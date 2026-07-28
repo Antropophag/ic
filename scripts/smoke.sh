@@ -4,6 +4,12 @@ set -eu
 base_url=${BASE_URL:-http://localhost:8080}
 dev_user_id=${DEV_USER_ID:-1}
 
+sql_scalar() {
+  docker compose exec -T mariadb sh -lc \
+    'mariadb --user=root --password="$MARIADB_ROOT_PASSWORD" --skip-column-names "$MARIADB_DATABASE" --execute "$1"' \
+    sh "$1"
+}
+
 attempts=0
 until curl --fail --silent --show-error "$base_url/health/ready" >/dev/null; do
   attempts=$((attempts + 1))
@@ -402,6 +408,34 @@ stale_status=$(curl --silent --output /dev/null --write-out '%{http_code}' \
   "$base_url/api/v1/requests/$request_id/start")
 [ "$stale_status" = '409' ] || {
   echo "Expected stale start status 409, got $stale_status" >&2
+  exit 1
+}
+
+manager_created_count=$(sql_scalar "SELECT COUNT(*) FROM notification_outbox WHERE request_id = $request_id AND event_type = 'request.created' AND recipient_email = 'dev.user@example.invalid'")
+[ "$manager_created_count" -ge 1 ] || {
+  echo "Expected the ic_manager to be notified about the new request" >&2
+  exit 1
+}
+non_manager_created_count=$(sql_scalar "SELECT COUNT(*) FROM notification_outbox WHERE request_id = $request_id AND event_type = 'request.created' AND recipient_email IN ('dev.executor@example.invalid', 'dev.expert@example.invalid', 'dev.security@example.invalid')")
+[ "$non_manager_created_count" = '0' ] || {
+  echo "Request creation must not notify unrelated roles" >&2
+  exit 1
+}
+
+executor_assigned_count=$(sql_scalar "SELECT COUNT(*) FROM notification_outbox WHERE request_id = $request_id AND event_type = 'request.executor_assigned' AND recipient_email = 'dev.executor@example.invalid'")
+[ "$executor_assigned_count" -ge 1 ] || {
+  echo "Expected the assigned executor to be notified" >&2
+  exit 1
+}
+
+security_opinion_count=$(sql_scalar "SELECT COUNT(*) FROM notification_outbox WHERE request_id = $request_id AND event_type = 'request.opinion_published' AND recipient_email = 'dev.security@example.invalid'")
+[ "$security_opinion_count" -ge 1 ] || {
+  echo "Expected the security officer to be notified about the published opinion" >&2
+  exit 1
+}
+non_security_opinion_count=$(sql_scalar "SELECT COUNT(*) FROM notification_outbox WHERE request_id = $request_id AND event_type = 'request.opinion_published' AND recipient_email IN ('dev.executor@example.invalid', 'dev.expert@example.invalid')")
+[ "$non_security_opinion_count" = '0' ] || {
+  echo "Opinion publication must not notify unrelated roles" >&2
   exit 1
 }
 

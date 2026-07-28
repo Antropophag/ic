@@ -13,6 +13,12 @@ final class NotificationController extends Controller
 {
     private const MAX_ATTEMPTS = 5;
     private const BATCH_SIZE = 50;
+    // Аренда захвата: если обработчик упал после захвата записи (status =
+    // sending), запись становится доступной для повторного захвата не раньше
+    // чем через этот интервал — вместо того, чтобы зависнуть навсегда.
+    private const CLAIM_LEASE_SECONDS = 300;
+    private const BACKOFF_BASE_SECONDS = 60;
+    private const BACKOFF_MAX_SECONDS = 3600;
 
     public function actionSend(): int
     {
@@ -21,20 +27,28 @@ final class NotificationController extends Controller
         $failed = 0;
 
         $ids = Yii::$app->db->createCommand(
-            'SELECT id FROM {{%notification_outbox}} '
-            . "WHERE status = 'pending' ORDER BY created_at LIMIT :limit",
-            [':limit' => self::BATCH_SIZE],
+            "SELECT id FROM {{%notification_outbox}} WHERE status IN ('pending', 'sending') "
+            . 'AND next_attempt_at <= :now ORDER BY next_attempt_at LIMIT :limit',
+            [':now' => gmdate('Y-m-d H:i:s.u'), ':limit' => self::BATCH_SIZE],
         )->queryColumn();
 
         foreach ($ids as $id) {
             $id = (int) $id;
+            $now = gmdate('Y-m-d H:i:s.u');
 
-            // NTF-003: атомарный захват записи предотвращает повторную
-            // отправку при параллельном или повторном запуске команды.
+            // Атомарный захват: срабатывает и на обычный pending, и на
+            // просроченную аренду sending (зависший после сбоя обработчик).
+            // next_attempt_at сразу сдвигается вперёд — это же поле служит
+            // границей аренды на время обработки этой записи.
             $claimed = Yii::$app->db->createCommand(
-                "UPDATE {{%notification_outbox}} SET status = 'sending', attempts = attempts + 1 "
-                . "WHERE id = :id AND status = 'pending'",
-                [':id' => $id],
+                "UPDATE {{%notification_outbox}} SET status = 'sending', attempts = attempts + 1, "
+                . 'next_attempt_at = :lease_until '
+                . "WHERE id = :id AND status IN ('pending', 'sending') AND next_attempt_at <= :now",
+                [
+                    ':id' => $id,
+                    ':now' => $now,
+                    ':lease_until' => gmdate('Y-m-d H:i:s.u', time() + self::CLAIM_LEASE_SECONDS),
+                ],
             )->execute();
             if ($claimed === 0) {
                 continue;
@@ -59,16 +73,29 @@ final class NotificationController extends Controller
                 Yii::$app->db->createCommand()->update(
                     '{{%notification_outbox}}',
                     ['status' => 'sent', 'sent_at' => gmdate('Y-m-d H:i:s.u'), 'last_error' => null],
-                    ['id' => $id],
+                    ['id' => $id, 'status' => 'sending'],
                 )->execute();
                 $sent++;
             } catch (\Throwable $error) {
-                $nextStatus = (int) $row['attempts'] >= self::MAX_ATTEMPTS ? 'failed' : 'pending';
-                Yii::$app->db->createCommand()->update(
-                    '{{%notification_outbox}}',
-                    ['status' => $nextStatus, 'last_error' => $error->getMessage()],
-                    ['id' => $id],
-                )->execute();
+                $attempts = (int) $row['attempts'];
+                if ($attempts >= self::MAX_ATTEMPTS) {
+                    Yii::$app->db->createCommand()->update(
+                        '{{%notification_outbox}}',
+                        ['status' => 'failed', 'last_error' => $error->getMessage()],
+                        ['id' => $id, 'status' => 'sending'],
+                    )->execute();
+                } else {
+                    $delay = min(self::BACKOFF_BASE_SECONDS * (2 ** ($attempts - 1)), self::BACKOFF_MAX_SECONDS);
+                    Yii::$app->db->createCommand()->update(
+                        '{{%notification_outbox}}',
+                        [
+                            'status' => 'pending',
+                            'next_attempt_at' => gmdate('Y-m-d H:i:s.u', time() + $delay),
+                            'last_error' => $error->getMessage(),
+                        ],
+                        ['id' => $id, 'status' => 'sending'],
+                    )->execute();
+                }
                 $failed++;
                 Yii::error([
                     'message' => 'Не удалось отправить уведомление.',

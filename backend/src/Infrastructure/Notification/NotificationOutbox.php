@@ -25,6 +25,7 @@ final class NotificationOutbox
         string $subject,
         string $body,
     ): void {
+        $now = gmdate('Y-m-d H:i:s.u');
         $this->db->createCommand()->insert('{{%notification_outbox}}', [
             'request_id' => $requestId,
             'event_type' => $eventType,
@@ -34,7 +35,8 @@ final class NotificationOutbox
             'body' => $body,
             'status' => 'pending',
             'attempts' => 0,
-            'created_at' => gmdate('Y-m-d H:i:s.u'),
+            'next_attempt_at' => $now,
+            'created_at' => $now,
         ])->execute();
     }
 }

@@ -31,15 +31,19 @@ final class Mailer
         $secure = self::env('SMTP_SECURE', 'tls');
         $scheme = $secure === 'tls' ? 'smtp' : ($secure === 'ssl' ? 'smtps' : 'smtp');
 
-        // Внутренний релей использует самоподписанный сертификат — проверка
-        // отключена намеренно, как в уже настроенном корпоративном отправителе.
+        // По умолчанию сертификат релея проверяется. Внутренний релей на
+        // самоподписанном сертификате требует явного SMTP_VERIFY_PEER=0 —
+        // отключение проверки никогда не подразумевается по умолчанию.
+        $verifyPeer = self::env('SMTP_VERIFY_PEER', '1') === '1' ? '1' : '0';
+
         return sprintf(
-            '%s://%s:%s@%s:%s?verify_peer=0',
+            '%s://%s:%s@%s:%s?verify_peer=%s',
             $scheme,
             rawurlencode(self::env('SMTP_USERNAME')),
             rawurlencode(self::env('SMTP_PASSWORD')),
             self::env('SMTP_HOST'),
             self::env('SMTP_PORT', '587'),
+            $verifyPeer,
         );
     }
 
