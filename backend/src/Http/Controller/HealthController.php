@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Http\Controller;
 
+use App\Infrastructure\Document\DocumentStorage;
 use Yii;
 use yii\rest\Controller;
 use yii\web\ServerErrorHttpException;
@@ -30,9 +31,7 @@ final class HealthController extends Controller
         try {
             Yii::$app->db->createCommand('SELECT 1')->queryScalar();
             $storagePath = getenv('DOCUMENT_STORAGE_PATH') ?: '/app/storage/documents';
-            if (!is_dir($storagePath) || !is_writable($storagePath)) {
-                throw new \RuntimeException('Document storage is not writable.');
-            }
+            (new DocumentStorage($storagePath))->assertWritable();
         } catch (\Throwable) {
             throw new ServerErrorHttpException('Application is not ready');
         }

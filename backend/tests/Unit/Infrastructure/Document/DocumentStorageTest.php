@@ -52,4 +52,43 @@ final class DocumentStorageTest extends TestCase
         $this->expectException(\InvalidArgumentException::class);
         (new DocumentStorage($this->root))->path('../../etc/passwd');
     }
+
+    public function testFailedCopyLeavesNoPartialFile(): void
+    {
+        $storage = new DocumentStorage($this->root);
+        try {
+            $storage->store($this->root . '/missing-source');
+            self::fail('Missing source must fail.');
+        } catch (\RuntimeException) {
+            self::assertSame([], $this->filesUnderRoot());
+        }
+    }
+
+    public function testWritableProbeCleansUpAfterItself(): void
+    {
+        mkdir($this->root, 0700, true);
+        $storage = new DocumentStorage($this->root);
+
+        $storage->assertWritable();
+
+        self::assertSame([], $this->filesUnderRoot());
+    }
+
+    /** @return list<string> */
+    private function filesUnderRoot(): array
+    {
+        if (!is_dir($this->root)) {
+            return [];
+        }
+        $files = [];
+        $iterator = new \RecursiveIteratorIterator(
+            new \RecursiveDirectoryIterator($this->root, \FilesystemIterator::SKIP_DOTS),
+        );
+        foreach ($iterator as $entry) {
+            if ($entry->isFile()) {
+                $files[] = $entry->getPathname();
+            }
+        }
+        return $files;
+    }
 }

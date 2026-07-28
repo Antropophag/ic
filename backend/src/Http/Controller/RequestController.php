@@ -158,10 +158,12 @@ final class RequestController extends Controller
         try {
             $version = $this->documents()->findVersionForDownload($id, $actorId);
         } catch (RequestNotFound $error) {
+            $this->recordRejectedDownloadSafely($id, $actorId, 'not_found_or_inactive');
             throw new NotFoundHttpException($error->getMessage());
         }
         $path = $this->storage()->path((string) $version['storageKey']);
         if (!is_file($path)) {
+            $this->recordRejectedDownloadSafely($id, $actorId, 'storage_unavailable');
             throw new NotFoundHttpException('Document version not found');
         }
         $this->documents()->recordDownload($id, (int) $version['requestId'], $actorId);
@@ -281,6 +283,21 @@ final class RequestController extends Controller
                 'executorId' => $executorId,
                 'actorId' => $actorId,
                 'ruleId' => $ruleId,
+                'exception' => $auditError,
+            ], __METHOD__);
+        }
+    }
+
+    private function recordRejectedDownloadSafely(int $versionId, int $actorId, string $reason): void
+    {
+        try {
+            $this->documents()->recordRejectedDownload($versionId, $actorId, $reason);
+        } catch (\Throwable $auditError) {
+            Yii::error([
+                'message' => 'Не удалось записать аудит отклонённого скачивания.',
+                'versionId' => $versionId,
+                'actorId' => $actorId,
+                'reason' => $reason,
                 'exception' => $auditError,
             ], __METHOD__);
         }

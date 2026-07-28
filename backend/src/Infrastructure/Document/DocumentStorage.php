@@ -18,11 +18,40 @@ final class DocumentStorage
             throw new \RuntimeException('Cannot create document storage directory.');
         }
         $destination = $directory . '/' . $key;
-        if (!copy($sourcePath, $destination)) {
-            throw new \RuntimeException('Cannot store document.');
+        $temporary = $destination . '.part-' . bin2hex(random_bytes(8));
+        try {
+            if (!@copy($sourcePath, $temporary) || !chmod($temporary, 0600) || !rename($temporary, $destination)) {
+                throw new \RuntimeException('Cannot store document.');
+            }
+        } finally {
+            if (is_file($temporary)) {
+                // nosemgrep: php.lang.security.unlink-use.unlink-use -- server-generated path under storage root
+                unlink($temporary);
+            }
         }
-        chmod($destination, 0600);
         return $key;
+    }
+
+    public function assertWritable(): void
+    {
+        if (!is_dir($this->root) || !is_writable($this->root)) {
+            throw new \RuntimeException('Document storage is not writable.');
+        }
+        $probe = tempnam($this->root, '.readiness-');
+        if ($probe === false) {
+            throw new \RuntimeException('Cannot create document storage probe.');
+        }
+        try {
+            $payload = random_bytes(16);
+            if (file_put_contents($probe, $payload, LOCK_EX) !== strlen($payload)) {
+                throw new \RuntimeException('Cannot write document storage probe.');
+            }
+        } finally {
+            if (is_file($probe)) {
+                // nosemgrep: php.lang.security.unlink-use.unlink-use -- tempnam created path under storage root
+                unlink($probe);
+            }
+        }
     }
 
     public function path(string $key): string
@@ -37,6 +66,7 @@ final class DocumentStorage
     {
         $path = $this->path($key);
         if (is_file($path)) {
+            // nosemgrep: php.lang.security.unlink-use.unlink-use -- path() accepts only a 64-char server key
             unlink($path);
         }
     }

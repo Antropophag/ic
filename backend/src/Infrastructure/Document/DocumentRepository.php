@@ -130,6 +130,34 @@ final class DocumentRepository
         ])->execute();
     }
 
+    public function recordRejectedDownload(int $versionId, int $actorId, string $reason): void
+    {
+        $actorExists = $this->db->createCommand(
+            'SELECT 1 FROM {{%users}} WHERE id = :actor_id',
+            [':actor_id' => $actorId],
+        )->queryScalar();
+        if ($actorExists === false) {
+            return;
+        }
+        $requestId = $this->db->createCommand(
+            'SELECT d.request_id FROM {{%request_document_versions}} v '
+            . 'JOIN {{%request_documents}} d ON d.id = v.document_id WHERE v.id = :version_id',
+            [':version_id' => $versionId],
+        )->queryScalar();
+        $this->db->createCommand()->insert('{{%audit_events}}', [
+            'event_type' => 'request.document_download_rejected',
+            'entity_type' => $requestId === false ? 'document_version' : 'request',
+            'entity_id' => $requestId === false ? $versionId : (int) $requestId,
+            'actor_id' => $actorId,
+            'rule_id' => 'ACL-007',
+            'payload_json' => json_encode(
+                ['version_id' => $versionId, 'outcome' => 'rejected', 'reason' => $reason],
+                JSON_THROW_ON_ERROR,
+            ),
+            'created_at' => gmdate('Y-m-d H:i:s.u'),
+        ])->execute();
+    }
+
     private function findOrCreateDocument(int $requestId, int $actorId, string $title): int
     {
         $documentId = $this->db->createCommand(
