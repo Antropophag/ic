@@ -124,6 +124,16 @@ registry=$(curl --fail --silent --show-error \
 printf '%s' "$registry" | grep "$marker" >/dev/null
 printf '%s' "$registry" | grep '"lockVersion":2' >/dev/null
 
+premature_report_status=$(curl --silent --output /dev/null --write-out '%{http_code}' \
+  --request POST \
+  --header 'X-Dev-User-ID: 2' \
+  --form "file=@$smoke_dir/report.pdf;type=application/pdf" \
+  "$base_url/api/v1/requests/$request_id/report")
+[ "$premature_report_status" = '403' ] || {
+  echo "Expected premature report status 403, got $premature_report_status" >&2
+  exit 1
+}
+
 started=$(curl --fail --silent --show-error \
   --request POST \
   --header 'X-Dev-User-ID: 2' \
@@ -132,6 +142,25 @@ started=$(curl --fail --silent --show-error \
   "$base_url/api/v1/requests/$request_id/start")
 printf '%s' "$started" | grep '"status":"in_progress"' >/dev/null
 printf '%s' "$started" | grep '"lockVersion":3' >/dev/null
+
+report=$(curl --fail --silent --show-error \
+  --request POST \
+  --header 'X-Dev-User-ID: 2' \
+  --form "file=@$smoke_dir/report.pdf;type=application/pdf" \
+  "$base_url/api/v1/requests/$request_id/report")
+printf '%s' "$report" | grep '"documentType":"report"' >/dev/null
+printf '%s' "$report" | grep '"status":"opinion_preparation"' >/dev/null
+printf '%s' "$report" | grep '"lockVersion":4' >/dev/null
+report_version_id=$(printf '%s' "$report" | sed -n 's/.*"versionId":\([0-9][0-9]*\).*/\1/p')
+[ -n "$report_version_id" ] || {
+  echo 'Uploaded report has no version id' >&2
+  exit 1
+}
+curl --fail --silent --show-error \
+  --header 'X-Dev-User-ID: 2' \
+  --output "$smoke_dir/downloaded-report.pdf" \
+  "$base_url/api/v1/document-versions/$report_version_id/download"
+cmp "$smoke_dir/report.pdf" "$smoke_dir/downloaded-report.pdf"
 
 details=$(curl --fail --silent --show-error \
   --header "X-Dev-User-ID: $dev_user_id" \
@@ -143,6 +172,9 @@ printf '%s' "$details" | grep "$comment_marker" >/dev/null
 printf '%s' "$details" | grep '"can_comment":1' >/dev/null
 printf '%s' "$details" | grep '"can_upload_document":1' >/dev/null
 printf '%s' "$details" | grep '"version":2' >/dev/null
+printf '%s' "$details" | grep '"status":"opinion_preparation"' >/dev/null
+printf '%s' "$details" | grep '"documentType":"report"' >/dev/null
+printf '%s' "$details" | grep '"action":"upload_report"' >/dev/null
 printf '%s' "$details" | grep -E '"(occurredAt|createdAt)":"[^"]+Z"' >/dev/null
 if printf '%s' "$details" | grep 'payload_json' >/dev/null; then
   echo 'Request details must not expose audit payloads' >&2

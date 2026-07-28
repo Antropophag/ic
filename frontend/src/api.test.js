@@ -64,6 +64,19 @@ it('uploads a document as multipart data and downloads its bytes', async () => {
   expect(fetchMock).toHaveBeenNthCalledWith(2, '/api/v1/document-versions/12/download', expect.any(Object))
 })
 
+it('uploads a test report through the dedicated endpoint', async () => {
+  const fetchMock = vi.fn().mockResolvedValue(new Response('{}', { status: 201 }))
+  vi.stubGlobal('fetch', fetchMock)
+  const file = new File(['pdf'], 'test-report.pdf', { type: 'application/pdf' })
+
+  await requestApi.uploadReport(7, file)
+
+  expect(fetchMock).toHaveBeenCalledWith('/api/v1/requests/7/report', expect.objectContaining({
+    method: 'POST',
+    body: expect.any(FormData),
+  }))
+})
+
 it('sends creation data as JSON', async () => {
   const fetchMock = vi.fn().mockResolvedValue(new Response('{}', { status: 201 }))
   vi.stubGlobal('fetch', fetchMock)
