@@ -14,6 +14,7 @@ use App\Domain\Request\AttachmentDenied;
 use App\Domain\Request\ConcurrentRequestModification;
 use App\Domain\Request\CommentDenied;
 use App\Domain\Request\RequestNotFound;
+use App\Domain\Request\ReportDenied;
 use App\Domain\Request\StartDenied;
 use App\Domain\Request\TransitionDenied;
 use App\Infrastructure\Identity\CurrentUser;
@@ -149,6 +150,45 @@ final class RequestController extends Controller
                 return ['errors' => ['file' => ['Тип, расширение или размер файла не разрешены.']]];
             }
             throw new ConflictHttpException($error->getMessage());
+        }
+    }
+
+    /** @return array<string, mixed> */
+    public function actionUploadReport(int $id): array
+    {
+        $actorId = (new CurrentUser())->id(Yii::$app->request);
+        $file = UploadedFile::getInstanceByName('file');
+        if ($file === null || $file->error !== UPLOAD_ERR_OK) {
+            $this->recordRejectedReportSafely($id, $actorId, 'DOC-008');
+            Yii::$app->response->statusCode = 422;
+            return ['errors' => ['file' => ['Выберите PDF-файл размером не более 10 МБ.']]];
+        }
+        $size = filesize($file->tempName);
+        $mimeType = mime_content_type($file->tempName);
+        if ($size === false || $mimeType === false) {
+            throw new ServerErrorHttpException('Не удалось проверить загруженный отчёт.');
+        }
+
+        try {
+            $report = $this->documents()->uploadReport(
+                $id,
+                $actorId,
+                $file->name,
+                $mimeType,
+                $size,
+                $file->tempName,
+            );
+            Yii::$app->response->statusCode = 201;
+            return $report;
+        } catch (RequestNotFound $error) {
+            throw new NotFoundHttpException($error->getMessage());
+        } catch (ReportDenied $error) {
+            $this->recordRejectedReportSafely($id, $actorId, $error->ruleId);
+            if ($error->ruleId === 'DOC-008') {
+                Yii::$app->response->statusCode = 422;
+                return ['errors' => ['file' => ['Отчёт должен быть PDF-файлом размером не более 10 МБ.']]];
+            }
+            throw new ForbiddenHttpException($error->getMessage());
         }
     }
 
@@ -298,6 +338,21 @@ final class RequestController extends Controller
                 'versionId' => $versionId,
                 'actorId' => $actorId,
                 'reason' => $reason,
+                'exception' => $auditError,
+            ], __METHOD__);
+        }
+    }
+
+    private function recordRejectedReportSafely(int $requestId, int $actorId, string $ruleId): void
+    {
+        try {
+            $this->documents()->recordRejectedReportUpload($requestId, $actorId, $ruleId);
+        } catch (\Throwable $auditError) {
+            Yii::error([
+                'message' => 'Не удалось записать аудит отклонённой загрузки отчёта.',
+                'requestId' => $requestId,
+                'actorId' => $actorId,
+                'ruleId' => $ruleId,
                 'exception' => $auditError,
             ], __METHOD__);
         }
