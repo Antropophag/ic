@@ -268,6 +268,13 @@ curl --fail --silent --show-error \
   --output "$smoke_dir/opinion.pdf" \
   "$base_url/api/v1/document-versions/$opinion_version_id/download"
 grep '%PDF-' "$smoke_dir/opinion.pdf" >/dev/null
+private_opinion_status=$(curl --silent --output /dev/null --write-out '%{http_code}' \
+  --header 'X-Dev-User-ID: 3' \
+  "$base_url/api/v1/document-versions/$opinion_version_id/download")
+[ "$private_opinion_status" = '404' ] || {
+  echo "Expected private opinion status 404, got $private_opinion_status" >&2
+  exit 1
+}
 opinion_details=$(curl --fail --silent --show-error \
   --header 'X-Dev-User-ID: 4' \
   "$base_url/api/v1/requests/$request_id")
@@ -290,6 +297,11 @@ curl --fail --silent --show-error \
   --output "$smoke_dir/public-report.pdf" \
   "$base_url/api/v1/document-versions/$report_v2_version_id/download"
 cmp "$smoke_dir/report-v2.pdf" "$smoke_dir/public-report.pdf"
+curl --fail --silent --show-error \
+  --header 'X-Dev-User-ID: 3' \
+  --output "$smoke_dir/public-opinion.pdf" \
+  "$base_url/api/v1/document-versions/$opinion_version_id/download"
+cmp "$smoke_dir/opinion.pdf" "$smoke_dir/public-opinion.pdf"
 
 public_details=$(curl --fail --silent --show-error \
   --header 'X-Dev-User-ID: 3' \
