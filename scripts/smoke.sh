@@ -60,6 +60,12 @@ denied_status=$(curl --silent --output /dev/null --write-out '%{http_code}' \
   exit 1
 }
 
+registry=$(curl --fail --silent --show-error \
+  --header "X-Dev-User-ID: $dev_user_id" \
+  "$base_url/api/v1/requests")
+printf '%s' "$registry" | grep "$marker" >/dev/null
+printf '%s' "$registry" | grep '"lockVersion":1' >/dev/null
+
 started=$(curl --fail --silent --show-error \
   --request POST \
   --header 'X-Dev-User-ID: 2' \
@@ -79,9 +85,5 @@ stale_status=$(curl --silent --output /dev/null --write-out '%{http_code}' \
   echo "Expected stale start status 409, got $stale_status" >&2
   exit 1
 }
-
-curl --fail --silent --show-error \
-  --header "X-Dev-User-ID: $dev_user_id" \
-  "$base_url/api/v1/requests" | grep "$marker" >/dev/null
 
 echo "Smoke test passed: health, validation, creation, assignment, start and registry."

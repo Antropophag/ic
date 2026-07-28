@@ -47,4 +47,23 @@ final class StartRequestPolicyTest extends TestCase
         yield 'обычный сотрудник' => [[Role::Employee], false];
         yield 'назначенный пользователь без роли' => [[Role::Employee], true];
     }
+
+    /** @param list<Role> $roles */
+    #[DataProvider('disabledActors')]
+    public function testDisabledActorIsDenied(array $roles, bool $isCurrentExecutor): void
+    {
+        try {
+            (new StartRequestPolicy())->assertCanStart($roles, $isCurrentExecutor, false);
+            self::fail('Отключённый пользователь не должен запускать заявку');
+        } catch (StartDenied $error) {
+            self::assertSame('AUTH-003', $error->ruleId);
+        }
+    }
+
+    /** @return iterable<string, array{list<Role>, bool}> */
+    public static function disabledActors(): iterable
+    {
+        yield 'отключённый руководитель' => [[Role::IcManager], false];
+        yield 'отключённый назначенный исполнитель' => [[Role::IcExecutor], true];
+    }
 }

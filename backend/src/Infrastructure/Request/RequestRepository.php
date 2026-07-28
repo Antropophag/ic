@@ -71,7 +71,7 @@ final class RequestRepository
     {
         return $this->db->createCommand(
             'SELECT r.id, r.number, r.status, r.product_name, r.manufacturer, '
-            . 'r.supplier, r.sample_quantity, r.test_method, r.created_at, '
+            . 'r.supplier, r.sample_quantity, r.test_method, r.lock_version AS lockVersion, r.created_at, '
             . 'u.display_name AS initiator_name, u.department '
             . 'FROM {{%requests}} r JOIN {{%users}} u ON u.id = r.initiator_id '
             . 'ORDER BY r.number DESC LIMIT :limit',
@@ -178,7 +178,7 @@ final class RequestRepository
         $transaction = $this->db->beginTransaction();
         try {
             $request = $this->db->createCommand(
-                'SELECT status, lock_version FROM {{%requests}} WHERE id = :id',
+                'SELECT status, lock_version FROM {{%requests}} WHERE id = :id FOR UPDATE',
                 [':id' => $requestId],
             )->queryOne();
             if ($request === false) {
@@ -194,6 +194,7 @@ final class RequestRepository
             (new StartRequestPolicy())->assertCanStart(
                 $roles,
                 $this->isCurrentExecutor($requestId, $actorId),
+                $this->isActiveUser($actorId),
             );
 
             $currentStatus = RequestStatus::from((string) $request['status']);
@@ -300,6 +301,14 @@ final class RequestRepository
             'SELECT 1 FROM {{%request_assignments}} WHERE request_id = :request_id '
             . "AND assignment_type = 'executor' AND user_id = :user_id AND valid_to IS NULL",
             [':request_id' => $requestId, ':user_id' => $userId],
+        )->queryScalar() !== false;
+    }
+
+    private function isActiveUser(int $userId): bool
+    {
+        return $this->db->createCommand(
+            'SELECT 1 FROM {{%users}} WHERE id = :id AND is_active = 1',
+            [':id' => $userId],
         )->queryScalar() !== false;
     }
 

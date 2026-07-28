@@ -7,8 +7,12 @@ namespace App\Domain\Request;
 final class StartRequestPolicy
 {
     /** @param list<Role> $actorRoles */
-    public function assertCanStart(array $actorRoles, bool $isCurrentExecutor): void
+    public function assertCanStart(array $actorRoles, bool $isCurrentExecutor, bool $isActorActive = true): void
     {
+        if (!$isActorActive) {
+            throw new StartDenied('AUTH-003');
+        }
+
         foreach ($actorRoles as $role) {
             if (in_array($role, [Role::IcManager, Role::LaboratoryManager], true)) {
                 return;
