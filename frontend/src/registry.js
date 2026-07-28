@@ -62,6 +62,10 @@ export function commentFromApi(item) {
   }
 }
 
+export function canSubmitComment(item, detailLoading) {
+  return Boolean(item?.canComment) && !detailLoading
+}
+
 export function filterRequests(requests, { tab, query, status, currentUser }) {
   const normalizedQuery = query.toLowerCase()
   return requests.filter(item => {

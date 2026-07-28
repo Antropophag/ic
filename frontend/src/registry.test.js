@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { commentFromApi, filterRequests, fromApi, historyFromApi } from './registry'
+import { canSubmitComment, commentFromApi, filterRequests, fromApi, historyFromApi } from './registry'
 
 const registered = {
   id: 4,
@@ -68,6 +68,12 @@ it('maps a server-authored comment', () => {
   expect(commentFromApi({
     id: '12', authorName: 'Иван Иванов', body: 'Готово', createdAt: '2026-07-28T10:00:00Z',
   })).toMatchObject({ id: 12, author: 'Иван Иванов', body: 'Готово' })
+})
+
+it('does not allow a comment while an older detail response can still arrive', () => {
+  expect(canSubmitComment({ canComment: true }, true)).toBe(false)
+  expect(canSubmitComment({ canComment: true }, false)).toBe(true)
+  expect(canSubmitComment({ canComment: false }, false)).toBe(false)
 })
 
 describe('registry filters', () => {

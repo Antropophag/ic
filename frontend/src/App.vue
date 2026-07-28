@@ -2,7 +2,7 @@
 import { computed, onMounted, reactive, ref } from 'vue'
 import { requestApi } from './api'
 import { createLatestRequestGuard } from './latestRequestGuard'
-import { ACTIVE_STATUSES, commentFromApi, filterRequests, fromApi, historyFromApi } from './registry'
+import { ACTIVE_STATUSES, canSubmitComment, commentFromApi, filterRequests, fromApi, historyFromApi } from './registry'
 
 const activeTab = ref('active')
 const query = ref('')
@@ -18,10 +18,12 @@ const detailError = ref('')
 const commentDraft = ref('')
 const commentLoading = ref(false)
 const commentError = ref('')
+const olderCommentsLoading = ref(false)
 const executors = ref([])
 const executorChoice = ref('')
 const detailRequestGuard = createLatestRequestGuard()
 const commentRequestGuard = createLatestRequestGuard()
+const commentsPageRequestGuard = createLatestRequestGuard()
 const draft = reactive({
   productName: '', manufacturer: '', supplier: '', sampleQuantity: 1, testMethod: '',
 })
@@ -62,6 +64,7 @@ async function loadRequestDetails(item) {
       ...fromApi(result.item),
       history: result.history.map(historyFromApi),
       comments: result.comments.map(commentFromApi),
+      commentsPage: result.commentsPage,
     }
     executorChoice.value = selected.value.executorId || ''
   } catch (error) {
@@ -78,6 +81,7 @@ async function loadRequestDetails(item) {
 
 async function openRequest(item) {
   commentRequestGuard.invalidate()
+  commentsPageRequestGuard.invalidate()
   commentLoading.value = false
   commentError.value = ''
   commentDraft.value = ''
@@ -89,6 +93,7 @@ async function openRequest(item) {
 function closeRequest() {
   detailRequestGuard.invalidate()
   commentRequestGuard.invalidate()
+  commentsPageRequestGuard.invalidate()
   selected.value = null
   detailLoading.value = false
   detailError.value = ''
@@ -108,6 +113,8 @@ async function addComment() {
   try {
     const result = await requestApi.addComment(requestId, commentDraft.value)
     if (!commentRequestGuard.isCurrent(requestToken, selected.value?.backendId)) return
+    detailRequestGuard.invalidate()
+    detailLoading.value = false
     selected.value = {
       ...selected.value,
       comments: [...(selected.value.comments || []), commentFromApi(result)],
@@ -118,6 +125,7 @@ async function addComment() {
     if (error.status === 422) {
       commentError.value = 'Комментарий пуст или превышает допустимый размер.'
     } else if (error.status === 409) {
+      await loadRequestDetails(selected.value)
       commentError.value = 'На текущем этапе новые комментарии запрещены.'
     } else {
       commentError.value = 'Не удалось добавить комментарий.'
@@ -125,6 +133,32 @@ async function addComment() {
   } finally {
     if (commentRequestGuard.isCurrent(requestToken, selected.value?.backendId)) {
       commentLoading.value = false
+    }
+  }
+}
+
+async function loadOlderComments() {
+  const requestId = selected.value.backendId
+  const beforeId = selected.value.commentsPage?.nextBeforeId
+  if (!beforeId) return
+  const requestToken = commentsPageRequestGuard.begin(requestId)
+  olderCommentsLoading.value = true
+  commentError.value = ''
+  try {
+    const result = await requestApi.comments(requestId, beforeId)
+    if (!commentsPageRequestGuard.isCurrent(requestToken, selected.value?.backendId)) return
+    selected.value = {
+      ...selected.value,
+      comments: [...result.items.map(commentFromApi), ...(selected.value.comments || [])],
+      commentsPage: { hasMore: result.hasMore, nextBeforeId: result.nextBeforeId },
+    }
+  } catch {
+    if (commentsPageRequestGuard.isCurrent(requestToken, selected.value?.backendId)) {
+      commentError.value = 'Не удалось загрузить предыдущие комментарии.'
+    }
+  } finally {
+    if (commentsPageRequestGuard.isCurrent(requestToken, selected.value?.backendId)) {
+      olderCommentsLoading.value = false
     }
   }
 }
@@ -327,9 +361,10 @@ onMounted(loadRequests)
             </article>
             <article class="card comments">
               <div class="section-title"><h3>Обсуждение <span>{{ selected.comments?.length || 0 }}</span></h3></div>
+              <button v-if="selected.commentsPage?.hasMore" class="secondary" :disabled="olderCommentsLoading" @click="loadOlderComments">{{ olderCommentsLoading ? 'Загрузка…' : 'Показать предыдущие' }}</button>
               <div v-for="comment in selected.comments || []" :key="comment.id" class="comment"><span class="avatar small">●</span><div><b>{{ comment.author }}</b><time>{{ comment.createdAt }}</time><p>{{ comment.body }}</p></div></div>
               <p v-if="!selected.comments?.length" class="placeholder-copy">Комментариев пока нет.</p>
-              <form v-if="selected.canComment" class="comment-input" @submit.prevent="addComment"><span class="avatar small">МУ</span><input v-model="commentDraft" :disabled="commentLoading" maxlength="10000" placeholder="Оставьте комментарий…" /><button :disabled="commentLoading">➤</button></form>
+              <form v-if="canSubmitComment(selected, detailLoading)" class="comment-input" @submit.prevent="addComment"><span class="avatar small">МУ</span><input v-model="commentDraft" :disabled="commentLoading" maxlength="10000" placeholder="Оставьте комментарий…" /><button :disabled="commentLoading">➤</button></form>
               <p v-else class="placeholder-copy">На текущем этапе новые комментарии недоступны.</p>
               <p v-if="commentError" class="action-error">{{ commentError }}</p>
             </article>

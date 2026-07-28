@@ -20,6 +20,7 @@ async function request(path, options = {}) {
 export const requestApi = {
   list: () => request('/api/v1/requests'),
   get: requestId => request(`/api/v1/requests/${requestId}`),
+  comments: (requestId, beforeId) => request(`/api/v1/requests/${requestId}/comments?beforeId=${beforeId}`),
   addComment: (requestId, body) => request(`/api/v1/requests/${requestId}/comments`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },

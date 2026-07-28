@@ -21,6 +21,7 @@ return yii\helpers\ArrayHelper::merge($common, [
                 'GET api/v1/requests' => 'request/index',
                 'GET api/v1/requests/<id:\\d+>' => 'request/view',
                 'POST api/v1/requests/<id:\\d+>/comments' => 'request/add-comment',
+                'GET api/v1/requests/<id:\\d+>/comments' => 'request/comments',
                 'GET api/v1/executors' => 'request/executors',
                 'POST api/v1/requests' => 'request/create',
                 'POST api/v1/requests/<id:\\d+>/executor' => 'request/assign-executor',

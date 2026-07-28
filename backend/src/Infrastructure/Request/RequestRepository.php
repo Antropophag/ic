@@ -89,8 +89,9 @@ final class RequestRepository
             . 'OR (current_executor.user_id = :start_executor AND EXISTS(SELECT 1 '
             . 'FROM {{%user_roles}} seur JOIN {{%roles}} ser ON ser.id = seur.role_id '
             . "WHERE seur.user_id = :start_executor_role AND ser.code = 'ic_executor')))) AS can_start, "
-            . "(r.status IN ('registered', 'in_progress', 'suspended', 'opinion_preparation', "
-            . "'security_review')) AS can_comment "
+            . "(EXISTS(SELECT 1 FROM {{%users}} cau WHERE cau.id = :active_comment_actor "
+            . "AND cau.is_active = 1) AND r.status IN ('registered', 'in_progress', 'suspended', "
+            . "'opinion_preparation', 'security_review')) AS can_comment "
             . 'FROM {{%requests}} r JOIN {{%users}} u ON u.id = r.initiator_id '
             . 'LEFT JOIN {{%request_assignments}} current_executor ON current_executor.request_id = r.id '
             . "AND current_executor.assignment_type = 'executor' AND current_executor.valid_to IS NULL "
@@ -103,12 +104,13 @@ final class RequestRepository
                 ':active_start_actor' => $actorId,
                 ':start_executor' => $actorId,
                 ':start_executor_role' => $actorId,
+                ':active_comment_actor' => $actorId,
                 ':limit' => $limit,
             ],
         )->queryAll();
     }
 
-    /** @return array{item: array<string, mixed>, history: list<array<string, mixed>>, comments: list<array<string, mixed>>} */
+    /** @return array{item: array<string, mixed>, history: list<array<string, mixed>>, comments: list<array<string, mixed>>, commentsPage: array{hasMore: bool, nextBeforeId: int|null}} */
     public function findDetails(int $requestId, int $actorId): array
     {
         $item = $this->db->createCommand(
@@ -163,15 +165,53 @@ final class RequestRepository
             [':transition_request_id' => $requestId, ':audit_request_id' => $requestId],
         )->queryAll();
 
-        $comments = $this->db->createCommand(
-            "SELECT c.id, c.body, DATE_FORMAT(c.created_at, '%Y-%m-%dT%H:%i:%s.%fZ') AS createdAt, "
-            . 'u.display_name AS authorName '
-            . 'FROM {{%request_comments}} c JOIN {{%users}} u ON u.id = c.author_id '
-            . 'WHERE c.request_id = :request_id ORDER BY c.created_at ASC, c.id ASC',
-            [':request_id' => $requestId],
-        )->queryAll();
+        $commentsPage = $this->queryCommentsPage($requestId, null);
 
-        return ['item' => $item, 'history' => $history, 'comments' => $comments];
+        return [
+            'item' => $item,
+            'history' => $history,
+            'comments' => $commentsPage['items'],
+            'commentsPage' => [
+                'hasMore' => $commentsPage['hasMore'],
+                'nextBeforeId' => $commentsPage['nextBeforeId'],
+            ],
+        ];
+    }
+
+    /** @return array{items: list<array<string, mixed>>, hasMore: bool, nextBeforeId: int|null} */
+    public function findCommentsPage(int $requestId, int $actorId, ?int $beforeId): array
+    {
+        $visible = $this->db->createCommand(
+            'SELECT 1 FROM {{%requests}} r JOIN {{%users}} viewer '
+            . 'ON viewer.id = :actor_id AND viewer.is_active = 1 WHERE r.id = :request_id',
+            [':request_id' => $requestId, ':actor_id' => $actorId],
+        )->queryScalar();
+        if ($visible === false) {
+            throw new RequestNotFound('Request not found');
+        }
+        return $this->queryCommentsPage($requestId, $beforeId);
+    }
+
+    /** @return array{items: list<array<string, mixed>>, hasMore: bool, nextBeforeId: int|null} */
+    private function queryCommentsPage(int $requestId, ?int $beforeId): array
+    {
+        $parameters = [':request_id' => $requestId, ':limit' => 51];
+        $cursor = '';
+        if ($beforeId !== null) {
+            $cursor = 'AND c.id < :before_id ';
+            $parameters[':before_id'] = $beforeId;
+        }
+        $rows = $this->db->createCommand(
+            "SELECT c.id, c.body, DATE_FORMAT(c.created_at, '%Y-%m-%dT%H:%i:%s.%fZ') AS createdAt, "
+            . 'u.display_name AS authorName FROM {{%request_comments}} c '
+            . 'JOIN {{%users}} u ON u.id = c.author_id WHERE c.request_id = :request_id '
+            . $cursor . 'ORDER BY c.id DESC LIMIT :limit',
+            $parameters,
+        )->queryAll();
+        $hasMore = count($rows) > 50;
+        $rows = array_slice($rows, 0, 50);
+        $nextBeforeId = $rows === [] ? null : (int) $rows[count($rows) - 1]['id'];
+        return ['items' => array_reverse($rows), 'hasMore' => $hasMore, 'nextBeforeId' => $nextBeforeId];
     }
 
     /** @return array<string, mixed> */

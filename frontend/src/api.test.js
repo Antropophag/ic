@@ -38,6 +38,15 @@ it('adds a comment as JSON', async () => {
   }))
 })
 
+it('loads an older comment page by cursor', async () => {
+  const payload = { items: [], hasMore: false, nextBeforeId: null }
+  const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify(payload), { status: 200 }))
+  vi.stubGlobal('fetch', fetchMock)
+
+  await expect(requestApi.comments(7, 51)).resolves.toEqual(payload)
+  expect(fetchMock).toHaveBeenCalledWith('/api/v1/requests/7/comments?beforeId=51', expect.any(Object))
+})
+
 it('sends creation data as JSON', async () => {
   const fetchMock = vi.fn().mockResolvedValue(new Response('{}', { status: 201 }))
   vi.stubGlobal('fetch', fetchMock)

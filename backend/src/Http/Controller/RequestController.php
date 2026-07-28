@@ -52,7 +52,7 @@ final class RequestController extends Controller
         return ['items' => $this->repository()->findLatest($actorId)];
     }
 
-    /** @return array{item: array<string, mixed>, history: list<array<string, mixed>>, comments: list<array<string, mixed>>} */
+    /** @return array{item: array<string, mixed>, history: list<array<string, mixed>>, comments: list<array<string, mixed>>, commentsPage: array{hasMore: bool, nextBeforeId: int|null}} */
     public function actionView(int $id): array
     {
         $actorId = (new CurrentUser())->id(Yii::$app->request);
@@ -85,6 +85,26 @@ final class RequestController extends Controller
             throw new NotFoundHttpException($error->getMessage());
         } catch (CommentDenied $error) {
             throw new ConflictHttpException($error->getMessage());
+        }
+    }
+
+    /** @return array{items: list<array<string, mixed>>, hasMore: bool, nextBeforeId: int|null} */
+    public function actionComments(int $id): array
+    {
+        $rawBeforeId = Yii::$app->request->get('beforeId');
+        $beforeId = $rawBeforeId === null ? null : filter_var($rawBeforeId, FILTER_VALIDATE_INT);
+        if ($rawBeforeId !== null && ($beforeId === false || $beforeId < 1)) {
+            Yii::$app->response->statusCode = 422;
+            return ['items' => [], 'hasMore' => false, 'nextBeforeId' => null];
+        }
+        try {
+            return $this->repository()->findCommentsPage(
+                $id,
+                (new CurrentUser())->id(Yii::$app->request),
+                $beforeId === false ? null : $beforeId,
+            );
+        } catch (RequestNotFound $error) {
+            throw new NotFoundHttpException($error->getMessage());
         }
     }
 
