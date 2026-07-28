@@ -7,7 +7,7 @@ namespace App\Domain\Request;
 final class StartRequestPolicy
 {
     /** @param list<Role> $actorRoles */
-    public function assertCanStart(array $actorRoles, bool $isCurrentExecutor, bool $isActorActive = true): void
+    public function assertCanStart(array $actorRoles, bool $isCurrentExecutor, bool $isActorActive): void
     {
         if (!$isActorActive) {
             throw new StartDenied('AUTH-003');

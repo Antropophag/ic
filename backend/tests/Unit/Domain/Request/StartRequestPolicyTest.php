@@ -16,7 +16,7 @@ final class StartRequestPolicyTest extends TestCase
     #[DataProvider('allowedActors')]
     public function testAllowedActorCanStart(array $roles, bool $isCurrentExecutor): void
     {
-        (new StartRequestPolicy())->assertCanStart($roles, $isCurrentExecutor);
+        (new StartRequestPolicy())->assertCanStart($roles, $isCurrentExecutor, true);
         self::addToAssertionCount(1);
     }
 
@@ -33,7 +33,7 @@ final class StartRequestPolicyTest extends TestCase
     public function testOtherActorIsDenied(array $roles, bool $isCurrentExecutor): void
     {
         try {
-            (new StartRequestPolicy())->assertCanStart($roles, $isCurrentExecutor);
+            (new StartRequestPolicy())->assertCanStart($roles, $isCurrentExecutor, true);
             self::fail('Запуск заявки должен быть запрещён');
         } catch (StartDenied $error) {
             self::assertSame('WF-004', $error->ruleId);
