@@ -61,6 +61,7 @@ frontend-coverage:
 
 e2e:
 	npm --prefix frontend ci --no-audit --no-fund
+	cd frontend && npm exec playwright install chromium
 	npm --prefix frontend run e2e
 
 frontend-quality:
