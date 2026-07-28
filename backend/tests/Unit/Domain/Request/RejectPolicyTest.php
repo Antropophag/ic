@@ -26,14 +26,26 @@ final class RejectPolicyTest extends TestCase
         yield 'руководитель лаборатории' => [Role::LaboratoryManager];
     }
 
-    public function testExecutorCannotReject(): void
+    #[DataProvider('unauthorizedRoles')]
+    public function testNonManagerCannotReject(Role $role): void
     {
-        $this->expectDenied('WF-006', fn () => (new RejectPolicy())->assertCanReject([Role::IcExecutor], true));
+        $this->expectDenied('WF-006', fn () => (new RejectPolicy())->assertCanReject([$role], true));
     }
 
-    public function testDisabledManagerCannotReject(): void
+    /** @return iterable<string, array{Role}> */
+    public static function unauthorizedRoles(): iterable
     {
-        $this->expectDenied('AUTH-003', fn () => (new RejectPolicy())->assertCanReject([Role::IcManager], false));
+        yield 'сотрудник' => [Role::Employee];
+        yield 'исполнитель ИЦ' => [Role::IcExecutor];
+        yield 'эксперт' => [Role::Expert];
+        yield 'сотрудник СБ' => [Role::SecurityOfficer];
+        yield 'администратор' => [Role::Administrator];
+    }
+
+    #[DataProvider('managerRoles')]
+    public function testDisabledManagerCannotReject(Role $managerRole): void
+    {
+        $this->expectDenied('AUTH-003', fn () => (new RejectPolicy())->assertCanReject([$managerRole], false));
     }
 
     private function expectDenied(string $ruleId, callable $operation): void

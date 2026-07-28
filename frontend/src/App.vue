@@ -442,6 +442,7 @@ async function setColorMark(color) {
     try {
       await refreshSelected(requestId)
     } catch {
+      if (!colorRequestGuard.isCurrent(requestToken, selected.value?.backendId)) return
       colorError.value = 'Метка сохранена, но обновить карточку не удалось.'
     }
   } catch (error) {
@@ -473,6 +474,7 @@ async function rejectRequest() {
     try {
       await refreshSelected(requestId)
     } catch {
+      if (!rejectRequestGuard.isCurrent(requestToken, selected.value?.backendId)) return
       rejectError.value = 'Отказ сохранён, но обновить карточку не удалось.'
     }
   } catch (error) {
@@ -504,6 +506,7 @@ async function withdrawRequest() {
     try {
       await refreshSelected(requestId)
     } catch {
+      if (!withdrawRequestGuard.isCurrent(requestToken, selected.value?.backendId)) return
       withdrawError.value = 'Заявка отозвана, но обновить карточку не удалось.'
     }
   } catch (error) {

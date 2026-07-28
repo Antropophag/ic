@@ -289,7 +289,9 @@ final class RequestRepository
             . 'AS can_reject, '
             . "(r.status IN ('registered', 'in_progress', 'suspended', 'opinion_preparation') "
             . 'AND r.initiator_id = :withdraw_actor AND EXISTS(SELECT 1 FROM {{%users}} wu '
-            . "WHERE wu.id = :withdraw_actor_active AND wu.is_active = 1)) AS can_withdraw "
+            . "WHERE wu.id = :withdraw_actor_active AND wu.is_active = 1) "
+            . 'AND NOT EXISTS(SELECT 1 FROM {{%security_checks}} wsc WHERE wsc.request_id = r.id)) '
+            . 'AS can_withdraw '
             . 'FROM {{%requests}} r JOIN {{%users}} u ON u.id = r.initiator_id '
             . 'LEFT JOIN {{%request_assignments}} current_executor ON current_executor.request_id = r.id '
             . "AND current_executor.assignment_type = 'executor' AND current_executor.valid_to IS NULL "
@@ -365,7 +367,9 @@ final class RequestRepository
             . "WHERE rjur.user_id = :reject_actor AND rjr.code IN ('ic_manager', 'laboratory_manager'))) "
             . 'AS can_reject, '
             . "(r.status IN ('registered', 'in_progress', 'suspended', 'opinion_preparation') "
-            . 'AND r.initiator_id = :withdraw_actor) AS can_withdraw '
+            . 'AND r.initiator_id = :withdraw_actor '
+            . 'AND NOT EXISTS(SELECT 1 FROM {{%security_checks}} wsc WHERE wsc.request_id = r.id)) '
+            . 'AS can_withdraw '
             . 'FROM {{%requests}} r '
             . 'JOIN {{%users}} viewer ON viewer.id = :actor_id AND viewer.is_active = 1 '
             . 'JOIN {{%users}} u ON u.id = r.initiator_id '
@@ -1054,6 +1058,19 @@ final class RequestRepository
                 'rule_id' => 'WF-006',
                 'created_at' => $now,
             ])->execute();
+            $this->db->createCommand()->insert('{{%audit_events}}', [
+                'event_type' => 'request.rejected',
+                'entity_type' => 'request',
+                'entity_id' => $requestId,
+                'actor_id' => $actorId,
+                'rule_id' => 'WF-006',
+                'payload_json' => json_encode([
+                    'from_status' => $currentStatus->value,
+                    'to_status' => RequestStatus::Rejected->value,
+                    'lock_version' => $nextLockVersion,
+                ], JSON_THROW_ON_ERROR),
+                'created_at' => $now,
+            ])->execute();
             $initiator = $this->initiatorContact($requestId);
             if ($initiator !== null) {
                 (new NotificationOutbox($this->db))->enqueue(
@@ -1109,15 +1126,22 @@ final class RequestRepository
         $transaction = $this->db->beginTransaction();
         try {
             $request = $this->db->createCommand(
-                'SELECT status, lock_version, initiator_id FROM {{%requests}} WHERE id = :id FOR UPDATE',
+                'SELECT r.status, r.lock_version, r.initiator_id, '
+                . 'EXISTS(SELECT 1 FROM {{%security_checks}} sc WHERE sc.request_id = r.id) AS reviewed_by_security '
+                . 'FROM {{%requests}} r WHERE r.id = :id FOR UPDATE',
                 [':id' => $requestId],
             )->queryOne();
             if ($request === false) {
                 throw new RequestNotFound('Request not found');
             }
             $currentStatus = RequestStatus::from((string) $request['status']);
+            // WF-007: отзыв разрешён только до контроля СБ. Заявка, уже
+            // побывавшая на контроле (в том числе возвращённая обратно в
+            // работу), больше не считается "до контроля СБ" — даже если
+            // текущий статус формально входит в WITHDRAWABLE_STATUSES.
             if (
                 !in_array($currentStatus, self::WITHDRAWABLE_STATUSES, true)
+                || (bool) $request['reviewed_by_security']
                 || (int) $request['lock_version'] !== $expectedLockVersion
             ) {
                 throw new ConcurrentRequestModification();
@@ -1149,26 +1173,39 @@ final class RequestRepository
                 'rule_id' => 'WF-007',
                 'created_at' => $now,
             ])->execute();
+            $this->db->createCommand()->insert('{{%audit_events}}', [
+                'event_type' => 'request.withdrawn',
+                'entity_type' => 'request',
+                'entity_id' => $requestId,
+                'actor_id' => $actorId,
+                'rule_id' => 'WF-007',
+                'payload_json' => json_encode([
+                    'from_status' => $currentStatus->value,
+                    'to_status' => RequestStatus::Withdrawn->value,
+                    'lock_version' => $nextLockVersion,
+                ], JSON_THROW_ON_ERROR),
+                'created_at' => $now,
+            ])->execute();
 
             // ТЗ 3.8: уведомление исполнителю и руководителям об отзыве.
-            $outbox = new NotificationOutbox($this->db);
+            // Один и тот же человек может одновременно быть исполнителем и
+            // руководителем (AUTH-005) — получатели дедуплицируются по email,
+            // чтобы не отправить два одинаковых письма.
+            $recipients = [];
             $executor = $this->currentAssigneeContact($requestId, 'executor');
             if ($executor !== null) {
-                $outbox->enqueue(
-                    $requestId,
-                    'request.withdrawn',
-                    $executor['email'],
-                    $executor['name'],
-                    'Заявка отозвана инициатором',
-                    'Инициатор отозвал заявку. Дальнейшая работа по ней не требуется.',
-                );
+                $recipients[$executor['email']] = $executor;
             }
             foreach ($this->activeUsersWithRoles(['ic_manager', 'laboratory_manager']) as $manager) {
+                $recipients[$manager['email']] ??= $manager;
+            }
+            $outbox = new NotificationOutbox($this->db);
+            foreach ($recipients as $recipient) {
                 $outbox->enqueue(
                     $requestId,
                     'request.withdrawn',
-                    $manager['email'],
-                    $manager['name'],
+                    $recipient['email'],
+                    $recipient['name'],
                     'Заявка отозвана инициатором',
                     'Инициатор отозвал заявку.',
                 );
