@@ -12,6 +12,7 @@
 - `docs/business-rules.md` — нумерованные бизнес-правила;
 - `docs/test-strategy.md` — автоматические проверки и quality gates;
 - `docs/engineering-standards.md` — правила кода, документации и Definition of Done;
+- `docs/roadmap.md` — укрупнённый план дальнейших работ;
 - `docs/devops-contract.md` — требования к готовому Docker-окружению;
 - `docs/adr/` — журнал архитектурных решений;
 - `docs/on-premise-handoff.md` — перенос в локальный GitLab и закрытый контур;
