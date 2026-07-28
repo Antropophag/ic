@@ -1,6 +1,6 @@
 .DEFAULT_GOAL := help
 
-.PHONY: help init up down setup check backend-quality coverage frontend-quality frontend-coverage repo-quality smoke demo-bundle frontend-build schema-diagram schema-diagram-check
+.PHONY: help init up down setup check backend-quality coverage frontend-quality frontend-coverage e2e repo-quality smoke demo-bundle frontend-build schema-diagram schema-diagram-check
 
 help:
 	@echo "up                    Build and start the development stack"
@@ -12,6 +12,7 @@ help:
 	@echo "coverage              Enforce backend domain/application coverage >= 90%"
 	@echo "frontend-quality      Run frontend lint and dependency audit"
 	@echo "frontend-coverage     Enforce frontend logic coverage >= 80%"
+	@echo "e2e                   Run critical browser flow against the running stack"
 	@echo "repo-quality          Lint workflows, Dockerfiles, shell, YAML and Markdown"
 	@echo "smoke                 Check the running API end-to-end"
 	@echo "demo-bundle           Build an offline Windows demo bundle"
@@ -57,6 +58,11 @@ coverage:
 frontend-coverage:
 	npm --prefix frontend ci --no-audit --no-fund
 	npm --prefix frontend run coverage
+
+e2e:
+	npm --prefix frontend ci --no-audit --no-fund
+	cd frontend && npm exec playwright install chromium
+	npm --prefix frontend run e2e
 
 frontend-quality:
 	npm --prefix frontend ci --no-audit --no-fund
