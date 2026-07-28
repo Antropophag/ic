@@ -5,8 +5,6 @@ services:
     build:
       context: .
       dockerfile: docker/gateway.Dockerfile
-      args:
-        VITE_DEV_USER_ID: "1"
     ports:
       - "8080:8080"
     depends_on:

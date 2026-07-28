@@ -1,7 +1,5 @@
 FROM node:22.23.0-alpine3.23 AS frontend
 WORKDIR /build
-ARG VITE_DEV_USER_ID
-ENV VITE_DEV_USER_ID=${VITE_DEV_USER_ID}
 COPY frontend/package*.json ./
 RUN npm ci --no-audit --no-fund
 COPY frontend/ ./

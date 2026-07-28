@@ -1,11 +1,13 @@
-const DEV_HEADERS = import.meta.env.VITE_DEV_USER_ID
-  ? { 'X-Dev-User-ID': import.meta.env.VITE_DEV_USER_ID }
-  : {}
+import { getDevUserId } from './devUsers'
+
+function devHeaders() {
+  return { 'X-Dev-User-ID': String(getDevUserId()) }
+}
 
 async function request(path, options = {}) {
   const response = await fetch(path, {
     ...options,
-    headers: { Accept: 'application/json', ...DEV_HEADERS, ...options.headers },
+    headers: { Accept: 'application/json', ...devHeaders(), ...options.headers },
   })
   const payload = await response.json().catch(() => ({}))
   if (!response.ok) {
@@ -38,7 +40,7 @@ export const requestApi = {
   },
   downloadDocument: async (versionId) => {
     const response = await fetch(`/api/v1/document-versions/${versionId}/download`, {
-      headers: { ...DEV_HEADERS },
+      headers: { ...devHeaders() },
     })
     if (!response.ok) {
       const error = new Error('Не удалось скачать документ')
