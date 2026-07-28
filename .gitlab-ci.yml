@@ -66,6 +66,33 @@ api-smoke:
   after_script:
     - docker compose down --volumes
 
+browser-e2e:
+  stage: test
+  image: mcr.microsoft.com/playwright:v1.62.0-noble
+  services:
+    - name: docker:29.0.0-dind
+      command: ["--tls=false"]
+  variables:
+    DOCKER_HOST: tcp://docker:2375
+    DOCKER_TLS_CERTDIR: ""
+    E2E_BASE_URL: http://docker:8080
+  before_script:
+    - apt-get update
+    - apt-get install -y --no-install-recommends docker.io docker-compose-v2
+    - cp .env.example .env
+  script:
+    - docker compose up -d --build
+    - docker compose run --rm backend ./yii migrate/up
+    - docker compose run --rm backend ./yii dev/seed
+    - npm --prefix frontend ci --no-audit --no-fund
+    - npm --prefix frontend run e2e
+  after_script:
+    - docker compose down --volumes
+  artifacts:
+    when: on_failure
+    paths:
+      - frontend/playwright-report/
+
 documentation:
   stage: test
   image: python:3.13.5-alpine3.22

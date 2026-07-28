@@ -9,6 +9,8 @@
 /frontend/node_modules/
 /frontend/dist/
 /frontend/coverage/
+/frontend/playwright-report/
+/frontend/test-results/
 /scripts/__pycache__/
 *.py[cod]
 
