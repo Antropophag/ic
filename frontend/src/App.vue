@@ -11,6 +11,7 @@ const selected = ref(null)
 const showCreate = ref(false)
 const showHistory = ref(false)
 const createError = ref('')
+const registryError = ref('')
 const createLoading = ref(false)
 const draftFiles = ref([])
 const actionError = ref('')
@@ -265,20 +266,30 @@ async function loadRequests(rethrow = false) {
 async function createRequest() {
   if (createLoading.value) return
   createError.value = ''
+  registryError.value = ''
   createLoading.value = true
+  let created
   try {
-    const created = await requestApi.create(draft)
-    const failedFiles = []
-    for (const file of draftFiles.value) {
-      try {
-        await requestApi.uploadDocument(created.id, file)
-      } catch {
-        failedFiles.push(file.name)
-      }
+    created = await requestApi.create(draft)
+  } catch (error) {
+    createError.value = error.status === 422
+      ? 'Проверьте обязательные поля формы.'
+      : 'Не удалось создать заявку. Повторите попытку.'
+    createLoading.value = false
+    return
+  }
+
+  const failedFiles = []
+  for (const file of draftFiles.value) {
+    try {
+      await requestApi.uploadDocument(created.id, file)
+    } catch {
+      failedFiles.push(file.name)
     }
-    showCreate.value = false
-    Object.assign(draft, { productName: '', manufacturer: '', supplier: '', sampleQuantity: 1, testMethod: '' })
-    draftFiles.value = []
+  }
+  Object.assign(draft, { productName: '', manufacturer: '', supplier: '', sampleQuantity: 1, testMethod: '' })
+  draftFiles.value = []
+  try {
     await loadRequests(true)
     const createdItem = requests.value.find(item => item.backendId === created.id)
     if (createdItem) {
@@ -286,12 +297,14 @@ async function createRequest() {
       if (failedFiles.length) {
         documentError.value = `Заявка создана, но не удалось загрузить: ${failedFiles.join(', ')}.`
       }
+    } else {
+      registryError.value = 'Заявка создана, но пока не появилась в реестре. Не создавайте её повторно; обновите страницу.'
     }
-  } catch (error) {
-    createError.value = error.status === 422
-      ? 'Проверьте обязательные поля формы.'
-      : 'Не удалось создать заявку. Повторите попытку.'
+  } catch {
+    const fileMessage = failedFiles.length ? ` Не загружены: ${failedFiles.join(', ')}.` : ''
+    registryError.value = `Заявка создана, но обновить реестр не удалось. Не создавайте её повторно; обновите страницу.${fileMessage}`
   } finally {
+    showCreate.value = false
     createLoading.value = false
   }
 }
@@ -422,6 +435,7 @@ onMounted(loadRequests)
           </div>
           <button class="primary" @click="showCreate = true">＋ Новая заявка</button>
         </div>
+        <p v-if="registryError" class="detail-state error">{{ registryError }}</p>
 
         <div class="card registry">
           <div class="tabs">
