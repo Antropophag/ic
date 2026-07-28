@@ -73,21 +73,36 @@ final class RequestController extends Controller
             return ['errors' => $input->getErrors()];
         }
 
+        $executorId = (int) $input->executorId;
+        $actorId = (new CurrentUser())->id(Yii::$app->request);
+
         try {
             return $this->repository()->assignExecutor(
                 $id,
-                (int) $input->executorId,
-                (new CurrentUser())->id(Yii::$app->request),
+                $executorId,
+                $actorId,
             );
         } catch (AssignmentTargetNotFound $error) {
             throw new NotFoundHttpException($error->getMessage());
         } catch (AssignmentDenied $error) {
-            $this->repository()->recordRejectedAssignment(
-                $id,
-                (int) $input->executorId,
-                (new CurrentUser())->id(Yii::$app->request),
-                $error->ruleId,
-            );
+            try {
+                $this->repository()->recordRejectedAssignment(
+                    $id,
+                    $executorId,
+                    $actorId,
+                    $error->ruleId,
+                );
+            } catch (\Throwable $auditError) {
+                Yii::error([
+                    'message' => 'Не удалось записать аудит отклонённого назначения.',
+                    'requestId' => $id,
+                    'executorId' => $executorId,
+                    'actorId' => $actorId,
+                    'ruleId' => $error->ruleId,
+                    'exception' => $auditError,
+                ], __METHOD__);
+            }
+
             throw new ForbiddenHttpException($error->getMessage());
         }
     }
