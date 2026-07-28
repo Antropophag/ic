@@ -8,6 +8,7 @@
     "ext-json": "*",
     "ext-pdo": "*",
     "ext-zip": "*",
+    "dompdf/dompdf": "^3.1",
     "yiisoft/yii2": "^2.0"
   },
   "require-dev": {
