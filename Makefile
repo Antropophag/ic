@@ -64,6 +64,10 @@ frontend-quality:
 	npm --prefix frontend run audit
 
 repo-quality:
+	@if test ! -x frontend/node_modules/.bin/markdownlint-cli2; then \
+		command -v npm >/dev/null 2>&1 || { echo "Repository quality requires npm or installed frontend dependencies." >&2; exit 1; }; \
+		npm --prefix frontend ci --no-audit --no-fund; \
+	fi
 	sh scripts/lint-repository.sh
 
 smoke:
