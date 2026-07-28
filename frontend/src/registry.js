@@ -46,6 +46,7 @@ export function fromApi(item) {
     canUploadDocument: Boolean(Number(item.can_upload_document)),
     canUploadReport: Boolean(Number(item.can_upload_report)),
     canPublishOpinion: Boolean(Number(item.can_publish_opinion)),
+    canSecurityDecide: Boolean(Number(item.can_security_decide)),
     status: STATUS_LABELS[item.status] || item.status,
     tone: STATUS_TONES[item.status] || 'blue',
   }
@@ -59,13 +60,16 @@ const HISTORY_LABELS = {
   start: 'перевёл(а) заявку в работу',
   upload_report: 'загрузил(а) отчёт испытаний',
   publish_opinion: 'опубликовал(а) экспертное заключение',
+  security_approve: 'согласовал(а) заключение',
+  security_return: 'вернул(а) заявку в работу',
 }
 
 export function historyFromApi(item) {
+  const description = HISTORY_LABELS[item.action] || item.action
   return {
     id: `${item.kind}-${item.id}`,
     actor: item.actorName,
-    description: HISTORY_LABELS[item.action] || item.action,
+    description: item.reason ? `${description}: ${item.reason}` : description,
     ruleId: item.ruleId,
     occurredAt: new Date(item.occurredAt).toLocaleString('ru-RU'),
   }

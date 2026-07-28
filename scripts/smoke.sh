@@ -280,10 +280,43 @@ opinion_details=$(curl --fail --silent --show-error \
   "$base_url/api/v1/requests/$request_id")
 printf '%s' "$opinion_details" | grep '"action":"publish_opinion"' >/dev/null
 printf '%s' "$opinion_details" | grep '"documentType":"opinion"' >/dev/null
-
-docker compose exec -T mariadb sh -lc \
-  'mariadb --user=root --password="$MARIADB_ROOT_PASSWORD" "$MARIADB_DATABASE" --execute "$1"' \
-  sh "UPDATE requests SET status = 'completed' WHERE id = $request_id"
+printf '%s' "$opinion_details" | grep '"can_security_decide":0' >/dev/null
+security_details=$(curl --fail --silent --show-error \
+  --header 'X-Dev-User-ID: 5' \
+  "$base_url/api/v1/requests/$request_id")
+printf '%s' "$security_details" | grep '"can_security_decide":1' >/dev/null
+denied_security_status=$(curl --silent --output /dev/null --write-out '%{http_code}' \
+  --request POST \
+  --header 'X-Dev-User-ID: 2' \
+  --header 'Content-Type: application/json' \
+  --data '{"decision":"approve","reason":null,"lockVersion":6}' \
+  "$base_url/api/v1/requests/$request_id/security-decision")
+[ "$denied_security_status" = '403' ] || {
+  echo "Expected forbidden security decision status 403, got $denied_security_status" >&2
+  exit 1
+}
+security_decision=$(curl --fail --silent --show-error \
+  --request POST \
+  --header 'X-Dev-User-ID: 5' \
+  --header 'Content-Type: application/json' \
+  --data '{"decision":"approve","reason":null,"lockVersion":6}' \
+  "$base_url/api/v1/requests/$request_id/security-decision")
+printf '%s' "$security_decision" | grep '"status":"completed"' >/dev/null
+printf '%s' "$security_decision" | grep '"lockVersion":7' >/dev/null
+repeated_security_status=$(curl --silent --output /dev/null --write-out '%{http_code}' \
+  --request POST \
+  --header 'X-Dev-User-ID: 5' \
+  --header 'Content-Type: application/json' \
+  --data '{"decision":"approve","reason":null,"lockVersion":6}' \
+  "$base_url/api/v1/requests/$request_id/security-decision")
+[ "$repeated_security_status" = '403' ] || {
+  echo "Expected repeated security decision status 403, got $repeated_security_status" >&2
+  exit 1
+}
+completed_details=$(curl --fail --silent --show-error \
+  --header 'X-Dev-User-ID: 5' \
+  "$base_url/api/v1/requests/$request_id")
+printf '%s' "$completed_details" | grep '"action":"security_approve"' >/dev/null
 
 obsolete_public_status=$(curl --silent --output /dev/null --write-out '%{http_code}' \
   --header 'X-Dev-User-ID: 3' \

@@ -15,6 +15,7 @@ use App\Domain\Request\RequestNotFound;
 use App\Domain\Request\RequestStatus;
 use App\Domain\Request\RequestWorkflow;
 use App\Domain\Request\Role;
+use App\Domain\Request\SecurityDecisionPolicy;
 use App\Domain\Request\StartRequestPolicy;
 use yii\db\Connection;
 
@@ -66,6 +67,125 @@ final class RequestRepository
             $transaction->rollBack();
             throw $error;
         }
+    }
+
+    /** @return array{requestId: int, decision: string, status: string, lockVersion: int} */
+    public function decideSecurity(
+        int $requestId,
+        int $actorId,
+        string $decision,
+        ?string $reason,
+        int $expectedLockVersion,
+    ): array {
+        $transaction = $this->db->beginTransaction();
+        try {
+            $request = $this->db->createCommand(
+                'SELECT r.status, r.lock_version AS lockVersion, actor.is_active AS actorIsActive, '
+                . "GROUP_CONCAT(DISTINCT role.code ORDER BY role.code SEPARATOR ',') AS roleCodes "
+                . 'FROM {{%requests}} r JOIN {{%users}} actor ON actor.id = :actor_id '
+                . 'LEFT JOIN {{%user_roles}} ur ON ur.user_id = actor.id '
+                . 'LEFT JOIN {{%roles}} role ON role.id = ur.role_id '
+                . 'WHERE r.id = :request_id GROUP BY r.id, actor.id FOR UPDATE',
+                [':request_id' => $requestId, ':actor_id' => $actorId],
+            )->queryOne();
+            if ($request === false) {
+                throw new RequestNotFound('Request not found');
+            }
+            $roles = array_map(
+                static fn (string $role): Role => Role::from($role),
+                array_filter(explode(',', (string) $request['roleCodes'])),
+            );
+            $targetStatus = (new SecurityDecisionPolicy())->targetStatus(
+                RequestStatus::from((string) $request['status']),
+                $decision,
+                $reason,
+                (bool) $request['actorIsActive'],
+                $roles,
+            );
+            if ((int) $request['lockVersion'] !== $expectedLockVersion) {
+                throw new ConcurrentRequestModification();
+            }
+            $opinionId = $this->db->createCommand(
+                'SELECT eo.id FROM {{%expert_opinions}} eo '
+                . 'LEFT JOIN {{%security_checks}} sc ON sc.expert_opinion_id = eo.id '
+                . 'WHERE eo.request_id = :request_id AND sc.id IS NULL '
+                . 'ORDER BY eo.revision DESC LIMIT 1 FOR UPDATE',
+                [':request_id' => $requestId],
+            )->queryScalar();
+            if ($opinionId === false) {
+                throw new \RuntimeException('Current expert opinion not found or already checked.');
+            }
+
+            $now = gmdate('Y-m-d H:i:s.u');
+            $this->db->createCommand()->insert('{{%security_checks}}', [
+                'request_id' => $requestId,
+                'expert_opinion_id' => (int) $opinionId,
+                'officer_id' => $actorId,
+                'decision' => $decision,
+                'reason' => $decision === 'return' ? $reason : null,
+                'created_at' => $now,
+            ])->execute();
+            $nextLockVersion = $expectedLockVersion + 1;
+            $updated = $this->db->createCommand()->update('{{%requests}}', [
+                'status' => $targetStatus->value,
+                'lock_version' => $nextLockVersion,
+                'updated_at' => $now,
+            ], [
+                'id' => $requestId,
+                'status' => RequestStatus::SecurityReview->value,
+                'lock_version' => $expectedLockVersion,
+            ])->execute();
+            if ($updated !== 1) {
+                throw new ConcurrentRequestModification();
+            }
+            $action = $decision === 'approve' ? 'security_approve' : 'security_return';
+            $ruleId = $decision === 'approve' ? 'SEC-002' : 'SEC-003';
+            $this->db->createCommand()->insert('{{%request_transitions}}', [
+                'request_id' => $requestId,
+                'actor_id' => $actorId,
+                'from_status' => RequestStatus::SecurityReview->value,
+                'to_status' => $targetStatus->value,
+                'action' => $action,
+                'rule_id' => $ruleId,
+                'reason' => $decision === 'return' ? $reason : null,
+                'created_at' => $now,
+            ])->execute();
+            $this->db->createCommand()->insert('{{%audit_events}}', [
+                'event_type' => 'request.security_decided',
+                'entity_type' => 'request',
+                'entity_id' => $requestId,
+                'actor_id' => $actorId,
+                'rule_id' => $ruleId,
+                'payload_json' => json_encode(['decision' => $decision, 'reason' => $reason], JSON_THROW_ON_ERROR),
+                'created_at' => $now,
+            ])->execute();
+            $transaction->commit();
+
+            return ['requestId' => $requestId, 'decision' => $decision, 'status' => $targetStatus->value, 'lockVersion' => $nextLockVersion];
+        } catch (\Throwable $error) {
+            $transaction->rollBack();
+            throw $error;
+        }
+    }
+
+    public function recordRejectedSecurityDecision(int $requestId, int $actorId, string $ruleId): void
+    {
+        $allowedReferences = $this->db->createCommand(
+            'SELECT 1 FROM {{%requests}} r JOIN {{%users}} actor ON actor.id = :actor_id WHERE r.id = :request_id',
+            [':request_id' => $requestId, ':actor_id' => $actorId],
+        )->queryScalar();
+        if ($allowedReferences === false) {
+            return;
+        }
+        $this->db->createCommand()->insert('{{%audit_events}}', [
+            'event_type' => 'request.security_decision_rejected',
+            'entity_type' => 'request',
+            'entity_id' => $requestId,
+            'actor_id' => $actorId,
+            'rule_id' => $ruleId,
+            'payload_json' => json_encode(['outcome' => 'rejected'], JSON_THROW_ON_ERROR),
+            'created_at' => gmdate('Y-m-d H:i:s.u'),
+        ])->execute();
     }
 
     /** @return list<array<string, mixed>> */
@@ -159,6 +279,10 @@ final class RequestRepository
             . "AND rr.code IN ('ic_manager', 'laboratory_manager')))) AS can_upload_report "
             . ", (r.status = 'opinion_preparation' AND current_expert.user_id = :opinion_actor) "
             . 'AS can_publish_opinion '
+            . ", (r.status = 'security_review' AND EXISTS(SELECT 1 FROM {{%user_roles}} security_ur "
+            . 'JOIN {{%roles}} security_role ON security_role.id = security_ur.role_id '
+            . "WHERE security_ur.user_id = :security_actor AND security_role.code = 'security_officer')) "
+            . 'AS can_security_decide '
             . 'FROM {{%requests}} r '
             . 'JOIN {{%users}} viewer ON viewer.id = :actor_id AND viewer.is_active = 1 '
             . 'JOIN {{%users}} u ON u.id = r.initiator_id '
@@ -180,6 +304,7 @@ final class RequestRepository
                 ':report_actor' => $actorId,
                 ':report_manager' => $actorId,
                 ':opinion_actor' => $actorId,
+                ':security_actor' => $actorId,
             ],
         )->queryOne();
         if ($item === false) {
@@ -188,13 +313,13 @@ final class RequestRepository
 
         $history = $this->db->createCommand(
             'SELECT t.id, \'transition\' AS kind, t.action, t.from_status AS fromStatus, '
-            . "t.to_status AS toStatus, t.rule_id AS ruleId, DATE_FORMAT(t.created_at, '%Y-%m-%dT%H:%i:%s.%fZ') AS occurredAt, "
+            . "t.to_status AS toStatus, t.rule_id AS ruleId, t.reason, DATE_FORMAT(t.created_at, '%Y-%m-%dT%H:%i:%s.%fZ') AS occurredAt, "
             . 'u.display_name AS actorName FROM {{%request_transitions}} t '
             . 'JOIN {{%users}} u ON u.id = t.actor_id WHERE t.request_id = :transition_request_id '
             . 'UNION ALL '
             . "SELECT a.id, 'assignment' AS kind, CASE a.event_type "
             . "WHEN 'request.executor_assigned' THEN 'assign_executor' ELSE 'assign_expert' END AS action, NULL, NULL, "
-            . "a.rule_id, DATE_FORMAT(a.created_at, '%Y-%m-%dT%H:%i:%s.%fZ'), u.display_name FROM {{%audit_events}} a "
+            . "a.rule_id, NULL, DATE_FORMAT(a.created_at, '%Y-%m-%dT%H:%i:%s.%fZ'), u.display_name FROM {{%audit_events}} a "
             . 'JOIN {{%users}} u ON u.id = a.actor_id '
             . "WHERE a.entity_type = 'request' AND a.entity_id = :audit_request_id "
             . "AND a.event_type IN ('request.executor_assigned', 'request.expert_assigned') "

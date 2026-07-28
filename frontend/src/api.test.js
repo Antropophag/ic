@@ -135,6 +135,18 @@ it('publishes an opinion with optimistic locking', async () => {
   }))
 })
 
+it('sends a security decision with optimistic locking', async () => {
+  const fetchMock = vi.fn().mockResolvedValue(new Response('{}', { status: 200 }))
+  vi.stubGlobal('fetch', fetchMock)
+
+  await requestApi.decideSecurity(7, 'return', 'Нужно уточнить вывод.', 7)
+
+  expect(fetchMock).toHaveBeenCalledWith('/api/v1/requests/7/security-decision', expect.objectContaining({
+    method: 'POST',
+    body: JSON.stringify({ decision: 'return', reason: 'Нужно уточнить вывод.', lockVersion: 7 }),
+  }))
+})
+
 it('loads active executors from the server', async () => {
   const payload = { items: [{ id: 2, displayName: 'Исполнитель' }] }
   vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(JSON.stringify(payload), { status: 200 })))

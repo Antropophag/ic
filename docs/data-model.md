@@ -106,6 +106,15 @@ erDiagram
         varchar(64) code
         varchar(128) name
     }
+    security_checks {
+        bigint(20)_unsigned id PK
+        bigint(20)_unsigned request_id FK "-> requests.id"
+        bigint(20)_unsigned expert_opinion_id FK "-> expert_opinions.id"
+        bigint(20)_unsigned officer_id FK "-> users.id"
+        varchar(16) decision
+        text reason
+        datetime(6) created_at
+    }
     users {
         bigint(20)_unsigned id PK
         varchar(128) ad_login
@@ -139,6 +148,9 @@ erDiagram
     users ||--o{ request_document_versions : "uploaded_by"
     requests ||--o{ request_transitions : "request_id"
     users ||--o{ request_transitions : "actor_id"
+    requests ||--o{ security_checks : "request_id"
+    expert_opinions ||--o{ security_checks : "expert_opinion_id"
+    users ||--o{ security_checks : "officer_id"
     users ||--o{ user_roles : "user_id"
     roles ||--o{ user_roles : "role_id"
     users |o--o{ user_roles : "assigned_by"

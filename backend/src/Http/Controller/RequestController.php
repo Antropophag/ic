@@ -9,6 +9,7 @@ use App\Application\Request\AddCommentInput;
 use App\Application\Request\AssignExecutorInput;
 use App\Application\Request\AssignExpertInput;
 use App\Application\Request\PublishOpinionInput;
+use App\Application\Request\SecurityDecisionInput;
 use App\Application\Request\StartRequestInput;
 use App\Domain\Request\AssignmentDenied;
 use App\Domain\Request\AssignmentTargetNotFound;
@@ -19,6 +20,7 @@ use App\Domain\Request\CommentDenied;
 use App\Domain\Request\RequestNotFound;
 use App\Domain\Request\ReportDenied;
 use App\Domain\Request\OpinionDenied;
+use App\Domain\Request\SecurityDecisionDenied;
 use App\Domain\Request\StartDenied;
 use App\Domain\Request\TransitionDenied;
 use App\Infrastructure\Identity\CurrentUser;
@@ -337,6 +339,36 @@ final class RequestController extends Controller
     }
 
     /** @return array<string, mixed> */
+    public function actionSecurityDecision(int $id): array
+    {
+        $input = new SecurityDecisionInput();
+        $input->load(Yii::$app->request->bodyParams, '');
+        if (!$input->validate()) {
+            Yii::$app->response->statusCode = 422;
+            return ['errors' => $input->getErrors()];
+        }
+
+        $actorId = (new CurrentUser())->id(Yii::$app->request);
+        try {
+            return $this->repository()->decideSecurity(
+                $id,
+                $actorId,
+                (string) $input->decision,
+                $input->reason === '' ? null : (string) $input->reason,
+                (int) $input->lockVersion,
+            );
+        } catch (RequestNotFound $error) {
+            throw new NotFoundHttpException($error->getMessage());
+        } catch (SecurityDecisionDenied $error) {
+            $this->recordRejectedSecurityDecisionSafely($id, $actorId, $error->ruleId);
+            throw new ForbiddenHttpException($error->getMessage());
+        } catch (ConcurrentRequestModification $error) {
+            $this->recordRejectedSecurityDecisionSafely($id, $actorId, $error->ruleId);
+            throw new ConflictHttpException($error->getMessage());
+        }
+    }
+
+    /** @return array<string, mixed> */
     public function actionStart(int $id): array
     {
         $input = new StartRequestInput();
@@ -452,6 +484,21 @@ final class RequestController extends Controller
         } catch (\Throwable $auditError) {
             Yii::error([
                 'message' => 'Не удалось записать аудит отклонённой публикации заключения.',
+                'requestId' => $requestId,
+                'actorId' => $actorId,
+                'ruleId' => $ruleId,
+                'exception' => $auditError,
+            ], __METHOD__);
+        }
+    }
+
+    private function recordRejectedSecurityDecisionSafely(int $requestId, int $actorId, string $ruleId): void
+    {
+        try {
+            $this->repository()->recordRejectedSecurityDecision($requestId, $actorId, $ruleId);
+        } catch (\Throwable $auditError) {
+            Yii::error([
+                'message' => 'Не удалось записать аудит отклонённого решения СБ.',
                 'requestId' => $requestId,
                 'actorId' => $actorId,
                 'ruleId' => $ruleId,
