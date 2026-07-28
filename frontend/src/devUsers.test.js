@@ -42,3 +42,26 @@ it('persists the selection through localStorage when available', () => {
 
   expect(store.get('shlz-dev-user-id')).toBe('5')
 })
+
+it('keeps the switch in memory when localStorage.setItem throws', () => {
+  vi.stubGlobal('localStorage', {
+    getItem: () => null,
+    setItem: () => {
+      throw new Error('storage blocked')
+    },
+  })
+
+  expect(() => setDevUserId(3)).not.toThrow()
+  expect(getDevUserId()).toBe(3)
+})
+
+it('falls back to the default user when localStorage.getItem throws', () => {
+  vi.stubGlobal('localStorage', {
+    getItem: () => {
+      throw new Error('storage blocked')
+    },
+    setItem: () => {},
+  })
+
+  expect(getDevUserId()).toBe(DEV_USERS[0].id)
+})

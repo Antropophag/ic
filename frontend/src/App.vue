@@ -44,6 +44,7 @@ const documentRequestGuard = createLatestRequestGuard()
 const reportRequestGuard = createLatestRequestGuard()
 const opinionRequestGuard = createLatestRequestGuard()
 const securityRequestGuard = createLatestRequestGuard()
+const registryRequestGuard = createLatestRequestGuard()
 const draft = reactive({
   productName: '', manufacturer: '', supplier: '', sampleQuantity: 1, testMethod: '',
 })
@@ -297,10 +298,13 @@ async function loadOlderComments() {
 }
 
 async function loadRequests(rethrow = false) {
+  const requestToken = registryRequestGuard.begin(devUserId.value)
   try {
     const result = await requestApi.list()
+    if (!registryRequestGuard.isCurrent(requestToken, devUserId.value)) return
     requests.value = result.items.map(fromApi)
   } catch (error) {
+    if (!registryRequestGuard.isCurrent(requestToken, devUserId.value)) return
     // Макет остаётся доступным отдельно от backend; ошибка будет видна в Network.
     if (rethrow) throw error
   }

@@ -1,7 +1,7 @@
 const STORAGE_KEY = 'shlz-dev-user-id'
 
 export const DEV_USERS = [
-  { id: 1, displayName: 'Максим Умнов', position: 'Руководитель ИЦ', department: 'Бюро приводной техники' },
+  { id: 1, displayName: 'Максим Умнов', position: 'Разработчик', department: 'Тестовое подразделение' },
   { id: 2, displayName: 'Сергей Кашин', position: 'Исполнитель ИЦ', department: 'Испытательный центр' },
   { id: 3, displayName: 'Тестовый сотрудник', position: 'Сотрудник', department: 'Тестовое подразделение' },
   { id: 4, displayName: 'Анна Смирнова', position: 'Эксперт', department: 'Испытательный центр' },
@@ -10,18 +10,28 @@ export const DEV_USERS = [
 
 let overrideId = null
 
-function readStorage() {
+function readStoredId() {
   try {
-    return typeof localStorage === 'undefined' ? null : localStorage
+    if (typeof localStorage === 'undefined') return NaN
+    return Number(localStorage.getItem(STORAGE_KEY))
   } catch {
-    return null
+    return NaN
+  }
+}
+
+function persistId(id) {
+  try {
+    if (typeof localStorage === 'undefined') return
+    localStorage.setItem(STORAGE_KEY, String(id))
+  } catch {
+    // Персистентность необязательна для dev-переключателя: недоступное
+    // хранилище не должно прерывать смену актёра в памяти.
   }
 }
 
 export function getDevUserId() {
   if (overrideId !== null) return overrideId
-  const storage = readStorage()
-  const stored = storage ? Number(storage.getItem(STORAGE_KEY)) : NaN
+  const stored = readStoredId()
   return DEV_USERS.some(user => user.id === stored) ? stored : DEV_USERS[0].id
 }
 
@@ -33,5 +43,5 @@ export function getDevUser() {
 export function setDevUserId(id) {
   if (!DEV_USERS.some(user => user.id === id)) return
   overrideId = id
-  readStorage()?.setItem(STORAGE_KEY, String(id))
+  persistId(id)
 }
