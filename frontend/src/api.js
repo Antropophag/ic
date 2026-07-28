@@ -19,9 +19,20 @@ async function request(path, options = {}) {
 
 export const requestApi = {
   list: () => request('/api/v1/requests'),
+  executors: () => request('/api/v1/executors'),
   create: (data) => request('/api/v1/requests', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(data),
+  }),
+  assignExecutor: (requestId, executorId, lockVersion) => request(`/api/v1/requests/${requestId}/executor`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ executorId, lockVersion }),
+  }),
+  start: (requestId, lockVersion) => request(`/api/v1/requests/${requestId}/start`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ lockVersion }),
   }),
 }

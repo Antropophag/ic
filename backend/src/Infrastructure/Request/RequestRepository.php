@@ -67,29 +67,76 @@ final class RequestRepository
     }
 
     /** @return list<array<string, mixed>> */
-    public function findLatest(int $limit = 50): array
+    public function findLatest(int $actorId, int $limit = 50): array
     {
         return $this->db->createCommand(
             'SELECT r.id, r.number, r.status, r.product_name, r.manufacturer, '
             . 'r.supplier, r.sample_quantity, r.test_method, r.lock_version AS lockVersion, r.created_at, '
-            . 'u.display_name AS initiator_name, u.department '
+            . 'u.display_name AS initiator_name, u.department, '
+            . 'executor.id AS executor_id, executor.display_name AS executor_name, '
+            . "(r.status = 'registered' AND EXISTS(SELECT 1 FROM {{%users}} aau "
+            . 'WHERE aau.id = :active_assign_actor AND aau.is_active = 1) '
+            . 'AND EXISTS(SELECT 1 FROM {{%user_roles}} aur '
+            . 'JOIN {{%roles}} ar ON ar.id = aur.role_id '
+            . "WHERE aur.user_id = :assign_actor AND ar.code IN ('ic_manager', 'laboratory_manager')) "
+            . ') AS can_assign_executor, '
+            . "(r.status = 'registered' AND EXISTS(SELECT 1 FROM {{%users}} sau "
+            . 'WHERE sau.id = :active_start_actor AND sau.is_active = 1) AND '
+            . '(EXISTS(SELECT 1 FROM {{%user_roles}} sur '
+            . 'JOIN {{%roles}} sr ON sr.id = sur.role_id '
+            . "WHERE sur.user_id = :start_manager AND sr.code IN ('ic_manager', 'laboratory_manager')) "
+            . 'OR (current_executor.user_id = :start_executor AND EXISTS(SELECT 1 '
+            . 'FROM {{%user_roles}} seur JOIN {{%roles}} ser ON ser.id = seur.role_id '
+            . "WHERE seur.user_id = :start_executor_role AND ser.code = 'ic_executor')))) AS can_start "
             . 'FROM {{%requests}} r JOIN {{%users}} u ON u.id = r.initiator_id '
+            . 'LEFT JOIN {{%request_assignments}} current_executor ON current_executor.request_id = r.id '
+            . "AND current_executor.assignment_type = 'executor' AND current_executor.valid_to IS NULL "
+            . 'LEFT JOIN {{%users}} executor ON executor.id = current_executor.user_id '
             . 'ORDER BY r.number DESC LIMIT :limit',
-            [':limit' => $limit],
+            [
+                ':assign_actor' => $actorId,
+                ':active_assign_actor' => $actorId,
+                ':start_manager' => $actorId,
+                ':active_start_actor' => $actorId,
+                ':start_executor' => $actorId,
+                ':start_executor_role' => $actorId,
+                ':limit' => $limit,
+            ],
+        )->queryAll();
+    }
+
+    /** @return list<array{id: int, displayName: string}> */
+    public function findActiveExecutors(): array
+    {
+        return $this->db->createCommand(
+            'SELECT u.id, u.display_name AS displayName FROM {{%users}} u '
+            . 'JOIN {{%user_roles}} ur ON ur.user_id = u.id '
+            . 'JOIN {{%roles}} r ON r.id = ur.role_id '
+            . "WHERE u.is_active = 1 AND r.code = 'ic_executor' ORDER BY u.display_name",
         )->queryAll();
     }
 
     /** @return array<string, mixed> */
-    public function assignExecutor(int $requestId, int $executorId, int $actorId): array
-    {
+    public function assignExecutor(
+        int $requestId,
+        int $executorId,
+        int $expectedLockVersion,
+        int $actorId,
+    ): array {
         $transaction = $this->db->beginTransaction();
         try {
-            $requestExists = $this->db->createCommand(
-                'SELECT id FROM {{%requests}} WHERE id = :id FOR UPDATE',
+            $request = $this->db->createCommand(
+                'SELECT status, lock_version FROM {{%requests}} WHERE id = :id FOR UPDATE',
                 [':id' => $requestId],
-            )->queryScalar();
-            if ($requestExists === false) {
+            )->queryOne();
+            if ($request === false) {
                 throw new AssignmentTargetNotFound('Request not found');
+            }
+            if (
+                (string) $request['status'] !== RequestStatus::Registered->value
+                || (int) $request['lock_version'] !== $expectedLockVersion
+            ) {
+                throw new ConcurrentRequestModification();
             }
 
             $executor = $this->db->createCommand(
@@ -104,9 +151,16 @@ final class RequestRepository
                 $this->rolesFor($actorId),
                 (bool) $executor['is_active'],
                 $this->rolesFor($executorId),
+                $this->isActiveUser($actorId),
             );
 
             $now = gmdate('Y-m-d H:i:s.u');
+            $nextLockVersion = $expectedLockVersion + 1;
+            $this->db->createCommand()->update(
+                '{{%requests}}',
+                ['lock_version' => $nextLockVersion, 'updated_at' => $now],
+                ['id' => $requestId],
+            )->execute();
             $this->db->createCommand()->update(
                 '{{%request_assignments}}',
                 ['valid_to' => $now],
@@ -127,7 +181,11 @@ final class RequestRepository
                 'actor_id' => $actorId,
                 'rule_id' => 'WF-001',
                 'payload_json' => json_encode(
-                    ['executor_id' => $executorId, 'assignment_id' => $assignmentId],
+                    [
+                        'executor_id' => $executorId,
+                        'assignment_id' => $assignmentId,
+                        'lock_version' => $nextLockVersion,
+                    ],
                     JSON_THROW_ON_ERROR,
                 ),
                 'created_at' => $now,
@@ -140,6 +198,7 @@ final class RequestRepository
                 'executorId' => $executorId,
                 'assignedBy' => $actorId,
                 'assignedAt' => $now,
+                'lockVersion' => $nextLockVersion,
             ];
         } catch (\Throwable $error) {
             $transaction->rollBack();

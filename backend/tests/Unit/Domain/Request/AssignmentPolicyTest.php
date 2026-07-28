@@ -15,7 +15,7 @@ final class AssignmentPolicyTest extends TestCase
     #[DataProvider('managerRoles')]
     public function testManagerCanAssignActiveExecutor(Role $managerRole): void
     {
-        (new AssignmentPolicy())->assertCanAssign([$managerRole], true, [Role::IcExecutor]);
+        (new AssignmentPolicy())->assertCanAssign([$managerRole], true, [Role::IcExecutor], true);
         self::addToAssertionCount(1);
     }
 
@@ -32,6 +32,7 @@ final class AssignmentPolicyTest extends TestCase
             [Role::Employee],
             true,
             [Role::IcExecutor],
+            true,
         ));
     }
 
@@ -43,6 +44,17 @@ final class AssignmentPolicyTest extends TestCase
             [Role::IcManager],
             $active,
             $roles,
+            true,
+        ));
+    }
+
+    public function testDisabledManagerCannotAssign(): void
+    {
+        $this->expectDenied('AUTH-003', fn () => (new AssignmentPolicy())->assertCanAssign(
+            [Role::IcManager],
+            true,
+            [Role::IcExecutor],
+            false,
         ));
     }
 

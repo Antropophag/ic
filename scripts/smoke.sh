@@ -45,15 +45,16 @@ assigned=$(curl --fail --silent --show-error \
   --request POST \
   --header "X-Dev-User-ID: $dev_user_id" \
   --header 'Content-Type: application/json' \
-  --data '{"executorId":2}' \
+  --data '{"executorId":2,"lockVersion":1}' \
   "$base_url/api/v1/requests/$request_id/executor")
 printf '%s' "$assigned" | grep '"executorId":2' >/dev/null
+printf '%s' "$assigned" | grep '"lockVersion":2' >/dev/null
 
 denied_status=$(curl --silent --output /dev/null --write-out '%{http_code}' \
   --request POST \
   --header 'X-Dev-User-ID: 2' \
   --header 'Content-Type: application/json' \
-  --data '{"executorId":2}' \
+  --data '{"executorId":2,"lockVersion":2}' \
   "$base_url/api/v1/requests/$request_id/executor")
 [ "$denied_status" = '403' ] || {
   echo "Expected forbidden assignment status 403, got $denied_status" >&2
@@ -64,22 +65,22 @@ registry=$(curl --fail --silent --show-error \
   --header "X-Dev-User-ID: $dev_user_id" \
   "$base_url/api/v1/requests")
 printf '%s' "$registry" | grep "$marker" >/dev/null
-printf '%s' "$registry" | grep '"lockVersion":1' >/dev/null
+printf '%s' "$registry" | grep '"lockVersion":2' >/dev/null
 
 started=$(curl --fail --silent --show-error \
   --request POST \
   --header 'X-Dev-User-ID: 2' \
   --header 'Content-Type: application/json' \
-  --data '{"lockVersion":1}' \
+  --data '{"lockVersion":2}' \
   "$base_url/api/v1/requests/$request_id/start")
 printf '%s' "$started" | grep '"status":"in_progress"' >/dev/null
-printf '%s' "$started" | grep '"lockVersion":2' >/dev/null
+printf '%s' "$started" | grep '"lockVersion":3' >/dev/null
 
 stale_status=$(curl --silent --output /dev/null --write-out '%{http_code}' \
   --request POST \
   --header "X-Dev-User-ID: $dev_user_id" \
   --header 'Content-Type: application/json' \
-  --data '{"lockVersion":1}' \
+  --data '{"lockVersion":2}' \
   "$base_url/api/v1/requests/$request_id/start")
 [ "$stale_status" = '409' ] || {
   echo "Expected stale start status 409, got $stale_status" >&2

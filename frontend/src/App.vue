@@ -10,6 +10,10 @@ const selected = ref(null)
 const showCreate = ref(false)
 const showHistory = ref(false)
 const createError = ref('')
+const actionError = ref('')
+const actionLoading = ref(false)
+const executors = ref([])
+const executorChoice = ref('')
 const draft = reactive({
   productName: '', manufacturer: '', supplier: '', sampleQuantity: 1, testMethod: '',
 })
@@ -39,14 +43,18 @@ const filtered = computed(() => filterRequests(requests.value, {
 function openRequest(item) {
   selected.value = item
   showHistory.value = false
+  actionError.value = ''
+  executorChoice.value = item.executorId || ''
+  if (item.canAssignExecutor && !executors.value.length) loadExecutors()
 }
 
-async function loadRequests() {
+async function loadRequests(rethrow = false) {
   try {
     const result = await requestApi.list()
     requests.value = result.items.map(fromApi)
-  } catch {
+  } catch (error) {
     // Макет остаётся доступным отдельно от backend; ошибка будет видна в Network.
+    if (rethrow) throw error
   }
 }
 
@@ -61,6 +69,88 @@ async function createRequest() {
     createError.value = error.status === 422
       ? 'Проверьте обязательные поля формы.'
       : 'Не удалось создать заявку. Повторите попытку.'
+  }
+}
+
+async function loadExecutors() {
+  try {
+    const result = await requestApi.executors()
+    executors.value = result.items
+  } catch {
+    actionError.value = 'Не удалось загрузить список исполнителей.'
+  }
+}
+
+async function refreshSelected(requestId) {
+  if (selected.value?.backendId === requestId) {
+    selected.value = { ...selected.value, canAssignExecutor: false, canStart: false }
+  }
+  await loadRequests(true)
+  selected.value = requests.value.find(item => item.backendId === requestId) || null
+}
+
+async function recoverConflict(requestId, message) {
+  try {
+    await refreshSelected(requestId)
+    actionError.value = `${message} Данные обновлены — проверьте актуальный статус.`
+  } catch {
+    actionError.value = `${message} Не удалось обновить данные; устаревшие действия отключены.`
+  }
+}
+
+async function assignExecutor() {
+  if (!executorChoice.value) {
+    actionError.value = 'Выберите исполнителя.'
+    return
+  }
+  if (!window.confirm('Назначить выбранного исполнителя на заявку?')) return
+
+  actionLoading.value = true
+  actionError.value = ''
+  const requestId = selected.value.backendId
+  try {
+    await requestApi.assignExecutor(requestId, Number(executorChoice.value), selected.value.lockVersion)
+    try {
+      await refreshSelected(requestId)
+    } catch {
+      actionError.value = 'Исполнитель назначен, но обновить карточку не удалось. Устаревшие действия отключены.'
+    }
+  } catch (error) {
+    if (error.status === 409) {
+      await recoverConflict(requestId, 'Заявка уже изменена.')
+    } else {
+      actionError.value = error.status === 403
+        ? 'У вас нет права назначать исполнителя.'
+        : 'Не удалось назначить исполнителя. Обновите страницу и повторите попытку.'
+    }
+  } finally {
+    actionLoading.value = false
+  }
+}
+
+async function startRequest() {
+  if (!window.confirm('Перевести заявку в работу?')) return
+
+  actionLoading.value = true
+  actionError.value = ''
+  const requestId = selected.value.backendId
+  try {
+    await requestApi.start(requestId, selected.value.lockVersion)
+    try {
+      await refreshSelected(requestId)
+    } catch {
+      actionError.value = 'Заявка переведена в работу, но обновить карточку не удалось. Устаревшие действия отключены.'
+    }
+  } catch (error) {
+    if (error.status === 409) {
+      await recoverConflict(requestId, 'Заявка уже изменена.')
+    } else {
+      actionError.value = error.status === 403
+        ? 'У вас нет права переводить эту заявку в работу.'
+        : 'Не удалось перевести заявку в работу. Повторите попытку.'
+    }
+  } finally {
+    actionLoading.value = false
   }
 }
 
@@ -154,7 +244,15 @@ onMounted(loadRequests)
             </article>
           </div>
           <aside class="stack side-column">
-            <article class="card summary"><h3>Исполнение</h3><p><span>Исполнитель</span><b>{{ selected.executor }}</b></p><p><span>Эксперт</span><b>А. В. Смирнов</b></p><p><span>Отметка СБ</span><b>—</b></p></article>
+            <article class="card summary"><h3>Исполнение</h3><p><span>Исполнитель</span><b>{{ selected.executor }}</b></p><p><span>Эксперт</span><b>А. В. Смирнов</b></p><p><span>Отметка СБ</span><b>—</b></p>
+              <div v-if="selected.canAssignExecutor" class="execution-action">
+                <label>Назначить исполнителя<select v-model="executorChoice" :disabled="actionLoading"><option value="">Выберите сотрудника</option><option v-for="executor in executors" :key="executor.id" :value="executor.id">{{ executor.displayName }}</option></select></label>
+                <button class="secondary" :disabled="actionLoading" @click="assignExecutor">{{ actionLoading ? 'Сохранение…' : 'Назначить' }}</button>
+              </div>
+              <button v-if="selected.canStart" class="primary action-wide" :disabled="actionLoading" @click="startRequest">{{ actionLoading ? 'Запуск…' : 'Начать работу' }}</button>
+              <p v-if="actionError" class="action-error">{{ actionError }}</p>
+              <a class="help-link" href="/help/assignment.html" target="_blank">Инструкция по назначению и началу работы</a>
+            </article>
             <article class="card"><h3>Документы</h3><div class="file large">DOCX <span>Сопроводительная документация<small>1,8 МБ</small></span></div><button class="upload">＋ Добавить файл</button></article>
             <article class="card timeline"><h3>Этапы</h3><p class="done">Заявка зарегистрирована<small>27 июля, 13:32</small></p><p class="active-step">Заявка в работе<small>Исполнитель назначен</small></p><p>Подготовка заключения</p><p>Контроль СБ</p><p>Завершение</p></article>
           </aside>
