@@ -161,11 +161,11 @@ final class DocumentRepository
                 'created_at' => $now,
             ])->execute();
             $versionId = (int) $this->db->getLastInsertID();
-            $nextLockVersion = (int) $request['lockVersion'] + ($version === 1 ? 1 : 0);
-            if ($version === 1) {
-                $targetStatus = $status === RequestStatus::InProgress
-                    ? RequestStatus::OpinionPreparation
-                    : $status;
+            $statusChanges = $status === RequestStatus::InProgress;
+            $requestChanges = $version === 1 || $statusChanges;
+            $nextLockVersion = (int) $request['lockVersion'] + ($requestChanges ? 1 : 0);
+            $targetStatus = $statusChanges ? RequestStatus::OpinionPreparation : $status;
+            if ($requestChanges) {
                 $updated = $this->db->createCommand()->update('{{%requests}}', [
                     'status' => $targetStatus->value,
                     'lock_version' => $nextLockVersion,
@@ -179,7 +179,7 @@ final class DocumentRepository
                     throw new \RuntimeException('Concurrent report upload detected.');
                 }
             }
-            if ($status === RequestStatus::InProgress) {
+            if ($statusChanges) {
                 $this->db->createCommand()->insert('{{%request_transitions}}', [
                     'request_id' => $requestId,
                     'actor_id' => $actorId,
@@ -216,9 +216,7 @@ final class DocumentRepository
                 'sha256' => $sha256,
                 'uploadedBy' => $actorId,
                 'createdAt' => str_replace(' ', 'T', $now) . 'Z',
-                'status' => $status === RequestStatus::InProgress
-                    ? RequestStatus::OpinionPreparation->value
-                    : $status->value,
+                'status' => $targetStatus->value,
                 'lockVersion' => $nextLockVersion,
             ];
         } catch (\Throwable $error) {

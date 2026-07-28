@@ -249,6 +249,24 @@ printf '%s' "$imported_report" | grep '"version":1' >/dev/null
 printf '%s' "$imported_report" | grep '"status":"opinion_preparation"' >/dev/null
 printf '%s' "$imported_report" | grep '"lockVersion":2' >/dev/null
 
+# Имитируем возврат заявки с существующим отчётом из контроля СБ в работу.
+docker compose exec -T mariadb sh -lc \
+  'mariadb --user=root --password="$MARIADB_ROOT_PASSWORD" "$MARIADB_DATABASE" --execute "$1"' \
+  sh "UPDATE requests SET status = 'in_progress' WHERE id = $imported_request_id"
+returned_report=$(curl --fail --silent --show-error \
+  --request POST \
+  --header "X-Dev-User-ID: $dev_user_id" \
+  --form "file=@$smoke_dir/report-v2.pdf;type=application/pdf" \
+  "$base_url/api/v1/requests/$imported_request_id/report")
+printf '%s' "$returned_report" | grep '"version":2' >/dev/null
+printf '%s' "$returned_report" | grep '"status":"opinion_preparation"' >/dev/null
+printf '%s' "$returned_report" | grep '"lockVersion":3' >/dev/null
+returned_details=$(curl --fail --silent --show-error \
+  --header "X-Dev-User-ID: $dev_user_id" \
+  "$base_url/api/v1/requests/$imported_request_id")
+printf '%s' "$returned_details" | grep '"status":"opinion_preparation"' >/dev/null
+printf '%s' "$returned_details" | grep '"lockVersion":3' >/dev/null
+
 hidden_status=$(curl --silent --output /dev/null --write-out '%{http_code}' \
   --header 'X-Dev-User-ID: 999999' \
   "$base_url/api/v1/requests/$request_id")
