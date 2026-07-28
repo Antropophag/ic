@@ -20,6 +20,8 @@ services:
     tmpfs:
       - /tmp
       - /app/runtime
+    volumes:
+      - document-data:/app/storage/documents
     restart: unless-stopped
 
   mariadb:
@@ -41,3 +43,4 @@ services:
 
 volumes:
   mariadb-data:
+  document-data:

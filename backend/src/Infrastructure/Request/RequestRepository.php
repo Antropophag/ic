@@ -91,7 +91,10 @@ final class RequestRepository
             . "WHERE seur.user_id = :start_executor_role AND ser.code = 'ic_executor')))) AS can_start, "
             . "(EXISTS(SELECT 1 FROM {{%users}} cau WHERE cau.id = :active_comment_actor "
             . "AND cau.is_active = 1) AND r.status IN ('registered', 'in_progress', 'suspended', "
-            . "'opinion_preparation', 'security_review')) AS can_comment "
+            . "'opinion_preparation', 'security_review')) AS can_comment, "
+            . "(EXISTS(SELECT 1 FROM {{%users}} dau WHERE dau.id = :active_document_actor "
+            . "AND dau.is_active = 1) AND r.status IN ('registered', 'in_progress', 'suspended', "
+            . "'opinion_preparation', 'security_review')) AS can_upload_document "
             . 'FROM {{%requests}} r JOIN {{%users}} u ON u.id = r.initiator_id '
             . 'LEFT JOIN {{%request_assignments}} current_executor ON current_executor.request_id = r.id '
             . "AND current_executor.assignment_type = 'executor' AND current_executor.valid_to IS NULL "
@@ -105,12 +108,13 @@ final class RequestRepository
                 ':start_executor' => $actorId,
                 ':start_executor_role' => $actorId,
                 ':active_comment_actor' => $actorId,
+                ':active_document_actor' => $actorId,
                 ':limit' => $limit,
             ],
         )->queryAll();
     }
 
-    /** @return array{item: array<string, mixed>, history: list<array<string, mixed>>, comments: list<array<string, mixed>>, commentsPage: array{hasMore: bool, nextBeforeId: int|null}} */
+    /** @return array{item: array<string, mixed>, history: list<array<string, mixed>>, comments: list<array<string, mixed>>, commentsPage: array{hasMore: bool, nextBeforeId: int|null}, documents: list<array<string, mixed>>} */
     public function findDetails(int $requestId, int $actorId): array
     {
         $item = $this->db->createCommand(
@@ -129,7 +133,9 @@ final class RequestRepository
             . 'FROM {{%user_roles}} seur JOIN {{%roles}} ser ON ser.id = seur.role_id '
             . "WHERE seur.user_id = :start_executor_role AND ser.code = 'ic_executor')))) AS can_start, "
             . "(r.status IN ('registered', 'in_progress', 'suspended', 'opinion_preparation', "
-            . "'security_review')) AS can_comment "
+            . "'security_review')) AS can_comment, "
+            . "(r.status IN ('registered', 'in_progress', 'suspended', 'opinion_preparation', "
+            . "'security_review')) AS can_upload_document "
             . 'FROM {{%requests}} r '
             . 'JOIN {{%users}} viewer ON viewer.id = :actor_id AND viewer.is_active = 1 '
             . 'JOIN {{%users}} u ON u.id = r.initiator_id '
@@ -167,6 +173,19 @@ final class RequestRepository
 
         $commentsPage = $this->queryCommentsPage($requestId, null);
 
+        $documents = $this->db->createCommand(
+            'SELECT d.id, d.title, v.id AS versionId, v.version, v.original_name AS originalName, '
+            . 'v.mime_type AS mimeType, v.size_bytes AS sizeBytes, v.sha256, '
+            . "DATE_FORMAT(v.created_at, '%Y-%m-%dT%H:%i:%s.%fZ') AS createdAt, "
+            . 'u.display_name AS uploadedBy FROM {{%request_documents}} d '
+            . 'JOIN {{%request_document_versions}} v ON v.document_id = d.id '
+            . 'AND v.version = (SELECT MAX(latest.version) FROM {{%request_document_versions}} latest '
+            . 'WHERE latest.document_id = d.id) '
+            . 'JOIN {{%users}} u ON u.id = v.uploaded_by '
+            . 'WHERE d.request_id = :document_request_id ORDER BY d.created_at ASC, d.id ASC',
+            [':document_request_id' => $requestId],
+        )->queryAll();
+
         return [
             'item' => $item,
             'history' => $history,
@@ -175,6 +194,7 @@ final class RequestRepository
                 'hasMore' => $commentsPage['hasMore'],
                 'nextBeforeId' => $commentsPage['nextBeforeId'],
             ],
+            'documents' => $documents,
         ];
     }
 

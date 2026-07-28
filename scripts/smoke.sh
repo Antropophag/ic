@@ -41,6 +41,43 @@ request_id=$(printf '%s' "$created" | sed -n 's/.*"id":\([0-9][0-9]*\).*/\1/p')
   exit 1
 }
 
+smoke_dir=$(mktemp -d)
+trap 'rm -rf "$smoke_dir"' EXIT INT TERM
+printf '%%PDF-1.4\n%% smoke document\n' >"$smoke_dir/report.pdf"
+printf '<html>not a document</html>\n' >"$smoke_dir/invalid.pdf"
+document=$(curl --fail --silent --show-error \
+  --request POST \
+  --header "X-Dev-User-ID: $dev_user_id" \
+  --form "file=@$smoke_dir/report.pdf;type=application/pdf" \
+  "$base_url/api/v1/requests/$request_id/documents")
+printf '%s' "$document" | grep '"version":1' >/dev/null
+document=$(curl --fail --silent --show-error \
+  --request POST \
+  --header "X-Dev-User-ID: $dev_user_id" \
+  --form "file=@$smoke_dir/report.pdf;type=application/pdf" \
+  "$base_url/api/v1/requests/$request_id/documents")
+printf '%s' "$document" | grep '"version":2' >/dev/null
+version_id=$(printf '%s' "$document" | sed -n 's/.*"versionId":\([0-9][0-9]*\).*/\1/p')
+[ -n "$version_id" ] || {
+  echo 'Uploaded document has no version id' >&2
+  exit 1
+}
+curl --fail --silent --show-error \
+  --header "X-Dev-User-ID: $dev_user_id" \
+  --output "$smoke_dir/downloaded.pdf" \
+  "$base_url/api/v1/document-versions/$version_id/download"
+cmp "$smoke_dir/report.pdf" "$smoke_dir/downloaded.pdf"
+
+invalid_file_status=$(curl --silent --output /dev/null --write-out '%{http_code}' \
+  --request POST \
+  --header "X-Dev-User-ID: $dev_user_id" \
+  --form "file=@$smoke_dir/invalid.pdf;type=application/pdf" \
+  "$base_url/api/v1/requests/$request_id/documents")
+[ "$invalid_file_status" = '422' ] || {
+  echo "Expected invalid document status 422, got $invalid_file_status" >&2
+  exit 1
+}
+
 assigned=$(curl --fail --silent --show-error \
   --request POST \
   --header "X-Dev-User-ID: $dev_user_id" \
@@ -104,6 +141,8 @@ printf '%s' "$details" | grep '"action":"start"' >/dev/null
 printf '%s' "$details" | grep '"action":"assign_executor"' >/dev/null
 printf '%s' "$details" | grep "$comment_marker" >/dev/null
 printf '%s' "$details" | grep '"can_comment":1' >/dev/null
+printf '%s' "$details" | grep '"can_upload_document":1' >/dev/null
+printf '%s' "$details" | grep '"version":2' >/dev/null
 printf '%s' "$details" | grep -E '"(occurredAt|createdAt)":"[^"]+Z"' >/dev/null
 if printf '%s' "$details" | grep 'payload_json' >/dev/null; then
   echo 'Request details must not expose audit payloads' >&2
@@ -129,4 +168,4 @@ stale_status=$(curl --silent --output /dev/null --write-out '%{http_code}' \
   exit 1
 }
 
-echo "Smoke test passed: health, validation, creation, comments, assignment, start, registry and details."
+echo "Smoke test passed: health, validation, creation, comments, documents, assignment, start, registry and details."

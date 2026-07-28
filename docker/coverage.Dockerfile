@@ -4,7 +4,9 @@ ARG XDEBUG_VERSION=3.5.3
 
 # Build-only packages follow the pinned Alpine base repository as one set.
 # hadolint ignore=DL3018,SC2086
-RUN apk add --no-cache --virtual .coverage-build-deps $PHPIZE_DEPS linux-headers \
+RUN apk add --no-cache libzip-dev \
+    && docker-php-ext-install zip \
+    && apk add --no-cache --virtual .coverage-build-deps $PHPIZE_DEPS linux-headers \
     && pecl install "xdebug-${XDEBUG_VERSION}" \
     && docker-php-ext-enable xdebug \
     && apk del .coverage-build-deps

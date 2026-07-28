@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Http\Controller;
 
+use App\Infrastructure\Document\DocumentStorage;
 use Yii;
 use yii\rest\Controller;
 use yii\web\ServerErrorHttpException;
@@ -24,15 +25,17 @@ final class HealthController extends Controller
         return ['status' => 'ok'];
     }
 
-    /** @return array{status: 'ready', database: 'ok'} */
+    /** @return array{status: 'ready', database: 'ok', documentStorage: 'ok'} */
     public function actionReady(): array
     {
         try {
             Yii::$app->db->createCommand('SELECT 1')->queryScalar();
+            $storagePath = getenv('DOCUMENT_STORAGE_PATH') ?: '/app/storage/documents';
+            (new DocumentStorage($storagePath))->assertWritable();
         } catch (\Throwable) {
             throw new ServerErrorHttpException('Application is not ready');
         }
 
-        return ['status' => 'ready', 'database' => 'ok'];
+        return ['status' => 'ready', 'database' => 'ok', 'documentStorage' => 'ok'];
     }
 }

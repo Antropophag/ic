@@ -10,12 +10,16 @@ use App\Application\Request\AssignExecutorInput;
 use App\Application\Request\StartRequestInput;
 use App\Domain\Request\AssignmentDenied;
 use App\Domain\Request\AssignmentTargetNotFound;
+use App\Domain\Request\AttachmentDenied;
 use App\Domain\Request\ConcurrentRequestModification;
 use App\Domain\Request\CommentDenied;
 use App\Domain\Request\RequestNotFound;
 use App\Domain\Request\StartDenied;
 use App\Domain\Request\TransitionDenied;
 use App\Infrastructure\Identity\CurrentUser;
+use App\Infrastructure\Document\DocumentRepository;
+use App\Infrastructure\Document\DocumentStorage;
+use App\Infrastructure\Document\OfficeDocumentInspector;
 use App\Infrastructure\Request\RequestRepository;
 use Yii;
 use yii\rest\Controller;
@@ -23,6 +27,8 @@ use yii\web\Response;
 use yii\web\ConflictHttpException;
 use yii\web\ForbiddenHttpException;
 use yii\web\NotFoundHttpException;
+use yii\web\ServerErrorHttpException;
+use yii\web\UploadedFile;
 
 final class RequestController extends Controller
 {
@@ -52,7 +58,7 @@ final class RequestController extends Controller
         return ['items' => $this->repository()->findLatest($actorId)];
     }
 
-    /** @return array{item: array<string, mixed>, history: list<array<string, mixed>>, comments: list<array<string, mixed>>, commentsPage: array{hasMore: bool, nextBeforeId: int|null}} */
+    /** @return array{item: array<string, mixed>, history: list<array<string, mixed>>, comments: list<array<string, mixed>>, commentsPage: array{hasMore: bool, nextBeforeId: int|null}, documents: list<array<string, mixed>>} */
     public function actionView(int $id): array
     {
         $actorId = (new CurrentUser())->id(Yii::$app->request);
@@ -108,6 +114,64 @@ final class RequestController extends Controller
         }
     }
 
+    /** @return array<string, mixed> */
+    public function actionUploadDocument(int $id): array
+    {
+        $actorId = (new CurrentUser())->id(Yii::$app->request);
+        $file = UploadedFile::getInstanceByName('file');
+        if ($file === null || $file->error !== UPLOAD_ERR_OK) {
+            Yii::$app->response->statusCode = 422;
+            return ['errors' => ['file' => ['Выберите файл размером не более 10 МБ.']]];
+        }
+        $size = filesize($file->tempName);
+        $mimeType = mime_content_type($file->tempName);
+        if ($size === false || $mimeType === false) {
+            throw new ServerErrorHttpException('Не удалось проверить загруженный файл.');
+        }
+
+        try {
+            $mimeType = (new OfficeDocumentInspector())->normalizeMimeType($file->name, $mimeType, $file->tempName);
+            $document = $this->documents()->upload(
+                $id,
+                $actorId,
+                $file->name,
+                $mimeType,
+                $size,
+                $file->tempName,
+            );
+            Yii::$app->response->statusCode = 201;
+            return $document;
+        } catch (RequestNotFound $error) {
+            throw new NotFoundHttpException($error->getMessage());
+        } catch (AttachmentDenied $error) {
+            if ($error->ruleId === 'COM-007') {
+                Yii::$app->response->statusCode = 422;
+                return ['errors' => ['file' => ['Тип, расширение или размер файла не разрешены.']]];
+            }
+            throw new ConflictHttpException($error->getMessage());
+        }
+    }
+
+    public function actionDownloadDocument(int $id): Response
+    {
+        $actorId = (new CurrentUser())->id(Yii::$app->request);
+        try {
+            $version = $this->documents()->findVersionForDownload($id, $actorId);
+        } catch (RequestNotFound $error) {
+            $this->recordRejectedDownloadSafely($id, $actorId, 'not_found_or_inactive');
+            throw new NotFoundHttpException($error->getMessage());
+        }
+        $path = $this->storage()->path((string) $version['storageKey']);
+        if (!is_file($path)) {
+            $this->recordRejectedDownloadSafely($id, $actorId, 'storage_unavailable');
+            throw new NotFoundHttpException('Document version not found');
+        }
+        $this->documents()->recordDownload($id, (int) $version['requestId'], $actorId);
+        return Yii::$app->response->sendFile($path, (string) $version['originalName'], [
+            'mimeType' => (string) $version['mimeType'],
+            'inline' => false,
+        ]);
+    }
     /** @return array{items: list<array{id: int, displayName: string}>} */
     public function actionExecutors(): array
     {
@@ -224,8 +288,33 @@ final class RequestController extends Controller
         }
     }
 
+    private function recordRejectedDownloadSafely(int $versionId, int $actorId, string $reason): void
+    {
+        try {
+            $this->documents()->recordRejectedDownload($versionId, $actorId, $reason);
+        } catch (\Throwable $auditError) {
+            Yii::error([
+                'message' => 'Не удалось записать аудит отклонённого скачивания.',
+                'versionId' => $versionId,
+                'actorId' => $actorId,
+                'reason' => $reason,
+                'exception' => $auditError,
+            ], __METHOD__);
+        }
+    }
+
     private function repository(): RequestRepository
     {
         return new RequestRepository(Yii::$app->db);
+    }
+
+    private function documents(): DocumentRepository
+    {
+        return new DocumentRepository(Yii::$app->db, $this->storage());
+    }
+
+    private function storage(): DocumentStorage
+    {
+        return new DocumentStorage(getenv('DOCUMENT_STORAGE_PATH') ?: '/app/storage/documents');
     }
 }

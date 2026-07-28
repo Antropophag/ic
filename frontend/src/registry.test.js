@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { canSubmitComment, commentFromApi, filterRequests, fromApi, historyFromApi } from './registry'
+import { canSubmitComment, commentFromApi, documentFromApi, filterRequests, fromApi, historyFromApi } from './registry'
 
 const registered = {
   id: 4,
@@ -19,6 +19,7 @@ const registered = {
   can_assign_executor: 1,
   can_start: 1,
   can_comment: 1,
+  can_upload_document: 1,
 }
 
 it('maps the API contract to a registry row', () => {
@@ -33,6 +34,7 @@ it('maps the API contract to a registry row', () => {
     canAssignExecutor: true,
     canStart: true,
     canComment: true,
+    canUploadDocument: true,
   })
 })
 
@@ -74,6 +76,14 @@ it('does not allow a comment while an older detail response can still arrive', (
   expect(canSubmitComment({ canComment: true }, true)).toBe(false)
   expect(canSubmitComment({ canComment: true }, false)).toBe(true)
   expect(canSubmitComment({ canComment: false }, false)).toBe(false)
+})
+
+it('maps the latest document version without exposing its storage key', () => {
+  expect(documentFromApi({
+    id: '4', title: 'report.pdf', versionId: '12', version: '2', originalName: 'report.pdf',
+    mimeType: 'application/pdf', sizeBytes: 1500, sha256: 'a'.repeat(64),
+    uploadedBy: 'Иван Иванов', createdAt: '2026-07-28T10:00:00Z',
+  })).toMatchObject({ id: 4, versionId: 12, version: 2, size: '2 КБ' })
 })
 
 describe('registry filters', () => {
