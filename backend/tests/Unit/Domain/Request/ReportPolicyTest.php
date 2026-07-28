@@ -44,11 +44,15 @@ final class ReportPolicyTest extends TestCase
         (new ReportPolicy())->assertValidFile('report.pdf', 'application/pdf', 100);
         self::addToAssertionCount(1);
 
-        $this->expectException(ReportDenied::class);
-        (new ReportPolicy())->assertValidFile(
-            'report.docx',
-            'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-            100,
-        );
+        try {
+            (new ReportPolicy())->assertValidFile(
+                'report.docx',
+                'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+                100,
+            );
+            self::fail('Invalid report must be rejected.');
+        } catch (ReportDenied $error) {
+            self::assertSame('DOC-002A', $error->ruleId);
+        }
     }
 }

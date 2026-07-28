@@ -17,7 +17,11 @@ final class DevController extends Controller
             return ExitCode::UNSPECIFIED_ERROR;
         }
 
-        $roleAssignments = [[1, 'employee'], [1, 'ic_manager'], [2, 'employee'], [2, 'ic_executor']];
+        $roleAssignments = [
+            [1, 'employee'], [1, 'ic_manager'],
+            [2, 'employee'], [2, 'ic_executor'],
+            [3, 'employee'],
+        ];
         $roleIds = [];
         foreach (array_unique(array_column($roleAssignments, 1)) as $roleCode) {
             $roleId = Yii::$app->db->createCommand(
@@ -39,6 +43,18 @@ final class DevController extends Controller
             'display_name' => 'Максим Умнов',
             'email' => 'dev.user@example.invalid',
             'position' => 'Разработчик',
+            'department' => 'Тестовое подразделение',
+            'is_active' => true,
+            'created_at' => gmdate('Y-m-d H:i:s'),
+            'updated_at' => gmdate('Y-m-d H:i:s'),
+        ])->execute();
+
+        Yii::$app->db->createCommand()->upsert('{{%users}}', [
+            'id' => 3,
+            'ad_login' => 'dev.employee',
+            'display_name' => 'Тестовый сотрудник',
+            'email' => 'dev.employee@example.invalid',
+            'position' => 'Сотрудник',
             'department' => 'Тестовое подразделение',
             'is_active' => true,
             'created_at' => gmdate('Y-m-d H:i:s'),

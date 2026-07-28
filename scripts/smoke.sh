@@ -162,6 +162,20 @@ curl --fail --silent --show-error \
   "$base_url/api/v1/document-versions/$report_version_id/download"
 cmp "$smoke_dir/report.pdf" "$smoke_dir/downloaded-report.pdf"
 
+printf '%%PDF-1.4\n%% smoke report revision 2\n' >"$smoke_dir/report-v2.pdf"
+report_v2=$(curl --fail --silent --show-error \
+  --request POST \
+  --header 'X-Dev-User-ID: 2' \
+  --form "file=@$smoke_dir/report-v2.pdf;type=application/pdf" \
+  "$base_url/api/v1/requests/$request_id/report")
+printf '%s' "$report_v2" | grep '"version":2' >/dev/null
+printf '%s' "$report_v2" | grep '"lockVersion":4' >/dev/null
+report_v2_version_id=$(printf '%s' "$report_v2" | sed -n 's/.*"versionId":\([0-9][0-9]*\).*/\1/p')
+[ -n "$report_v2_version_id" ] || {
+  echo 'Second report revision has no version id' >&2
+  exit 1
+}
+
 details=$(curl --fail --silent --show-error \
   --header "X-Dev-User-ID: $dev_user_id" \
   "$base_url/api/v1/requests/$request_id")
@@ -174,12 +188,66 @@ printf '%s' "$details" | grep '"can_upload_document":1' >/dev/null
 printf '%s' "$details" | grep '"version":2' >/dev/null
 printf '%s' "$details" | grep '"status":"opinion_preparation"' >/dev/null
 printf '%s' "$details" | grep '"documentType":"report"' >/dev/null
+report_history_count=$(printf '%s' "$details" | grep -o '"documentType":"report"' | wc -l | tr -d ' ')
+[ "$report_history_count" = '2' ] || {
+  echo "Expected two report revisions for participant, got $report_history_count" >&2
+  exit 1
+}
 printf '%s' "$details" | grep '"action":"upload_report"' >/dev/null
 printf '%s' "$details" | grep -E '"(occurredAt|createdAt)":"[^"]+Z"' >/dev/null
 if printf '%s' "$details" | grep 'payload_json' >/dev/null; then
   echo 'Request details must not expose audit payloads' >&2
   exit 1
 fi
+
+docker compose exec -T mariadb sh -lc \
+  'mariadb --user=root --password="$MARIADB_ROOT_PASSWORD" "$MARIADB_DATABASE" --execute "$1"' \
+  sh "UPDATE requests SET status = 'completed' WHERE id = $request_id"
+
+obsolete_public_status=$(curl --silent --output /dev/null --write-out '%{http_code}' \
+  --header 'X-Dev-User-ID: 3' \
+  "$base_url/api/v1/document-versions/$report_version_id/download")
+[ "$obsolete_public_status" = '404' ] || {
+  echo "Expected obsolete public report status 404, got $obsolete_public_status" >&2
+  exit 1
+}
+curl --fail --silent --show-error \
+  --header 'X-Dev-User-ID: 3' \
+  --output "$smoke_dir/public-report.pdf" \
+  "$base_url/api/v1/document-versions/$report_v2_version_id/download"
+cmp "$smoke_dir/report-v2.pdf" "$smoke_dir/public-report.pdf"
+
+public_details=$(curl --fail --silent --show-error \
+  --header 'X-Dev-User-ID: 3' \
+  "$base_url/api/v1/requests/$request_id")
+public_report_count=$(printf '%s' "$public_details" | grep -o '"documentType":"report"' | wc -l | tr -d ' ')
+[ "$public_report_count" = '1' ] || {
+  echo "Expected one current public report, got $public_report_count" >&2
+  exit 1
+}
+
+imported=$(curl --fail --silent --show-error \
+  --request POST \
+  --header "X-Dev-User-ID: $dev_user_id" \
+  --header 'Content-Type: application/json' \
+  --data "{\"productName\":\"Imported $marker\",\"manufacturer\":\"Тестовый производитель\",\"supplier\":\"Тестовый поставщик\",\"sampleQuantity\":1,\"testMethod\":\"Импортированный статус\"}" \
+  "$base_url/api/v1/requests")
+imported_request_id=$(printf '%s' "$imported" | sed -n 's/.*"id":\([0-9][0-9]*\).*/\1/p')
+[ -n "$imported_request_id" ] || {
+  echo 'Imported-state request has no id' >&2
+  exit 1
+}
+docker compose exec -T mariadb sh -lc \
+  'mariadb --user=root --password="$MARIADB_ROOT_PASSWORD" "$MARIADB_DATABASE" --execute "$1"' \
+  sh "UPDATE requests SET status = 'opinion_preparation' WHERE id = $imported_request_id"
+imported_report=$(curl --fail --silent --show-error \
+  --request POST \
+  --header "X-Dev-User-ID: $dev_user_id" \
+  --form "file=@$smoke_dir/report.pdf;type=application/pdf" \
+  "$base_url/api/v1/requests/$imported_request_id/report")
+printf '%s' "$imported_report" | grep '"version":1' >/dev/null
+printf '%s' "$imported_report" | grep '"status":"opinion_preparation"' >/dev/null
+printf '%s' "$imported_report" | grep '"lockVersion":2' >/dev/null
 
 hidden_status=$(curl --silent --output /dev/null --write-out '%{http_code}' \
   --header 'X-Dev-User-ID: 999999' \

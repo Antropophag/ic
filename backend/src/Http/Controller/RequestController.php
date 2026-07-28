@@ -159,7 +159,7 @@ final class RequestController extends Controller
         $actorId = (new CurrentUser())->id(Yii::$app->request);
         $file = UploadedFile::getInstanceByName('file');
         if ($file === null || $file->error !== UPLOAD_ERR_OK) {
-            $this->recordRejectedReportSafely($id, $actorId, 'DOC-008');
+            $this->recordRejectedReportSafely($id, $actorId, 'DOC-002A');
             Yii::$app->response->statusCode = 422;
             return ['errors' => ['file' => ['Выберите PDF-файл размером не более 10 МБ.']]];
         }
@@ -184,7 +184,7 @@ final class RequestController extends Controller
             throw new NotFoundHttpException($error->getMessage());
         } catch (ReportDenied $error) {
             $this->recordRejectedReportSafely($id, $actorId, $error->ruleId);
-            if ($error->ruleId === 'DOC-008') {
+            if ($error->ruleId === 'DOC-002A') {
                 Yii::$app->response->statusCode = 422;
                 return ['errors' => ['file' => ['Отчёт должен быть PDF-файлом размером не более 10 МБ.']]];
             }

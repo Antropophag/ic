@@ -21,10 +21,10 @@ final class ReportPolicy
         try {
             (new AttachmentPolicy())->assertValidFile($name, $mimeType, $size);
         } catch (AttachmentDenied) {
-            throw new ReportDenied('DOC-008');
+            throw new ReportDenied('DOC-002A');
         }
         if (strtolower((string) pathinfo($name, PATHINFO_EXTENSION)) !== 'pdf') {
-            throw new ReportDenied('DOC-008');
+            throw new ReportDenied('DOC-002A');
         }
     }
 }

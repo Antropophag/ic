@@ -185,19 +185,22 @@ final class RequestRepository
             . "DATE_FORMAT(v.created_at, '%Y-%m-%dT%H:%i:%s.%fZ') AS createdAt, "
             . 'u.display_name AS uploadedBy FROM {{%request_documents}} d '
             . 'JOIN {{%request_document_versions}} v ON v.document_id = d.id '
-            . 'AND v.version = (SELECT MAX(latest.version) FROM {{%request_document_versions}} latest '
-            . 'WHERE latest.document_id = d.id) '
             . 'JOIN {{%users}} u ON u.id = v.uploaded_by '
             . 'JOIN {{%requests}} item_request ON item_request.id = d.request_id '
             . 'LEFT JOIN {{%request_assignments}} current_report_executor '
             . 'ON current_report_executor.request_id = item_request.id '
             . "AND current_report_executor.assignment_type = 'executor' "
             . 'AND current_report_executor.valid_to IS NULL '
-            . "WHERE d.request_id = :document_request_id AND (d.document_type <> 'report' "
-            . "OR item_request.status = 'completed' OR current_report_executor.user_id = :report_viewer "
+            . "WHERE d.request_id = :document_request_id AND ((d.document_type <> 'report' "
+            . 'AND v.version = (SELECT MAX(attachment_version.version) FROM {{%request_document_versions}} attachment_version '
+            . "WHERE attachment_version.document_id = d.id)) OR (d.document_type = 'report' AND ("
+            . 'current_report_executor.user_id = :report_viewer '
             . 'OR EXISTS(SELECT 1 FROM {{%user_roles}} rvur JOIN {{%roles}} rvr ON rvr.id = rvur.role_id '
-            . "WHERE rvur.user_id = :report_manager_viewer AND rvr.code IN ('ic_manager', 'laboratory_manager'))) "
-            . 'ORDER BY d.created_at ASC, d.id ASC',
+            . "WHERE rvur.user_id = :report_manager_viewer AND rvr.code IN ('ic_manager', 'laboratory_manager')) "
+            . "OR (d.document_type = 'report' AND item_request.status = 'completed' "
+            . 'AND v.version = (SELECT MAX(public_report_version.version) FROM {{%request_document_versions}} public_report_version '
+            . 'WHERE public_report_version.document_id = d.id))))) '
+            . 'ORDER BY d.created_at ASC, d.id ASC, v.version DESC',
             [
                 ':document_request_id' => $requestId,
                 ':report_viewer' => $actorId,

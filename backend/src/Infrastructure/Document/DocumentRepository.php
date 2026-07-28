@@ -161,12 +161,25 @@ final class DocumentRepository
                 'created_at' => $now,
             ])->execute();
             $versionId = (int) $this->db->getLastInsertID();
-            if ($status === RequestStatus::InProgress) {
-                $this->db->createCommand()->update('{{%requests}}', [
-                    'status' => RequestStatus::OpinionPreparation->value,
-                    'lock_version' => (int) $request['lockVersion'] + 1,
+            $nextLockVersion = (int) $request['lockVersion'] + ($version === 1 ? 1 : 0);
+            if ($version === 1) {
+                $targetStatus = $status === RequestStatus::InProgress
+                    ? RequestStatus::OpinionPreparation
+                    : $status;
+                $updated = $this->db->createCommand()->update('{{%requests}}', [
+                    'status' => $targetStatus->value,
+                    'lock_version' => $nextLockVersion,
                     'updated_at' => $now,
-                ], ['id' => $requestId])->execute();
+                ], [
+                    'id' => $requestId,
+                    'status' => $status->value,
+                    'lock_version' => (int) $request['lockVersion'],
+                ])->execute();
+                if ($updated !== 1) {
+                    throw new \RuntimeException('Concurrent report upload detected.');
+                }
+            }
+            if ($status === RequestStatus::InProgress) {
                 $this->db->createCommand()->insert('{{%request_transitions}}', [
                     'request_id' => $requestId,
                     'actor_id' => $actorId,
@@ -206,9 +219,7 @@ final class DocumentRepository
                 'status' => $status === RequestStatus::InProgress
                     ? RequestStatus::OpinionPreparation->value
                     : $status->value,
-                'lockVersion' => $status === RequestStatus::InProgress
-                    ? (int) $request['lockVersion'] + 1
-                    : (int) $request['lockVersion'],
+                'lockVersion' => $nextLockVersion,
             ];
         } catch (\Throwable $error) {
             $transaction->rollBack();
@@ -231,7 +242,9 @@ final class DocumentRepository
             . 'JOIN {{%users}} viewer ON viewer.id = :actor_id AND viewer.is_active = 1 '
             . 'LEFT JOIN {{%request_assignments}} executor ON executor.request_id = r.id '
             . "AND executor.assignment_type = 'executor' AND executor.valid_to IS NULL "
-            . "WHERE v.id = :version_id AND (d.document_type <> 'report' OR r.status = 'completed' "
+            . "WHERE v.id = :version_id AND (d.document_type <> 'report' "
+            . "OR (r.status = 'completed' AND v.version = (SELECT MAX(public_version.version) "
+            . 'FROM {{%request_document_versions}} public_version WHERE public_version.document_id = d.id)) '
             . 'OR executor.user_id = :report_actor OR EXISTS(SELECT 1 FROM {{%user_roles}} ur '
             . 'JOIN {{%roles}} role ON role.id = ur.role_id WHERE ur.user_id = :manager_actor '
             . "AND role.code IN ('ic_manager', 'laboratory_manager')))",
