@@ -22,6 +22,7 @@ final class DevController extends Controller
             [2, 'employee'], [2, 'ic_executor'],
             [3, 'employee'],
             [4, 'employee'], [4, 'expert'],
+            [5, 'employee'], [5, 'security_officer'],
         ];
         $roleIds = [];
         foreach (array_unique(array_column($roleAssignments, 1)) as $roleCode) {
@@ -81,6 +82,18 @@ final class DevController extends Controller
             'email' => 'dev.expert@example.invalid',
             'position' => 'Эксперт',
             'department' => 'Испытательный центр',
+            'is_active' => true,
+            'created_at' => gmdate('Y-m-d H:i:s'),
+            'updated_at' => gmdate('Y-m-d H:i:s'),
+        ])->execute();
+
+        Yii::$app->db->createCommand()->upsert('{{%users}}', [
+            'id' => 5,
+            'ad_login' => 'dev.security',
+            'display_name' => 'Олег Воронцов',
+            'email' => 'dev.security@example.invalid',
+            'position' => 'Сотрудник СБ',
+            'department' => 'Служба безопасности',
             'is_active' => true,
             'created_at' => gmdate('Y-m-d H:i:s'),
             'updated_at' => gmdate('Y-m-d H:i:s'),

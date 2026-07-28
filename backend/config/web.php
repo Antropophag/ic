@@ -31,6 +31,7 @@ return yii\helpers\ArrayHelper::merge($common, [
                 'POST api/v1/requests/<id:\\d+>/executor' => 'request/assign-executor',
                 'POST api/v1/requests/<id:\\d+>/expert' => 'request/assign-expert',
                 'POST api/v1/requests/<id:\\d+>/opinion' => 'request/publish-opinion',
+                'POST api/v1/requests/<id:\\d+>/security-decision' => 'request/security-decision',
                 'POST api/v1/requests/<id:\\d+>/start' => 'request/start',
             ],
         ],

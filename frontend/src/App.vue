@@ -2,7 +2,7 @@
 import { computed, onMounted, reactive, ref } from 'vue'
 import { requestApi } from './api'
 import { createLatestRequestGuard } from './latestRequestGuard'
-import { ACTIVE_STATUSES, canSubmitComment, commentFromApi, documentFromApi, filterRequests, fromApi, historyFromApi } from './registry'
+import { ACTIVE_STATUSES, canSubmitComment, commentFromApi, documentFromApi, filterRequests, fromApi, historyFromApi, withoutStaleActions } from './registry'
 
 const activeTab = ref('active')
 const query = ref('')
@@ -33,12 +33,16 @@ const expertChoice = ref('')
 const opinionDraft = ref('')
 const opinionLoading = ref(false)
 const opinionError = ref('')
+const securityReason = ref('')
+const securityLoading = ref(false)
+const securityError = ref('')
 const detailRequestGuard = createLatestRequestGuard()
 const commentRequestGuard = createLatestRequestGuard()
 const commentsPageRequestGuard = createLatestRequestGuard()
 const documentRequestGuard = createLatestRequestGuard()
 const reportRequestGuard = createLatestRequestGuard()
 const opinionRequestGuard = createLatestRequestGuard()
+const securityRequestGuard = createLatestRequestGuard()
 const draft = reactive({
   productName: '', manufacturer: '', supplier: '', sampleQuantity: 1, testMethod: '',
 })
@@ -106,6 +110,7 @@ async function openRequest(item) {
   documentRequestGuard.invalidate()
   reportRequestGuard.invalidate()
   opinionRequestGuard.invalidate()
+  securityRequestGuard.invalidate()
   commentLoading.value = false
   commentError.value = ''
   commentDraft.value = ''
@@ -116,6 +121,9 @@ async function openRequest(item) {
   opinionLoading.value = false
   opinionError.value = ''
   opinionDraft.value = ''
+  securityLoading.value = false
+  securityError.value = ''
+  securityReason.value = ''
   showHistory.value = false
   actionError.value = ''
   await loadRequestDetails(item)
@@ -128,6 +136,7 @@ function closeRequest() {
   documentRequestGuard.invalidate()
   reportRequestGuard.invalidate()
   opinionRequestGuard.invalidate()
+  securityRequestGuard.invalidate()
   selected.value = null
   detailLoading.value = false
   detailError.value = ''
@@ -139,6 +148,9 @@ function closeRequest() {
   reportError.value = ''
   opinionLoading.value = false
   opinionError.value = ''
+  securityLoading.value = false
+  securityError.value = ''
+  securityReason.value = ''
 }
 
 async function uploadReport(event) {
@@ -351,13 +363,7 @@ async function loadExperts() {
 
 async function refreshSelected(requestId) {
   if (selected.value?.backendId === requestId) {
-    selected.value = {
-      ...selected.value,
-      canAssignExecutor: false,
-      canAssignExpert: false,
-      canPublishOpinion: false,
-      canStart: false,
-    }
+    selected.value = withoutStaleActions(selected.value)
   }
   await loadRequests(true)
   if (selected.value?.backendId !== requestId) return
@@ -474,6 +480,49 @@ async function publishOpinion() {
   } finally {
     if (opinionRequestGuard.isCurrent(requestToken, selected.value?.backendId)) {
       opinionLoading.value = false
+    }
+  }
+}
+
+async function decideSecurity(decision) {
+  const reason = securityReason.value.trim()
+  if (decision === 'return' && !reason) {
+    securityError.value = 'Укажите причину возврата заявки.'
+    return
+  }
+  const prompt = decision === 'approve'
+    ? 'Согласовать заключение и завершить заявку?'
+    : 'Вернуть заявку исполнителю с указанной причиной?'
+  if (!window.confirm(prompt)) return
+
+  const requestId = selected.value.backendId
+  const requestToken = securityRequestGuard.begin(requestId)
+  securityLoading.value = true
+  securityError.value = ''
+  try {
+    await requestApi.decideSecurity(requestId, decision, reason || null, selected.value.lockVersion)
+    if (!securityRequestGuard.isCurrent(requestToken, selected.value?.backendId)) return
+    selected.value = { ...selected.value, canSecurityDecide: false }
+    securityReason.value = ''
+    try {
+      await refreshSelected(requestId)
+    } catch {
+      securityError.value = 'Решение сохранено, но обновить карточку не удалось. Устаревшие действия отключены.'
+    }
+  } catch (error) {
+    if (!securityRequestGuard.isCurrent(requestToken, selected.value?.backendId)) return
+    if (error.status === 409) {
+      await recoverConflict(requestId, 'Заявка уже изменена.')
+    } else {
+      securityError.value = error.status === 422
+        ? 'Проверьте решение и причину возврата.'
+        : error.status === 403
+          ? 'Решение может принять только сотрудник СБ на этапе контроля.'
+          : 'Не удалось сохранить решение СБ.'
+    }
+  } finally {
+    if (securityRequestGuard.isCurrent(requestToken, selected.value?.backendId)) {
+      securityLoading.value = false
     }
   }
 }
@@ -615,6 +664,12 @@ onMounted(loadRequests)
                 <button class="primary action-wide" :disabled="opinionLoading" @click="publishOpinion">{{ opinionLoading ? 'Публикация…' : 'Опубликовать и передать в СБ' }}</button>
               </div>
               <p v-if="opinionError" class="action-error">{{ opinionError }}</p>
+              <div v-if="selected.canSecurityDecide" class="execution-action">
+                <label>Комментарий СБ<textarea v-model="securityReason" :disabled="securityLoading" maxlength="5000" placeholder="Обязателен при возврате заявки"></textarea></label>
+                <button class="primary action-wide" :disabled="securityLoading" @click="decideSecurity('approve')">{{ securityLoading ? 'Сохранение…' : 'Согласовать и завершить' }}</button>
+                <button class="secondary action-wide" :disabled="securityLoading" @click="decideSecurity('return')">Вернуть в работу</button>
+              </div>
+              <p v-if="securityError" class="action-error">{{ securityError }}</p>
               <p v-if="actionError" class="action-error">{{ actionError }}</p>
               <a class="help-link" href="/help/assignment.html" target="_blank">Инструкция по назначению и началу работы</a>
             </article>

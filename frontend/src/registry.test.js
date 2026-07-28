@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { canSubmitComment, commentFromApi, documentFromApi, filterRequests, fromApi, historyFromApi } from './registry'
+import { canSubmitComment, commentFromApi, documentFromApi, filterRequests, fromApi, historyFromApi, withoutStaleActions } from './registry'
 
 const registered = {
   id: 4,
@@ -25,6 +25,7 @@ const registered = {
   can_upload_document: 1,
   can_upload_report: 0,
   can_publish_opinion: 0,
+  can_security_decide: 0,
 }
 
 it('maps the API contract to a registry row', () => {
@@ -44,6 +45,7 @@ it('maps the API contract to a registry row', () => {
     canUploadDocument: true,
     canUploadReport: false,
     canPublishOpinion: false,
+    canSecurityDecide: false,
   })
 })
 
@@ -55,6 +57,22 @@ it('hides the start action after the request leaves registered status', () => {
   expect(fromApi({ ...registered, status: 'in_progress', can_start: 1 })).toMatchObject({
     status: 'Заявка в работе',
     tone: 'cyan',
+    canStart: false,
+  })
+})
+
+it('disables every version-sensitive action before conflict recovery', () => {
+  expect(withoutStaleActions({
+    canAssignExecutor: true,
+    canAssignExpert: true,
+    canPublishOpinion: true,
+    canSecurityDecide: true,
+    canStart: true,
+  })).toMatchObject({
+    canAssignExecutor: false,
+    canAssignExpert: false,
+    canPublishOpinion: false,
+    canSecurityDecide: false,
     canStart: false,
   })
 })
@@ -83,6 +101,15 @@ it('maps permission and history for publishing an expert opinion', () => {
     id: 12, kind: 'transition', action: 'publish_opinion', actorName: 'Эксперт',
     ruleId: 'DOC-007', occurredAt: '2026-07-28T10:02:00Z',
   }).description).toBe('опубликовал(а) экспертное заключение')
+})
+
+it('maps the security decision permission and history', () => {
+  expect(fromApi({ ...registered, status: 'security_review', can_security_decide: 1 }))
+    .toMatchObject({ canSecurityDecide: true, status: 'Контроль СБ' })
+  expect(historyFromApi({
+    id: 13, kind: 'transition', action: 'security_return', actorName: 'Сотрудник СБ',
+    reason: 'Уточнить вывод', ruleId: 'SEC-003', occurredAt: '2026-07-28T10:03:00Z',
+  }).description).toBe('вернул(а) заявку в работу: Уточнить вывод')
 })
 
 it('maps a safe history event without audit payload', () => {
