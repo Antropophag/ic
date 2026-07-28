@@ -53,6 +53,18 @@ it('preserves an unknown status so API drift stays visible', () => {
   expect(fromApi({ ...registered, status: 'new_status' }).status).toBe('new_status')
 })
 
+it('maps the manual color mark for a manager', () => {
+  expect(fromApi({ ...registered, color: 'red', can_set_color: 1 })).toMatchObject({
+    color: 'red',
+    canSetColor: true,
+  })
+})
+
+it('falls back to white for a missing or unknown color', () => {
+  expect(fromApi(registered).color).toBe('white')
+  expect(fromApi({ ...registered, color: 'not-a-color' }).color).toBe('white')
+})
+
 it('hides the start action after the request leaves registered status', () => {
   expect(fromApi({ ...registered, status: 'in_progress', can_start: 1 })).toMatchObject({
     status: 'Заявка в работе',
@@ -68,12 +80,14 @@ it('disables every version-sensitive action before conflict recovery', () => {
     canPublishOpinion: true,
     canSecurityDecide: true,
     canStart: true,
+    canSetColor: true,
   })).toMatchObject({
     canAssignExecutor: false,
     canAssignExpert: false,
     canPublishOpinion: false,
     canSecurityDecide: false,
     canStart: false,
+    canSetColor: false,
   })
 })
 

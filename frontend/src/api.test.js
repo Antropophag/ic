@@ -172,6 +172,18 @@ it('uses a fallback message for a non-JSON server error', async () => {
   await expect(requestApi.list()).rejects.toThrow('Ошибка обращения к серверу')
 })
 
+it('sets the manual color mark with optimistic locking', async () => {
+  const fetchMock = vi.fn().mockResolvedValue(new Response('{}', { status: 200 }))
+  vi.stubGlobal('fetch', fetchMock)
+
+  await requestApi.setColor(7, 'red', 3)
+
+  expect(fetchMock).toHaveBeenCalledWith('/api/v1/requests/7/color', expect.objectContaining({
+    method: 'POST',
+    body: JSON.stringify({ color: 'red', lockVersion: 3 }),
+  }))
+})
+
 it('sends the currently selected dev user as the actor header', async () => {
   const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({ items: [] }), { status: 200 }))
   vi.stubGlobal('fetch', fetchMock)

@@ -3,7 +3,7 @@ import { computed, onMounted, reactive, ref } from 'vue'
 import { requestApi } from './api'
 import { DEV_USERS, getDevUserId, setDevUserId } from './devUsers'
 import { createLatestRequestGuard } from './latestRequestGuard'
-import { ACTIVE_STATUSES, canSubmitComment, commentFromApi, documentFromApi, filterRequests, fromApi, historyFromApi, withoutStaleActions } from './registry'
+import { ACTIVE_STATUSES, REQUEST_COLORS, canSubmitComment, commentFromApi, documentFromApi, filterRequests, fromApi, historyFromApi, withoutStaleActions } from './registry'
 
 const activeTab = ref('active')
 const query = ref('')
@@ -37,6 +37,8 @@ const opinionError = ref('')
 const securityReason = ref('')
 const securityLoading = ref(false)
 const securityError = ref('')
+const colorLoading = ref(false)
+const colorError = ref('')
 const detailRequestGuard = createLatestRequestGuard()
 const commentRequestGuard = createLatestRequestGuard()
 const commentsPageRequestGuard = createLatestRequestGuard()
@@ -45,6 +47,7 @@ const reportRequestGuard = createLatestRequestGuard()
 const opinionRequestGuard = createLatestRequestGuard()
 const securityRequestGuard = createLatestRequestGuard()
 const registryRequestGuard = createLatestRequestGuard()
+const colorRequestGuard = createLatestRequestGuard()
 const draft = reactive({
   productName: '', manufacturer: '', supplier: '', sampleQuantity: 1, testMethod: '',
 })
@@ -125,6 +128,7 @@ async function openRequest(item) {
   reportRequestGuard.invalidate()
   opinionRequestGuard.invalidate()
   securityRequestGuard.invalidate()
+  colorRequestGuard.invalidate()
   commentLoading.value = false
   commentError.value = ''
   commentDraft.value = ''
@@ -138,6 +142,8 @@ async function openRequest(item) {
   securityLoading.value = false
   securityError.value = ''
   securityReason.value = ''
+  colorLoading.value = false
+  colorError.value = ''
   showHistory.value = false
   actionError.value = ''
   await loadRequestDetails(item)
@@ -151,6 +157,7 @@ function closeRequest() {
   reportRequestGuard.invalidate()
   opinionRequestGuard.invalidate()
   securityRequestGuard.invalidate()
+  colorRequestGuard.invalidate()
   selected.value = null
   detailLoading.value = false
   detailError.value = ''
@@ -165,6 +172,8 @@ function closeRequest() {
   securityLoading.value = false
   securityError.value = ''
   securityReason.value = ''
+  colorLoading.value = false
+  colorError.value = ''
 }
 
 async function uploadReport(event) {
@@ -403,6 +412,36 @@ async function recoverConflict(requestId, message) {
   }
 }
 
+async function setColorMark(color) {
+  if (colorLoading.value || color === selected.value.color) return
+  const requestId = selected.value.backendId
+  const requestToken = colorRequestGuard.begin(requestId)
+  colorLoading.value = true
+  colorError.value = ''
+  try {
+    await requestApi.setColor(requestId, color, selected.value.lockVersion)
+    if (!colorRequestGuard.isCurrent(requestToken, selected.value?.backendId)) return
+    try {
+      await refreshSelected(requestId)
+    } catch {
+      colorError.value = 'Метка сохранена, но обновить карточку не удалось.'
+    }
+  } catch (error) {
+    if (!colorRequestGuard.isCurrent(requestToken, selected.value?.backendId)) return
+    if (error.status === 409) {
+      await recoverConflict(requestId, 'Заявка уже изменена.')
+    } else {
+      colorError.value = error.status === 403
+        ? 'У вас нет права менять цветовую метку.'
+        : 'Не удалось сохранить цветовую метку. Повторите попытку.'
+    }
+  } finally {
+    if (colorRequestGuard.isCurrent(requestToken, selected.value?.backendId)) {
+      colorLoading.value = false
+    }
+  }
+}
+
 async function assignExecutor() {
   if (!executorChoice.value) {
     actionError.value = 'Выберите исполнителя.'
@@ -631,7 +670,7 @@ onMounted(loadRequests)
             <table>
               <thead><tr><th>№ заявки</th><th>Дата</th><th>Объект испытаний</th><th>Инициатор</th><th>Исполнитель</th><th>Статус</th><th></th></tr></thead>
               <tbody>
-                <tr v-for="item in filtered" :key="item.id" @click="openRequest(item)">
+                <tr v-for="item in filtered" :key="item.id" :class="'row-color-' + item.color" @click="openRequest(item)">
                   <td class="number">{{ item.id }}</td><td>{{ item.date }}</td>
                   <td><b>{{ item.product }}</b><small>{{ item.supplier }}</small></td>
                   <td>{{ item.initiator }}<small>{{ item.department }}</small></td>
@@ -677,6 +716,19 @@ onMounted(loadRequests)
           </div>
           <aside class="stack side-column">
             <article class="card summary"><h3>Исполнение</h3><p><span>Исполнитель</span><b>{{ selected.executor }}</b></p><p><span>Эксперт</span><b>{{ selected.expert }}</b></p><p><span>Отметка СБ</span><b>—</b></p>
+              <div v-if="selected.canSetColor" class="color-picker">
+                <button
+                  v-for="color in REQUEST_COLORS"
+                  :key="color"
+                  type="button"
+                  class="color-swatch"
+                  :class="[color, { active: selected.color === color }]"
+                  :disabled="colorLoading"
+                  :title="color"
+                  @click="setColorMark(color)"
+                ></button>
+              </div>
+              <p v-if="colorError" class="action-error">{{ colorError }}</p>
               <div v-if="selected.canAssignExecutor" class="execution-action">
                 <label>Назначить исполнителя<select v-model="executorChoice" :disabled="actionLoading"><option value="">Выберите сотрудника</option><option v-for="executor in executors" :key="executor.id" :value="executor.id">{{ executor.displayName }}</option></select></label>
                 <button class="secondary" :disabled="actionLoading" @click="assignExecutor">{{ actionLoading ? 'Сохранение…' : 'Назначить' }}</button>

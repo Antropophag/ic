@@ -33,6 +33,7 @@ return yii\helpers\ArrayHelper::merge($common, [
                 'POST api/v1/requests/<id:\\d+>/opinion' => 'request/publish-opinion',
                 'POST api/v1/requests/<id:\\d+>/security-decision' => 'request/security-decision',
                 'POST api/v1/requests/<id:\\d+>/start' => 'request/start',
+                'POST api/v1/requests/<id:\\d+>/color' => 'request/set-color',
             ],
         ],
     ],

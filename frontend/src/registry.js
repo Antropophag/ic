@@ -22,6 +22,8 @@ const STATUS_TONES = {
   opinion_preparation: 'violet', security_review: 'yellow', completed: 'green',
 }
 
+export const REQUEST_COLORS = ['white', 'red', 'orange', 'blue', 'violet', 'green']
+
 export function fromApi(item) {
   return {
     backendId: Number(item.id),
@@ -47,6 +49,8 @@ export function fromApi(item) {
     canUploadReport: Boolean(Number(item.can_upload_report)),
     canPublishOpinion: Boolean(Number(item.can_publish_opinion)),
     canSecurityDecide: Boolean(Number(item.can_security_decide)),
+    canSetColor: Boolean(Number(item.can_set_color)),
+    color: REQUEST_COLORS.includes(item.color) ? item.color : 'white',
     status: STATUS_LABELS[item.status] || item.status,
     tone: STATUS_TONES[item.status] || 'blue',
   }
@@ -60,6 +64,7 @@ export function withoutStaleActions(item) {
     canPublishOpinion: false,
     canSecurityDecide: false,
     canStart: false,
+    canSetColor: false,
   }
 }
 
