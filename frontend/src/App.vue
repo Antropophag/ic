@@ -671,10 +671,13 @@ onMounted(loadRequests)
               </div>
               <p v-if="securityError" class="action-error">{{ securityError }}</p>
               <p v-if="actionError" class="action-error">{{ actionError }}</p>
-              <a class="help-link" href="/help/assignment.html" target="_blank">Инструкция по назначению и началу работы</a>
+              <a v-if="selected.canAssignExecutor || selected.canAssignExpert || selected.canStart" class="help-link" href="/help/assignment.html" target="_blank">Инструкция по назначению и началу работы</a>
+              <a v-if="selected.canPublishOpinion" class="help-link" href="/help/expert-opinion.html" target="_blank">Инструкция по формированию заключения</a>
+              <a v-if="selected.canSecurityDecide" class="help-link" href="/help/security-review.html" target="_blank">Инструкция по контролю СБ</a>
             </article>
             <article class="card documents"><h3>Документы <span>{{ selected.documents?.length || 0 }}</span></h3>
               <label v-if="selected.canUploadReport" class="primary upload-button">{{ reportLoading ? 'Загрузка отчёта…' : 'Загрузить отчёт испытаний' }}<input type="file" :disabled="reportLoading" accept=".pdf,application/pdf" @change="uploadReport" /></label>
+              <a v-if="selected.canUploadReport" class="help-link" href="/help/report.html" target="_blank">Инструкция по загрузке отчёта испытаний</a>
               <p v-if="reportError" class="action-error">{{ reportError }}</p>
               <button v-for="document in selected.documents || []" :key="document.versionId" class="document-row" @click="downloadDocument(document)"><span>▣</span><span><b>{{ document.title }}</b><small>Версия {{ document.version }} · {{ document.size }} · {{ document.createdAt }}</small></span></button>
               <p v-if="!selected.documents?.length" class="placeholder-copy">Документов пока нет.</p>
