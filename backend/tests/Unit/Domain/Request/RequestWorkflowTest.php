@@ -28,6 +28,8 @@ final class RequestWorkflowTest extends TestCase
     public static function allowedTransitions(): iterable
     {
         yield 'executor starts' => [RequestStatus::Registered, RequestAction::Start, Role::IcExecutor, RequestStatus::InProgress];
+        yield 'manager starts' => [RequestStatus::Registered, RequestAction::Start, Role::IcManager, RequestStatus::InProgress];
+        yield 'laboratory manager starts' => [RequestStatus::Registered, RequestAction::Start, Role::LaboratoryManager, RequestStatus::InProgress];
         yield 'executor uploads report' => [RequestStatus::InProgress, RequestAction::UploadReport, Role::IcExecutor, RequestStatus::OpinionPreparation];
         yield 'expert publishes' => [RequestStatus::OpinionPreparation, RequestAction::PublishOpinion, Role::Expert, RequestStatus::SecurityReview];
         yield 'security approves' => [RequestStatus::SecurityReview, RequestAction::SecurityApprove, Role::SecurityOfficer, RequestStatus::Completed];
