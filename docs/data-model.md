@@ -60,7 +60,6 @@ erDiagram
     request_documents {
         bigint(20)_unsigned id PK
         bigint(20)_unsigned request_id FK "-> requests.id"
-        varchar(32) document_type
         varchar(255) title
         bigint(20)_unsigned created_by FK "-> users.id"
         datetime(6) created_at

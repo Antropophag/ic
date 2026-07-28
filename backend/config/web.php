@@ -23,7 +23,6 @@ return yii\helpers\ArrayHelper::merge($common, [
                 'POST api/v1/requests/<id:\\d+>/comments' => 'request/add-comment',
                 'GET api/v1/requests/<id:\\d+>/comments' => 'request/comments',
                 'POST api/v1/requests/<id:\\d+>/documents' => 'request/upload-document',
-                'POST api/v1/requests/<id:\\d+>/report' => 'request/upload-report',
                 'GET api/v1/document-versions/<id:\\d+>/download' => 'request/download-document',
                 'GET api/v1/executors' => 'request/executors',
                 'POST api/v1/requests' => 'request/create',

@@ -9,18 +9,9 @@ export const ACTIVE_STATUSES = [
 const STATUS_LABELS = {
   registered: 'Заявка зарегистрирована',
   in_progress: 'Заявка в работе',
-  suspended: 'Работы приостановлены',
-  opinion_preparation: 'Подготовка заключения',
-  security_review: 'Контроль СБ',
-  completed: 'Заявка выполнена',
-  rejected: 'В проведении испытаний отказано',
-  withdrawn: 'Заявка отозвана',
 }
 
-const STATUS_TONES = {
-  registered: 'blue', in_progress: 'cyan', suspended: 'orange',
-  opinion_preparation: 'violet', security_review: 'yellow', completed: 'green',
-}
+const STATUS_TONES = { registered: 'blue', in_progress: 'cyan' }
 
 export function fromApi(item) {
   return {
@@ -41,7 +32,6 @@ export function fromApi(item) {
     canStart: Boolean(Number(item.can_start)) && item.status === 'registered',
     canComment: Boolean(Number(item.can_comment)),
     canUploadDocument: Boolean(Number(item.can_upload_document)),
-    canUploadReport: Boolean(Number(item.can_upload_report)),
     status: STATUS_LABELS[item.status] || item.status,
     tone: STATUS_TONES[item.status] || 'blue',
   }
@@ -52,7 +42,6 @@ const HISTORY_LABELS = {
   import: 'импортировал(а) заявку',
   assign_executor: 'назначил(а) исполнителя',
   start: 'перевёл(а) заявку в работу',
-  upload_report: 'загрузил(а) отчёт испытаний',
 }
 
 export function historyFromApi(item) {
@@ -82,7 +71,6 @@ export function documentFromApi(item) {
   return {
     id: Number(item.id),
     title: item.title,
-    documentType: item.documentType || 'attachment',
     versionId: Number(item.versionId),
     version: Number(item.version),
     originalName: item.originalName,

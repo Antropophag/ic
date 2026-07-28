@@ -136,10 +136,6 @@ final class RequestRepository
             . "'security_review')) AS can_comment, "
             . "(r.status IN ('registered', 'in_progress', 'suspended', 'opinion_preparation', "
             . "'security_review')) AS can_upload_document "
-            . ", (r.status IN ('in_progress', 'opinion_preparation') AND "
-            . '(current_executor.user_id = :report_actor OR EXISTS(SELECT 1 FROM {{%user_roles}} rur '
-            . 'JOIN {{%roles}} rr ON rr.id = rur.role_id WHERE rur.user_id = :report_manager '
-            . "AND rr.code IN ('ic_manager', 'laboratory_manager')))) AS can_upload_report "
             . 'FROM {{%requests}} r '
             . 'JOIN {{%users}} viewer ON viewer.id = :actor_id AND viewer.is_active = 1 '
             . 'JOIN {{%users}} u ON u.id = r.initiator_id '
@@ -154,8 +150,6 @@ final class RequestRepository
                 ':start_manager' => $actorId,
                 ':start_executor' => $actorId,
                 ':start_executor_role' => $actorId,
-                ':report_actor' => $actorId,
-                ':report_manager' => $actorId,
             ],
         )->queryOne();
         if ($item === false) {
@@ -180,7 +174,7 @@ final class RequestRepository
         $commentsPage = $this->queryCommentsPage($requestId, null);
 
         $documents = $this->db->createCommand(
-            'SELECT d.id, d.document_type AS documentType, d.title, v.id AS versionId, v.version, v.original_name AS originalName, '
+            'SELECT d.id, d.title, v.id AS versionId, v.version, v.original_name AS originalName, '
             . 'v.mime_type AS mimeType, v.size_bytes AS sizeBytes, v.sha256, '
             . "DATE_FORMAT(v.created_at, '%Y-%m-%dT%H:%i:%s.%fZ') AS createdAt, "
             . 'u.display_name AS uploadedBy FROM {{%request_documents}} d '
@@ -188,21 +182,8 @@ final class RequestRepository
             . 'AND v.version = (SELECT MAX(latest.version) FROM {{%request_document_versions}} latest '
             . 'WHERE latest.document_id = d.id) '
             . 'JOIN {{%users}} u ON u.id = v.uploaded_by '
-            . 'JOIN {{%requests}} item_request ON item_request.id = d.request_id '
-            . 'LEFT JOIN {{%request_assignments}} current_report_executor '
-            . 'ON current_report_executor.request_id = item_request.id '
-            . "AND current_report_executor.assignment_type = 'executor' "
-            . 'AND current_report_executor.valid_to IS NULL '
-            . "WHERE d.request_id = :document_request_id AND (d.document_type <> 'report' "
-            . "OR item_request.status = 'completed' OR current_report_executor.user_id = :report_viewer "
-            . 'OR EXISTS(SELECT 1 FROM {{%user_roles}} rvur JOIN {{%roles}} rvr ON rvr.id = rvur.role_id '
-            . "WHERE rvur.user_id = :report_manager_viewer AND rvr.code IN ('ic_manager', 'laboratory_manager'))) "
-            . 'ORDER BY d.created_at ASC, d.id ASC',
-            [
-                ':document_request_id' => $requestId,
-                ':report_viewer' => $actorId,
-                ':report_manager_viewer' => $actorId,
-            ],
+            . 'WHERE d.request_id = :document_request_id ORDER BY d.created_at ASC, d.id ASC',
+            [':document_request_id' => $requestId],
         )->queryAll();
 
         return [

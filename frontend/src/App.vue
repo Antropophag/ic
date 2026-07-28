@@ -21,15 +21,12 @@ const commentError = ref('')
 const olderCommentsLoading = ref(false)
 const documentLoading = ref(false)
 const documentError = ref('')
-const reportLoading = ref(false)
-const reportError = ref('')
 const executors = ref([])
 const executorChoice = ref('')
 const detailRequestGuard = createLatestRequestGuard()
 const commentRequestGuard = createLatestRequestGuard()
 const commentsPageRequestGuard = createLatestRequestGuard()
 const documentRequestGuard = createLatestRequestGuard()
-const reportRequestGuard = createLatestRequestGuard()
 const draft = reactive({
   productName: '', manufacturer: '', supplier: '', sampleQuantity: 1, testMethod: '',
 })
@@ -90,14 +87,11 @@ async function openRequest(item) {
   commentRequestGuard.invalidate()
   commentsPageRequestGuard.invalidate()
   documentRequestGuard.invalidate()
-  reportRequestGuard.invalidate()
   commentLoading.value = false
   commentError.value = ''
   commentDraft.value = ''
   documentLoading.value = false
   documentError.value = ''
-  reportLoading.value = false
-  reportError.value = ''
   showHistory.value = false
   actionError.value = ''
   await loadRequestDetails(item)
@@ -108,7 +102,6 @@ function closeRequest() {
   commentRequestGuard.invalidate()
   commentsPageRequestGuard.invalidate()
   documentRequestGuard.invalidate()
-  reportRequestGuard.invalidate()
   selected.value = null
   detailLoading.value = false
   detailError.value = ''
@@ -116,35 +109,6 @@ function closeRequest() {
   commentError.value = ''
   documentLoading.value = false
   documentError.value = ''
-  reportLoading.value = false
-  reportError.value = ''
-}
-
-async function uploadReport(event) {
-  const file = event.target.files?.[0]
-  event.target.value = ''
-  if (!file) return
-  const requestId = selected.value.backendId
-  const requestToken = reportRequestGuard.begin(requestId)
-  reportLoading.value = true
-  reportError.value = ''
-  try {
-    await requestApi.uploadReport(requestId, file)
-    if (!reportRequestGuard.isCurrent(requestToken, selected.value?.backendId)) return
-    await loadRequestDetails(selected.value)
-    await loadRequests()
-  } catch (error) {
-    if (!reportRequestGuard.isCurrent(requestToken, selected.value?.backendId)) return
-    reportError.value = error.status === 422
-      ? 'Отчёт должен быть PDF-файлом размером до 10 МБ.'
-      : error.status === 403
-        ? 'Загрузить отчёт может назначенный исполнитель или руководитель.'
-        : 'Не удалось загрузить отчёт.'
-  } finally {
-    if (reportRequestGuard.isCurrent(requestToken, selected.value?.backendId)) {
-      reportLoading.value = false
-    }
-  }
 }
 
 async function uploadDocument(event) {
@@ -467,8 +431,6 @@ onMounted(loadRequests)
               <a class="help-link" href="/help/assignment.html" target="_blank">Инструкция по назначению и началу работы</a>
             </article>
             <article class="card documents"><h3>Документы <span>{{ selected.documents?.length || 0 }}</span></h3>
-              <label v-if="selected.canUploadReport" class="primary upload-button">{{ reportLoading ? 'Загрузка отчёта…' : 'Загрузить отчёт испытаний' }}<input type="file" :disabled="reportLoading" accept=".pdf,application/pdf" @change="uploadReport" /></label>
-              <p v-if="reportError" class="action-error">{{ reportError }}</p>
               <button v-for="document in selected.documents || []" :key="document.versionId" class="document-row" @click="downloadDocument(document)"><span>▣</span><span><b>{{ document.title }}</b><small>Версия {{ document.version }} · {{ document.size }} · {{ document.createdAt }}</small></span></button>
               <p v-if="!selected.documents?.length" class="placeholder-copy">Документов пока нет.</p>
               <label v-if="selected.canUploadDocument" class="secondary upload-button">{{ documentLoading ? 'Загрузка…' : 'Загрузить документ' }}<input type="file" :disabled="documentLoading" accept=".pdf,.png,.jpg,.jpeg,.docx,.xlsx" @change="uploadDocument" /></label>
