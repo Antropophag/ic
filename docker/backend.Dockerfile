@@ -6,7 +6,10 @@ RUN composer install --no-dev --no-interaction --no-progress --prefer-dist \
     --classmap-authoritative
 
 FROM php:8.3-fpm-alpine3.23
-RUN docker-php-ext-install pdo_mysql \
+# Build dependency follows the pinned Alpine base repository.
+# hadolint ignore=DL3018
+RUN apk add --no-cache libzip-dev \
+    && docker-php-ext-install pdo_mysql zip \
     && addgroup -S -g 10001 app \
     && adduser -S -D -H -u 10001 -G app app
 WORKDIR /app

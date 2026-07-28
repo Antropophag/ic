@@ -7,6 +7,7 @@
     "php": "^8.3",
     "ext-json": "*",
     "ext-pdo": "*",
+    "ext-zip": "*",
     "yiisoft/yii2": "^2.0"
   },
   "require-dev": {

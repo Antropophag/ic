@@ -14,8 +14,8 @@ final class AttachmentPolicy
         'png' => ['image/png'],
         'jpg' => ['image/jpeg'],
         'jpeg' => ['image/jpeg'],
-        'docx' => ['application/vnd.openxmlformats-officedocument.wordprocessingml.document', 'application/zip'],
-        'xlsx' => ['application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', 'application/zip'],
+        'docx' => ['application/vnd.openxmlformats-officedocument.wordprocessingml.document'],
+        'xlsx' => ['application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'],
     ];
 
     public function assertCanUpload(RequestStatus $status): void

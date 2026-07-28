@@ -19,6 +19,7 @@ use App\Domain\Request\TransitionDenied;
 use App\Infrastructure\Identity\CurrentUser;
 use App\Infrastructure\Document\DocumentRepository;
 use App\Infrastructure\Document\DocumentStorage;
+use App\Infrastructure\Document\OfficeDocumentInspector;
 use App\Infrastructure\Request\RequestRepository;
 use Yii;
 use yii\rest\Controller;
@@ -129,6 +130,7 @@ final class RequestController extends Controller
         }
 
         try {
+            $mimeType = (new OfficeDocumentInspector())->normalizeMimeType($file->name, $mimeType, $file->tempName);
             $document = $this->documents()->upload(
                 $id,
                 $actorId,
