@@ -33,8 +33,15 @@ check:
 
 coverage:
 	mkdir -p backend/build/coverage
-	docker build --file docker/coverage.Dockerfile --tag shlz-test-registry-coverage .
-	docker run --rm --volume "$(CURDIR)/backend/build/coverage:/app/build/coverage" shlz-test-registry-coverage
+	@if command -v php >/dev/null 2>&1 && php -r 'exit(extension_loaded("xdebug") || extension_loaded("pcov") ? 0 : 1);'; then \
+		cd backend && XDEBUG_MODE=coverage php vendor/bin/phpunit --coverage-clover build/coverage/clover.xml; \
+	elif command -v docker >/dev/null 2>&1; then \
+		docker build --file docker/coverage.Dockerfile --tag shlz-test-registry-coverage . && \
+		docker run --rm --volume "$(CURDIR)/backend/build/coverage:/app/build/coverage" shlz-test-registry-coverage; \
+	else \
+		echo "Backend coverage requires PHP with Xdebug/PCOV or Docker." >&2; \
+		exit 1; \
+	fi
 	python3 scripts/check_coverage.py backend/build/coverage/clover.xml --minimum 90
 
 frontend-coverage:

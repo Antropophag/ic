@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Fail when Clover line coverage is below the configured threshold."""
+"""Fail when Clover statement coverage is invalid or below the threshold."""
 
 from __future__ import annotations
 
@@ -20,8 +20,20 @@ def main() -> int:
 
     statements = int(metrics.attrib["statements"])
     covered = int(metrics.attrib["coveredstatements"])
-    coverage = 100.0 if statements == 0 else covered * 100.0 / statements
-    print(f"Backend domain/application line coverage: {coverage:.2f}% ({covered}/{statements})")
+    if statements <= 0:
+        raise SystemExit(
+            "Clover report contains no statements; coverage collection is likely misconfigured"
+        )
+    if covered < 0 or covered > statements:
+        raise SystemExit(
+            f"Invalid Clover metrics: covered statements {covered}, total statements {statements}"
+        )
+
+    coverage = covered * 100.0 / statements
+    print(
+        "Backend domain/application statement coverage: "
+        f"{coverage:.2f}% ({covered}/{statements})"
+    )
 
     if coverage < args.minimum:
         print(f"Required coverage: {args.minimum:.2f}%")

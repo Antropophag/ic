@@ -1,7 +1,9 @@
 FROM php:8.3-cli-alpine3.23
 
+ARG XDEBUG_VERSION=3.5.3
+
 RUN apk add --no-cache --virtual .coverage-build-deps $PHPIZE_DEPS linux-headers \
-    && pecl install xdebug \
+    && pecl install "xdebug-${XDEBUG_VERSION}" \
     && docker-php-ext-enable xdebug \
     && apk del .coverage-build-deps
 
