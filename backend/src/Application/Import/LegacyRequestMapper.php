@@ -6,6 +6,8 @@ namespace App\Application\Import;
 
 use App\Domain\Request\RequestStatus;
 use DateTimeImmutable;
+use DateTimeInterface;
+use DateTimeZone;
 use UnexpectedValueException;
 
 final class LegacyRequestMapper
@@ -35,7 +37,7 @@ final class LegacyRequestMapper
             $quantity,
             $this->string($details, 'testMethod'),
             $this->status($this->requiredString($details, 'status')),
-            new DateTimeImmutable($this->requiredString($details, 'dateCreate')),
+            $this->date($this->requiredString($details, 'dateCreate')),
             $this->requiredString($creator, 'ID'),
             trim($this->string($creator, 'LAST_NAME') . ' ' . $this->string($creator, 'NAME')),
             $this->string($department, 'NAME'),
@@ -72,6 +74,22 @@ final class LegacyRequestMapper
             return 0;
         }
         return (int) $matches[1];
+    }
+
+    private function date(string $value): DateTimeImmutable
+    {
+        foreach ([[DateTimeInterface::ATOM, DateTimeInterface::ATOM], ['!Y-m-d', 'Y-m-d']] as [$format, $output]) {
+            $date = DateTimeImmutable::createFromFormat($format, $value, new DateTimeZone('UTC'));
+            $errors = DateTimeImmutable::getLastErrors();
+            if (
+                $date !== false
+                && ($errors === false || ($errors['warning_count'] === 0 && $errors['error_count'] === 0))
+                && $date->format($output) === $value
+            ) {
+                return $date;
+            }
+        }
+        throw new UnexpectedValueException('Legacy creation date has an invalid or unsupported format.');
     }
 
     private function status(string $status): RequestStatus

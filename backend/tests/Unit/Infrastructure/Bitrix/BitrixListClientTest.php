@@ -45,4 +45,30 @@ final class BitrixListClientTest extends TestCase
             (new BitrixListClient($transport, 'lists', 114, 0))->elements(1),
         ));
     }
+
+    public function testRejectsMalformedCursor(): void
+    {
+        $transport = new class () implements BitrixTransport {
+            public function call(string $method, array $parameters = []): array
+            {
+                return ['result' => [], 'next' => 'not-a-number'];
+            }
+        };
+
+        $this->expectException(\RuntimeException::class);
+        iterator_to_array((new BitrixListClient($transport, 'lists', 114, 0))->elements());
+    }
+
+    public function testRejectsNonAdvancingCursor(): void
+    {
+        $transport = new class () implements BitrixTransport {
+            public function call(string $method, array $parameters = []): array
+            {
+                return ['result' => [], 'next' => $parameters['start'] ?? 0];
+            }
+        };
+
+        $this->expectException(\RuntimeException::class);
+        iterator_to_array((new BitrixListClient($transport, 'lists', 114, 0))->elements());
+    }
 }

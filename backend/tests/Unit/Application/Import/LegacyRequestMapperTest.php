@@ -6,6 +6,7 @@ namespace Tests\Unit\Application\Import;
 
 use App\Application\Import\LegacyRequestMapper;
 use App\Domain\Request\RequestStatus;
+use DateTimeInterface;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 use UnexpectedValueException;
@@ -57,6 +58,28 @@ final class LegacyRequestMapperTest extends TestCase
                 'creator' => ['ID' => '77'],
             ], JSON_THROW_ON_ERROR),
         ], 114);
+    }
+
+    public function testMapsStrictDateOnlyValueAtUtcMidnight(): void
+    {
+        $request = (new LegacyRequestMapper())->map($this->element(['dateCreate' => '2025-02-03']), 114);
+
+        self::assertSame('2025-02-03T00:00:00+00:00', $request->createdAt->format(DateTimeInterface::ATOM));
+    }
+
+    #[DataProvider('invalidDates')]
+    public function testRejectsInvalidDate(string $date): void
+    {
+        $this->expectException(UnexpectedValueException::class);
+        (new LegacyRequestMapper())->map($this->element(['dateCreate' => $date]), 114);
+    }
+
+    /** @return iterable<string, array{string}> */
+    public static function invalidDates(): iterable
+    {
+        yield 'невозможный день' => ['2025-02-30T10:20:30+03:00'];
+        yield 'невозможный день без времени' => ['2025-02-30'];
+        yield 'неподдерживаемый формат' => ['2025-02-03 10:20:30'];
     }
 
     #[DataProvider('knownStatuses')]

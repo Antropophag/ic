@@ -43,7 +43,13 @@ final class BitrixListClient
 
             ++$page;
             $next = $response['next'] ?? null;
-            $start = is_numeric($next) ? (int) $next : 0;
+            if ($next !== null) {
+                $nextStart = filter_var($next, FILTER_VALIDATE_INT);
+                if ($nextStart === false || $nextStart <= $start) {
+                    throw new RuntimeException('Bitrix24 returned an invalid pagination cursor.');
+                }
+                $start = $nextStart;
+            }
             if ($next !== null && $this->pageDelayMilliseconds > 0) {
                 usleep($this->pageDelayMilliseconds * 1000);
             }
