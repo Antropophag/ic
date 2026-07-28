@@ -123,6 +123,18 @@ it('loads and assigns an expert with optimistic locking', async () => {
   }))
 })
 
+it('publishes an opinion with optimistic locking', async () => {
+  const fetchMock = vi.fn().mockResolvedValue(new Response('{}', { status: 200 }))
+  vi.stubGlobal('fetch', fetchMock)
+
+  await requestApi.publishOpinion(7, 'Испытания пройдены успешно.', 6)
+
+  expect(fetchMock).toHaveBeenCalledWith('/api/v1/requests/7/opinion', expect.objectContaining({
+    method: 'POST',
+    body: JSON.stringify({ body: 'Испытания пройдены успешно.', lockVersion: 6 }),
+  }))
+})
+
 it('loads active executors from the server', async () => {
   const payload = { items: [{ id: 2, displayName: 'Исполнитель' }] }
   vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(JSON.stringify(payload), { status: 200 })))

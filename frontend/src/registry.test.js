@@ -24,6 +24,7 @@ const registered = {
   can_comment: 1,
   can_upload_document: 1,
   can_upload_report: 0,
+  can_publish_opinion: 0,
 }
 
 it('maps the API contract to a registry row', () => {
@@ -42,6 +43,7 @@ it('maps the API contract to a registry row', () => {
     canComment: true,
     canUploadDocument: true,
     canUploadReport: false,
+    canPublishOpinion: false,
   })
 })
 
@@ -72,6 +74,15 @@ it('maps the report stage, permission and history label', () => {
     id: 11, kind: 'assignment', action: 'assign_expert', actorName: 'Руководитель',
     ruleId: 'WF-010', occurredAt: '2026-07-28T10:01:00Z',
   }).description).toBe('назначил(а) эксперта')
+})
+
+it('maps permission and history for publishing an expert opinion', () => {
+  expect(fromApi({ ...registered, status: 'opinion_preparation', can_publish_opinion: 1 }))
+    .toMatchObject({ canPublishOpinion: true })
+  expect(historyFromApi({
+    id: 12, kind: 'transition', action: 'publish_opinion', actorName: 'Эксперт',
+    ruleId: 'DOC-007', occurredAt: '2026-07-28T10:02:00Z',
+  }).description).toBe('опубликовал(а) экспертное заключение')
 })
 
 it('maps a safe history event without audit payload', () => {

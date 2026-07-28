@@ -45,6 +45,7 @@ export function fromApi(item) {
     canComment: Boolean(Number(item.can_comment)),
     canUploadDocument: Boolean(Number(item.can_upload_document)),
     canUploadReport: Boolean(Number(item.can_upload_report)),
+    canPublishOpinion: Boolean(Number(item.can_publish_opinion)),
     status: STATUS_LABELS[item.status] || item.status,
     tone: STATUS_TONES[item.status] || 'blue',
   }
@@ -57,6 +58,7 @@ const HISTORY_LABELS = {
   assign_expert: 'назначил(а) эксперта',
   start: 'перевёл(а) заявку в работу',
   upload_report: 'загрузил(а) отчёт испытаний',
+  publish_opinion: 'опубликовал(а) экспертное заключение',
 }
 
 export function historyFromApi(item) {

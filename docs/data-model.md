@@ -21,6 +21,15 @@ erDiagram
         longtext payload_json
         datetime(6) created_at
     }
+    expert_opinions {
+        bigint(20)_unsigned id PK
+        bigint(20)_unsigned request_id FK "-> requests.id"
+        int(11)_unsigned revision
+        bigint(20)_unsigned expert_id FK "-> users.id"
+        text body
+        bigint(20)_unsigned document_version_id FK "-> request_document_versions.id"
+        datetime(6) created_at
+    }
     migration {
         varchar(180) version PK
         int(11) apply_time
@@ -115,6 +124,9 @@ erDiagram
         datetime(6) created_at
     }
     users ||--o{ audit_events : "actor_id"
+    requests ||--o{ expert_opinions : "request_id"
+    users ||--o{ expert_opinions : "expert_id"
+    request_document_versions ||--o{ expert_opinions : "document_version_id"
     users ||--o{ requests : "initiator_id"
     requests ||--o{ request_assignments : "request_id"
     users ||--o{ request_assignments : "user_id"

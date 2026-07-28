@@ -5,9 +5,12 @@
   "license": "proprietary",
   "require": {
     "php": "^8.3",
+    "ext-dom": "*",
     "ext-json": "*",
+    "ext-mbstring": "*",
     "ext-pdo": "*",
     "ext-zip": "*",
+    "dompdf/dompdf": "^3.1",
     "yiisoft/yii2": "^2.0"
   },
   "require-dev": {

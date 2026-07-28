@@ -8,6 +8,7 @@ use App\Application\Request\CreateRequestInput;
 use App\Application\Request\AddCommentInput;
 use App\Application\Request\AssignExecutorInput;
 use App\Application\Request\AssignExpertInput;
+use App\Application\Request\PublishOpinionInput;
 use App\Application\Request\StartRequestInput;
 use App\Domain\Request\AssignmentDenied;
 use App\Domain\Request\AssignmentTargetNotFound;
@@ -17,12 +18,14 @@ use App\Domain\Request\ExpertAssignmentDenied;
 use App\Domain\Request\CommentDenied;
 use App\Domain\Request\RequestNotFound;
 use App\Domain\Request\ReportDenied;
+use App\Domain\Request\OpinionDenied;
 use App\Domain\Request\StartDenied;
 use App\Domain\Request\TransitionDenied;
 use App\Infrastructure\Identity\CurrentUser;
 use App\Infrastructure\Document\DocumentRepository;
 use App\Infrastructure\Document\DocumentStorage;
 use App\Infrastructure\Document\OfficeDocumentInspector;
+use App\Infrastructure\Document\OpinionPdfRenderer;
 use App\Infrastructure\Request\RequestRepository;
 use Yii;
 use yii\rest\Controller;
@@ -304,6 +307,36 @@ final class RequestController extends Controller
     }
 
     /** @return array<string, mixed> */
+    public function actionPublishOpinion(int $id): array
+    {
+        $input = new PublishOpinionInput();
+        $input->load(Yii::$app->request->bodyParams, '');
+        if (!$input->validate()) {
+            Yii::$app->response->statusCode = 422;
+            return ['errors' => $input->getErrors()];
+        }
+
+        $actorId = (new CurrentUser())->id(Yii::$app->request);
+        try {
+            return $this->documents()->publishOpinion(
+                $id,
+                $actorId,
+                trim((string) $input->body),
+                (int) $input->lockVersion,
+                new OpinionPdfRenderer(),
+            );
+        } catch (RequestNotFound $error) {
+            throw new NotFoundHttpException($error->getMessage());
+        } catch (OpinionDenied $error) {
+            $this->recordRejectedOpinionSafely($id, $actorId, $error->ruleId);
+            throw new ForbiddenHttpException($error->getMessage());
+        } catch (ConcurrentRequestModification $error) {
+            $this->recordRejectedOpinionSafely($id, $actorId, $error->ruleId);
+            throw new ConflictHttpException($error->getMessage());
+        }
+    }
+
+    /** @return array<string, mixed> */
     public function actionStart(int $id): array
     {
         $input = new StartRequestInput();
@@ -404,6 +437,21 @@ final class RequestController extends Controller
         } catch (\Throwable $auditError) {
             Yii::error([
                 'message' => 'Не удалось записать аудит отклонённой загрузки отчёта.',
+                'requestId' => $requestId,
+                'actorId' => $actorId,
+                'ruleId' => $ruleId,
+                'exception' => $auditError,
+            ], __METHOD__);
+        }
+    }
+
+    private function recordRejectedOpinionSafely(int $requestId, int $actorId, string $ruleId): void
+    {
+        try {
+            $this->documents()->recordRejectedOpinion($requestId, $actorId, $ruleId);
+        } catch (\Throwable $auditError) {
+            Yii::error([
+                'message' => 'Не удалось записать аудит отклонённой публикации заключения.',
                 'requestId' => $requestId,
                 'actorId' => $actorId,
                 'ruleId' => $ruleId,
