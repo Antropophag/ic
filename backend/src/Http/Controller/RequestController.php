@@ -7,11 +7,13 @@ namespace App\Http\Controller;
 use App\Application\Request\CreateRequestInput;
 use App\Application\Request\AddCommentInput;
 use App\Application\Request\AssignExecutorInput;
+use App\Application\Request\AssignExpertInput;
 use App\Application\Request\StartRequestInput;
 use App\Domain\Request\AssignmentDenied;
 use App\Domain\Request\AssignmentTargetNotFound;
 use App\Domain\Request\AttachmentDenied;
 use App\Domain\Request\ConcurrentRequestModification;
+use App\Domain\Request\ExpertAssignmentDenied;
 use App\Domain\Request\CommentDenied;
 use App\Domain\Request\RequestNotFound;
 use App\Domain\Request\ReportDenied;
@@ -219,6 +221,13 @@ final class RequestController extends Controller
         return ['items' => $this->repository()->findActiveExecutors()];
     }
 
+    /** @return array{items: list<array{id: int, displayName: string}>} */
+    public function actionExperts(): array
+    {
+        (new CurrentUser())->id(Yii::$app->request);
+        return ['items' => $this->repository()->findActiveExperts()];
+    }
+
     /** @return array<string, mixed> */
     public function actionCreate(): array
     {
@@ -265,6 +274,31 @@ final class RequestController extends Controller
             throw new ForbiddenHttpException($error->getMessage());
         } catch (ConcurrentRequestModification $error) {
             $this->recordRejectedAssignmentSafely($id, $executorId, $actorId, $error->ruleId);
+            throw new ConflictHttpException($error->getMessage());
+        }
+    }
+
+    /** @return array<string, mixed> */
+    public function actionAssignExpert(int $id): array
+    {
+        $input = new AssignExpertInput();
+        $input->load(Yii::$app->request->bodyParams, '');
+        if (!$input->validate()) {
+            Yii::$app->response->statusCode = 422;
+            return ['errors' => $input->getErrors()];
+        }
+
+        $expertId = (int) $input->expertId;
+        $actorId = (new CurrentUser())->id(Yii::$app->request);
+        try {
+            return $this->repository()->assignExpert($id, $expertId, (int) $input->lockVersion, $actorId);
+        } catch (AssignmentTargetNotFound $error) {
+            throw new NotFoundHttpException($error->getMessage());
+        } catch (ExpertAssignmentDenied $error) {
+            $this->recordRejectedExpertAssignmentSafely($id, $expertId, $actorId, $error->ruleId);
+            throw new ForbiddenHttpException($error->getMessage());
+        } catch (ConcurrentRequestModification $error) {
+            $this->recordRejectedExpertAssignmentSafely($id, $expertId, $actorId, $error->ruleId);
             throw new ConflictHttpException($error->getMessage());
         }
     }
@@ -321,6 +355,26 @@ final class RequestController extends Controller
                 'message' => 'Не удалось записать аудит отклонённого назначения.',
                 'requestId' => $requestId,
                 'executorId' => $executorId,
+                'actorId' => $actorId,
+                'ruleId' => $ruleId,
+                'exception' => $auditError,
+            ], __METHOD__);
+        }
+    }
+
+    private function recordRejectedExpertAssignmentSafely(
+        int $requestId,
+        int $expertId,
+        int $actorId,
+        string $ruleId,
+    ): void {
+        try {
+            $this->repository()->recordRejectedExpertAssignment($requestId, $expertId, $actorId, $ruleId);
+        } catch (\Throwable $auditError) {
+            Yii::error([
+                'message' => 'Не удалось записать аудит отклонённого назначения эксперта.',
+                'requestId' => $requestId,
+                'expertId' => $expertId,
                 'actorId' => $actorId,
                 'ruleId' => $ruleId,
                 'exception' => $auditError,

@@ -9,6 +9,7 @@ use App\Domain\Request\CommentPolicy;
 use App\Domain\Request\AssignmentPolicy;
 use App\Domain\Request\AssignmentTargetNotFound;
 use App\Domain\Request\ConcurrentRequestModification;
+use App\Domain\Request\ExpertAssignmentPolicy;
 use App\Domain\Request\RequestAction;
 use App\Domain\Request\RequestNotFound;
 use App\Domain\Request\RequestStatus;
@@ -312,6 +313,103 @@ final class RequestRepository
             . 'JOIN {{%roles}} r ON r.id = ur.role_id '
             . "WHERE u.is_active = 1 AND r.code = 'ic_executor' ORDER BY u.display_name",
         )->queryAll();
+    }
+
+    /** @return list<array{id: int, displayName: string}> */
+    public function findActiveExperts(): array
+    {
+        return $this->db->createCommand(
+            'SELECT u.id, u.display_name AS displayName FROM {{%users}} u '
+            . 'JOIN {{%user_roles}} ur ON ur.user_id = u.id '
+            . 'JOIN {{%roles}} r ON r.id = ur.role_id '
+            . "WHERE u.is_active = 1 AND r.code = 'expert' ORDER BY u.display_name",
+        )->queryAll();
+    }
+
+    /** @return array<string, mixed> */
+    public function assignExpert(int $requestId, int $expertId, int $expectedLockVersion, int $actorId): array
+    {
+        $transaction = $this->db->beginTransaction();
+        try {
+            $request = $this->db->createCommand(
+                'SELECT status, lock_version FROM {{%requests}} WHERE id = :id FOR UPDATE',
+                [':id' => $requestId],
+            )->queryOne();
+            if ($request === false) {
+                throw new AssignmentTargetNotFound('Request not found');
+            }
+            if ((int) $request['lock_version'] !== $expectedLockVersion) {
+                throw new ConcurrentRequestModification();
+            }
+            $expert = $this->db->createCommand(
+                'SELECT id, is_active FROM {{%users}} WHERE id = :id',
+                [':id' => $expertId],
+            )->queryOne();
+            if ($expert === false) {
+                throw new AssignmentTargetNotFound('Expert not found');
+            }
+            (new ExpertAssignmentPolicy())->assertCanAssign(
+                RequestStatus::from((string) $request['status']),
+                $this->rolesFor($actorId),
+                $this->isActiveUser($actorId),
+                $this->rolesFor($expertId),
+                (bool) $expert['is_active'],
+            );
+
+            $now = gmdate('Y-m-d H:i:s.u');
+            $nextLockVersion = $expectedLockVersion + 1;
+            $updated = $this->db->createCommand()->update(
+                '{{%requests}}',
+                ['lock_version' => $nextLockVersion, 'updated_at' => $now],
+                ['id' => $requestId, 'status' => RequestStatus::OpinionPreparation->value, 'lock_version' => $expectedLockVersion],
+            )->execute();
+            if ($updated !== 1) {
+                throw new ConcurrentRequestModification();
+            }
+            $this->db->createCommand()->update(
+                '{{%request_assignments}}',
+                ['valid_to' => $now],
+                ['request_id' => $requestId, 'assignment_type' => 'expert', 'valid_to' => null],
+            )->execute();
+            $this->db->createCommand()->insert('{{%request_assignments}}', [
+                'request_id' => $requestId,
+                'assignment_type' => 'expert',
+                'user_id' => $expertId,
+                'assigned_by' => $actorId,
+                'valid_from' => $now,
+            ])->execute();
+            $assignmentId = (int) $this->db->getLastInsertID();
+            $this->db->createCommand()->insert('{{%audit_events}}', [
+                'event_type' => 'request.expert_assigned',
+                'entity_type' => 'request',
+                'entity_id' => $requestId,
+                'actor_id' => $actorId,
+                'rule_id' => 'WF-006',
+                'payload_json' => json_encode(['expert_id' => $expertId, 'assignment_id' => $assignmentId, 'lock_version' => $nextLockVersion], JSON_THROW_ON_ERROR),
+                'created_at' => $now,
+            ])->execute();
+            $transaction->commit();
+            return ['id' => $assignmentId, 'requestId' => $requestId, 'expertId' => $expertId, 'assignedBy' => $actorId, 'assignedAt' => $now, 'lockVersion' => $nextLockVersion];
+        } catch (\Throwable $error) {
+            $transaction->rollBack();
+            throw $error;
+        }
+    }
+
+    public function recordRejectedExpertAssignment(int $requestId, int $expertId, int $actorId, string $ruleId): void
+    {
+        if (!$this->isActiveUser($actorId) && $this->db->createCommand('SELECT 1 FROM {{%users}} WHERE id = :id', [':id' => $actorId])->queryScalar() === false) {
+            return;
+        }
+        $this->db->createCommand()->insert('{{%audit_events}}', [
+            'event_type' => 'request.expert_assignment_denied',
+            'entity_type' => 'request',
+            'entity_id' => $requestId,
+            'actor_id' => $actorId,
+            'rule_id' => $ruleId,
+            'payload_json' => json_encode(['expert_id' => $expertId], JSON_THROW_ON_ERROR),
+            'created_at' => gmdate('Y-m-d H:i:s.u'),
+        ])->execute();
     }
 
     /** @return array<string, mixed> */
