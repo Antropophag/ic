@@ -11,6 +11,9 @@ const selected = ref(null)
 const showCreate = ref(false)
 const showHistory = ref(false)
 const createError = ref('')
+const registryError = ref('')
+const createLoading = ref(false)
+const draftFiles = ref([])
 const actionError = ref('')
 const actionLoading = ref(false)
 const detailLoading = ref(false)
@@ -268,17 +271,53 @@ async function loadRequests(rethrow = false) {
 }
 
 async function createRequest() {
+  if (createLoading.value) return
   createError.value = ''
+  registryError.value = ''
+  createLoading.value = true
+  let created
   try {
-    await requestApi.create(draft)
-    showCreate.value = false
-    Object.assign(draft, { productName: '', manufacturer: '', supplier: '', sampleQuantity: 1, testMethod: '' })
-    await loadRequests()
+    created = await requestApi.create(draft)
   } catch (error) {
     createError.value = error.status === 422
       ? 'Проверьте обязательные поля формы.'
       : 'Не удалось создать заявку. Повторите попытку.'
+    createLoading.value = false
+    return
   }
+
+  const failedFiles = []
+  for (const file of draftFiles.value) {
+    try {
+      await requestApi.uploadDocument(created.id, file)
+    } catch {
+      failedFiles.push(file.name)
+    }
+  }
+  Object.assign(draft, { productName: '', manufacturer: '', supplier: '', sampleQuantity: 1, testMethod: '' })
+  draftFiles.value = []
+  try {
+    await loadRequests(true)
+    const createdItem = requests.value.find(item => item.backendId === created.id)
+    if (createdItem) {
+      await openRequest(createdItem)
+      if (failedFiles.length) {
+        documentError.value = `Заявка создана, но не удалось загрузить: ${failedFiles.join(', ')}.`
+      }
+    } else {
+      registryError.value = 'Заявка создана, но пока не появилась в реестре. Не создавайте её повторно; обновите страницу.'
+    }
+  } catch {
+    const fileMessage = failedFiles.length ? ` Не загружены: ${failedFiles.join(', ')}.` : ''
+    registryError.value = `Заявка создана, но обновить реестр не удалось. Не создавайте её повторно; обновите страницу.${fileMessage}`
+  } finally {
+    showCreate.value = false
+    createLoading.value = false
+  }
+}
+
+function selectDraftFiles(event) {
+  draftFiles.value = Array.from(event.target.files || [])
 }
 
 async function loadExecutors() {
@@ -447,6 +486,7 @@ onMounted(loadRequests)
           </div>
           <button class="primary" @click="showCreate = true">＋ Новая заявка</button>
         </div>
+        <p v-if="registryError" class="detail-state error">{{ registryError }}</p>
 
         <div class="card registry">
           <div class="tabs">
@@ -535,20 +575,20 @@ onMounted(loadRequests)
       </section>
     </main>
 
-    <div v-if="showCreate" class="overlay" @click.self="showCreate = false">
+    <div v-if="showCreate" class="overlay" @click.self="!createLoading && (showCreate = false)">
       <form class="modal" @submit.prevent="createRequest">
-        <div class="modal-head"><div><p class="eyebrow">Новая заявка</p><h2>Проведение испытаний</h2></div><button type="button" @click="showCreate = false">×</button></div>
+        <div class="modal-head"><div><p class="eyebrow">Новая заявка</p><h2>Проведение испытаний</h2></div><button type="button" :disabled="createLoading" @click="showCreate = false">×</button></div>
         <div class="form-grid">
           <label>Наименование и тип *<input v-model="draft.productName" required placeholder="Введите наименование продукции" /></label>
           <label>Количество образцов *<input v-model.number="draft.sampleQuantity" required type="number" min="1" /></label>
           <label>Производитель *<input v-model="draft.manufacturer" required placeholder="Наименование производителя" /></label>
           <label>Поставщик *<input v-model="draft.supplier" required placeholder="Наименование поставщика" /></label>
           <label class="wide">Метод испытаний *<textarea v-model="draft.testMethod" required placeholder="Опишите метод или программу испытаний"></textarea></label>
-          <label class="wide">Сопроводительная документация<div class="dropzone">Перетащите файлы сюда или <b>выберите на компьютере</b></div></label>
+          <label class="wide">Сопроводительная документация<div class="dropzone"><input type="file" multiple accept=".pdf,.png,.jpg,.jpeg,.docx,.xlsx" :disabled="createLoading" @change="selectDraftFiles" /><span>Перетащите файлы сюда или <b>выберите на компьютере</b></span><small v-if="draftFiles.length">Выбрано: {{ draftFiles.map(file => file.name).join(', ') }}</small></div></label>
           <label class="wide">Комментарий<textarea placeholder="Дополнительная информация"></textarea></label>
         </div>
         <p v-if="createError" class="form-error">{{ createError }}</p>
-        <div class="modal-actions"><button type="button" class="secondary" @click="showCreate = false">Отмена</button><button class="primary">Создать заявку</button></div>
+        <div class="modal-actions"><button type="button" class="secondary" :disabled="createLoading" @click="showCreate = false">Отмена</button><button class="primary" :disabled="createLoading">{{ createLoading ? 'Создание…' : 'Создать заявку' }}</button></div>
       </form>
     </div>
 
