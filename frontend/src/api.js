@@ -64,6 +64,11 @@ export const requestApi = {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ expertId, lockVersion }),
   }),
+  publishOpinion: (requestId, body, lockVersion) => request(`/api/v1/requests/${requestId}/opinion`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ body, lockVersion }),
+  }),
   start: (requestId, lockVersion) => request(`/api/v1/requests/${requestId}/start`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },

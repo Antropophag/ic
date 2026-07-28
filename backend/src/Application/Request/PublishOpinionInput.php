@@ -14,6 +14,7 @@ final class PublishOpinionInput extends Model
     public function rules(): array
     {
         return [
+            ['body', 'filter', 'filter' => 'trim'],
             ['body', 'required'],
             ['body', 'string', 'min' => 10, 'max' => 20000],
             ['lockVersion', 'required'],

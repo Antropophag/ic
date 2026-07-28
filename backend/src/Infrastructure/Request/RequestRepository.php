@@ -157,6 +157,8 @@ final class RequestRepository
             . '(current_executor.user_id = :report_actor OR EXISTS(SELECT 1 FROM {{%user_roles}} rur '
             . 'JOIN {{%roles}} rr ON rr.id = rur.role_id WHERE rur.user_id = :report_manager '
             . "AND rr.code IN ('ic_manager', 'laboratory_manager')))) AS can_upload_report "
+            . ", (r.status = 'opinion_preparation' AND current_expert.user_id = :opinion_actor) "
+            . 'AS can_publish_opinion '
             . 'FROM {{%requests}} r '
             . 'JOIN {{%users}} viewer ON viewer.id = :actor_id AND viewer.is_active = 1 '
             . 'JOIN {{%users}} u ON u.id = r.initiator_id '
@@ -177,6 +179,7 @@ final class RequestRepository
                 ':start_executor_role' => $actorId,
                 ':report_actor' => $actorId,
                 ':report_manager' => $actorId,
+                ':opinion_actor' => $actorId,
             ],
         )->queryOne();
         if ($item === false) {
@@ -213,7 +216,10 @@ final class RequestRepository
             . 'ON current_report_executor.request_id = item_request.id '
             . "AND current_report_executor.assignment_type = 'executor' "
             . 'AND current_report_executor.valid_to IS NULL '
-            . "WHERE d.request_id = :document_request_id AND ((d.document_type <> 'report' "
+            . 'LEFT JOIN {{%request_assignments}} current_expert '
+            . 'ON current_expert.request_id = item_request.id '
+            . "AND current_expert.assignment_type = 'expert' AND current_expert.valid_to IS NULL "
+            . "WHERE d.request_id = :document_request_id AND ((d.document_type NOT IN ('report', 'opinion') "
             . 'AND v.version = (SELECT MAX(attachment_version.version) FROM {{%request_document_versions}} attachment_version '
             . "WHERE attachment_version.document_id = d.id)) OR (d.document_type = 'report' AND ("
             . 'current_report_executor.user_id = :report_viewer '
@@ -221,12 +227,23 @@ final class RequestRepository
             . "WHERE rvur.user_id = :report_manager_viewer AND rvr.code IN ('ic_manager', 'laboratory_manager')) "
             . "OR (d.document_type = 'report' AND item_request.status = 'completed' "
             . 'AND v.version = (SELECT MAX(public_report_version.version) FROM {{%request_document_versions}} public_report_version '
-            . 'WHERE public_report_version.document_id = d.id))))) '
+            . 'WHERE public_report_version.document_id = d.id)))) '
+            . "OR (d.document_type = 'opinion' AND (current_expert.user_id = :opinion_viewer "
+            . 'OR EXISTS(SELECT 1 FROM {{%expert_opinions}} visible_opinion '
+            . 'WHERE visible_opinion.document_version_id = v.id AND visible_opinion.expert_id = :opinion_author_viewer) '
+            . 'OR EXISTS(SELECT 1 FROM {{%user_roles}} ovur JOIN {{%roles}} ovr ON ovr.id = ovur.role_id '
+            . "WHERE ovur.user_id = :opinion_privileged_viewer AND ovr.code IN ('ic_manager', 'laboratory_manager', 'security_officer')) "
+            . "OR (item_request.status = 'completed' AND v.version = (SELECT MAX(public_opinion_version.version) "
+            . 'FROM {{%request_document_versions}} public_opinion_version '
+            . 'WHERE public_opinion_version.document_id = d.id))))) '
             . 'ORDER BY d.created_at ASC, d.id ASC, v.version DESC',
             [
                 ':document_request_id' => $requestId,
                 ':report_viewer' => $actorId,
                 ':report_manager_viewer' => $actorId,
+                ':opinion_viewer' => $actorId,
+                ':opinion_author_viewer' => $actorId,
+                ':opinion_privileged_viewer' => $actorId,
             ],
         )->queryAll();
 

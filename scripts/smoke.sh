@@ -219,11 +219,60 @@ report_history_count=$(printf '%s' "$details" | grep -o '"documentType":"report"
   exit 1
 }
 printf '%s' "$details" | grep '"action":"upload_report"' >/dev/null
+printf '%s' "$details" | grep '"can_publish_opinion":0' >/dev/null
 printf '%s' "$details" | grep -E '"(occurredAt|createdAt)":"[^"]+Z"' >/dev/null
 if printf '%s' "$details" | grep 'payload_json' >/dev/null; then
   echo 'Request details must not expose audit payloads' >&2
   exit 1
 fi
+
+expert_details=$(curl --fail --silent --show-error \
+  --header 'X-Dev-User-ID: 4' \
+  "$base_url/api/v1/requests/$request_id")
+printf '%s' "$expert_details" | grep '"can_publish_opinion":1' >/dev/null
+denied_opinion_status=$(curl --silent --output /dev/null --write-out '%{http_code}' \
+  --request POST \
+  --header 'X-Dev-User-ID: 2' \
+  --header 'Content-Type: application/json' \
+  --data '{"body":"Недопустимое заключение исполнителя","lockVersion":5}' \
+  "$base_url/api/v1/requests/$request_id/opinion")
+[ "$denied_opinion_status" = '403' ] || {
+  echo "Expected forbidden opinion status 403, got $denied_opinion_status" >&2
+  exit 1
+}
+opinion=$(curl --fail --silent --show-error \
+  --request POST \
+  --header 'X-Dev-User-ID: 4' \
+  --header 'Content-Type: application/json' \
+  --data '{"body":"Образец соответствует заявленным требованиям по результатам испытаний.","lockVersion":5}' \
+  "$base_url/api/v1/requests/$request_id/opinion")
+printf '%s' "$opinion" | grep '"status":"security_review"' >/dev/null
+printf '%s' "$opinion" | grep '"lockVersion":6' >/dev/null
+opinion_version_id=$(printf '%s' "$opinion" | sed -n 's/.*"documentVersionId":\([0-9][0-9]*\).*/\1/p')
+[ -n "$opinion_version_id" ] || {
+  echo 'Published opinion has no document version id' >&2
+  exit 1
+}
+stale_opinion_status=$(curl --silent --output /dev/null --write-out '%{http_code}' \
+  --request POST \
+  --header 'X-Dev-User-ID: 4' \
+  --header 'Content-Type: application/json' \
+  --data '{"body":"Повторная публикация заключения запрещена.","lockVersion":5}' \
+  "$base_url/api/v1/requests/$request_id/opinion")
+[ "$stale_opinion_status" = '403' ] || {
+  echo "Expected repeated opinion status 403, got $stale_opinion_status" >&2
+  exit 1
+}
+curl --fail --silent --show-error \
+  --header 'X-Dev-User-ID: 4' \
+  --output "$smoke_dir/opinion.pdf" \
+  "$base_url/api/v1/document-versions/$opinion_version_id/download"
+grep '%PDF-' "$smoke_dir/opinion.pdf" >/dev/null
+opinion_details=$(curl --fail --silent --show-error \
+  --header 'X-Dev-User-ID: 4' \
+  "$base_url/api/v1/requests/$request_id")
+printf '%s' "$opinion_details" | grep '"action":"publish_opinion"' >/dev/null
+printf '%s' "$opinion_details" | grep '"documentType":"opinion"' >/dev/null
 
 docker compose exec -T mariadb sh -lc \
   'mariadb --user=root --password="$MARIADB_ROOT_PASSWORD" "$MARIADB_DATABASE" --execute "$1"' \

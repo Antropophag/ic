@@ -30,11 +30,15 @@ const executors = ref([])
 const executorChoice = ref('')
 const experts = ref([])
 const expertChoice = ref('')
+const opinionDraft = ref('')
+const opinionLoading = ref(false)
+const opinionError = ref('')
 const detailRequestGuard = createLatestRequestGuard()
 const commentRequestGuard = createLatestRequestGuard()
 const commentsPageRequestGuard = createLatestRequestGuard()
 const documentRequestGuard = createLatestRequestGuard()
 const reportRequestGuard = createLatestRequestGuard()
+const opinionRequestGuard = createLatestRequestGuard()
 const draft = reactive({
   productName: '', manufacturer: '', supplier: '', sampleQuantity: 1, testMethod: '',
 })
@@ -101,6 +105,7 @@ async function openRequest(item) {
   commentsPageRequestGuard.invalidate()
   documentRequestGuard.invalidate()
   reportRequestGuard.invalidate()
+  opinionRequestGuard.invalidate()
   commentLoading.value = false
   commentError.value = ''
   commentDraft.value = ''
@@ -108,6 +113,9 @@ async function openRequest(item) {
   documentError.value = ''
   reportLoading.value = false
   reportError.value = ''
+  opinionLoading.value = false
+  opinionError.value = ''
+  opinionDraft.value = ''
   showHistory.value = false
   actionError.value = ''
   await loadRequestDetails(item)
@@ -119,6 +127,7 @@ function closeRequest() {
   commentsPageRequestGuard.invalidate()
   documentRequestGuard.invalidate()
   reportRequestGuard.invalidate()
+  opinionRequestGuard.invalidate()
   selected.value = null
   detailLoading.value = false
   detailError.value = ''
@@ -128,6 +137,8 @@ function closeRequest() {
   documentError.value = ''
   reportLoading.value = false
   reportError.value = ''
+  opinionLoading.value = false
+  opinionError.value = ''
 }
 
 async function uploadReport(event) {
@@ -344,6 +355,7 @@ async function refreshSelected(requestId) {
       ...selected.value,
       canAssignExecutor: false,
       canAssignExpert: false,
+      canPublishOpinion: false,
       canStart: false,
     }
   }
@@ -423,6 +435,46 @@ async function assignExpert() {
     }
   } finally {
     actionLoading.value = false
+  }
+}
+
+async function publishOpinion() {
+  const body = opinionDraft.value.trim()
+  if (body.length < 10) {
+    opinionError.value = 'Заключение должно содержать не менее 10 символов.'
+    return
+  }
+  if (!window.confirm('Опубликовать заключение и передать заявку на контроль СБ?')) return
+
+  const requestId = selected.value.backendId
+  const requestToken = opinionRequestGuard.begin(requestId)
+  opinionLoading.value = true
+  opinionError.value = ''
+  try {
+    await requestApi.publishOpinion(requestId, body, selected.value.lockVersion)
+    if (!opinionRequestGuard.isCurrent(requestToken, selected.value?.backendId)) return
+    selected.value = { ...selected.value, canPublishOpinion: false }
+    opinionDraft.value = ''
+    try {
+      await refreshSelected(requestId)
+    } catch {
+      opinionError.value = 'Заключение опубликовано, но обновить карточку не удалось. Не отправляйте его повторно.'
+    }
+  } catch (error) {
+    if (!opinionRequestGuard.isCurrent(requestToken, selected.value?.backendId)) return
+    if (error.status === 409) {
+      await recoverConflict(requestId, 'Заявка уже изменена.')
+    } else {
+      opinionError.value = error.status === 422
+        ? 'Заключение должно содержать от 10 до 20 000 символов.'
+        : error.status === 403
+          ? 'Опубликовать заключение может только назначенный эксперт.'
+          : 'Не удалось опубликовать заключение.'
+    }
+  } finally {
+    if (opinionRequestGuard.isCurrent(requestToken, selected.value?.backendId)) {
+      opinionLoading.value = false
+    }
   }
 }
 
@@ -558,6 +610,11 @@ onMounted(loadRequests)
                 <button class="secondary" :disabled="actionLoading" @click="assignExpert">{{ actionLoading ? 'Сохранение…' : 'Назначить' }}</button>
               </div>
               <button v-if="selected.canStart" class="primary action-wide" :disabled="actionLoading" @click="startRequest">{{ actionLoading ? 'Запуск…' : 'Начать работу' }}</button>
+              <div v-if="selected.canPublishOpinion" class="execution-action">
+                <label>Экспертное заключение<textarea v-model="opinionDraft" :disabled="opinionLoading" minlength="10" maxlength="20000" placeholder="Введите итоговое заключение по результатам испытаний"></textarea></label>
+                <button class="primary action-wide" :disabled="opinionLoading" @click="publishOpinion">{{ opinionLoading ? 'Публикация…' : 'Опубликовать и передать в СБ' }}</button>
+              </div>
+              <p v-if="opinionError" class="action-error">{{ opinionError }}</p>
               <p v-if="actionError" class="action-error">{{ actionError }}</p>
               <a class="help-link" href="/help/assignment.html" target="_blank">Инструкция по назначению и началу работы</a>
             </article>
