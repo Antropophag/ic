@@ -5,12 +5,18 @@
   "type": "module",
   "scripts": {
     "dev": "vite --host 0.0.0.0",
-    "build": "vite build"
+    "build": "vite build",
+    "test": "vitest run",
+    "coverage": "vitest run --coverage"
   },
   "dependencies": {
     "@fontsource/fira-sans": "^5.3.0",
     "@vitejs/plugin-vue": "latest",
     "vite": "latest",
     "vue": "latest"
+  },
+  "devDependencies": {
+    "@vitest/coverage-v8": "^4.1.10",
+    "vitest": "^4.1.10"
   }
 }

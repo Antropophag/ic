@@ -7,6 +7,7 @@ cd "$project_root"
 python3 -m py_compile scripts/gen_schema_diagram.py
 npm --prefix frontend ci --no-audit --no-fund
 npm --prefix frontend run build
+npm --prefix frontend run coverage
 
 if command -v composer >/dev/null 2>&1 && command -v php >/dev/null 2>&1; then
     (cd backend && composer install --no-interaction --no-progress && composer test)
@@ -17,5 +18,7 @@ else
     echo "PHP checks require PHP 8.3 + Composer or Docker." >&2
     exit 1
 fi
+
+make coverage
 
 git diff --check

@@ -8,6 +8,7 @@
 /prototype/dist/
 /frontend/node_modules/
 /frontend/dist/
+/frontend/coverage/
 /scripts/__pycache__/
 *.py[cod]
 
@@ -15,6 +16,7 @@
 /backend/runtime/*
 !/backend/runtime/.gitkeep
 /backend/.phpunit.cache/
+/backend/build/
 /backend/web/assets/*
 !/backend/web/assets/.gitkeep
 
