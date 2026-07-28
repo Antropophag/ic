@@ -31,6 +31,7 @@ export function fromApi(item) {
     canAssignExecutor: Boolean(Number(item.can_assign_executor)),
     canStart: Boolean(Number(item.can_start)) && item.status === 'registered',
     canComment: Boolean(Number(item.can_comment)),
+    canUploadDocument: Boolean(Number(item.can_upload_document)),
     status: STATUS_LABELS[item.status] || item.status,
     tone: STATUS_TONES[item.status] || 'blue',
   }
@@ -64,6 +65,21 @@ export function commentFromApi(item) {
 
 export function canSubmitComment(item, detailLoading) {
   return Boolean(item?.canComment) && !detailLoading
+}
+
+export function documentFromApi(item) {
+  return {
+    id: Number(item.id),
+    title: item.title,
+    versionId: Number(item.versionId),
+    version: Number(item.version),
+    originalName: item.originalName,
+    mimeType: item.mimeType,
+    size: `${Math.max(1, Math.ceil(Number(item.sizeBytes) / 1024))} КБ`,
+    sha256: item.sha256,
+    uploadedBy: item.uploadedBy,
+    createdAt: new Date(item.createdAt).toLocaleString('ru-RU'),
+  }
 }
 
 export function filterRequests(requests, { tab, query, status, currentUser }) {

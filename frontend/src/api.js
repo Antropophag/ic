@@ -26,6 +26,22 @@ export const requestApi = {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ body }),
   }),
+  uploadDocument: (requestId, file) => {
+    const body = new FormData()
+    body.append('file', file)
+    return request(`/api/v1/requests/${requestId}/documents`, { method: 'POST', body })
+  },
+  downloadDocument: async (versionId) => {
+    const response = await fetch(`/api/v1/document-versions/${versionId}/download`, {
+      headers: { ...DEV_HEADERS },
+    })
+    if (!response.ok) {
+      const error = new Error('Не удалось скачать документ')
+      error.status = response.status
+      throw error
+    }
+    return response.blob()
+  },
   executors: () => request('/api/v1/executors'),
   create: (data) => request('/api/v1/requests', {
     method: 'POST',

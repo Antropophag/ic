@@ -57,6 +57,25 @@ erDiagram
         text body
         datetime(6) created_at
     }
+    request_documents {
+        bigint(20)_unsigned id PK
+        bigint(20)_unsigned request_id FK "-> requests.id"
+        varchar(255) title
+        bigint(20)_unsigned created_by FK "-> users.id"
+        datetime(6) created_at
+    }
+    request_document_versions {
+        bigint(20)_unsigned id PK
+        bigint(20)_unsigned document_id FK "-> request_documents.id"
+        int(11)_unsigned version
+        varchar(80) storage_key
+        varchar(255) original_name
+        varchar(100) mime_type
+        bigint(20)_unsigned size_bytes
+        char(64) sha256
+        bigint(20)_unsigned uploaded_by FK "-> users.id"
+        datetime(6) created_at
+    }
     request_number_sequence {
         tinyint(3)_unsigned id PK
         bigint(20)_unsigned value
@@ -101,6 +120,10 @@ erDiagram
     users ||--o{ request_assignments : "assigned_by"
     requests ||--o{ request_comments : "request_id"
     users ||--o{ request_comments : "author_id"
+    requests ||--o{ request_documents : "request_id"
+    users ||--o{ request_documents : "created_by"
+    request_documents ||--o{ request_document_versions : "document_id"
+    users ||--o{ request_document_versions : "uploaded_by"
     requests ||--o{ request_transitions : "request_id"
     users ||--o{ request_transitions : "actor_id"
     users ||--o{ user_roles : "user_id"

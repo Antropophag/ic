@@ -47,6 +47,23 @@ it('loads an older comment page by cursor', async () => {
   expect(fetchMock).toHaveBeenCalledWith('/api/v1/requests/7/comments?beforeId=51', expect.any(Object))
 })
 
+it('uploads a document as multipart data and downloads its bytes', async () => {
+  const fetchMock = vi.fn()
+    .mockResolvedValueOnce(new Response('{}', { status: 201 }))
+    .mockResolvedValueOnce(new Response('pdf', { status: 200 }))
+  vi.stubGlobal('fetch', fetchMock)
+  const file = new File(['pdf'], 'report.pdf', { type: 'application/pdf' })
+
+  await requestApi.uploadDocument(7, file)
+  await expect(requestApi.downloadDocument(12)).resolves.toBeInstanceOf(Blob)
+
+  expect(fetchMock).toHaveBeenNthCalledWith(1, '/api/v1/requests/7/documents', expect.objectContaining({
+    method: 'POST',
+    body: expect.any(FormData),
+  }))
+  expect(fetchMock).toHaveBeenNthCalledWith(2, '/api/v1/document-versions/12/download', expect.any(Object))
+})
+
 it('sends creation data as JSON', async () => {
   const fetchMock = vi.fn().mockResolvedValue(new Response('{}', { status: 201 }))
   vi.stubGlobal('fetch', fetchMock)

@@ -24,15 +24,19 @@ final class HealthController extends Controller
         return ['status' => 'ok'];
     }
 
-    /** @return array{status: 'ready', database: 'ok'} */
+    /** @return array{status: 'ready', database: 'ok', documentStorage: 'ok'} */
     public function actionReady(): array
     {
         try {
             Yii::$app->db->createCommand('SELECT 1')->queryScalar();
+            $storagePath = getenv('DOCUMENT_STORAGE_PATH') ?: '/app/storage/documents';
+            if (!is_dir($storagePath) || !is_writable($storagePath)) {
+                throw new \RuntimeException('Document storage is not writable.');
+            }
         } catch (\Throwable) {
             throw new ServerErrorHttpException('Application is not ready');
         }
 
-        return ['status' => 'ready', 'database' => 'ok'];
+        return ['status' => 'ready', 'database' => 'ok', 'documentStorage' => 'ok'];
     }
 }

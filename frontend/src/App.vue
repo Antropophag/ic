@@ -2,7 +2,7 @@
 import { computed, onMounted, reactive, ref } from 'vue'
 import { requestApi } from './api'
 import { createLatestRequestGuard } from './latestRequestGuard'
-import { ACTIVE_STATUSES, canSubmitComment, commentFromApi, filterRequests, fromApi, historyFromApi } from './registry'
+import { ACTIVE_STATUSES, canSubmitComment, commentFromApi, documentFromApi, filterRequests, fromApi, historyFromApi } from './registry'
 
 const activeTab = ref('active')
 const query = ref('')
@@ -19,11 +19,14 @@ const commentDraft = ref('')
 const commentLoading = ref(false)
 const commentError = ref('')
 const olderCommentsLoading = ref(false)
+const documentLoading = ref(false)
+const documentError = ref('')
 const executors = ref([])
 const executorChoice = ref('')
 const detailRequestGuard = createLatestRequestGuard()
 const commentRequestGuard = createLatestRequestGuard()
 const commentsPageRequestGuard = createLatestRequestGuard()
+const documentRequestGuard = createLatestRequestGuard()
 const draft = reactive({
   productName: '', manufacturer: '', supplier: '', sampleQuantity: 1, testMethod: '',
 })
@@ -65,6 +68,7 @@ async function loadRequestDetails(item) {
       history: result.history.map(historyFromApi),
       comments: result.comments.map(commentFromApi),
       commentsPage: result.commentsPage,
+      documents: result.documents.map(documentFromApi),
     }
     executorChoice.value = selected.value.executorId || ''
   } catch (error) {
@@ -82,9 +86,12 @@ async function loadRequestDetails(item) {
 async function openRequest(item) {
   commentRequestGuard.invalidate()
   commentsPageRequestGuard.invalidate()
+  documentRequestGuard.invalidate()
   commentLoading.value = false
   commentError.value = ''
   commentDraft.value = ''
+  documentLoading.value = false
+  documentError.value = ''
   showHistory.value = false
   actionError.value = ''
   await loadRequestDetails(item)
@@ -94,11 +101,55 @@ function closeRequest() {
   detailRequestGuard.invalidate()
   commentRequestGuard.invalidate()
   commentsPageRequestGuard.invalidate()
+  documentRequestGuard.invalidate()
   selected.value = null
   detailLoading.value = false
   detailError.value = ''
   commentLoading.value = false
   commentError.value = ''
+  documentLoading.value = false
+  documentError.value = ''
+}
+
+async function uploadDocument(event) {
+  const file = event.target.files?.[0]
+  event.target.value = ''
+  if (!file) return
+  const requestId = selected.value.backendId
+  const requestToken = documentRequestGuard.begin(requestId)
+  documentLoading.value = true
+  documentError.value = ''
+  try {
+    await requestApi.uploadDocument(requestId, file)
+    if (!documentRequestGuard.isCurrent(requestToken, selected.value?.backendId)) return
+    await loadRequestDetails(selected.value)
+  } catch (error) {
+    if (!documentRequestGuard.isCurrent(requestToken, selected.value?.backendId)) return
+    documentError.value = error.status === 422
+      ? 'Разрешены PDF, PNG, JPG, DOCX и XLSX размером до 10 МБ.'
+      : error.status === 409
+        ? 'На текущем этапе загрузка документов запрещена.'
+        : 'Не удалось загрузить документ.'
+  } finally {
+    if (documentRequestGuard.isCurrent(requestToken, selected.value?.backendId)) {
+      documentLoading.value = false
+    }
+  }
+}
+
+async function downloadDocument(document) {
+  documentError.value = ''
+  try {
+    const blob = await requestApi.downloadDocument(document.versionId)
+    const url = URL.createObjectURL(blob)
+    const link = window.document.createElement('a')
+    link.href = url
+    link.download = document.originalName
+    link.click()
+    URL.revokeObjectURL(url)
+  } catch {
+    documentError.value = 'Не удалось скачать документ.'
+  }
 }
 
 async function addComment() {
@@ -379,7 +430,12 @@ onMounted(loadRequests)
               <p v-if="actionError" class="action-error">{{ actionError }}</p>
               <a class="help-link" href="/help/assignment.html" target="_blank">Инструкция по назначению и началу работы</a>
             </article>
-            <article class="card"><h3>Документы</h3><p class="placeholder-copy">Вложения будут подключены отдельным безопасным контуром.</p></article>
+            <article class="card documents"><h3>Документы <span>{{ selected.documents?.length || 0 }}</span></h3>
+              <button v-for="document in selected.documents || []" :key="document.versionId" class="document-row" @click="downloadDocument(document)"><span>▣</span><span><b>{{ document.title }}</b><small>Версия {{ document.version }} · {{ document.size }} · {{ document.createdAt }}</small></span></button>
+              <p v-if="!selected.documents?.length" class="placeholder-copy">Документов пока нет.</p>
+              <label v-if="selected.canUploadDocument" class="secondary upload-button">{{ documentLoading ? 'Загрузка…' : 'Загрузить документ' }}<input type="file" :disabled="documentLoading" accept=".pdf,.png,.jpg,.jpeg,.docx,.xlsx" @change="uploadDocument" /></label>
+              <p v-if="documentError" class="action-error">{{ documentError }}</p>
+            </article>
             <article class="card timeline"><h3>Последние события</h3><p v-for="event in (selected.history || []).slice(0, 4)" :key="event.id" class="done">{{ event.description }}<small>{{ event.occurredAt }}</small></p><p v-if="!selected.history?.length">История пока пуста</p></article>
           </aside>
         </div>

@@ -12,7 +12,8 @@ RUN docker-php-ext-install pdo_mysql \
 WORKDIR /app
 COPY --from=vendor --chown=app:app /build/vendor ./vendor
 COPY --chown=app:app backend/ ./
-RUN chmod +x yii && mkdir -p runtime && chown app:app runtime
+COPY docker/php/uploads.ini /usr/local/etc/php/conf.d/uploads.ini
+RUN chmod +x yii && mkdir -p runtime storage/documents && chown -R app:app runtime storage
 USER app
 EXPOSE 9000
 CMD ["php-fpm", "-F"]
