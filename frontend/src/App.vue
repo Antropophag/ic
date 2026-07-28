@@ -79,6 +79,8 @@ async function loadRequestDetails(item) {
     }
     executorChoice.value = selected.value.executorId || ''
     expertChoice.value = selected.value.expertId || ''
+    if (selected.value.canAssignExecutor && !executors.value.length) loadExecutors()
+    if (selected.value.canAssignExpert && !experts.value.length) loadExperts()
   } catch (error) {
     if (!detailRequestGuard.isCurrent(requestToken, selected.value?.backendId)) return
     detailError.value = error.status === 404
@@ -299,7 +301,12 @@ async function loadExperts() {
 
 async function refreshSelected(requestId) {
   if (selected.value?.backendId === requestId) {
-    selected.value = { ...selected.value, canAssignExecutor: false, canStart: false }
+    selected.value = {
+      ...selected.value,
+      canAssignExecutor: false,
+      canAssignExpert: false,
+      canStart: false,
+    }
   }
   await loadRequests(true)
   if (selected.value?.backendId !== requestId) return
