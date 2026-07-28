@@ -83,7 +83,10 @@ final class RequestWorkflow
         return $target;
     }
 
-    /** @param list<Role> $actual @param list<Role> $allowed */
+    /**
+     * @param list<Role> $actual
+     * @param list<Role> $allowed
+     */
     private function forRoles(
         array $actual,
         array $allowed,

@@ -18,11 +18,13 @@ final class HealthController extends Controller
         return $behaviors;
     }
 
+    /** @return array{status: 'ok'} */
     public function actionLive(): array
     {
         return ['status' => 'ok'];
     }
 
+    /** @return array{status: 'ready', database: 'ok'} */
     public function actionReady(): array
     {
         try {

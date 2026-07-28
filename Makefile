@@ -1,6 +1,6 @@
 .DEFAULT_GOAL := help
 
-.PHONY: help init up down setup check coverage frontend-coverage smoke demo-bundle frontend-build schema-diagram schema-diagram-check
+.PHONY: help init up down setup check backend-quality coverage frontend-quality frontend-coverage repo-quality smoke demo-bundle frontend-build schema-diagram schema-diagram-check
 
 help:
 	@echo "up                    Build and start the development stack"
@@ -8,8 +8,11 @@ help:
 	@echo "down                  Stop the development stack"
 	@echo "setup                 Enable repository Git hooks"
 	@echo "check                 Run the same checks as CI before push"
+	@echo "backend-quality       Run PHP style, static analysis and dependency audit"
 	@echo "coverage              Enforce backend domain/application coverage >= 90%"
+	@echo "frontend-quality      Run frontend lint and dependency audit"
 	@echo "frontend-coverage     Enforce frontend logic coverage >= 80%"
+	@echo "repo-quality          Lint workflows, Dockerfiles, shell, YAML and Markdown"
 	@echo "smoke                 Check the running API end-to-end"
 	@echo "demo-bundle           Build an offline Windows demo bundle"
 	@echo "frontend-build        Verify the production frontend build"
@@ -31,6 +34,12 @@ setup:
 check:
 	sh scripts/check.sh
 
+backend-quality:
+	docker build --file docker/coverage.Dockerfile --tag shlz-test-registry-coverage .
+	docker run --rm shlz-test-registry-coverage composer lint
+	docker run --rm shlz-test-registry-coverage composer analyse
+	docker run --rm shlz-test-registry-coverage composer audit
+
 coverage:
 	mkdir -p backend/build/coverage
 	@if command -v php >/dev/null 2>&1 && test -f backend/vendor/bin/phpunit && \
@@ -48,6 +57,18 @@ coverage:
 frontend-coverage:
 	npm --prefix frontend ci --no-audit --no-fund
 	npm --prefix frontend run coverage
+
+frontend-quality:
+	npm --prefix frontend ci --no-audit --no-fund
+	npm --prefix frontend run lint
+	npm --prefix frontend run audit
+
+repo-quality:
+	@if test ! -x frontend/node_modules/.bin/markdownlint-cli2; then \
+		command -v npm >/dev/null 2>&1 || { echo "Repository quality requires npm or installed frontend dependencies." >&2; exit 1; }; \
+		npm --prefix frontend ci --no-audit --no-fund; \
+	fi
+	sh scripts/lint-repository.sh
 
 smoke:
 	sh scripts/smoke.sh
