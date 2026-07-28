@@ -29,6 +29,11 @@ final class LegacyRequestMapper
             throw new UnexpectedValueException('Legacy request sample quantity must be positive.');
         }
 
+        $creatorLegacyId = $this->requiredString($creator, 'ID');
+        if (preg_match('/^\d+$/', $creatorLegacyId) !== 1) {
+            throw new UnexpectedValueException('Legacy creator ID must be numeric.');
+        }
+
         return new LegacyRequestData(
             "bitrix24:{$listId}:{$elementId}",
             $this->requiredString($details, 'nameType'),
@@ -38,7 +43,7 @@ final class LegacyRequestMapper
             $this->string($details, 'testMethod'),
             $this->status($this->requiredString($details, 'status')),
             $this->date($this->requiredString($details, 'dateCreate')),
-            $this->requiredString($creator, 'ID'),
+            $creatorLegacyId,
             trim($this->string($creator, 'LAST_NAME') . ' ' . $this->string($creator, 'NAME')),
             $this->string($department, 'NAME'),
             $this->count($details, 'supportingDocFiles'),

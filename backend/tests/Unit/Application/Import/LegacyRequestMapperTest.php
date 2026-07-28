@@ -82,6 +82,14 @@ final class LegacyRequestMapperTest extends TestCase
         yield 'неподдерживаемый формат' => ['2025-02-03 10:20:30'];
     }
 
+    public function testRejectsNonNumericCreatorId(): void
+    {
+        $this->expectException(UnexpectedValueException::class);
+        (new LegacyRequestMapper())->map($this->element([
+            'creator' => ['ID' => '../admin'],
+        ]), 114);
+    }
+
     #[DataProvider('knownStatuses')]
     public function testMapsEveryKnownStatus(string $legacyStatus, RequestStatus $expected): void
     {

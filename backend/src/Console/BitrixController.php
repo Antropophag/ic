@@ -5,19 +5,24 @@ declare(strict_types=1);
 namespace App\Console;
 
 use App\Application\Import\LegacyRequestMapper;
+use App\Application\Import\LegacyRequestImporter;
 use App\Infrastructure\Bitrix\BitrixListClient;
 use App\Infrastructure\Bitrix\NativeBitrixTransport;
+use App\Infrastructure\Import\DatabaseLegacyRequestWriter;
 use Throwable;
+use Yii;
 use yii\console\Controller;
 use yii\console\ExitCode;
 
 final class BitrixController extends Controller
 {
     public int $maxPages = 1;
+    public bool $apply = false;
 
     public function options($actionID): array
     {
-        return [...parent::options($actionID), 'maxPages'];
+        $options = [...parent::options($actionID), 'maxPages'];
+        return $actionID === 'import' ? [...$options, 'apply'] : $options;
     }
 
     public function actionInspect(): int
@@ -51,6 +56,20 @@ final class BitrixController extends Controller
 
         ksort($summary['statuses']);
         $this->stdout(json_encode($summary, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR) . "\n");
+        return $summary['invalid'] === 0 ? ExitCode::OK : ExitCode::DATAERR;
+    }
+
+    public function actionImport(): int
+    {
+        $writer = $this->apply ? new DatabaseLegacyRequestWriter(Yii::$app->db) : null;
+        $summary = (new LegacyRequestImporter(new LegacyRequestMapper()))->import(
+            $this->client()->elements($this->maxPages),
+            $this->listId(),
+            $writer,
+        );
+        $result = ['mode' => $this->apply ? 'apply' : 'dry-run', ...$summary];
+        $this->stdout(json_encode($result, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR) . "\n");
+
         return $summary['invalid'] === 0 ? ExitCode::OK : ExitCode::DATAERR;
     }
 
