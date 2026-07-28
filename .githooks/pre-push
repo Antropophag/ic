@@ -1,0 +1,5 @@
+#!/usr/bin/env sh
+set -eu
+
+project_root=$(git rev-parse --show-toplevel)
+exec "$project_root/scripts/check.sh"

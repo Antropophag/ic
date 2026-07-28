@@ -1,0 +1,75 @@
+stages:
+  - test
+  - package
+
+workflow:
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+    - if: '$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH'
+
+frontend:
+  stage: test
+  image: node:22.23.0-alpine3.23
+  script:
+    - npm --prefix frontend ci --no-audit --no-fund
+    - npm --prefix frontend run build
+
+backend-unit:
+  stage: test
+  image: composer:2.8.10
+  script:
+    - cd backend
+    - composer install --no-interaction --no-progress
+    - composer test
+
+api-smoke:
+  stage: test
+  image: docker:29.0.0-cli
+  services:
+    - name: docker:29.0.0-dind
+      command: ["--tls=false"]
+  variables:
+    DOCKER_HOST: tcp://docker:2375
+    DOCKER_TLS_CERTDIR: ""
+    BASE_URL: http://docker:8080
+  before_script:
+    - apk add --no-cache curl
+    - cp .env.example .env
+  script:
+    - docker compose up -d --build
+    - docker compose run --rm backend ./yii migrate/up
+    - docker compose run --rm backend ./yii dev/seed
+    - sh scripts/smoke.sh
+  after_script:
+    - docker compose down --volumes
+
+documentation:
+  stage: test
+  image: python:3.13.5-alpine3.22
+  script:
+    - python3 -m py_compile scripts/gen_schema_diagram.py
+    - git diff --check
+
+demo-bundle:
+  stage: package
+  image: docker:29.0.0-cli
+  services:
+    - name: docker:29.0.0-dind
+      command: ["--tls=false"]
+  variables:
+    DOCKER_HOST: tcp://docker:2375
+    DOCKER_TLS_CERTDIR: ""
+  script:
+    - sh scripts/build-demo-bundle.sh dist-demo
+  artifacts:
+    name: "shlz-demo-${CI_COMMIT_SHORT_SHA}"
+    paths:
+      - dist-demo/
+    expire_in: 14 days
+  rules:
+    - if: '$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH'
+      when: manual
+    - if: '$CI_COMMIT_TAG'
+
+# После появления integration-контура этот job поднимет MariaDB, применит
+# миграции и включит `make schema-diagram-check` как обязательный quality gate.
