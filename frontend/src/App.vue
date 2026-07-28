@@ -2,7 +2,7 @@
 import { computed, onMounted, reactive, ref } from 'vue'
 import { requestApi } from './api'
 import { createLatestRequestGuard } from './latestRequestGuard'
-import { ACTIVE_STATUSES, canSubmitComment, commentFromApi, documentFromApi, filterRequests, fromApi, historyFromApi } from './registry'
+import { ACTIVE_STATUSES, canSubmitComment, commentFromApi, documentFromApi, filterRequests, fromApi, historyFromApi, withoutStaleActions } from './registry'
 
 const activeTab = ref('active')
 const query = ref('')
@@ -363,13 +363,7 @@ async function loadExperts() {
 
 async function refreshSelected(requestId) {
   if (selected.value?.backendId === requestId) {
-    selected.value = {
-      ...selected.value,
-      canAssignExecutor: false,
-      canAssignExpert: false,
-      canPublishOpinion: false,
-      canStart: false,
-    }
+    selected.value = withoutStaleActions(selected.value)
   }
   await loadRequests(true)
   if (selected.value?.backendId !== requestId) return

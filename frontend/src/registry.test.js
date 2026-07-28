@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { canSubmitComment, commentFromApi, documentFromApi, filterRequests, fromApi, historyFromApi } from './registry'
+import { canSubmitComment, commentFromApi, documentFromApi, filterRequests, fromApi, historyFromApi, withoutStaleActions } from './registry'
 
 const registered = {
   id: 4,
@@ -57,6 +57,22 @@ it('hides the start action after the request leaves registered status', () => {
   expect(fromApi({ ...registered, status: 'in_progress', can_start: 1 })).toMatchObject({
     status: 'Заявка в работе',
     tone: 'cyan',
+    canStart: false,
+  })
+})
+
+it('disables every version-sensitive action before conflict recovery', () => {
+  expect(withoutStaleActions({
+    canAssignExecutor: true,
+    canAssignExpert: true,
+    canPublishOpinion: true,
+    canSecurityDecide: true,
+    canStart: true,
+  })).toMatchObject({
+    canAssignExecutor: false,
+    canAssignExpert: false,
+    canPublishOpinion: false,
+    canSecurityDecide: false,
     canStart: false,
   })
 })

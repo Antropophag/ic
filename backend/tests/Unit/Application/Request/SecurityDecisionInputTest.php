@@ -26,4 +26,25 @@ final class SecurityDecisionInputTest extends TestCase
         self::assertArrayHasKey('reason', $input->errors);
         self::assertArrayHasKey('lockVersion', $input->errors);
     }
+
+    public function testStructuredReasonIsRejectedWithoutConversion(): void
+    {
+        foreach ([['не строка'], (object) ['reason' => 'не строка']] as $reason) {
+            $input = new SecurityDecisionInput();
+            $input->load(['decision' => 'return', 'reason' => $reason, 'lockVersion' => 6], '');
+
+            self::assertFalse($input->validate());
+            self::assertArrayHasKey('reason', $input->errors);
+            self::assertSame($reason, $input->reason);
+        }
+    }
+
+    public function testStringReasonIsTrimmed(): void
+    {
+        $input = new SecurityDecisionInput();
+        $input->load(['decision' => 'return', 'reason' => '  Уточнить вывод  ', 'lockVersion' => 6], '');
+
+        self::assertTrue($input->validate());
+        self::assertSame('Уточнить вывод', $input->reason);
+    }
 }

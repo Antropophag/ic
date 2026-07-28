@@ -52,6 +52,17 @@ export function fromApi(item) {
   }
 }
 
+export function withoutStaleActions(item) {
+  return {
+    ...item,
+    canAssignExecutor: false,
+    canAssignExpert: false,
+    canPublishOpinion: false,
+    canSecurityDecide: false,
+    canStart: false,
+  }
+}
+
 const HISTORY_LABELS = {
   create: 'создал(а) заявку',
   import: 'импортировал(а) заявку',
