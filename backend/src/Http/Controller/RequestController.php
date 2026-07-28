@@ -248,7 +248,7 @@ final class RequestController extends Controller
         try {
             $request = $this->repository()->create($input, $actorId);
         } catch (RequestCreationDenied $error) {
-            $this->repository()->recordRejectedCreate($actorId, $error->ruleId);
+            $this->recordRejectedCreateSafely($actorId, $error->ruleId);
             throw new ForbiddenHttpException($error->getMessage());
         }
         Yii::$app->response->statusCode = 201;
@@ -393,6 +393,20 @@ final class RequestController extends Controller
         } catch (TransitionDenied | ConcurrentRequestModification $error) {
             $this->recordRejectedStartSafely($id, $actorId, $error->ruleId);
             throw new ConflictHttpException($error->getMessage());
+        }
+    }
+
+    private function recordRejectedCreateSafely(int $actorId, string $ruleId): void
+    {
+        try {
+            $this->repository()->recordRejectedCreate($actorId, $ruleId);
+        } catch (\Throwable $auditError) {
+            Yii::error([
+                'message' => 'Не удалось записать аудит отклонённого создания заявки.',
+                'actorId' => $actorId,
+                'ruleId' => $ruleId,
+                'exception' => $auditError,
+            ], __METHOD__);
         }
     }
 
