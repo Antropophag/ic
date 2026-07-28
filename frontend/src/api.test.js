@@ -35,12 +35,12 @@ it('assigns an executor and starts a request with optimistic locking', async () 
   const fetchMock = vi.fn().mockResolvedValue(new Response('{}', { status: 200 }))
   vi.stubGlobal('fetch', fetchMock)
 
-  await requestApi.assignExecutor(7, 2)
+  await requestApi.assignExecutor(7, 2, 3)
   await requestApi.start(7, 3)
 
   expect(fetchMock).toHaveBeenNthCalledWith(1, '/api/v1/requests/7/executor', expect.objectContaining({
     method: 'POST',
-    body: JSON.stringify({ executorId: 2 }),
+    body: JSON.stringify({ executorId: 2, lockVersion: 3 }),
   }))
   expect(fetchMock).toHaveBeenNthCalledWith(2, '/api/v1/requests/7/start', expect.objectContaining({
     method: 'POST',

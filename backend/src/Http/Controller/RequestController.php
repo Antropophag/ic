@@ -93,30 +93,17 @@ final class RequestController extends Controller
             return $this->repository()->assignExecutor(
                 $id,
                 $executorId,
+                (int) $input->lockVersion,
                 $actorId,
             );
         } catch (AssignmentTargetNotFound $error) {
             throw new NotFoundHttpException($error->getMessage());
         } catch (AssignmentDenied $error) {
-            try {
-                $this->repository()->recordRejectedAssignment(
-                    $id,
-                    $executorId,
-                    $actorId,
-                    $error->ruleId,
-                );
-            } catch (\Throwable $auditError) {
-                Yii::error([
-                    'message' => 'Не удалось записать аудит отклонённого назначения.',
-                    'requestId' => $id,
-                    'executorId' => $executorId,
-                    'actorId' => $actorId,
-                    'ruleId' => $error->ruleId,
-                    'exception' => $auditError,
-                ], __METHOD__);
-            }
-
+            $this->recordRejectedAssignmentSafely($id, $executorId, $actorId, $error->ruleId);
             throw new ForbiddenHttpException($error->getMessage());
+        } catch (ConcurrentRequestModification $error) {
+            $this->recordRejectedAssignmentSafely($id, $executorId, $actorId, $error->ruleId);
+            throw new ConflictHttpException($error->getMessage());
         }
     }
 
@@ -152,6 +139,26 @@ final class RequestController extends Controller
             Yii::error([
                 'message' => 'Не удалось записать аудит отклонённого запуска заявки.',
                 'requestId' => $requestId,
+                'actorId' => $actorId,
+                'ruleId' => $ruleId,
+                'exception' => $auditError,
+            ], __METHOD__);
+        }
+    }
+
+    private function recordRejectedAssignmentSafely(
+        int $requestId,
+        int $executorId,
+        int $actorId,
+        string $ruleId,
+    ): void {
+        try {
+            $this->repository()->recordRejectedAssignment($requestId, $executorId, $actorId, $ruleId);
+        } catch (\Throwable $auditError) {
+            Yii::error([
+                'message' => 'Не удалось записать аудит отклонённого назначения.',
+                'requestId' => $requestId,
+                'executorId' => $executorId,
                 'actorId' => $actorId,
                 'ruleId' => $ruleId,
                 'exception' => $auditError,

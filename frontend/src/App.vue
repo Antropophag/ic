@@ -48,12 +48,13 @@ function openRequest(item) {
   if (item.canAssignExecutor && !executors.value.length) loadExecutors()
 }
 
-async function loadRequests() {
+async function loadRequests(rethrow = false) {
   try {
     const result = await requestApi.list()
     requests.value = result.items.map(fromApi)
-  } catch {
+  } catch (error) {
     // Макет остаётся доступным отдельно от backend; ошибка будет видна в Network.
+    if (rethrow) throw error
   }
 }
 
@@ -81,8 +82,20 @@ async function loadExecutors() {
 }
 
 async function refreshSelected(requestId) {
-  await loadRequests()
+  if (selected.value?.backendId === requestId) {
+    selected.value = { ...selected.value, canAssignExecutor: false, canStart: false }
+  }
+  await loadRequests(true)
   selected.value = requests.value.find(item => item.backendId === requestId) || null
+}
+
+async function recoverConflict(requestId, message) {
+  try {
+    await refreshSelected(requestId)
+    actionError.value = `${message} Данные обновлены — проверьте актуальный статус.`
+  } catch {
+    actionError.value = `${message} Не удалось обновить данные; устаревшие действия отключены.`
+  }
 }
 
 async function assignExecutor() {
@@ -96,12 +109,20 @@ async function assignExecutor() {
   actionError.value = ''
   const requestId = selected.value.backendId
   try {
-    await requestApi.assignExecutor(requestId, Number(executorChoice.value))
-    await refreshSelected(requestId)
+    await requestApi.assignExecutor(requestId, Number(executorChoice.value), selected.value.lockVersion)
+    try {
+      await refreshSelected(requestId)
+    } catch {
+      actionError.value = 'Исполнитель назначен, но обновить карточку не удалось. Устаревшие действия отключены.'
+    }
   } catch (error) {
-    actionError.value = error.status === 403
-      ? 'У вас нет права назначать исполнителя.'
-      : 'Не удалось назначить исполнителя. Обновите страницу и повторите попытку.'
+    if (error.status === 409) {
+      await recoverConflict(requestId, 'Заявка уже изменена.')
+    } else {
+      actionError.value = error.status === 403
+        ? 'У вас нет права назначать исполнителя.'
+        : 'Не удалось назначить исполнителя. Обновите страницу и повторите попытку.'
+    }
   } finally {
     actionLoading.value = false
   }
@@ -115,14 +136,19 @@ async function startRequest() {
   const requestId = selected.value.backendId
   try {
     await requestApi.start(requestId, selected.value.lockVersion)
-    await refreshSelected(requestId)
+    try {
+      await refreshSelected(requestId)
+    } catch {
+      actionError.value = 'Заявка переведена в работу, но обновить карточку не удалось. Устаревшие действия отключены.'
+    }
   } catch (error) {
-    actionError.value = error.status === 409
-      ? 'Заявка уже изменена. Данные обновлены — проверьте актуальный статус.'
-      : error.status === 403
+    if (error.status === 409) {
+      await recoverConflict(requestId, 'Заявка уже изменена.')
+    } else {
+      actionError.value = error.status === 403
         ? 'У вас нет права переводить эту заявку в работу.'
         : 'Не удалось перевести заявку в работу. Повторите попытку.'
-    if (error.status === 409) await refreshSelected(requestId)
+    }
   } finally {
     actionLoading.value = false
   }

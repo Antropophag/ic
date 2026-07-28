@@ -10,8 +10,15 @@ final class AssignmentPolicy
      * @param list<Role> $actorRoles
      * @param list<Role> $executorRoles
      */
-    public function assertCanAssign(array $actorRoles, bool $executorActive, array $executorRoles): void
-    {
+    public function assertCanAssign(
+        array $actorRoles,
+        bool $executorActive,
+        array $executorRoles,
+        bool $actorActive,
+    ): void {
+        if (!$actorActive) {
+            throw new AssignmentDenied('AUTH-003');
+        }
         if (!$this->hasAny($actorRoles, [Role::IcManager, Role::LaboratoryManager])) {
             throw new AssignmentDenied('WF-001');
         }

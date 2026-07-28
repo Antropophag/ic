@@ -25,10 +25,10 @@ export const requestApi = {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(data),
   }),
-  assignExecutor: (requestId, executorId) => request(`/api/v1/requests/${requestId}/executor`, {
+  assignExecutor: (requestId, executorId, lockVersion) => request(`/api/v1/requests/${requestId}/executor`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ executorId }),
+    body: JSON.stringify({ executorId, lockVersion }),
   }),
   start: (requestId, lockVersion) => request(`/api/v1/requests/${requestId}/start`, {
     method: 'POST',
