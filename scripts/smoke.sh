@@ -440,4 +440,59 @@ non_security_opinion_count=$(sql_scalar "SELECT COUNT(*) FROM notification_outbo
   exit 1
 }
 
+reject_created=$(curl --fail --silent --show-error \
+  --request POST \
+  --header "X-Dev-User-ID: $initiator_user_id" \
+  --header 'Content-Type: application/json' \
+  --data "{\"productName\":\"Reject $marker\",\"manufacturer\":\"Тестовый производитель\",\"supplier\":\"Тестовый поставщик\",\"sampleQuantity\":1,\"testMethod\":\"Тест\"}" \
+  "$base_url/api/v1/requests")
+reject_request_id=$(printf '%s' "$reject_created" | sed -n 's/.*"id":\([0-9][0-9]*\).*/\1/p')
+denied_reject_status=$(curl --silent --output /dev/null --write-out '%{http_code}' \
+  --request POST \
+  --header 'X-Dev-User-ID: 2' \
+  --header 'Content-Type: application/json' \
+  --data '{"lockVersion":1}' \
+  "$base_url/api/v1/requests/$reject_request_id/reject")
+[ "$denied_reject_status" = '403' ] || {
+  echo "Expected forbidden reject status 403, got $denied_reject_status" >&2
+  exit 1
+}
+rejected=$(curl --fail --silent --show-error \
+  --request POST \
+  --header "X-Dev-User-ID: $dev_user_id" \
+  --header 'Content-Type: application/json' \
+  --data '{"lockVersion":1}' \
+  "$base_url/api/v1/requests/$reject_request_id/reject")
+printf '%s' "$rejected" | grep '"status":"rejected"' >/dev/null
+
+withdraw_created=$(curl --fail --silent --show-error \
+  --request POST \
+  --header "X-Dev-User-ID: $initiator_user_id" \
+  --header 'Content-Type: application/json' \
+  --data "{\"productName\":\"Withdraw $marker\",\"manufacturer\":\"Тестовый производитель\",\"supplier\":\"Тестовый поставщик\",\"sampleQuantity\":1,\"testMethod\":\"Тест\"}" \
+  "$base_url/api/v1/requests")
+withdraw_request_id=$(printf '%s' "$withdraw_created" | sed -n 's/.*"id":\([0-9][0-9]*\).*/\1/p')
+denied_withdraw_status=$(curl --silent --output /dev/null --write-out '%{http_code}' \
+  --request POST \
+  --header "X-Dev-User-ID: $dev_user_id" \
+  --header 'Content-Type: application/json' \
+  --data '{"lockVersion":1}' \
+  "$base_url/api/v1/requests/$withdraw_request_id/withdraw")
+[ "$denied_withdraw_status" = '403' ] || {
+  echo "Expected forbidden withdraw status 403, got $denied_withdraw_status" >&2
+  exit 1
+}
+withdrawn=$(curl --fail --silent --show-error \
+  --request POST \
+  --header "X-Dev-User-ID: $initiator_user_id" \
+  --header 'Content-Type: application/json' \
+  --data '{"lockVersion":1}' \
+  "$base_url/api/v1/requests/$withdraw_request_id/withdraw")
+printf '%s' "$withdrawn" | grep '"status":"withdrawn"' >/dev/null
+manager_withdrawn_count=$(sql_scalar "SELECT COUNT(*) FROM notification_outbox WHERE request_id = $withdraw_request_id AND event_type = 'request.withdrawn' AND recipient_email = 'dev.user@example.invalid'")
+[ "$manager_withdrawn_count" -ge 1 ] || {
+  echo "Expected the ic_manager to be notified about the withdrawn request" >&2
+  exit 1
+}
+
 echo "Smoke test passed: health, validation, creation, comments, documents, assignment, start, registry and details."

@@ -50,6 +50,8 @@ export function fromApi(item) {
     canPublishOpinion: Boolean(Number(item.can_publish_opinion)),
     canSecurityDecide: Boolean(Number(item.can_security_decide)),
     canSetColor: Boolean(Number(item.can_set_color)),
+    canReject: Boolean(Number(item.can_reject)),
+    canWithdraw: Boolean(Number(item.can_withdraw)),
     color: REQUEST_COLORS.includes(item.color) ? item.color : 'white',
     status: STATUS_LABELS[item.status] || item.status,
     tone: STATUS_TONES[item.status] || 'blue',
@@ -65,6 +67,8 @@ export function withoutStaleActions(item) {
     canSecurityDecide: false,
     canStart: false,
     canSetColor: false,
+    canReject: false,
+    canWithdraw: false,
   }
 }
 
@@ -78,6 +82,8 @@ const HISTORY_LABELS = {
   publish_opinion: 'опубликовал(а) экспертное заключение',
   security_approve: 'согласовал(а) заключение',
   security_return: 'вернул(а) заявку в работу',
+  reject: 'отказал(а) в проведении испытаний',
+  withdraw: 'отозвал(а) заявку',
 }
 
 export function historyFromApi(item) {

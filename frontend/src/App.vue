@@ -39,6 +39,10 @@ const securityLoading = ref(false)
 const securityError = ref('')
 const colorLoading = ref(false)
 const colorError = ref('')
+const rejectLoading = ref(false)
+const rejectError = ref('')
+const withdrawLoading = ref(false)
+const withdrawError = ref('')
 const detailRequestGuard = createLatestRequestGuard()
 const commentRequestGuard = createLatestRequestGuard()
 const commentsPageRequestGuard = createLatestRequestGuard()
@@ -48,6 +52,8 @@ const opinionRequestGuard = createLatestRequestGuard()
 const securityRequestGuard = createLatestRequestGuard()
 const registryRequestGuard = createLatestRequestGuard()
 const colorRequestGuard = createLatestRequestGuard()
+const rejectRequestGuard = createLatestRequestGuard()
+const withdrawRequestGuard = createLatestRequestGuard()
 const draft = reactive({
   productName: '', manufacturer: '', supplier: '', sampleQuantity: 1, testMethod: '',
 })
@@ -129,6 +135,8 @@ async function openRequest(item) {
   opinionRequestGuard.invalidate()
   securityRequestGuard.invalidate()
   colorRequestGuard.invalidate()
+  rejectRequestGuard.invalidate()
+  withdrawRequestGuard.invalidate()
   commentLoading.value = false
   commentError.value = ''
   commentDraft.value = ''
@@ -144,6 +152,10 @@ async function openRequest(item) {
   securityReason.value = ''
   colorLoading.value = false
   colorError.value = ''
+  rejectLoading.value = false
+  rejectError.value = ''
+  withdrawLoading.value = false
+  withdrawError.value = ''
   showHistory.value = false
   actionError.value = ''
   await loadRequestDetails(item)
@@ -158,6 +170,8 @@ function closeRequest() {
   opinionRequestGuard.invalidate()
   securityRequestGuard.invalidate()
   colorRequestGuard.invalidate()
+  rejectRequestGuard.invalidate()
+  withdrawRequestGuard.invalidate()
   selected.value = null
   detailLoading.value = false
   detailError.value = ''
@@ -174,6 +188,10 @@ function closeRequest() {
   securityReason.value = ''
   colorLoading.value = false
   colorError.value = ''
+  rejectLoading.value = false
+  rejectError.value = ''
+  withdrawLoading.value = false
+  withdrawError.value = ''
 }
 
 async function uploadReport(event) {
@@ -438,6 +456,68 @@ async function setColorMark(color) {
   } finally {
     if (colorRequestGuard.isCurrent(requestToken, selected.value?.backendId)) {
       colorLoading.value = false
+    }
+  }
+}
+
+async function rejectRequest() {
+  if (rejectLoading.value) return
+  if (!window.confirm('Отказать в проведении испытаний по этой заявке?')) return
+  const requestId = selected.value.backendId
+  const requestToken = rejectRequestGuard.begin(requestId)
+  rejectLoading.value = true
+  rejectError.value = ''
+  try {
+    await requestApi.reject(requestId, selected.value.lockVersion)
+    if (!rejectRequestGuard.isCurrent(requestToken, selected.value?.backendId)) return
+    try {
+      await refreshSelected(requestId)
+    } catch {
+      rejectError.value = 'Отказ сохранён, но обновить карточку не удалось.'
+    }
+  } catch (error) {
+    if (!rejectRequestGuard.isCurrent(requestToken, selected.value?.backendId)) return
+    if (error.status === 409) {
+      await recoverConflict(requestId, 'Заявка уже изменена.')
+    } else {
+      rejectError.value = error.status === 403
+        ? 'Отказать в проведении испытаний может только руководитель.'
+        : 'Не удалось сохранить отказ. Повторите попытку.'
+    }
+  } finally {
+    if (rejectRequestGuard.isCurrent(requestToken, selected.value?.backendId)) {
+      rejectLoading.value = false
+    }
+  }
+}
+
+async function withdrawRequest() {
+  if (withdrawLoading.value) return
+  if (!window.confirm('Отозвать эту заявку?')) return
+  const requestId = selected.value.backendId
+  const requestToken = withdrawRequestGuard.begin(requestId)
+  withdrawLoading.value = true
+  withdrawError.value = ''
+  try {
+    await requestApi.withdraw(requestId, selected.value.lockVersion)
+    if (!withdrawRequestGuard.isCurrent(requestToken, selected.value?.backendId)) return
+    try {
+      await refreshSelected(requestId)
+    } catch {
+      withdrawError.value = 'Заявка отозвана, но обновить карточку не удалось.'
+    }
+  } catch (error) {
+    if (!withdrawRequestGuard.isCurrent(requestToken, selected.value?.backendId)) return
+    if (error.status === 409) {
+      await recoverConflict(requestId, 'Заявка уже изменена.')
+    } else {
+      withdrawError.value = error.status === 403
+        ? 'Отозвать заявку может только инициатор.'
+        : 'Не удалось отозвать заявку. Повторите попытку.'
+    }
+  } finally {
+    if (withdrawRequestGuard.isCurrent(requestToken, selected.value?.backendId)) {
+      withdrawLoading.value = false
     }
   }
 }
@@ -749,6 +829,10 @@ onMounted(loadRequests)
                 <button class="secondary action-wide" :disabled="securityLoading" @click="decideSecurity('return')">Вернуть в работу</button>
               </div>
               <p v-if="securityError" class="action-error">{{ securityError }}</p>
+              <button v-if="selected.canReject" class="secondary action-wide" :disabled="rejectLoading" @click="rejectRequest">{{ rejectLoading ? 'Сохранение…' : 'Отказать в проведении испытаний' }}</button>
+              <p v-if="rejectError" class="action-error">{{ rejectError }}</p>
+              <button v-if="selected.canWithdraw" class="secondary action-wide" :disabled="withdrawLoading" @click="withdrawRequest">{{ withdrawLoading ? 'Сохранение…' : 'Отозвать заявку' }}</button>
+              <p v-if="withdrawError" class="action-error">{{ withdrawError }}</p>
               <p v-if="actionError" class="action-error">{{ actionError }}</p>
               <a v-if="selected.canAssignExecutor || selected.canAssignExpert || selected.canStart" class="help-link" href="/help/assignment.html" target="_blank">Инструкция по назначению и началу работы</a>
               <a v-if="selected.canPublishOpinion" class="help-link" href="/help/expert-opinion.html" target="_blank">Инструкция по формированию заключения</a>
