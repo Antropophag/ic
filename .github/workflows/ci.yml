@@ -66,7 +66,7 @@ jobs:
         env:
           ACTIONLINT_VERSION: "1.7.7"
           HADOLINT_VERSION: "2.12.0"
-          HADOLINT_SHA256: "56de6d5e5ec427e17b74fa8d51271c7fc0d61244bf5c90e828aab8362d55010"
+          HADOLINT_SHA256: "56de6d5e5ec427e17b74fa48d51271c7fc0d61244bf5c90e828aab8362d55010"
           SHFMT_VERSION: "3.10.0"
         run: |
           set -euo pipefail

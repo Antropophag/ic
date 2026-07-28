@@ -38,7 +38,7 @@
   },
   "scripts": {
     "lint": "phpcs -n",
-    "analyse": "phpstan analyse --no-progress",
+    "analyse": "phpstan analyse --no-progress --memory-limit=512M",
     "test": "phpunit --colors=always"
   }
 }
