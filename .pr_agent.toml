@@ -1,0 +1,15 @@
+# Qodo reviews only actionable findings and skips generated dependency files.
+inline_comments_severity_threshold = 2
+comments_location_policy = "both"
+
+[config]
+ignore_pr_labels = ["dependencies", "skip-ai-review"]
+ignore_language_framework = ["lock"]
+
+[review_agent_ux]
+finding_overflow_count = 3
+resolved_overflow_count = 1
+expand_description = true
+expand_code = true
+expand_evidence = true
+expand_prompt = false

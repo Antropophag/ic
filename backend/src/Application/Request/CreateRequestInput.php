@@ -11,7 +11,7 @@ final class CreateRequestInput extends Model
     public ?string $productName = null;
     public ?string $manufacturer = null;
     public ?string $supplier = null;
-    public ?int $sampleQuantity = null;
+    public mixed $sampleQuantity = null;
     public ?string $testMethod = null;
 
     public function rules(): array

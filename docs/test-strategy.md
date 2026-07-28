@@ -73,5 +73,14 @@
 ## Покрытие
 
 Процент не заменяет сценарии. Для domain и application слоёв минимальный порог —
-90% строк и ветвей; для frontend — 80%. Все правила `WF`, `DOC`, `SEC` и `ACL`
+90% строк; для тестируемой frontend-логики — 80% строк, функций, statements и
+ветвей. HTTP/infrastructure проверяются API-smoke и integration-тестами, поэтому
+не смешиваются с unit coverage. Текущие gates запускаются командами
+`make coverage` и `make frontend-coverage`, а `make check` выполняет оба.
+Backend-порог вычисляется по исполняемым statements из Clover-отчёта; пустой
+или противоречивый отчёт считается ошибкой сборки.
+
+На 28.07.2026 зафиксирован baseline выше обязательного минимума: backend
+domain/application — 94,81% statements, frontend API/registry logic — 100% строк и
+90,47% ветвей. Pipeline падает при снижении ниже порога. Все правила `WF`, `DOC`, `SEC` и `ACL`
 должны иметь прямой позитивный и негативный тест независимо от общего процента.

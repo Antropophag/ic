@@ -13,6 +13,7 @@ frontend:
   script:
     - npm --prefix frontend ci --no-audit --no-fund
     - npm --prefix frontend run build
+    - npm --prefix frontend run coverage
 
 backend-unit:
   stage: test
@@ -21,6 +22,23 @@ backend-unit:
     - cd backend
     - composer install --no-interaction --no-progress
     - composer test
+
+backend-coverage:
+  stage: test
+  image: docker:29.0.0-cli
+  services:
+    - name: docker:29.0.0-dind
+      command: ["--tls=false"]
+  variables:
+    DOCKER_HOST: tcp://docker:2375
+    DOCKER_TLS_CERTDIR: ""
+  before_script:
+    - apk add --no-cache python3
+  script:
+    - mkdir -p backend/build/coverage
+    - docker build --file docker/coverage.Dockerfile --tag shlz-test-registry-coverage .
+    - docker run --rm --volume "$CI_PROJECT_DIR/backend/build/coverage:/app/build/coverage" shlz-test-registry-coverage
+    - python3 scripts/check_coverage.py backend/build/coverage/clover.xml --minimum 90
 
 api-smoke:
   stage: test

@@ -1,6 +1,7 @@
 <script setup>
 import { computed, onMounted, reactive, ref } from 'vue'
 import { requestApi } from './api'
+import { ACTIVE_STATUSES, filterRequests, fromApi } from './registry'
 
 const activeTab = ref('active')
 const query = ref('')
@@ -13,8 +14,6 @@ const draft = reactive({
   productName: '', manufacturer: '', supplier: '', sampleQuantity: 1, testMethod: '',
 })
 
-const activeStatuses = ['Заявка зарегистрирована', 'Заявка в работе', 'Работы приостановлены', 'Подготовка заключения', 'Контроль СБ']
-
 const requests = ref([
   { id: '000146', date: '27.07.2026', initiator: 'Максим Умнов', department: 'Бюро приводной техники', product: 'Лебёдка Furder VT40K', supplier: 'ООО «Вектор Технологий»', executor: 'С. И. Кашин', status: 'Заявка зарегистрирована', tone: 'blue' },
   { id: '000145', date: '27.07.2026', initiator: 'Виктор Медведев', department: 'Отдел производственных закупок', product: 'IP-видеокамера DS-2CD2543G2-IS', supplier: 'ООО «Видеотехнология»', executor: 'С. В. Наумов', status: 'Заявка в работе', tone: 'cyan' },
@@ -25,39 +24,21 @@ const requests = ref([
 ])
 
 const tabs = computed(() => [
-  { id: 'active', label: 'Активные заявки', count: requests.value.filter(item => activeStatuses.includes(item.status)).length },
+  { id: 'active', label: 'Активные заявки', count: requests.value.filter(item => ACTIVE_STATUSES.includes(item.status)).length },
   { id: 'all', label: 'Все заявки', count: requests.value.length },
   { id: 'mine', label: 'Мои заявки', count: requests.value.filter(item => item.initiator === 'Максим Умнов').length },
 ])
 const statuses = computed(() => [...new Set(requests.value.map(item => item.status))])
-const filtered = computed(() => requests.value.filter(item => {
-  if (activeTab.value === 'active' && !activeStatuses.includes(item.status)) return false
-  if (activeTab.value === 'mine' && item.initiator !== 'Максим Умнов') return false
-  if (statusFilter.value && item.status !== statusFilter.value) return false
-  const haystack = Object.values(item).join(' ').toLowerCase()
-  return haystack.includes(query.value.toLowerCase())
+const filtered = computed(() => filterRequests(requests.value, {
+  tab: activeTab.value,
+  query: query.value,
+  status: statusFilter.value,
+  currentUser: 'Максим Умнов',
 }))
 
 function openRequest(item) {
   selected.value = item
   showHistory.value = false
-}
-
-function fromApi(item) {
-  return {
-    id: String(item.number).padStart(6, '0'),
-    date: new Date(item.created_at).toLocaleDateString('ru-RU'),
-    initiator: item.initiator_name,
-    department: item.department,
-    product: item.product_name,
-    manufacturer: item.manufacturer,
-    supplier: item.supplier,
-    sampleQuantity: item.sample_quantity,
-    testMethod: item.test_method,
-    executor: 'Не назначен',
-    status: item.status === 'registered' ? 'Заявка зарегистрирована' : item.status,
-    tone: 'blue',
-  }
 }
 
 async function loadRequests() {
