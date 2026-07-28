@@ -81,6 +81,8 @@ it('disables every version-sensitive action before conflict recovery', () => {
     canSecurityDecide: true,
     canStart: true,
     canSetColor: true,
+    canReject: true,
+    canWithdraw: true,
   })).toMatchObject({
     canAssignExecutor: false,
     canAssignExpert: false,
@@ -88,7 +90,24 @@ it('disables every version-sensitive action before conflict recovery', () => {
     canSecurityDecide: false,
     canStart: false,
     canSetColor: false,
+    canReject: false,
+    canWithdraw: false,
   })
+})
+
+it('maps reject and withdraw permissions and history labels', () => {
+  expect(fromApi({ ...registered, can_reject: 1, can_withdraw: 1 })).toMatchObject({
+    canReject: true,
+    canWithdraw: true,
+  })
+  expect(historyFromApi({
+    id: 14, kind: 'transition', action: 'reject', actorName: 'Руководитель',
+    ruleId: 'WF-006', occurredAt: '2026-07-28T10:04:00Z',
+  }).description).toBe('отказал(а) в проведении испытаний')
+  expect(historyFromApi({
+    id: 15, kind: 'transition', action: 'withdraw', actorName: 'Тестовый сотрудник',
+    ruleId: 'WF-007', occurredAt: '2026-07-28T10:05:00Z',
+  }).description).toBe('отозвал(а) заявку')
 })
 
 it('maps the report stage, permission and history label', () => {

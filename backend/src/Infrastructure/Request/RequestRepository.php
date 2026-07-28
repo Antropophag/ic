@@ -12,6 +12,7 @@ use App\Domain\Request\AssignmentTargetNotFound;
 use App\Domain\Request\ConcurrentRequestModification;
 use App\Domain\Request\ExpertAssignmentPolicy;
 use App\Domain\Request\RequestAction;
+use App\Domain\Request\RejectPolicy;
 use App\Domain\Request\RequestCreationPolicy;
 use App\Domain\Request\RequestNotFound;
 use App\Domain\Request\RequestStatus;
@@ -19,6 +20,7 @@ use App\Domain\Request\RequestWorkflow;
 use App\Domain\Request\Role;
 use App\Domain\Request\SecurityDecisionPolicy;
 use App\Domain\Request\StartRequestPolicy;
+use App\Domain\Request\WithdrawPolicy;
 use App\Infrastructure\Notification\NotificationOutbox;
 use yii\db\Connection;
 
@@ -286,7 +288,17 @@ final class RequestRepository
             . "'opinion_preparation', 'security_review')) AS can_comment, "
             . "(EXISTS(SELECT 1 FROM {{%users}} dau WHERE dau.id = :active_document_actor "
             . "AND dau.is_active = 1) AND r.status IN ('registered', 'in_progress', 'suspended', "
-            . "'opinion_preparation', 'security_review')) AS can_upload_document "
+            . "'opinion_preparation', 'security_review')) AS can_upload_document, "
+            . "(r.status IN ('registered', 'in_progress') AND EXISTS(SELECT 1 FROM {{%users}} rju "
+            . 'WHERE rju.id = :reject_actor AND rju.is_active = 1) '
+            . 'AND EXISTS(SELECT 1 FROM {{%user_roles}} rjur JOIN {{%roles}} rjr ON rjr.id = rjur.role_id '
+            . "WHERE rjur.user_id = :reject_actor_role AND rjr.code IN ('ic_manager', 'laboratory_manager'))) "
+            . 'AS can_reject, '
+            . "(r.status IN ('registered', 'in_progress', 'suspended', 'opinion_preparation') "
+            . 'AND r.initiator_id = :withdraw_actor AND EXISTS(SELECT 1 FROM {{%users}} wu '
+            . "WHERE wu.id = :withdraw_actor_active AND wu.is_active = 1) "
+            . 'AND NOT EXISTS(SELECT 1 FROM {{%security_checks}} wsc WHERE wsc.request_id = r.id)) '
+            . 'AS can_withdraw '
             . 'FROM {{%requests}} r JOIN {{%users}} u ON u.id = r.initiator_id '
             . 'LEFT JOIN {{%request_assignments}} current_executor ON current_executor.request_id = r.id '
             . "AND current_executor.assignment_type = 'executor' AND current_executor.valid_to IS NULL "
@@ -308,6 +320,10 @@ final class RequestRepository
                 ':start_executor_role' => $actorId,
                 ':active_comment_actor' => $actorId,
                 ':active_document_actor' => $actorId,
+                ':reject_actor' => $actorId,
+                ':reject_actor_role' => $actorId,
+                ':withdraw_actor' => $actorId,
+                ':withdraw_actor_active' => $actorId,
                 ':limit' => $limit,
             ],
         )->queryAll();
@@ -352,7 +368,15 @@ final class RequestRepository
             . ", (r.status = 'security_review' AND EXISTS(SELECT 1 FROM {{%user_roles}} security_ur "
             . 'JOIN {{%roles}} security_role ON security_role.id = security_ur.role_id '
             . "WHERE security_ur.user_id = :security_actor AND security_role.code = 'security_officer')) "
-            . 'AS can_security_decide '
+            . 'AS can_security_decide, '
+            . "(r.status IN ('registered', 'in_progress') AND EXISTS(SELECT 1 FROM {{%user_roles}} rjur "
+            . 'JOIN {{%roles}} rjr ON rjr.id = rjur.role_id '
+            . "WHERE rjur.user_id = :reject_actor AND rjr.code IN ('ic_manager', 'laboratory_manager'))) "
+            . 'AS can_reject, '
+            . "(r.status IN ('registered', 'in_progress', 'suspended', 'opinion_preparation') "
+            . 'AND r.initiator_id = :withdraw_actor '
+            . 'AND NOT EXISTS(SELECT 1 FROM {{%security_checks}} wsc WHERE wsc.request_id = r.id)) '
+            . 'AS can_withdraw '
             . 'FROM {{%requests}} r '
             . 'JOIN {{%users}} viewer ON viewer.id = :actor_id AND viewer.is_active = 1 '
             . 'JOIN {{%users}} u ON u.id = r.initiator_id '
@@ -376,6 +400,8 @@ final class RequestRepository
                 ':report_manager' => $actorId,
                 ':opinion_actor' => $actorId,
                 ':security_actor' => $actorId,
+                ':reject_actor' => $actorId,
+                ':withdraw_actor' => $actorId,
             ],
         )->queryOne();
         if ($item === false) {
@@ -987,6 +1013,234 @@ final class RequestRepository
             'event_type' => 'request.create_denied',
             'entity_type' => 'request_creation',
             'entity_id' => $actorId,
+            'actor_id' => $actorId,
+            'rule_id' => $ruleId,
+            'payload_json' => json_encode([], JSON_THROW_ON_ERROR),
+            'created_at' => gmdate('Y-m-d H:i:s.u'),
+        ])->execute();
+    }
+
+    /** @return array{requestId: int, status: string, lockVersion: int} */
+    public function rejectRequest(int $requestId, int $expectedLockVersion, int $actorId): array
+    {
+        $transaction = $this->db->beginTransaction();
+        try {
+            $request = $this->db->createCommand(
+                'SELECT status, lock_version FROM {{%requests}} WHERE id = :id FOR UPDATE',
+                [':id' => $requestId],
+            )->queryOne();
+            if ($request === false) {
+                throw new RequestNotFound('Request not found');
+            }
+            $currentStatus = RequestStatus::from((string) $request['status']);
+            if (
+                !in_array($currentStatus, [RequestStatus::Registered, RequestStatus::InProgress], true)
+                || (int) $request['lock_version'] !== $expectedLockVersion
+            ) {
+                throw new ConcurrentRequestModification();
+            }
+
+            (new RejectPolicy())->assertCanReject($this->rolesFor($actorId), $this->isActiveUser($actorId));
+
+            $now = gmdate('Y-m-d H:i:s.u');
+            $nextLockVersion = $expectedLockVersion + 1;
+            $updated = $this->db->createCommand()->update('{{%requests}}', [
+                'status' => RequestStatus::Rejected->value,
+                'lock_version' => $nextLockVersion,
+                'updated_at' => $now,
+            ], [
+                'id' => $requestId,
+                'status' => $currentStatus->value,
+                'lock_version' => $expectedLockVersion,
+            ])->execute();
+            if ($updated !== 1) {
+                throw new ConcurrentRequestModification();
+            }
+            $this->db->createCommand()->insert('{{%request_transitions}}', [
+                'request_id' => $requestId,
+                'actor_id' => $actorId,
+                'from_status' => $currentStatus->value,
+                'to_status' => RequestStatus::Rejected->value,
+                'action' => 'reject',
+                'rule_id' => 'WF-006',
+                'created_at' => $now,
+            ])->execute();
+            $this->db->createCommand()->insert('{{%audit_events}}', [
+                'event_type' => 'request.rejected',
+                'entity_type' => 'request',
+                'entity_id' => $requestId,
+                'actor_id' => $actorId,
+                'rule_id' => 'WF-006',
+                'payload_json' => json_encode([
+                    'from_status' => $currentStatus->value,
+                    'to_status' => RequestStatus::Rejected->value,
+                    'lock_version' => $nextLockVersion,
+                ], JSON_THROW_ON_ERROR),
+                'created_at' => $now,
+            ])->execute();
+            $initiator = $this->initiatorContact($requestId);
+            if ($initiator !== null) {
+                (new NotificationOutbox($this->db))->enqueue(
+                    $requestId,
+                    'request.rejected',
+                    $initiator['email'],
+                    $initiator['name'],
+                    'В проведении испытаний отказано',
+                    'По вашей заявке принято решение об отказе в проведении испытаний. '
+                    . 'Подробности — в карточке заявки в портале.',
+                );
+            }
+            $transaction->commit();
+
+            return ['requestId' => $requestId, 'status' => RequestStatus::Rejected->value, 'lockVersion' => $nextLockVersion];
+        } catch (\Throwable $error) {
+            $transaction->rollBack();
+            throw $error;
+        }
+    }
+
+    public function recordRejectedReject(int $requestId, int $actorId, string $ruleId): void
+    {
+        $actorExists = $this->db->createCommand(
+            'SELECT 1 FROM {{%users}} WHERE id = :id',
+            [':id' => $actorId],
+        )->queryScalar();
+        if ($actorExists === false) {
+            return;
+        }
+
+        $this->db->createCommand()->insert('{{%audit_events}}', [
+            'event_type' => 'request.reject_denied',
+            'entity_type' => 'request',
+            'entity_id' => $requestId,
+            'actor_id' => $actorId,
+            'rule_id' => $ruleId,
+            'payload_json' => json_encode([], JSON_THROW_ON_ERROR),
+            'created_at' => gmdate('Y-m-d H:i:s.u'),
+        ])->execute();
+    }
+
+    private const WITHDRAWABLE_STATUSES = [
+        RequestStatus::Registered,
+        RequestStatus::InProgress,
+        RequestStatus::Suspended,
+        RequestStatus::OpinionPreparation,
+    ];
+
+    /** @return array{requestId: int, status: string, lockVersion: int} */
+    public function withdrawRequest(int $requestId, int $expectedLockVersion, int $actorId): array
+    {
+        $transaction = $this->db->beginTransaction();
+        try {
+            $request = $this->db->createCommand(
+                'SELECT r.status, r.lock_version, r.initiator_id, '
+                . 'EXISTS(SELECT 1 FROM {{%security_checks}} sc WHERE sc.request_id = r.id) AS reviewed_by_security '
+                . 'FROM {{%requests}} r WHERE r.id = :id FOR UPDATE',
+                [':id' => $requestId],
+            )->queryOne();
+            if ($request === false) {
+                throw new RequestNotFound('Request not found');
+            }
+            $currentStatus = RequestStatus::from((string) $request['status']);
+            // WF-007: отзыв разрешён только до контроля СБ. Заявка, уже
+            // побывавшая на контроле (в том числе возвращённая обратно в
+            // работу), больше не считается "до контроля СБ" — даже если
+            // текущий статус формально входит в WITHDRAWABLE_STATUSES.
+            if (
+                !in_array($currentStatus, self::WITHDRAWABLE_STATUSES, true)
+                || (bool) $request['reviewed_by_security']
+                || (int) $request['lock_version'] !== $expectedLockVersion
+            ) {
+                throw new ConcurrentRequestModification();
+            }
+
+            $isInitiator = (int) $request['initiator_id'] === $actorId;
+            (new WithdrawPolicy())->assertCanWithdraw($isInitiator, $this->isActiveUser($actorId));
+
+            $now = gmdate('Y-m-d H:i:s.u');
+            $nextLockVersion = $expectedLockVersion + 1;
+            $updated = $this->db->createCommand()->update('{{%requests}}', [
+                'status' => RequestStatus::Withdrawn->value,
+                'lock_version' => $nextLockVersion,
+                'updated_at' => $now,
+            ], [
+                'id' => $requestId,
+                'status' => $currentStatus->value,
+                'lock_version' => $expectedLockVersion,
+            ])->execute();
+            if ($updated !== 1) {
+                throw new ConcurrentRequestModification();
+            }
+            $this->db->createCommand()->insert('{{%request_transitions}}', [
+                'request_id' => $requestId,
+                'actor_id' => $actorId,
+                'from_status' => $currentStatus->value,
+                'to_status' => RequestStatus::Withdrawn->value,
+                'action' => 'withdraw',
+                'rule_id' => 'WF-007',
+                'created_at' => $now,
+            ])->execute();
+            $this->db->createCommand()->insert('{{%audit_events}}', [
+                'event_type' => 'request.withdrawn',
+                'entity_type' => 'request',
+                'entity_id' => $requestId,
+                'actor_id' => $actorId,
+                'rule_id' => 'WF-007',
+                'payload_json' => json_encode([
+                    'from_status' => $currentStatus->value,
+                    'to_status' => RequestStatus::Withdrawn->value,
+                    'lock_version' => $nextLockVersion,
+                ], JSON_THROW_ON_ERROR),
+                'created_at' => $now,
+            ])->execute();
+
+            // ТЗ 3.8: уведомление исполнителю и руководителям об отзыве.
+            // Один и тот же человек может одновременно быть исполнителем и
+            // руководителем (AUTH-005) — получатели дедуплицируются по email,
+            // чтобы не отправить два одинаковых письма.
+            $recipients = [];
+            $executor = $this->currentAssigneeContact($requestId, 'executor');
+            if ($executor !== null) {
+                $recipients[$executor['email']] = $executor;
+            }
+            foreach ($this->activeUsersWithRoles(['ic_manager', 'laboratory_manager']) as $manager) {
+                $recipients[$manager['email']] ??= $manager;
+            }
+            $outbox = new NotificationOutbox($this->db);
+            foreach ($recipients as $recipient) {
+                $outbox->enqueue(
+                    $requestId,
+                    'request.withdrawn',
+                    $recipient['email'],
+                    $recipient['name'],
+                    'Заявка отозвана инициатором',
+                    'Инициатор отозвал заявку.',
+                );
+            }
+
+            $transaction->commit();
+
+            return ['requestId' => $requestId, 'status' => RequestStatus::Withdrawn->value, 'lockVersion' => $nextLockVersion];
+        } catch (\Throwable $error) {
+            $transaction->rollBack();
+            throw $error;
+        }
+    }
+
+    public function recordRejectedWithdraw(int $requestId, int $actorId, string $ruleId): void
+    {
+        $actorExists = $this->db->createCommand(
+            'SELECT 1 FROM {{%users}} WHERE id = :id',
+            [':id' => $actorId],
+        )->queryScalar();
+        if ($actorExists === false) {
+            return;
+        }
+
+        $this->db->createCommand()->insert('{{%audit_events}}', [
+            'event_type' => 'request.withdraw_denied',
+            'entity_type' => 'request',
+            'entity_id' => $requestId,
             'actor_id' => $actorId,
             'rule_id' => $ruleId,
             'payload_json' => json_encode([], JSON_THROW_ON_ERROR),

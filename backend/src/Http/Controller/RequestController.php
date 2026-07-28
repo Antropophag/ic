@@ -9,9 +9,11 @@ use App\Application\Request\AddCommentInput;
 use App\Application\Request\AssignExecutorInput;
 use App\Application\Request\AssignExpertInput;
 use App\Application\Request\PublishOpinionInput;
+use App\Application\Request\RejectRequestInput;
 use App\Application\Request\SecurityDecisionInput;
 use App\Application\Request\SetColorInput;
 use App\Application\Request\StartRequestInput;
+use App\Application\Request\WithdrawRequestInput;
 use App\Domain\Request\AssignmentDenied;
 use App\Domain\Request\AssignmentTargetNotFound;
 use App\Domain\Request\AttachmentDenied;
@@ -19,6 +21,7 @@ use App\Domain\Request\ColorMarkDenied;
 use App\Domain\Request\ConcurrentRequestModification;
 use App\Domain\Request\ExpertAssignmentDenied;
 use App\Domain\Request\CommentDenied;
+use App\Domain\Request\RejectDenied;
 use App\Domain\Request\RequestCreationDenied;
 use App\Domain\Request\RequestNotFound;
 use App\Domain\Request\ReportDenied;
@@ -26,6 +29,7 @@ use App\Domain\Request\OpinionDenied;
 use App\Domain\Request\SecurityDecisionDenied;
 use App\Domain\Request\StartDenied;
 use App\Domain\Request\TransitionDenied;
+use App\Domain\Request\WithdrawDenied;
 use App\Infrastructure\Identity\CurrentUser;
 use App\Infrastructure\Document\DocumentRepository;
 use App\Infrastructure\Document\DocumentStorage;
@@ -423,6 +427,54 @@ final class RequestController extends Controller
         }
     }
 
+    /** @return array<string, mixed> */
+    public function actionReject(int $id): array
+    {
+        $input = new RejectRequestInput();
+        $input->load(Yii::$app->request->bodyParams, '');
+        if (!$input->validate()) {
+            Yii::$app->response->statusCode = 422;
+            return ['errors' => $input->getErrors()];
+        }
+
+        $actorId = (new CurrentUser())->id(Yii::$app->request);
+        try {
+            return $this->repository()->rejectRequest($id, (int) $input->lockVersion, $actorId);
+        } catch (RequestNotFound $error) {
+            throw new NotFoundHttpException($error->getMessage());
+        } catch (RejectDenied $error) {
+            $this->recordRejectedRejectSafely($id, $actorId, $error->ruleId);
+            throw new ForbiddenHttpException($error->getMessage());
+        } catch (ConcurrentRequestModification $error) {
+            $this->recordRejectedRejectSafely($id, $actorId, $error->ruleId);
+            throw new ConflictHttpException($error->getMessage());
+        }
+    }
+
+    /** @return array<string, mixed> */
+    public function actionWithdraw(int $id): array
+    {
+        $input = new WithdrawRequestInput();
+        $input->load(Yii::$app->request->bodyParams, '');
+        if (!$input->validate()) {
+            Yii::$app->response->statusCode = 422;
+            return ['errors' => $input->getErrors()];
+        }
+
+        $actorId = (new CurrentUser())->id(Yii::$app->request);
+        try {
+            return $this->repository()->withdrawRequest($id, (int) $input->lockVersion, $actorId);
+        } catch (RequestNotFound $error) {
+            throw new NotFoundHttpException($error->getMessage());
+        } catch (WithdrawDenied $error) {
+            $this->recordRejectedWithdrawSafely($id, $actorId, $error->ruleId);
+            throw new ForbiddenHttpException($error->getMessage());
+        } catch (ConcurrentRequestModification $error) {
+            $this->recordRejectedWithdrawSafely($id, $actorId, $error->ruleId);
+            throw new ConflictHttpException($error->getMessage());
+        }
+    }
+
     private function recordRejectedCreateSafely(int $actorId, string $ruleId): void
     {
         try {
@@ -444,6 +496,36 @@ final class RequestController extends Controller
         } catch (\Throwable $auditError) {
             Yii::error([
                 'message' => 'Не удалось записать аудит отклонённого запуска заявки.',
+                'requestId' => $requestId,
+                'actorId' => $actorId,
+                'ruleId' => $ruleId,
+                'exception' => $auditError,
+            ], __METHOD__);
+        }
+    }
+
+    private function recordRejectedRejectSafely(int $requestId, int $actorId, string $ruleId): void
+    {
+        try {
+            $this->repository()->recordRejectedReject($requestId, $actorId, $ruleId);
+        } catch (\Throwable $auditError) {
+            Yii::error([
+                'message' => 'Не удалось записать аудит отклонённого отказа в испытаниях.',
+                'requestId' => $requestId,
+                'actorId' => $actorId,
+                'ruleId' => $ruleId,
+                'exception' => $auditError,
+            ], __METHOD__);
+        }
+    }
+
+    private function recordRejectedWithdrawSafely(int $requestId, int $actorId, string $ruleId): void
+    {
+        try {
+            $this->repository()->recordRejectedWithdraw($requestId, $actorId, $ruleId);
+        } catch (\Throwable $auditError) {
+            Yii::error([
+                'message' => 'Не удалось записать аудит отклонённого отзыва заявки.',
                 'requestId' => $requestId,
                 'actorId' => $actorId,
                 'ruleId' => $ruleId,

@@ -440,4 +440,127 @@ non_security_opinion_count=$(sql_scalar "SELECT COUNT(*) FROM notification_outbo
   exit 1
 }
 
+reject_created=$(curl --fail --silent --show-error \
+  --request POST \
+  --header "X-Dev-User-ID: $initiator_user_id" \
+  --header 'Content-Type: application/json' \
+  --data "{\"productName\":\"Reject $marker\",\"manufacturer\":\"Тестовый производитель\",\"supplier\":\"Тестовый поставщик\",\"sampleQuantity\":1,\"testMethod\":\"Тест\"}" \
+  "$base_url/api/v1/requests")
+reject_request_id=$(printf '%s' "$reject_created" | sed -n 's/.*"id":\([0-9][0-9]*\).*/\1/p')
+denied_reject_status=$(curl --silent --output /dev/null --write-out '%{http_code}' \
+  --request POST \
+  --header 'X-Dev-User-ID: 2' \
+  --header 'Content-Type: application/json' \
+  --data '{"lockVersion":1}' \
+  "$base_url/api/v1/requests/$reject_request_id/reject")
+[ "$denied_reject_status" = '403' ] || {
+  echo "Expected forbidden reject status 403, got $denied_reject_status" >&2
+  exit 1
+}
+rejected=$(curl --fail --silent --show-error \
+  --request POST \
+  --header "X-Dev-User-ID: $dev_user_id" \
+  --header 'Content-Type: application/json' \
+  --data '{"lockVersion":1}' \
+  "$base_url/api/v1/requests/$reject_request_id/reject")
+printf '%s' "$rejected" | grep '"status":"rejected"' >/dev/null
+
+withdraw_created=$(curl --fail --silent --show-error \
+  --request POST \
+  --header "X-Dev-User-ID: $initiator_user_id" \
+  --header 'Content-Type: application/json' \
+  --data "{\"productName\":\"Withdraw $marker\",\"manufacturer\":\"Тестовый производитель\",\"supplier\":\"Тестовый поставщик\",\"sampleQuantity\":1,\"testMethod\":\"Тест\"}" \
+  "$base_url/api/v1/requests")
+withdraw_request_id=$(printf '%s' "$withdraw_created" | sed -n 's/.*"id":\([0-9][0-9]*\).*/\1/p')
+denied_withdraw_status=$(curl --silent --output /dev/null --write-out '%{http_code}' \
+  --request POST \
+  --header "X-Dev-User-ID: $dev_user_id" \
+  --header 'Content-Type: application/json' \
+  --data '{"lockVersion":1}' \
+  "$base_url/api/v1/requests/$withdraw_request_id/withdraw")
+[ "$denied_withdraw_status" = '403' ] || {
+  echo "Expected forbidden withdraw status 403, got $denied_withdraw_status" >&2
+  exit 1
+}
+withdrawn=$(curl --fail --silent --show-error \
+  --request POST \
+  --header "X-Dev-User-ID: $initiator_user_id" \
+  --header 'Content-Type: application/json' \
+  --data '{"lockVersion":1}' \
+  "$base_url/api/v1/requests/$withdraw_request_id/withdraw")
+printf '%s' "$withdrawn" | grep '"status":"withdrawn"' >/dev/null
+manager_withdrawn_count=$(sql_scalar "SELECT COUNT(*) FROM notification_outbox WHERE request_id = $withdraw_request_id AND event_type = 'request.withdrawn' AND recipient_email = 'dev.user@example.invalid'")
+[ "$manager_withdrawn_count" -ge 1 ] || {
+  echo "Expected the ic_manager to be notified about the withdrawn request" >&2
+  exit 1
+}
+
+reject_audit_count=$(sql_scalar "SELECT COUNT(*) FROM audit_events WHERE entity_type = 'request' AND entity_id = $reject_request_id AND event_type = 'request.rejected' AND rule_id = 'WF-006'")
+[ "$reject_audit_count" = '1' ] || {
+  echo "Expected exactly one WF-006 audit event for the rejected request" >&2
+  exit 1
+}
+withdraw_audit_count=$(sql_scalar "SELECT COUNT(*) FROM audit_events WHERE entity_type = 'request' AND entity_id = $withdraw_request_id AND event_type = 'request.withdrawn' AND rule_id = 'WF-007'")
+[ "$withdraw_audit_count" = '1' ] || {
+  echo "Expected exactly one WF-007 audit event for the withdrawn request" >&2
+  exit 1
+}
+
+# WF-007: заявка, уже прошедшая контроль СБ (даже вернувшаяся в работу),
+# отзыву не подлежит, хотя её статус формально входит в число отзываемых.
+sb_created=$(curl --fail --silent --show-error \
+  --request POST \
+  --header "X-Dev-User-ID: $initiator_user_id" \
+  --header 'Content-Type: application/json' \
+  --data "{\"productName\":\"SB withdraw $marker\",\"manufacturer\":\"Тестовый производитель\",\"supplier\":\"Тестовый поставщик\",\"sampleQuantity\":1,\"testMethod\":\"Тест\"}" \
+  "$base_url/api/v1/requests")
+sb_request_id=$(printf '%s' "$sb_created" | sed -n 's/.*"id":\([0-9][0-9]*\).*/\1/p')
+curl --fail --silent --show-error \
+  --request POST \
+  --header "X-Dev-User-ID: $dev_user_id" \
+  --header 'Content-Type: application/json' \
+  --data '{"executorId":2,"lockVersion":1}' \
+  "$base_url/api/v1/requests/$sb_request_id/executor" >/dev/null
+curl --fail --silent --show-error \
+  --request POST \
+  --header 'X-Dev-User-ID: 2' \
+  --header 'Content-Type: application/json' \
+  --data '{"lockVersion":2}' \
+  "$base_url/api/v1/requests/$sb_request_id/start" >/dev/null
+curl --fail --silent --show-error \
+  --request POST \
+  --header 'X-Dev-User-ID: 2' \
+  --form "file=@$smoke_dir/report.pdf;type=application/pdf" \
+  "$base_url/api/v1/requests/$sb_request_id/report" >/dev/null
+curl --fail --silent --show-error \
+  --request POST \
+  --header "X-Dev-User-ID: $dev_user_id" \
+  --header 'Content-Type: application/json' \
+  --data '{"expertId":4,"lockVersion":4}' \
+  "$base_url/api/v1/requests/$sb_request_id/expert" >/dev/null
+curl --fail --silent --show-error \
+  --request POST \
+  --header 'X-Dev-User-ID: 4' \
+  --header 'Content-Type: application/json' \
+  --data '{"body":"Образец соответствует заявленным требованиям по результатам испытаний.","lockVersion":5}' \
+  "$base_url/api/v1/requests/$sb_request_id/opinion" >/dev/null
+sb_returned=$(curl --fail --silent --show-error \
+  --request POST \
+  --header 'X-Dev-User-ID: 5' \
+  --header 'Content-Type: application/json' \
+  --data '{"decision":"return","reason":"Недостаточно данных, требуется доработка.","lockVersion":6}' \
+  "$base_url/api/v1/requests/$sb_request_id/security-decision")
+printf '%s' "$sb_returned" | grep '"status":"in_progress"' >/dev/null
+printf '%s' "$sb_returned" | grep '"lockVersion":7' >/dev/null
+sb_withdraw_status=$(curl --silent --output /dev/null --write-out '%{http_code}' \
+  --request POST \
+  --header "X-Dev-User-ID: $initiator_user_id" \
+  --header 'Content-Type: application/json' \
+  --data '{"lockVersion":7}' \
+  "$base_url/api/v1/requests/$sb_request_id/withdraw")
+[ "$sb_withdraw_status" = '409' ] || {
+  echo "Expected a request already reviewed by security to reject withdrawal with 409, got $sb_withdraw_status" >&2
+  exit 1
+}
+
 echo "Smoke test passed: health, validation, creation, comments, documents, assignment, start, registry and details."

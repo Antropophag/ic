@@ -184,6 +184,30 @@ it('sets the manual color mark with optimistic locking', async () => {
   }))
 })
 
+it('rejects a request with optimistic locking', async () => {
+  const fetchMock = vi.fn().mockResolvedValue(new Response('{}', { status: 200 }))
+  vi.stubGlobal('fetch', fetchMock)
+
+  await requestApi.reject(7, 2)
+
+  expect(fetchMock).toHaveBeenCalledWith('/api/v1/requests/7/reject', expect.objectContaining({
+    method: 'POST',
+    body: JSON.stringify({ lockVersion: 2 }),
+  }))
+})
+
+it('withdraws a request with optimistic locking', async () => {
+  const fetchMock = vi.fn().mockResolvedValue(new Response('{}', { status: 200 }))
+  vi.stubGlobal('fetch', fetchMock)
+
+  await requestApi.withdraw(7, 2)
+
+  expect(fetchMock).toHaveBeenCalledWith('/api/v1/requests/7/withdraw', expect.objectContaining({
+    method: 'POST',
+    body: JSON.stringify({ lockVersion: 2 }),
+  }))
+})
+
 it('sends the currently selected dev user as the actor header', async () => {
   const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({ items: [] }), { status: 200 }))
   vi.stubGlobal('fetch', fetchMock)
