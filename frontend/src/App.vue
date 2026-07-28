@@ -1,7 +1,7 @@
 <script setup>
 import { computed, onMounted, reactive, ref } from 'vue'
 import { requestApi } from './api'
-import { ACTIVE_STATUSES, filterRequests, fromApi } from './registry'
+import { ACTIVE_STATUSES, filterRequests, fromApi, historyFromApi } from './registry'
 
 const activeTab = ref('active')
 const query = ref('')
@@ -12,6 +12,8 @@ const showHistory = ref(false)
 const createError = ref('')
 const actionError = ref('')
 const actionLoading = ref(false)
+const detailLoading = ref(false)
+const detailError = ref('')
 const executors = ref([])
 const executorChoice = ref('')
 const draft = reactive({
@@ -40,12 +42,30 @@ const filtered = computed(() => filterRequests(requests.value, {
   currentUser: 'Максим Умнов',
 }))
 
-function openRequest(item) {
+async function openRequest(item) {
   selected.value = item
   showHistory.value = false
   actionError.value = ''
+  detailError.value = ''
+  detailLoading.value = true
   executorChoice.value = item.executorId || ''
   if (item.canAssignExecutor && !executors.value.length) loadExecutors()
+  try {
+    const result = await requestApi.get(item.backendId)
+    selected.value = {
+      ...fromApi(result.item),
+      canAssignExecutor: item.canAssignExecutor,
+      canStart: item.canStart,
+      history: result.history.map(historyFromApi),
+    }
+    executorChoice.value = selected.value.executorId || ''
+  } catch (error) {
+    detailError.value = error.status === 404
+      ? 'Заявка не найдена или недоступна.'
+      : 'Не удалось загрузить актуальную карточку заявки.'
+  } finally {
+    detailLoading.value = false
+  }
 }
 
 async function loadRequests(rethrow = false) {
@@ -225,6 +245,8 @@ onMounted(loadRequests)
           <button class="secondary" @click="showHistory = true">◷ История</button>
           <button class="primary">Действия ▾</button>
         </div>
+        <p v-if="detailLoading" class="detail-state">Загрузка актуальной карточки…</p>
+        <p v-if="detailError" class="detail-state error">{{ detailError }}</p>
         <div class="request-grid">
           <div class="stack">
             <article class="card details">
@@ -237,10 +259,8 @@ onMounted(loadRequests)
               </dl>
             </article>
             <article class="card comments">
-              <div class="section-title"><h3>Обсуждение <span>3</span></h3><button>⌕</button></div>
-              <div class="comment"><span class="avatar small">МУ</span><div><b>Максим Умнов</b><time>Сегодня, 10:14</time><p>Образцы переданы в испытательный центр. Прикладываю сопроводительную документацию.</p><div class="file">PDF <span>Программа испытаний.pdf<small>2,4 МБ</small></span></div></div></div>
-              <div class="comment"><span class="avatar small blue-avatar">СК</span><div><b>Сергей Кашин</b><time>Сегодня, 11:02</time><p>Заявка принята в работу. Ожидаемый срок завершения — 12 августа.</p></div></div>
-              <label class="comment-input"><span class="avatar small">МУ</span><input placeholder="Оставьте комментарий…" /><button>➤</button></label>
+              <div class="section-title"><h3>Обсуждение</h3></div>
+              <p class="placeholder-copy">Комментарии появятся в следующем этапе разработки карточки.</p>
             </article>
           </div>
           <aside class="stack side-column">
@@ -253,8 +273,8 @@ onMounted(loadRequests)
               <p v-if="actionError" class="action-error">{{ actionError }}</p>
               <a class="help-link" href="/help/assignment.html" target="_blank">Инструкция по назначению и началу работы</a>
             </article>
-            <article class="card"><h3>Документы</h3><div class="file large">DOCX <span>Сопроводительная документация<small>1,8 МБ</small></span></div><button class="upload">＋ Добавить файл</button></article>
-            <article class="card timeline"><h3>Этапы</h3><p class="done">Заявка зарегистрирована<small>27 июля, 13:32</small></p><p class="active-step">Заявка в работе<small>Исполнитель назначен</small></p><p>Подготовка заключения</p><p>Контроль СБ</p><p>Завершение</p></article>
+            <article class="card"><h3>Документы</h3><p class="placeholder-copy">Вложения будут подключены отдельным безопасным контуром.</p></article>
+            <article class="card timeline"><h3>Последние события</h3><p v-for="event in (selected.history || []).slice(0, 4)" :key="event.id" class="done">{{ event.description }}<small>{{ event.occurredAt }}</small></p><p v-if="!selected.history?.length">История пока пуста</p></article>
           </aside>
         </div>
       </section>
@@ -279,7 +299,7 @@ onMounted(loadRequests)
 
     <div v-if="showHistory" class="overlay drawer-overlay" @click.self="showHistory = false">
       <aside class="drawer"><div class="modal-head"><h2>История изменений</h2><button @click="showHistory = false">×</button></div>
-        <div class="history"><div><b>Сергей Кашин</b><p>принял заявку в работу</p><time>27.07.2026, 14:08</time></div><div><b>Руководитель ИЦ</b><p>назначил исполнителя: Сергей Кашин</p><time>27.07.2026, 13:48</time></div><div><b>Максим Умнов</b><p>создал заявку</p><time>27.07.2026, 13:32</time></div></div>
+        <div class="history"><div v-for="event in selected.history || []" :key="event.id"><b>{{ event.actor }}</b><p>{{ event.description }} · {{ event.ruleId }}</p><time>{{ event.occurredAt }}</time></div><p v-if="!selected.history?.length" class="placeholder-copy">История пока пуста.</p></div>
       </aside>
     </div>
   </div>

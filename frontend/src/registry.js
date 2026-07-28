@@ -35,6 +35,23 @@ export function fromApi(item) {
   }
 }
 
+const HISTORY_LABELS = {
+  create: 'создал(а) заявку',
+  import: 'импортировал(а) заявку',
+  assign_executor: 'назначил(а) исполнителя',
+  start: 'перевёл(а) заявку в работу',
+}
+
+export function historyFromApi(item) {
+  return {
+    id: `${item.kind}-${item.id}`,
+    actor: item.actorName,
+    description: HISTORY_LABELS[item.action] || item.action,
+    ruleId: item.ruleId,
+    occurredAt: new Date(item.occurredAt).toLocaleString('ru-RU'),
+  }
+}
+
 export function filterRequests(requests, { tab, query, status, currentUser }) {
   const normalizedQuery = query.toLowerCase()
   return requests.filter(item => {

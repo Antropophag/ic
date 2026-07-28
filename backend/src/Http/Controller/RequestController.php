@@ -50,6 +50,17 @@ final class RequestController extends Controller
         return ['items' => $this->repository()->findLatest($actorId)];
     }
 
+    /** @return array{item: array<string, mixed>, history: list<array<string, mixed>>} */
+    public function actionView(int $id): array
+    {
+        $actorId = (new CurrentUser())->id(Yii::$app->request);
+        try {
+            return $this->repository()->findDetails($id, $actorId);
+        } catch (RequestNotFound $error) {
+            throw new NotFoundHttpException($error->getMessage());
+        }
+    }
+
     /** @return array{items: list<array{id: int, displayName: string}>} */
     public function actionExecutors(): array
     {
