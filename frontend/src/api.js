@@ -81,4 +81,9 @@ export const requestApi = {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ lockVersion }),
   }),
+  setColor: (requestId, color, lockVersion) => request(`/api/v1/requests/${requestId}/color`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ color, lockVersion }),
+  }),
 }

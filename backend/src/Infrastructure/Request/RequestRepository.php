@@ -7,6 +7,7 @@ namespace App\Infrastructure\Request;
 use App\Application\Request\CreateRequestInput;
 use App\Domain\Request\CommentPolicy;
 use App\Domain\Request\AssignmentPolicy;
+use App\Domain\Request\ColorMarkPolicy;
 use App\Domain\Request\AssignmentTargetNotFound;
 use App\Domain\Request\ConcurrentRequestModification;
 use App\Domain\Request\ExpertAssignmentPolicy;
@@ -198,11 +199,15 @@ final class RequestRepository
     public function findLatest(int $actorId, int $limit = 50): array
     {
         return $this->db->createCommand(
-            'SELECT r.id, r.number, r.status, r.product_name, r.manufacturer, '
+            'SELECT r.id, r.number, r.status, r.color, r.product_name, r.manufacturer, '
             . 'r.supplier, r.sample_quantity, r.test_method, r.lock_version AS lockVersion, r.created_at, '
             . 'u.display_name AS initiator_name, u.department, '
             . 'executor.id AS executor_id, executor.display_name AS executor_name, '
             . 'expert.id AS expert_id, expert.display_name AS expert_name, '
+            . "(EXISTS(SELECT 1 FROM {{%users}} clu WHERE clu.id = :color_actor AND clu.is_active = 1) "
+            . 'AND EXISTS(SELECT 1 FROM {{%user_roles}} clr JOIN {{%roles}} clrole ON clrole.id = clr.role_id '
+            . "WHERE clr.user_id = :color_actor_role AND clrole.code IN ('ic_manager', 'laboratory_manager'))) "
+            . 'AS can_set_color, '
             . "(r.status = 'registered' AND EXISTS(SELECT 1 FROM {{%users}} aau "
             . 'WHERE aau.id = :active_assign_actor AND aau.is_active = 1) '
             . 'AND EXISTS(SELECT 1 FROM {{%user_roles}} aur '
@@ -237,6 +242,8 @@ final class RequestRepository
             . 'LEFT JOIN {{%users}} expert ON expert.id = current_expert.user_id '
             . 'ORDER BY r.number DESC LIMIT :limit',
             [
+                ':color_actor' => $actorId,
+                ':color_actor_role' => $actorId,
                 ':assign_actor' => $actorId,
                 ':active_assign_actor' => $actorId,
                 ':active_expert_actor' => $actorId,
@@ -256,11 +263,14 @@ final class RequestRepository
     public function findDetails(int $requestId, int $actorId): array
     {
         $item = $this->db->createCommand(
-            'SELECT r.id, r.number, r.status, r.product_name, r.manufacturer, '
+            'SELECT r.id, r.number, r.status, r.color, r.product_name, r.manufacturer, '
             . 'r.supplier, r.sample_quantity, r.test_method, r.lock_version AS lockVersion, '
             . 'r.created_at, r.updated_at, u.display_name AS initiator_name, u.department, '
             . 'executor.id AS executor_id, executor.display_name AS executor_name, '
             . 'expert.id AS expert_id, expert.display_name AS expert_name, '
+            . 'EXISTS(SELECT 1 FROM {{%user_roles}} clr JOIN {{%roles}} clrole ON clrole.id = clr.role_id '
+            . "WHERE clr.user_id = :color_actor AND clrole.code IN ('ic_manager', 'laboratory_manager')) "
+            . 'AS can_set_color, '
             . "(r.status = 'registered' AND EXISTS(SELECT 1 FROM {{%user_roles}} aur "
             . 'JOIN {{%roles}} ar ON ar.id = aur.role_id '
             . "WHERE aur.user_id = :assign_actor AND ar.code IN ('ic_manager', 'laboratory_manager'))) "
@@ -302,6 +312,7 @@ final class RequestRepository
             [
                 ':request_id' => $requestId,
                 ':actor_id' => $actorId,
+                ':color_actor' => $actorId,
                 ':assign_actor' => $actorId,
                 ':expert_actor' => $actorId,
                 ':start_manager' => $actorId,
@@ -692,6 +703,73 @@ final class RequestRepository
             'actor_id' => $actorId,
             'rule_id' => $ruleId,
             'payload_json' => json_encode(['executor_id' => $executorId], JSON_THROW_ON_ERROR),
+            'created_at' => gmdate('Y-m-d H:i:s.u'),
+        ])->execute();
+    }
+
+    /** @return array{requestId: int, color: string, lockVersion: int} */
+    public function setColor(int $requestId, string $color, int $expectedLockVersion, int $actorId): array
+    {
+        $transaction = $this->db->beginTransaction();
+        try {
+            $request = $this->db->createCommand(
+                'SELECT lock_version FROM {{%requests}} WHERE id = :id FOR UPDATE',
+                [':id' => $requestId],
+            )->queryOne();
+            if ($request === false) {
+                throw new RequestNotFound('Request not found');
+            }
+            if ((int) $request['lock_version'] !== $expectedLockVersion) {
+                throw new ConcurrentRequestModification();
+            }
+
+            (new ColorMarkPolicy())->assertCanSetColor(
+                $this->rolesFor($actorId),
+                $this->isActiveUser($actorId),
+            );
+
+            $now = gmdate('Y-m-d H:i:s.u');
+            $nextLockVersion = $expectedLockVersion + 1;
+            $this->db->createCommand()->update(
+                '{{%requests}}',
+                ['color' => $color, 'lock_version' => $nextLockVersion, 'updated_at' => $now],
+                ['id' => $requestId],
+            )->execute();
+            $this->db->createCommand()->insert('{{%audit_events}}', [
+                'event_type' => 'request.color_marked',
+                'entity_type' => 'request',
+                'entity_id' => $requestId,
+                'actor_id' => $actorId,
+                'rule_id' => 'WF-009',
+                'payload_json' => json_encode(['color' => $color], JSON_THROW_ON_ERROR),
+                'created_at' => $now,
+            ])->execute();
+            $transaction->commit();
+
+            return ['requestId' => $requestId, 'color' => $color, 'lockVersion' => $nextLockVersion];
+        } catch (\Throwable $error) {
+            $transaction->rollBack();
+            throw $error;
+        }
+    }
+
+    public function recordRejectedColor(int $requestId, int $actorId, string $ruleId): void
+    {
+        $actorExists = $this->db->createCommand(
+            'SELECT 1 FROM {{%users}} WHERE id = :id',
+            [':id' => $actorId],
+        )->queryScalar();
+        if ($actorExists === false) {
+            return;
+        }
+
+        $this->db->createCommand()->insert('{{%audit_events}}', [
+            'event_type' => 'request.color_mark_denied',
+            'entity_type' => 'request',
+            'entity_id' => $requestId,
+            'actor_id' => $actorId,
+            'rule_id' => $ruleId,
+            'payload_json' => json_encode([], JSON_THROW_ON_ERROR),
             'created_at' => gmdate('Y-m-d H:i:s.u'),
         ])->execute();
     }

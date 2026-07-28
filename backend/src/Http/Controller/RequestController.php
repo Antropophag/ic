@@ -10,10 +10,12 @@ use App\Application\Request\AssignExecutorInput;
 use App\Application\Request\AssignExpertInput;
 use App\Application\Request\PublishOpinionInput;
 use App\Application\Request\SecurityDecisionInput;
+use App\Application\Request\SetColorInput;
 use App\Application\Request\StartRequestInput;
 use App\Domain\Request\AssignmentDenied;
 use App\Domain\Request\AssignmentTargetNotFound;
 use App\Domain\Request\AttachmentDenied;
+use App\Domain\Request\ColorMarkDenied;
 use App\Domain\Request\ConcurrentRequestModification;
 use App\Domain\Request\ExpertAssignmentDenied;
 use App\Domain\Request\CommentDenied;
@@ -257,6 +259,31 @@ final class RequestController extends Controller
     }
 
     /** @return array<string, mixed> */
+    public function actionSetColor(int $id): array
+    {
+        $input = new SetColorInput();
+        $input->load(Yii::$app->request->bodyParams, '');
+        if (!$input->validate()) {
+            Yii::$app->response->statusCode = 422;
+            return ['errors' => $input->getErrors()];
+        }
+
+        $actorId = (new CurrentUser())->id(Yii::$app->request);
+
+        try {
+            return $this->repository()->setColor($id, (string) $input->color, (int) $input->lockVersion, $actorId);
+        } catch (RequestNotFound $error) {
+            throw new NotFoundHttpException($error->getMessage());
+        } catch (ColorMarkDenied $error) {
+            $this->recordRejectedColorSafely($id, $actorId, $error->ruleId);
+            throw new ForbiddenHttpException($error->getMessage());
+        } catch (ConcurrentRequestModification $error) {
+            $this->recordRejectedColorSafely($id, $actorId, $error->ruleId);
+            throw new ConflictHttpException($error->getMessage());
+        }
+    }
+
+    /** @return array<string, mixed> */
     public function actionAssignExecutor(int $id): array
     {
         $input = new AssignExecutorInput();
@@ -417,6 +444,21 @@ final class RequestController extends Controller
         } catch (\Throwable $auditError) {
             Yii::error([
                 'message' => 'Не удалось записать аудит отклонённого запуска заявки.',
+                'requestId' => $requestId,
+                'actorId' => $actorId,
+                'ruleId' => $ruleId,
+                'exception' => $auditError,
+            ], __METHOD__);
+        }
+    }
+
+    private function recordRejectedColorSafely(int $requestId, int $actorId, string $ruleId): void
+    {
+        try {
+            $this->repository()->recordRejectedColor($requestId, $actorId, $ruleId);
+        } catch (\Throwable $auditError) {
+            Yii::error([
+                'message' => 'Не удалось записать аудит отклонённой цветовой метки.',
                 'requestId' => $requestId,
                 'actorId' => $actorId,
                 'ruleId' => $ruleId,
