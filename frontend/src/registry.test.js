@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { filterRequests, fromApi, historyFromApi } from './registry'
+import { commentFromApi, filterRequests, fromApi, historyFromApi } from './registry'
 
 const registered = {
   id: 4,
@@ -18,6 +18,7 @@ const registered = {
   executor_name: 'Сергей Кашин',
   can_assign_executor: 1,
   can_start: 1,
+  can_comment: 1,
 }
 
 it('maps the API contract to a registry row', () => {
@@ -31,6 +32,7 @@ it('maps the API contract to a registry row', () => {
     lockVersion: 3,
     canAssignExecutor: true,
     canStart: true,
+    canComment: true,
   })
 })
 
@@ -60,6 +62,12 @@ it('maps a safe history event without audit payload', () => {
     description: 'перевёл(а) заявку в работу',
     ruleId: 'WF-004',
   })
+})
+
+it('maps a server-authored comment', () => {
+  expect(commentFromApi({
+    id: '12', authorName: 'Иван Иванов', body: 'Готово', createdAt: '2026-07-28T10:00:00Z',
+  })).toMatchObject({ id: 12, author: 'Иван Иванов', body: 'Готово' })
 })
 
 describe('registry filters', () => {

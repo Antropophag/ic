@@ -2,7 +2,7 @@
 import { computed, onMounted, reactive, ref } from 'vue'
 import { requestApi } from './api'
 import { createLatestRequestGuard } from './latestRequestGuard'
-import { ACTIVE_STATUSES, filterRequests, fromApi, historyFromApi } from './registry'
+import { ACTIVE_STATUSES, commentFromApi, filterRequests, fromApi, historyFromApi } from './registry'
 
 const activeTab = ref('active')
 const query = ref('')
@@ -15,9 +15,13 @@ const actionError = ref('')
 const actionLoading = ref(false)
 const detailLoading = ref(false)
 const detailError = ref('')
+const commentDraft = ref('')
+const commentLoading = ref(false)
+const commentError = ref('')
 const executors = ref([])
 const executorChoice = ref('')
 const detailRequestGuard = createLatestRequestGuard()
+const commentRequestGuard = createLatestRequestGuard()
 const draft = reactive({
   productName: '', manufacturer: '', supplier: '', sampleQuantity: 1, testMethod: '',
 })
@@ -57,6 +61,7 @@ async function loadRequestDetails(item) {
     selected.value = {
       ...fromApi(result.item),
       history: result.history.map(historyFromApi),
+      comments: result.comments.map(commentFromApi),
     }
     executorChoice.value = selected.value.executorId || ''
   } catch (error) {
@@ -72,6 +77,10 @@ async function loadRequestDetails(item) {
 }
 
 async function openRequest(item) {
+  commentRequestGuard.invalidate()
+  commentLoading.value = false
+  commentError.value = ''
+  commentDraft.value = ''
   showHistory.value = false
   actionError.value = ''
   await loadRequestDetails(item)
@@ -79,9 +88,45 @@ async function openRequest(item) {
 
 function closeRequest() {
   detailRequestGuard.invalidate()
+  commentRequestGuard.invalidate()
   selected.value = null
   detailLoading.value = false
   detailError.value = ''
+  commentLoading.value = false
+  commentError.value = ''
+}
+
+async function addComment() {
+  if (!commentDraft.value.trim()) {
+    commentError.value = 'Введите текст комментария.'
+    return
+  }
+  commentLoading.value = true
+  commentError.value = ''
+  const requestId = selected.value.backendId
+  const requestToken = commentRequestGuard.begin(requestId)
+  try {
+    const result = await requestApi.addComment(requestId, commentDraft.value)
+    if (!commentRequestGuard.isCurrent(requestToken, selected.value?.backendId)) return
+    selected.value = {
+      ...selected.value,
+      comments: [...(selected.value.comments || []), commentFromApi(result)],
+    }
+    commentDraft.value = ''
+  } catch (error) {
+    if (!commentRequestGuard.isCurrent(requestToken, selected.value?.backendId)) return
+    if (error.status === 422) {
+      commentError.value = 'Комментарий пуст или превышает допустимый размер.'
+    } else if (error.status === 409) {
+      commentError.value = 'На текущем этапе новые комментарии запрещены.'
+    } else {
+      commentError.value = 'Не удалось добавить комментарий.'
+    }
+  } finally {
+    if (commentRequestGuard.isCurrent(requestToken, selected.value?.backendId)) {
+      commentLoading.value = false
+    }
+  }
 }
 
 async function loadRequests(rethrow = false) {
@@ -281,8 +326,12 @@ onMounted(loadRequests)
               </dl>
             </article>
             <article class="card comments">
-              <div class="section-title"><h3>Обсуждение</h3></div>
-              <p class="placeholder-copy">Комментарии появятся в следующем этапе разработки карточки.</p>
+              <div class="section-title"><h3>Обсуждение <span>{{ selected.comments?.length || 0 }}</span></h3></div>
+              <div v-for="comment in selected.comments || []" :key="comment.id" class="comment"><span class="avatar small">●</span><div><b>{{ comment.author }}</b><time>{{ comment.createdAt }}</time><p>{{ comment.body }}</p></div></div>
+              <p v-if="!selected.comments?.length" class="placeholder-copy">Комментариев пока нет.</p>
+              <form v-if="selected.canComment" class="comment-input" @submit.prevent="addComment"><span class="avatar small">МУ</span><input v-model="commentDraft" :disabled="commentLoading" maxlength="10000" placeholder="Оставьте комментарий…" /><button :disabled="commentLoading">➤</button></form>
+              <p v-else class="placeholder-copy">На текущем этапе новые комментарии недоступны.</p>
+              <p v-if="commentError" class="action-error">{{ commentError }}</p>
             </article>
           </div>
           <aside class="stack side-column">

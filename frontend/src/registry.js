@@ -30,6 +30,7 @@ export function fromApi(item) {
     lockVersion: Number(item.lockVersion),
     canAssignExecutor: Boolean(Number(item.can_assign_executor)),
     canStart: Boolean(Number(item.can_start)) && item.status === 'registered',
+    canComment: Boolean(Number(item.can_comment)),
     status: STATUS_LABELS[item.status] || item.status,
     tone: STATUS_TONES[item.status] || 'blue',
   }
@@ -49,6 +50,15 @@ export function historyFromApi(item) {
     description: HISTORY_LABELS[item.action] || item.action,
     ruleId: item.ruleId,
     occurredAt: new Date(item.occurredAt).toLocaleString('ru-RU'),
+  }
+}
+
+export function commentFromApi(item) {
+  return {
+    id: Number(item.id),
+    author: item.authorName,
+    body: item.body,
+    createdAt: new Date(item.createdAt).toLocaleString('ru-RU'),
   }
 }
 

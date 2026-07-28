@@ -5,11 +5,13 @@ declare(strict_types=1);
 namespace App\Http\Controller;
 
 use App\Application\Request\CreateRequestInput;
+use App\Application\Request\AddCommentInput;
 use App\Application\Request\AssignExecutorInput;
 use App\Application\Request\StartRequestInput;
 use App\Domain\Request\AssignmentDenied;
 use App\Domain\Request\AssignmentTargetNotFound;
 use App\Domain\Request\ConcurrentRequestModification;
+use App\Domain\Request\CommentDenied;
 use App\Domain\Request\RequestNotFound;
 use App\Domain\Request\StartDenied;
 use App\Domain\Request\TransitionDenied;
@@ -50,7 +52,7 @@ final class RequestController extends Controller
         return ['items' => $this->repository()->findLatest($actorId)];
     }
 
-    /** @return array{item: array<string, mixed>, history: list<array<string, mixed>>} */
+    /** @return array{item: array<string, mixed>, history: list<array<string, mixed>>, comments: list<array<string, mixed>>} */
     public function actionView(int $id): array
     {
         $actorId = (new CurrentUser())->id(Yii::$app->request);
@@ -58,6 +60,31 @@ final class RequestController extends Controller
             return $this->repository()->findDetails($id, $actorId);
         } catch (RequestNotFound $error) {
             throw new NotFoundHttpException($error->getMessage());
+        }
+    }
+
+    /** @return array<string, mixed> */
+    public function actionAddComment(int $id): array
+    {
+        $input = new AddCommentInput();
+        $input->load(Yii::$app->request->bodyParams, '');
+        if (!$input->validate()) {
+            Yii::$app->response->statusCode = 422;
+            return ['errors' => $input->getErrors()];
+        }
+
+        try {
+            $comment = $this->repository()->addComment(
+                $id,
+                (new CurrentUser())->id(Yii::$app->request),
+                (string) $input->body,
+            );
+            Yii::$app->response->statusCode = 201;
+            return $comment;
+        } catch (RequestNotFound $error) {
+            throw new NotFoundHttpException($error->getMessage());
+        } catch (CommentDenied $error) {
+            throw new ConflictHttpException($error->getMessage());
         }
     }
 

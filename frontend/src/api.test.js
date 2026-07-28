@@ -27,6 +27,17 @@ it('loads one request card with its history', async () => {
   expect(fetchMock).toHaveBeenCalledWith('/api/v1/requests/7', expect.any(Object))
 })
 
+it('adds a comment as JSON', async () => {
+  const fetchMock = vi.fn().mockResolvedValue(new Response('{}', { status: 201 }))
+  vi.stubGlobal('fetch', fetchMock)
+
+  await requestApi.addComment(7, 'Текст')
+  expect(fetchMock).toHaveBeenCalledWith('/api/v1/requests/7/comments', expect.objectContaining({
+    method: 'POST',
+    body: JSON.stringify({ body: 'Текст' }),
+  }))
+})
+
 it('sends creation data as JSON', async () => {
   const fetchMock = vi.fn().mockResolvedValue(new Response('{}', { status: 201 }))
   vi.stubGlobal('fetch', fetchMock)
