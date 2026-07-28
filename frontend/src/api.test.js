@@ -1,8 +1,10 @@
 import { afterEach, expect, it, vi } from 'vitest'
 import { requestApi } from './api'
+import { setDevUserId } from './devUsers'
 
 afterEach(() => {
   vi.unstubAllGlobals()
+  setDevUserId(1)
 })
 
 it('loads the registry as JSON', async () => {
@@ -168,4 +170,16 @@ it('uses a fallback message for a non-JSON server error', async () => {
   vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response('broken', { status: 500 })))
 
   await expect(requestApi.list()).rejects.toThrow('Ошибка обращения к серверу')
+})
+
+it('sends the currently selected dev user as the actor header', async () => {
+  const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({ items: [] }), { status: 200 }))
+  vi.stubGlobal('fetch', fetchMock)
+  setDevUserId(4)
+
+  await requestApi.list()
+
+  expect(fetchMock).toHaveBeenCalledWith('/api/v1/requests', expect.objectContaining({
+    headers: expect.objectContaining({ 'X-Dev-User-ID': '4' }),
+  }))
 })

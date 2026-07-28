@@ -1,6 +1,7 @@
 <script setup>
 import { computed, onMounted, reactive, ref } from 'vue'
 import { requestApi } from './api'
+import { DEV_USERS, getDevUserId, setDevUserId } from './devUsers'
 import { createLatestRequestGuard } from './latestRequestGuard'
 import { ACTIVE_STATUSES, canSubmitComment, commentFromApi, documentFromApi, filterRequests, fromApi, historyFromApi, withoutStaleActions } from './registry'
 
@@ -43,9 +44,22 @@ const documentRequestGuard = createLatestRequestGuard()
 const reportRequestGuard = createLatestRequestGuard()
 const opinionRequestGuard = createLatestRequestGuard()
 const securityRequestGuard = createLatestRequestGuard()
+const registryRequestGuard = createLatestRequestGuard()
 const draft = reactive({
   productName: '', manufacturer: '', supplier: '', sampleQuantity: 1, testMethod: '',
 })
+const devUserId = ref(getDevUserId())
+const currentProfile = computed(() => DEV_USERS.find(user => user.id === devUserId.value) ?? DEV_USERS[0])
+const currentInitials = computed(() => currentProfile.value.displayName
+  .split(' ').map(part => part[0]).join('').slice(0, 2).toUpperCase())
+
+function switchDevUser(rawId) {
+  const id = Number(rawId)
+  setDevUserId(id)
+  devUserId.value = id
+  selected.value = null
+  loadRequests()
+}
 
 const requests = ref([
   { id: '000146', date: '27.07.2026', initiator: 'Максим Умнов', department: 'Бюро приводной техники', product: 'Лебёдка Furder VT40K', supplier: 'ООО «Вектор Технологий»', executor: 'С. И. Кашин', status: 'Заявка зарегистрирована', tone: 'blue' },
@@ -59,14 +73,14 @@ const requests = ref([
 const tabs = computed(() => [
   { id: 'active', label: 'Активные заявки', count: requests.value.filter(item => ACTIVE_STATUSES.includes(item.status)).length },
   { id: 'all', label: 'Все заявки', count: requests.value.length },
-  { id: 'mine', label: 'Мои заявки', count: requests.value.filter(item => item.initiator === 'Максим Умнов').length },
+  { id: 'mine', label: 'Мои заявки', count: requests.value.filter(item => item.initiator === currentProfile.value.displayName).length },
 ])
 const statuses = computed(() => [...new Set(requests.value.map(item => item.status))])
 const filtered = computed(() => filterRequests(requests.value, {
   tab: activeTab.value,
   query: query.value,
   status: statusFilter.value,
-  currentUser: 'Максим Умнов',
+  currentUser: currentProfile.value.displayName,
 }))
 
 async function loadRequestDetails(item) {
@@ -284,10 +298,13 @@ async function loadOlderComments() {
 }
 
 async function loadRequests(rethrow = false) {
+  const requestToken = registryRequestGuard.begin(devUserId.value)
   try {
     const result = await requestApi.list()
+    if (!registryRequestGuard.isCurrent(requestToken, devUserId.value)) return
     requests.value = result.items.map(fromApi)
   } catch (error) {
+    if (!registryRequestGuard.isCurrent(requestToken, devUserId.value)) return
     // Макет остаётся доступным отдельно от backend; ошибка будет видна в Network.
     if (rethrow) throw error
   }
@@ -573,8 +590,16 @@ onMounted(loadRequests)
             <button>Справочники</button>
           </nav>
           <div class="profile">
-            <span class="avatar">МУ</span>
-            <span><b>Максим Умнов</b><small>Бюро приводной техники</small></span>
+            <span class="avatar">{{ currentInitials }}</span>
+            <span><b>{{ currentProfile.displayName }}</b><small>{{ currentProfile.position }}</small></span>
+            <select
+              class="dev-user-switch"
+              title="Временный переключатель пользователя до подключения LDAP"
+              :value="devUserId"
+              @change="switchDevUser($event.target.value)"
+            >
+              <option v-for="user in DEV_USERS" :key="user.id" :value="user.id">{{ user.displayName }} — {{ user.position }}</option>
+            </select>
           </div>
         </div>
       </header>
