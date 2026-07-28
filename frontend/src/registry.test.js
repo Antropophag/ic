@@ -80,12 +80,14 @@ it('disables every version-sensitive action before conflict recovery', () => {
     canPublishOpinion: true,
     canSecurityDecide: true,
     canStart: true,
+    canSetColor: true,
   })).toMatchObject({
     canAssignExecutor: false,
     canAssignExpert: false,
     canPublishOpinion: false,
     canSecurityDecide: false,
     canStart: false,
+    canSetColor: false,
   })
 })
 

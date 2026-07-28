@@ -64,6 +64,7 @@ export function withoutStaleActions(item) {
     canPublishOpinion: false,
     canSecurityDecide: false,
     canStart: false,
+    canSetColor: false,
   }
 }
 

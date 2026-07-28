@@ -47,6 +47,7 @@ const reportRequestGuard = createLatestRequestGuard()
 const opinionRequestGuard = createLatestRequestGuard()
 const securityRequestGuard = createLatestRequestGuard()
 const registryRequestGuard = createLatestRequestGuard()
+const colorRequestGuard = createLatestRequestGuard()
 const draft = reactive({
   productName: '', manufacturer: '', supplier: '', sampleQuantity: 1, testMethod: '',
 })
@@ -127,6 +128,7 @@ async function openRequest(item) {
   reportRequestGuard.invalidate()
   opinionRequestGuard.invalidate()
   securityRequestGuard.invalidate()
+  colorRequestGuard.invalidate()
   commentLoading.value = false
   commentError.value = ''
   commentDraft.value = ''
@@ -155,6 +157,7 @@ function closeRequest() {
   reportRequestGuard.invalidate()
   opinionRequestGuard.invalidate()
   securityRequestGuard.invalidate()
+  colorRequestGuard.invalidate()
   selected.value = null
   detailLoading.value = false
   detailError.value = ''
@@ -411,17 +414,20 @@ async function recoverConflict(requestId, message) {
 
 async function setColorMark(color) {
   if (colorLoading.value || color === selected.value.color) return
+  const requestId = selected.value.backendId
+  const requestToken = colorRequestGuard.begin(requestId)
   colorLoading.value = true
   colorError.value = ''
-  const requestId = selected.value.backendId
   try {
     await requestApi.setColor(requestId, color, selected.value.lockVersion)
+    if (!colorRequestGuard.isCurrent(requestToken, selected.value?.backendId)) return
     try {
       await refreshSelected(requestId)
     } catch {
       colorError.value = 'Метка сохранена, но обновить карточку не удалось.'
     }
   } catch (error) {
+    if (!colorRequestGuard.isCurrent(requestToken, selected.value?.backendId)) return
     if (error.status === 409) {
       await recoverConflict(requestId, 'Заявка уже изменена.')
     } else {
@@ -430,7 +436,9 @@ async function setColorMark(color) {
         : 'Не удалось сохранить цветовую метку. Повторите попытку.'
     }
   } finally {
-    colorLoading.value = false
+    if (colorRequestGuard.isCurrent(requestToken, selected.value?.backendId)) {
+      colorLoading.value = false
+    }
   }
 }
 
