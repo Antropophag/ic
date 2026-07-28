@@ -21,6 +21,7 @@ return yii\helpers\ArrayHelper::merge($common, [
                 'GET api/v1/requests' => 'request/index',
                 'POST api/v1/requests' => 'request/create',
                 'POST api/v1/requests/<id:\\d+>/executor' => 'request/assign-executor',
+                'POST api/v1/requests/<id:\\d+>/start' => 'request/start',
             ],
         ],
     ],

@@ -6,13 +6,19 @@ namespace App\Http\Controller;
 
 use App\Application\Request\CreateRequestInput;
 use App\Application\Request\AssignExecutorInput;
+use App\Application\Request\StartRequestInput;
 use App\Domain\Request\AssignmentDenied;
 use App\Domain\Request\AssignmentTargetNotFound;
+use App\Domain\Request\ConcurrentRequestModification;
+use App\Domain\Request\RequestNotFound;
+use App\Domain\Request\StartDenied;
+use App\Domain\Request\TransitionDenied;
 use App\Infrastructure\Identity\CurrentUser;
 use App\Infrastructure\Request\RequestRepository;
 use Yii;
 use yii\rest\Controller;
 use yii\web\Response;
+use yii\web\ConflictHttpException;
 use yii\web\ForbiddenHttpException;
 use yii\web\NotFoundHttpException;
 
@@ -104,6 +110,45 @@ final class RequestController extends Controller
             }
 
             throw new ForbiddenHttpException($error->getMessage());
+        }
+    }
+
+    /** @return array<string, mixed> */
+    public function actionStart(int $id): array
+    {
+        $input = new StartRequestInput();
+        $input->load(Yii::$app->request->bodyParams, '');
+        if (!$input->validate()) {
+            Yii::$app->response->statusCode = 422;
+            return ['errors' => $input->getErrors()];
+        }
+
+        $actorId = (new CurrentUser())->id(Yii::$app->request);
+        try {
+            return $this->repository()->startRequest($id, (int) $input->lockVersion, $actorId);
+        } catch (RequestNotFound $error) {
+            throw new NotFoundHttpException($error->getMessage());
+        } catch (StartDenied $error) {
+            $this->recordRejectedStartSafely($id, $actorId, $error->ruleId);
+            throw new ForbiddenHttpException($error->getMessage());
+        } catch (TransitionDenied | ConcurrentRequestModification $error) {
+            $this->recordRejectedStartSafely($id, $actorId, $error->ruleId);
+            throw new ConflictHttpException($error->getMessage());
+        }
+    }
+
+    private function recordRejectedStartSafely(int $requestId, int $actorId, string $ruleId): void
+    {
+        try {
+            $this->repository()->recordRejectedStart($requestId, $actorId, $ruleId);
+        } catch (\Throwable $auditError) {
+            Yii::error([
+                'message' => 'Не удалось записать аудит отклонённого запуска заявки.',
+                'requestId' => $requestId,
+                'actorId' => $actorId,
+                'ruleId' => $ruleId,
+                'exception' => $auditError,
+            ], __METHOD__);
         }
     }
 

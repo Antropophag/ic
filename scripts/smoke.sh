@@ -60,8 +60,28 @@ denied_status=$(curl --silent --output /dev/null --write-out '%{http_code}' \
   exit 1
 }
 
+started=$(curl --fail --silent --show-error \
+  --request POST \
+  --header 'X-Dev-User-ID: 2' \
+  --header 'Content-Type: application/json' \
+  --data '{"lockVersion":1}' \
+  "$base_url/api/v1/requests/$request_id/start")
+printf '%s' "$started" | grep '"status":"in_progress"' >/dev/null
+printf '%s' "$started" | grep '"lockVersion":2' >/dev/null
+
+stale_status=$(curl --silent --output /dev/null --write-out '%{http_code}' \
+  --request POST \
+  --header "X-Dev-User-ID: $dev_user_id" \
+  --header 'Content-Type: application/json' \
+  --data '{"lockVersion":1}' \
+  "$base_url/api/v1/requests/$request_id/start")
+[ "$stale_status" = '409' ] || {
+  echo "Expected stale start status 409, got $stale_status" >&2
+  exit 1
+}
+
 curl --fail --silent --show-error \
   --header "X-Dev-User-ID: $dev_user_id" \
   "$base_url/api/v1/requests" | grep "$marker" >/dev/null
 
-echo "Smoke test passed: health, validation, creation, assignment and registry."
+echo "Smoke test passed: health, validation, creation, assignment, start and registry."

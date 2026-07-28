@@ -7,8 +7,13 @@ namespace App\Infrastructure\Request;
 use App\Application\Request\CreateRequestInput;
 use App\Domain\Request\AssignmentPolicy;
 use App\Domain\Request\AssignmentTargetNotFound;
+use App\Domain\Request\ConcurrentRequestModification;
+use App\Domain\Request\RequestAction;
+use App\Domain\Request\RequestNotFound;
 use App\Domain\Request\RequestStatus;
+use App\Domain\Request\RequestWorkflow;
 use App\Domain\Request\Role;
+use App\Domain\Request\StartRequestPolicy;
 use yii\db\Connection;
 
 final class RequestRepository
@@ -167,6 +172,113 @@ final class RequestRepository
         ])->execute();
     }
 
+    /** @return array{requestId: int, status: string, lockVersion: int, startedAt: string} */
+    public function startRequest(int $requestId, int $expectedLockVersion, int $actorId): array
+    {
+        $transaction = $this->db->beginTransaction();
+        try {
+            $request = $this->db->createCommand(
+                'SELECT status, lock_version FROM {{%requests}} WHERE id = :id',
+                [':id' => $requestId],
+            )->queryOne();
+            if ($request === false) {
+                throw new RequestNotFound('Request not found');
+            }
+
+            $currentLockVersion = (int) $request['lock_version'];
+            if ($currentLockVersion !== $expectedLockVersion) {
+                throw new ConcurrentRequestModification();
+            }
+
+            $roles = $this->rolesFor($actorId);
+            (new StartRequestPolicy())->assertCanStart(
+                $roles,
+                $this->isCurrentExecutor($requestId, $actorId),
+            );
+
+            $currentStatus = RequestStatus::from((string) $request['status']);
+            $targetStatus = (new RequestWorkflow())->transition(
+                $currentStatus,
+                RequestAction::Start,
+                $roles,
+            );
+            $nextLockVersion = $currentLockVersion + 1;
+            $now = gmdate('Y-m-d H:i:s.u');
+            $updated = $this->db->createCommand()->update(
+                '{{%requests}}',
+                [
+                    'status' => $targetStatus->value,
+                    'lock_version' => $nextLockVersion,
+                    'updated_at' => $now,
+                ],
+                [
+                    'id' => $requestId,
+                    'status' => $currentStatus->value,
+                    'lock_version' => $currentLockVersion,
+                ],
+            )->execute();
+            if ($updated !== 1) {
+                throw new ConcurrentRequestModification();
+            }
+
+            $this->db->createCommand()->insert('{{%request_transitions}}', [
+                'request_id' => $requestId,
+                'actor_id' => $actorId,
+                'from_status' => $currentStatus->value,
+                'to_status' => $targetStatus->value,
+                'action' => RequestAction::Start->value,
+                'rule_id' => 'WF-004',
+                'created_at' => $now,
+            ])->execute();
+            $this->db->createCommand()->insert('{{%audit_events}}', [
+                'event_type' => 'request.started',
+                'entity_type' => 'request',
+                'entity_id' => $requestId,
+                'actor_id' => $actorId,
+                'rule_id' => 'WF-004',
+                'payload_json' => json_encode([
+                    'from_status' => $currentStatus->value,
+                    'to_status' => $targetStatus->value,
+                    'lock_version' => $nextLockVersion,
+                ], JSON_THROW_ON_ERROR),
+                'created_at' => $now,
+            ])->execute();
+            $transaction->commit();
+
+            return [
+                'requestId' => $requestId,
+                'status' => $targetStatus->value,
+                'lockVersion' => $nextLockVersion,
+                'startedAt' => $now,
+            ];
+        } catch (\Throwable $error) {
+            $transaction->rollBack();
+            throw $error;
+        }
+    }
+
+    public function recordRejectedStart(int $requestId, int $actorId, string $ruleId): void
+    {
+        $participantsExist = $this->db->createCommand(
+            'SELECT COUNT(*) FROM {{%users}} u JOIN {{%requests}} r ON r.id = :request_id '
+            . 'WHERE u.id = :actor_id',
+            [':request_id' => $requestId, ':actor_id' => $actorId],
+        )->queryScalar();
+        if ((int) $participantsExist !== 1) {
+            return;
+        }
+
+        $this->db->createCommand()->insert('{{%audit_events}}', [
+            'event_type' => 'request.start_denied',
+            'entity_type' => 'request',
+            'entity_id' => $requestId,
+            'actor_id' => $actorId,
+            'rule_id' => $ruleId,
+            'payload_json' => json_encode([], JSON_THROW_ON_ERROR),
+            'created_at' => gmdate('Y-m-d H:i:s.u'),
+        ])->execute();
+    }
+
     /** @return list<Role> */
     private function rolesFor(int $userId): array
     {
@@ -180,6 +292,15 @@ final class RequestRepository
             static fn (string $code): ?Role => Role::tryFrom($code),
             $codes,
         )));
+    }
+
+    private function isCurrentExecutor(int $requestId, int $userId): bool
+    {
+        return $this->db->createCommand(
+            'SELECT 1 FROM {{%request_assignments}} WHERE request_id = :request_id '
+            . "AND assignment_type = 'executor' AND user_id = :user_id AND valid_to IS NULL",
+            [':request_id' => $requestId, ':user_id' => $userId],
+        )->queryScalar() !== false;
     }
 
     /** @return array<string, mixed> */
