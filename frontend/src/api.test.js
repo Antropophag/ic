@@ -18,6 +18,15 @@ it('loads the registry as JSON', async () => {
   }))
 })
 
+it('loads one request card with its history', async () => {
+  const payload = { item: { id: 7 }, history: [] }
+  const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify(payload), { status: 200 }))
+  vi.stubGlobal('fetch', fetchMock)
+
+  await expect(requestApi.get(7)).resolves.toEqual(payload)
+  expect(fetchMock).toHaveBeenCalledWith('/api/v1/requests/7', expect.any(Object))
+})
+
 it('sends creation data as JSON', async () => {
   const fetchMock = vi.fn().mockResolvedValue(new Response('{}', { status: 201 }))
   vi.stubGlobal('fetch', fetchMock)

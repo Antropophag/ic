@@ -76,6 +76,25 @@ started=$(curl --fail --silent --show-error \
 printf '%s' "$started" | grep '"status":"in_progress"' >/dev/null
 printf '%s' "$started" | grep '"lockVersion":3' >/dev/null
 
+details=$(curl --fail --silent --show-error \
+  --header "X-Dev-User-ID: $dev_user_id" \
+  "$base_url/api/v1/requests/$request_id")
+printf '%s' "$details" | grep "$marker" >/dev/null
+printf '%s' "$details" | grep '"action":"start"' >/dev/null
+printf '%s' "$details" | grep '"action":"assign_executor"' >/dev/null
+if printf '%s' "$details" | grep 'payload_json' >/dev/null; then
+  echo 'Request details must not expose audit payloads' >&2
+  exit 1
+fi
+
+hidden_status=$(curl --silent --output /dev/null --write-out '%{http_code}' \
+  --header 'X-Dev-User-ID: 999999' \
+  "$base_url/api/v1/requests/$request_id")
+[ "$hidden_status" = '404' ] || {
+  echo "Expected hidden request status 404, got $hidden_status" >&2
+  exit 1
+}
+
 stale_status=$(curl --silent --output /dev/null --write-out '%{http_code}' \
   --request POST \
   --header "X-Dev-User-ID: $dev_user_id" \
@@ -87,4 +106,4 @@ stale_status=$(curl --silent --output /dev/null --write-out '%{http_code}' \
   exit 1
 }
 
-echo "Smoke test passed: health, validation, creation, assignment, start and registry."
+echo "Smoke test passed: health, validation, creation, assignment, start, registry and request details."

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { filterRequests, fromApi } from './registry'
+import { filterRequests, fromApi, historyFromApi } from './registry'
 
 const registered = {
   id: 4,
@@ -43,6 +43,22 @@ it('hides the start action after the request leaves registered status', () => {
     status: 'Заявка в работе',
     tone: 'cyan',
     canStart: false,
+  })
+})
+
+it('maps a safe history event without audit payload', () => {
+  expect(historyFromApi({
+    id: 9,
+    kind: 'transition',
+    action: 'start',
+    actorName: 'Сергей Кашин',
+    ruleId: 'WF-004',
+    occurredAt: '2026-07-28T10:00:00Z',
+  })).toMatchObject({
+    id: 'transition-9',
+    actor: 'Сергей Кашин',
+    description: 'перевёл(а) заявку в работу',
+    ruleId: 'WF-004',
   })
 })
 

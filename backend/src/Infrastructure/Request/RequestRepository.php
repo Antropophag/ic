@@ -105,6 +105,62 @@ final class RequestRepository
         )->queryAll();
     }
 
+    /** @return array{item: array<string, mixed>, history: list<array<string, mixed>>} */
+    public function findDetails(int $requestId, int $actorId): array
+    {
+        $item = $this->db->createCommand(
+            'SELECT r.id, r.number, r.status, r.product_name, r.manufacturer, '
+            . 'r.supplier, r.sample_quantity, r.test_method, r.lock_version AS lockVersion, '
+            . 'r.created_at, r.updated_at, u.display_name AS initiator_name, u.department, '
+            . 'executor.id AS executor_id, executor.display_name AS executor_name, '
+            . "(r.status = 'registered' AND EXISTS(SELECT 1 FROM {{%user_roles}} aur "
+            . 'JOIN {{%roles}} ar ON ar.id = aur.role_id '
+            . "WHERE aur.user_id = :assign_actor AND ar.code IN ('ic_manager', 'laboratory_manager'))) "
+            . 'AS can_assign_executor, '
+            . "(r.status = 'registered' AND (EXISTS(SELECT 1 FROM {{%user_roles}} sur "
+            . 'JOIN {{%roles}} sr ON sr.id = sur.role_id '
+            . "WHERE sur.user_id = :start_manager AND sr.code IN ('ic_manager', 'laboratory_manager')) "
+            . 'OR (current_executor.user_id = :start_executor AND EXISTS(SELECT 1 '
+            . 'FROM {{%user_roles}} seur JOIN {{%roles}} ser ON ser.id = seur.role_id '
+            . "WHERE seur.user_id = :start_executor_role AND ser.code = 'ic_executor')))) AS can_start "
+            . 'FROM {{%requests}} r '
+            . 'JOIN {{%users}} viewer ON viewer.id = :actor_id AND viewer.is_active = 1 '
+            . 'JOIN {{%users}} u ON u.id = r.initiator_id '
+            . 'LEFT JOIN {{%request_assignments}} current_executor ON current_executor.request_id = r.id '
+            . "AND current_executor.assignment_type = 'executor' AND current_executor.valid_to IS NULL "
+            . 'LEFT JOIN {{%users}} executor ON executor.id = current_executor.user_id '
+            . 'WHERE r.id = :request_id',
+            [
+                ':request_id' => $requestId,
+                ':actor_id' => $actorId,
+                ':assign_actor' => $actorId,
+                ':start_manager' => $actorId,
+                ':start_executor' => $actorId,
+                ':start_executor_role' => $actorId,
+            ],
+        )->queryOne();
+        if ($item === false) {
+            throw new RequestNotFound('Request not found');
+        }
+
+        $history = $this->db->createCommand(
+            'SELECT t.id, \'transition\' AS kind, t.action, t.from_status AS fromStatus, '
+            . "t.to_status AS toStatus, t.rule_id AS ruleId, DATE_FORMAT(t.created_at, '%Y-%m-%dT%H:%i:%s.%fZ') AS occurredAt, "
+            . 'u.display_name AS actorName FROM {{%request_transitions}} t '
+            . 'JOIN {{%users}} u ON u.id = t.actor_id WHERE t.request_id = :transition_request_id '
+            . 'UNION ALL '
+            . 'SELECT a.id, \'assignment\' AS kind, \'assign_executor\' AS action, NULL, NULL, '
+            . "a.rule_id, DATE_FORMAT(a.created_at, '%Y-%m-%dT%H:%i:%s.%fZ'), u.display_name FROM {{%audit_events}} a "
+            . 'JOIN {{%users}} u ON u.id = a.actor_id '
+            . "WHERE a.entity_type = 'request' AND a.entity_id = :audit_request_id "
+            . "AND a.event_type = 'request.executor_assigned' "
+            . 'ORDER BY occurredAt DESC, kind DESC, id DESC',
+            [':transition_request_id' => $requestId, ':audit_request_id' => $requestId],
+        )->queryAll();
+
+        return ['item' => $item, 'history' => $history];
+    }
+
     /** @return list<array{id: int, displayName: string}> */
     public function findActiveExecutors(): array
     {

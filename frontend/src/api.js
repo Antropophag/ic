@@ -19,6 +19,7 @@ async function request(path, options = {}) {
 
 export const requestApi = {
   list: () => request('/api/v1/requests'),
+  get: requestId => request(`/api/v1/requests/${requestId}`),
   executors: () => request('/api/v1/executors'),
   create: (data) => request('/api/v1/requests', {
     method: 'POST',
