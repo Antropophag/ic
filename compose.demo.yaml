@@ -24,6 +24,19 @@ services:
       - document-data:/app/storage/documents
     restart: unless-stopped
 
+  scheduler:
+    image: shlz-test-registry-backend:demo
+    env_file: .env
+    depends_on:
+      mariadb:
+        condition: service_healthy
+    read_only: true
+    tmpfs:
+      - /tmp
+      - /app/runtime
+    command: ["sh", "-c", "while true; do php yii notification/send; sleep 60; done"]
+    restart: unless-stopped
+
   mariadb:
     image: mariadb:11.4.7-noble
     environment:
