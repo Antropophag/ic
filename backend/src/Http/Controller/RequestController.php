@@ -46,8 +46,15 @@ final class RequestController extends Controller
     /** @return array{items: list<array<string, mixed>>} */
     public function actionIndex(): array
     {
+        $actorId = (new CurrentUser())->id(Yii::$app->request);
+        return ['items' => $this->repository()->findLatest($actorId)];
+    }
+
+    /** @return array{items: list<array{id: int, displayName: string}>} */
+    public function actionExecutors(): array
+    {
         (new CurrentUser())->id(Yii::$app->request);
-        return ['items' => $this->repository()->findLatest()];
+        return ['items' => $this->repository()->findActiveExecutors()];
     }
 
     /** @return array<string, mixed> */

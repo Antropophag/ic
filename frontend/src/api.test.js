@@ -31,6 +31,30 @@ it('sends creation data as JSON', async () => {
   }))
 })
 
+it('assigns an executor and starts a request with optimistic locking', async () => {
+  const fetchMock = vi.fn().mockResolvedValue(new Response('{}', { status: 200 }))
+  vi.stubGlobal('fetch', fetchMock)
+
+  await requestApi.assignExecutor(7, 2)
+  await requestApi.start(7, 3)
+
+  expect(fetchMock).toHaveBeenNthCalledWith(1, '/api/v1/requests/7/executor', expect.objectContaining({
+    method: 'POST',
+    body: JSON.stringify({ executorId: 2 }),
+  }))
+  expect(fetchMock).toHaveBeenNthCalledWith(2, '/api/v1/requests/7/start', expect.objectContaining({
+    method: 'POST',
+    body: JSON.stringify({ lockVersion: 3 }),
+  }))
+})
+
+it('loads active executors from the server', async () => {
+  const payload = { items: [{ id: 2, displayName: 'Исполнитель' }] }
+  vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(JSON.stringify(payload), { status: 200 })))
+
+  await expect(requestApi.executors()).resolves.toEqual(payload)
+})
+
 it('exposes HTTP status and validation payload', async () => {
   const payload = { message: 'Validation failed', errors: { productName: ['Required'] } }
   vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(

@@ -19,6 +19,7 @@ return yii\helpers\ArrayHelper::merge($common, [
                 'GET health/live' => 'health/live',
                 'GET health/ready' => 'health/ready',
                 'GET api/v1/requests' => 'request/index',
+                'GET api/v1/executors' => 'request/executors',
                 'POST api/v1/requests' => 'request/create',
                 'POST api/v1/requests/<id:\\d+>/executor' => 'request/assign-executor',
                 'POST api/v1/requests/<id:\\d+>/start' => 'request/start',

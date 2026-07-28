@@ -8,10 +8,14 @@ export const ACTIVE_STATUSES = [
 
 const STATUS_LABELS = {
   registered: 'Заявка зарегистрирована',
+  in_progress: 'Заявка в работе',
 }
+
+const STATUS_TONES = { registered: 'blue', in_progress: 'cyan' }
 
 export function fromApi(item) {
   return {
+    backendId: Number(item.id),
     id: String(item.number).padStart(6, '0'),
     date: new Date(item.created_at).toLocaleDateString('ru-RU'),
     initiator: item.initiator_name,
@@ -21,9 +25,13 @@ export function fromApi(item) {
     supplier: item.supplier,
     sampleQuantity: item.sample_quantity,
     testMethod: item.test_method,
-    executor: 'Не назначен',
+    executor: item.executor_name || 'Не назначен',
+    executorId: item.executor_id ? Number(item.executor_id) : null,
+    lockVersion: Number(item.lockVersion),
+    canAssignExecutor: Boolean(Number(item.can_assign_executor)),
+    canStart: Boolean(Number(item.can_start)) && item.status === 'registered',
     status: STATUS_LABELS[item.status] || item.status,
-    tone: 'blue',
+    tone: STATUS_TONES[item.status] || 'blue',
   }
 }
 
