@@ -1,6 +1,7 @@
 <script setup>
 import { computed, onMounted, reactive, ref } from 'vue'
 import { requestApi } from './api'
+import { createLatestRequestGuard } from './latestRequestGuard'
 import { ACTIVE_STATUSES, filterRequests, fromApi, historyFromApi } from './registry'
 
 const activeTab = ref('active')
@@ -16,6 +17,7 @@ const detailLoading = ref(false)
 const detailError = ref('')
 const executors = ref([])
 const executorChoice = ref('')
+const detailRequestGuard = createLatestRequestGuard()
 const draft = reactive({
   productName: '', manufacturer: '', supplier: '', sampleQuantity: 1, testMethod: '',
 })
@@ -42,30 +44,44 @@ const filtered = computed(() => filterRequests(requests.value, {
   currentUser: 'Максим Умнов',
 }))
 
-async function openRequest(item) {
+async function loadRequestDetails(item) {
+  const requestToken = detailRequestGuard.begin(item.backendId)
   selected.value = item
-  showHistory.value = false
-  actionError.value = ''
   detailError.value = ''
   detailLoading.value = true
   executorChoice.value = item.executorId || ''
   if (item.canAssignExecutor && !executors.value.length) loadExecutors()
   try {
     const result = await requestApi.get(item.backendId)
+    if (!detailRequestGuard.isCurrent(requestToken, selected.value?.backendId)) return
     selected.value = {
       ...fromApi(result.item),
-      canAssignExecutor: item.canAssignExecutor,
-      canStart: item.canStart,
       history: result.history.map(historyFromApi),
     }
     executorChoice.value = selected.value.executorId || ''
   } catch (error) {
+    if (!detailRequestGuard.isCurrent(requestToken, selected.value?.backendId)) return
     detailError.value = error.status === 404
       ? 'Заявка не найдена или недоступна.'
       : 'Не удалось загрузить актуальную карточку заявки.'
   } finally {
-    detailLoading.value = false
+    if (detailRequestGuard.isCurrent(requestToken, selected.value?.backendId)) {
+      detailLoading.value = false
+    }
   }
+}
+
+async function openRequest(item) {
+  showHistory.value = false
+  actionError.value = ''
+  await loadRequestDetails(item)
+}
+
+function closeRequest() {
+  detailRequestGuard.invalidate()
+  selected.value = null
+  detailLoading.value = false
+  detailError.value = ''
 }
 
 async function loadRequests(rethrow = false) {
@@ -106,7 +122,13 @@ async function refreshSelected(requestId) {
     selected.value = { ...selected.value, canAssignExecutor: false, canStart: false }
   }
   await loadRequests(true)
-  selected.value = requests.value.find(item => item.backendId === requestId) || null
+  if (selected.value?.backendId !== requestId) return
+  const refreshed = requests.value.find(item => item.backendId === requestId) || null
+  if (!refreshed) {
+    closeRequest()
+    return
+  }
+  await loadRequestDetails(refreshed)
 }
 
 async function recoverConflict(requestId, message) {
@@ -240,7 +262,7 @@ onMounted(loadRequests)
 
       <section v-else class="page request-page">
         <div class="request-actions">
-          <button class="back" @click="selected = null">‹</button>
+          <button class="back" @click="closeRequest">‹</button>
           <span class="badge" :class="selected.tone">{{ selected.status }}</span>
           <button class="secondary" @click="showHistory = true">◷ История</button>
           <button class="primary">Действия ▾</button>
