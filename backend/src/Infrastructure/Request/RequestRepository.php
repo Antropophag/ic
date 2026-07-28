@@ -11,6 +11,7 @@ use App\Domain\Request\AssignmentTargetNotFound;
 use App\Domain\Request\ConcurrentRequestModification;
 use App\Domain\Request\ExpertAssignmentPolicy;
 use App\Domain\Request\RequestAction;
+use App\Domain\Request\RequestCreationPolicy;
 use App\Domain\Request\RequestNotFound;
 use App\Domain\Request\RequestStatus;
 use App\Domain\Request\RequestWorkflow;
@@ -30,6 +31,11 @@ final class RequestRepository
     {
         $transaction = $this->db->beginTransaction();
         try {
+            (new RequestCreationPolicy())->assertCanCreate(
+                $this->rolesFor($initiatorId),
+                $this->isActiveUser($initiatorId),
+            );
+
             // Отдельная строка-счётчик блокируется MariaDB и исключает выдачу
             // одинакового номера двумя параллельными запросами (REQ-002).
             $this->db->createCommand(
@@ -791,6 +797,23 @@ final class RequestRepository
             'event_type' => 'request.start_denied',
             'entity_type' => 'request',
             'entity_id' => $requestId,
+            'actor_id' => $actorId,
+            'rule_id' => $ruleId,
+            'payload_json' => json_encode([], JSON_THROW_ON_ERROR),
+            'created_at' => gmdate('Y-m-d H:i:s.u'),
+        ])->execute();
+    }
+
+    public function recordRejectedCreate(int $actorId, string $ruleId): void
+    {
+        if (!$this->isActiveUser($actorId) && $this->db->createCommand('SELECT 1 FROM {{%users}} WHERE id = :id', [':id' => $actorId])->queryScalar() === false) {
+            return;
+        }
+
+        $this->db->createCommand()->insert('{{%audit_events}}', [
+            'event_type' => 'request.create_denied',
+            'entity_type' => 'request_creation',
+            'entity_id' => $actorId,
             'actor_id' => $actorId,
             'rule_id' => $ruleId,
             'payload_json' => json_encode([], JSON_THROW_ON_ERROR),

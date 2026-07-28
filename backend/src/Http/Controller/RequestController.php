@@ -17,6 +17,7 @@ use App\Domain\Request\AttachmentDenied;
 use App\Domain\Request\ConcurrentRequestModification;
 use App\Domain\Request\ExpertAssignmentDenied;
 use App\Domain\Request\CommentDenied;
+use App\Domain\Request\RequestCreationDenied;
 use App\Domain\Request\RequestNotFound;
 use App\Domain\Request\ReportDenied;
 use App\Domain\Request\OpinionDenied;
@@ -243,10 +244,13 @@ final class RequestController extends Controller
             return ['errors' => $input->getErrors()];
         }
 
-        $request = $this->repository()->create(
-            $input,
-            (new CurrentUser())->id(Yii::$app->request),
-        );
+        $actorId = (new CurrentUser())->id(Yii::$app->request);
+        try {
+            $request = $this->repository()->create($input, $actorId);
+        } catch (RequestCreationDenied $error) {
+            $this->repository()->recordRejectedCreate($actorId, $error->ruleId);
+            throw new ForbiddenHttpException($error->getMessage());
+        }
         Yii::$app->response->statusCode = 201;
         Yii::$app->response->headers->set('Location', '/api/v1/requests/' . $request['id']);
         return $request;

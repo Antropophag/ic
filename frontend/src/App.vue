@@ -321,7 +321,9 @@ async function createRequest() {
   } catch (error) {
     createError.value = error.status === 422
       ? 'Проверьте обязательные поля формы.'
-      : 'Не удалось создать заявку. Повторите попытку.'
+      : error.status === 403
+        ? 'Сотрудники испытательного центра не могут подавать заявки.'
+        : 'Не удалось создать заявку. Повторите попытку.'
     createLoading.value = false
     return
   }

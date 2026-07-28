@@ -14,11 +14,12 @@ async function expectOk(response) {
 
 test('заявка проходит критический путь до согласования СБ', async ({ page, baseURL }) => {
   const marker = `E2E-${Date.now()}`
+  const initiator = await apiFor(baseURL, 3)
   const manager = await apiFor(baseURL, 1)
   const executor = await apiFor(baseURL, 2)
   const expert = await apiFor(baseURL, 4)
 
-  const created = await expectOk(await manager.post('/api/v1/requests', { data: {
+  const created = await expectOk(await initiator.post('/api/v1/requests', { data: {
     productName: marker,
     manufacturer: 'Тестовый производитель',
     supplier: 'Тестовый поставщик',
@@ -53,5 +54,5 @@ test('заявка проходит критический путь до сог�
   await expect(page.getByText('Заявка выполнена', { exact: true })).toBeVisible()
   await expect(page.getByRole('button', { name: 'Согласовать и завершить' })).toHaveCount(0)
 
-  await Promise.all([manager.dispose(), executor.dispose(), expert.dispose()])
+  await Promise.all([initiator.dispose(), manager.dispose(), executor.dispose(), expert.dispose()])
 })
