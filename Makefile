@@ -33,7 +33,8 @@ check:
 
 coverage:
 	mkdir -p backend/build/coverage
-	@if command -v php >/dev/null 2>&1 && php -r 'exit(extension_loaded("xdebug") || extension_loaded("pcov") ? 0 : 1);'; then \
+	@if command -v php >/dev/null 2>&1 && test -f backend/vendor/bin/phpunit && \
+		php -r 'exit(extension_loaded("xdebug") || extension_loaded("pcov") ? 0 : 1);'; then \
 		cd backend && XDEBUG_MODE=coverage php vendor/bin/phpunit --coverage-clover build/coverage/clover.xml; \
 	elif command -v docker >/dev/null 2>&1; then \
 		docker build --file docker/coverage.Dockerfile --tag shlz-test-registry-coverage . && \
