@@ -1,0 +1,15 @@
+extends: default
+
+ignore: |
+  backend/vendor/
+  frontend/node_modules/
+  frontend/coverage/
+  frontend/dist/
+  prototype/node_modules/
+  prototype/dist/
+
+rules:
+  document-start: disable
+  line-length: disable
+  truthy:
+    allowed-values: ['true', 'false', 'on']

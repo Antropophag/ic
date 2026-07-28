@@ -32,12 +32,14 @@ final class RequestController extends Controller
         return parent::beforeAction($action);
     }
 
+    /** @return array{items: list<array<string, mixed>>} */
     public function actionIndex(): array
     {
         (new CurrentUser())->id(Yii::$app->request);
         return ['items' => $this->repository()->findLatest()];
     }
 
+    /** @return array<string, mixed> */
     public function actionCreate(): array
     {
         $input = new CreateRequestInput();
