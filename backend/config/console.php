@@ -8,6 +8,7 @@ return yii\helpers\ArrayHelper::merge($common, [
     'controllerNamespace' => 'yii\\console\\controllers',
     'controllerMap' => [
         'dev' => App\Console\DevController::class,
+        'bitrix' => App\Console\BitrixController::class,
         'migrate' => [
             'class' => yii\console\controllers\MigrateController::class,
             'migrationPath' => '@app/migrations',
