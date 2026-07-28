@@ -242,8 +242,15 @@ final class RequestRepository
         ])->execute();
     }
 
+    // Реестр целиком грузится на клиент, где выполняются поиск, сортировка и
+    // пагинация (App.vue). Лимит — верхняя граница для ожидаемого объёма
+    // внутреннего корпоративного реестра, а не постраничная выдача; при
+    // устойчивом росте свыше нескольких сотен активных записей потребуется
+    // перейти на серверную пагинацию, поиск и фильтрацию (см. issue #59).
+    private const DEFAULT_LIST_LIMIT = 500;
+
     /** @return list<array<string, mixed>> */
-    public function findLatest(int $actorId, int $limit = 50): array
+    public function findLatest(int $actorId, int $limit = self::DEFAULT_LIST_LIMIT): array
     {
         return $this->db->createCommand(
             'SELECT r.id, r.number, r.status, r.color, r.product_name, r.manufacturer, '

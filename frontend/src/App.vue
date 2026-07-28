@@ -1,13 +1,16 @@
 <script setup>
-import { computed, onMounted, reactive, ref } from 'vue'
+import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { requestApi } from './api'
 import { DEV_USERS, getDevUserId, setDevUserId } from './devUsers'
 import { createLatestRequestGuard } from './latestRequestGuard'
-import { ACTIVE_STATUSES, REQUEST_COLORS, canSubmitComment, commentFromApi, documentFromApi, filterRequests, fromApi, historyFromApi, withoutStaleActions } from './registry'
+import { ACTIVE_STATUSES, REGISTRY_PAGE_SIZE, REQUEST_COLORS, canSubmitComment, commentFromApi, documentFromApi, filterRequests, fromApi, historyFromApi, paginate, withoutStaleActions } from './registry'
 
 const activeTab = ref('active')
 const query = ref('')
 const statusFilter = ref('')
+const sortDirection = ref('desc')
+const currentPage = ref(1)
+const pageSize = REGISTRY_PAGE_SIZE
 const selected = ref(null)
 const showCreate = ref(false)
 const showHistory = ref(false)
@@ -84,7 +87,18 @@ const filtered = computed(() => filterRequests(requests.value, {
   query: query.value,
   status: statusFilter.value,
   currentUser: currentProfile.value.displayName,
+  sortDirection: sortDirection.value,
 }))
+const paged = computed(() => paginate(filtered.value, currentPage.value))
+const pageNumbers = computed(() => Array.from({ length: paged.value.pageCount }, (_, i) => i + 1))
+
+watch([activeTab, query, statusFilter, sortDirection], () => {
+  currentPage.value = 1
+})
+
+function toggleSort() {
+  sortDirection.value = sortDirection.value === 'desc' ? 'asc' : 'desc'
+}
 
 async function loadRequestDetails(item) {
   const requestToken = detailRequestGuard.begin(item.backendId)
@@ -668,9 +682,9 @@ onMounted(loadRequests)
           </div>
           <div class="table-wrap">
             <table>
-              <thead><tr><th>№ заявки</th><th>Дата</th><th>Объект испытаний</th><th>Инициатор</th><th>Исполнитель</th><th>Статус</th><th></th></tr></thead>
+              <thead><tr><th class="sortable" @click="toggleSort">№ заявки {{ sortDirection === 'desc' ? '↓' : '↑' }}</th><th>Дата</th><th>Объект испытаний</th><th>Инициатор</th><th>Исполнитель</th><th>Статус</th><th></th></tr></thead>
               <tbody>
-                <tr v-for="item in filtered" :key="item.id" :class="'row-color-' + item.color" @click="openRequest(item)">
+                <tr v-for="item in paged.items" :key="item.id" :class="'row-color-' + item.color" @click="openRequest(item)">
                   <td class="number">{{ item.id }}</td><td>{{ item.date }}</td>
                   <td><b>{{ item.product }}</b><small>{{ item.supplier }}</small></td>
                   <td>{{ item.initiator }}<small>{{ item.department }}</small></td>
@@ -680,7 +694,14 @@ onMounted(loadRequests)
             </table>
             <div v-if="!filtered.length" class="empty"><div>⌕</div><h3>Ничего не найдено</h3><p>Измените запрос или очистите фильтры</p></div>
           </div>
-          <footer class="pagination"><span>1–{{ filtered.length }} из {{ filtered.length }}</span><span><button>‹</button><button class="current">1</button><button>2</button><button>3</button><button>›</button></span></footer>
+          <footer v-if="filtered.length" class="pagination">
+            <span>{{ (paged.page - 1) * pageSize + 1 }}–{{ Math.min(paged.page * pageSize, paged.total) }} из {{ paged.total }}</span>
+            <span>
+              <button :disabled="paged.page <= 1" @click="currentPage = paged.page - 1">‹</button>
+              <button v-for="pageNumber in pageNumbers" :key="pageNumber" :class="{ current: pageNumber === paged.page }" @click="currentPage = pageNumber">{{ pageNumber }}</button>
+              <button :disabled="paged.page >= paged.pageCount" @click="currentPage = paged.page + 1">›</button>
+            </span>
+          </footer>
         </div>
       </section>
 

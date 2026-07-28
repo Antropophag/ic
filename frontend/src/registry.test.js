@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { canSubmitComment, commentFromApi, documentFromApi, filterRequests, fromApi, historyFromApi, withoutStaleActions } from './registry'
+import { canSubmitComment, commentFromApi, documentFromApi, filterRequests, fromApi, historyFromApi, paginate, withoutStaleActions } from './registry'
 
 const registered = {
   id: 4,
@@ -182,5 +182,31 @@ describe('registry filters', () => {
   it('returns nothing when the query does not match', () => {
     expect(filterRequests(requests, { tab: 'all', query: 'нет такого', status: '', currentUser: '' }))
       .toEqual([])
+  })
+})
+
+describe('registry sorting and pagination', () => {
+  const byNumber = [1, 2, 3].map(backendId => ({ ...fromApi(registered), backendId, id: String(backendId).padStart(6, '0') }))
+
+  it('sorts by request number, newest first by default', () => {
+    expect(filterRequests(byNumber, { tab: 'all', query: '', status: '', currentUser: '' }).map(item => item.backendId))
+      .toEqual([3, 2, 1])
+  })
+
+  it('sorts ascending when requested', () => {
+    expect(filterRequests(byNumber, { tab: 'all', query: '', status: '', currentUser: '', sortDirection: 'asc' }).map(item => item.backendId))
+      .toEqual([1, 2, 3])
+  })
+
+  it('paginates a page of items and clamps an out-of-range page', () => {
+    const items = Array.from({ length: 25 }, (_, i) => i)
+
+    expect(paginate(items, 1, 10)).toEqual({ items: items.slice(0, 10), page: 1, pageCount: 3, total: 25 })
+    expect(paginate(items, 3, 10)).toEqual({ items: items.slice(20, 25), page: 3, pageCount: 3, total: 25 })
+    expect(paginate(items, 99, 10).page).toBe(3)
+  })
+
+  it('never returns a page below 1', () => {
+    expect(paginate([1, 2, 3], 0, 10).page).toBe(1)
   })
 })

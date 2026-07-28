@@ -120,12 +120,23 @@ export function documentFromApi(item) {
   }
 }
 
-export function filterRequests(requests, { tab, query, status, currentUser }) {
+export function filterRequests(requests, { tab, query, status, currentUser, sortDirection = 'desc' }) {
   const normalizedQuery = query.toLowerCase()
-  return requests.filter(item => {
+  const filtered = requests.filter(item => {
     if (tab === 'active' && !ACTIVE_STATUSES.includes(item.status)) return false
     if (tab === 'mine' && item.initiator !== currentUser) return false
     if (status && item.status !== status) return false
     return Object.values(item).join(' ').toLowerCase().includes(normalizedQuery)
   })
+  const direction = sortDirection === 'asc' ? 1 : -1
+  return [...filtered].sort((a, b) => direction * (a.backendId - b.backendId))
+}
+
+export const REGISTRY_PAGE_SIZE = 10
+
+export function paginate(items, page, pageSize = REGISTRY_PAGE_SIZE) {
+  const pageCount = Math.max(1, Math.ceil(items.length / pageSize))
+  const safePage = Math.min(Math.max(1, page), pageCount)
+  const start = (safePage - 1) * pageSize
+  return { items: items.slice(start, start + pageSize), page: safePage, pageCount, total: items.length }
 }
