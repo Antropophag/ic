@@ -9,6 +9,7 @@ use App\Domain\Request\CommentPolicy;
 use App\Domain\Request\AssignmentPolicy;
 use App\Domain\Request\AssignmentTargetNotFound;
 use App\Domain\Request\ConcurrentRequestModification;
+use App\Domain\Request\ExpertAssignmentPolicy;
 use App\Domain\Request\RequestAction;
 use App\Domain\Request\RequestNotFound;
 use App\Domain\Request\RequestStatus;
@@ -75,12 +76,18 @@ final class RequestRepository
             . 'r.supplier, r.sample_quantity, r.test_method, r.lock_version AS lockVersion, r.created_at, '
             . 'u.display_name AS initiator_name, u.department, '
             . 'executor.id AS executor_id, executor.display_name AS executor_name, '
+            . 'expert.id AS expert_id, expert.display_name AS expert_name, '
             . "(r.status = 'registered' AND EXISTS(SELECT 1 FROM {{%users}} aau "
             . 'WHERE aau.id = :active_assign_actor AND aau.is_active = 1) '
             . 'AND EXISTS(SELECT 1 FROM {{%user_roles}} aur '
             . 'JOIN {{%roles}} ar ON ar.id = aur.role_id '
             . "WHERE aur.user_id = :assign_actor AND ar.code IN ('ic_manager', 'laboratory_manager')) "
             . ') AS can_assign_executor, '
+            . "(r.status = 'opinion_preparation' AND EXISTS(SELECT 1 FROM {{%users}} eau "
+            . 'WHERE eau.id = :active_expert_actor AND eau.is_active = 1) '
+            . 'AND EXISTS(SELECT 1 FROM {{%user_roles}} eur JOIN {{%roles}} er ON er.id = eur.role_id '
+            . "WHERE eur.user_id = :expert_actor AND er.code IN ('ic_manager', 'laboratory_manager')) "
+            . ') AS can_assign_expert, '
             . "(r.status = 'registered' AND EXISTS(SELECT 1 FROM {{%users}} sau "
             . 'WHERE sau.id = :active_start_actor AND sau.is_active = 1) AND '
             . '(EXISTS(SELECT 1 FROM {{%user_roles}} sur '
@@ -99,10 +106,15 @@ final class RequestRepository
             . 'LEFT JOIN {{%request_assignments}} current_executor ON current_executor.request_id = r.id '
             . "AND current_executor.assignment_type = 'executor' AND current_executor.valid_to IS NULL "
             . 'LEFT JOIN {{%users}} executor ON executor.id = current_executor.user_id '
+            . 'LEFT JOIN {{%request_assignments}} current_expert ON current_expert.request_id = r.id '
+            . "AND current_expert.assignment_type = 'expert' AND current_expert.valid_to IS NULL "
+            . 'LEFT JOIN {{%users}} expert ON expert.id = current_expert.user_id '
             . 'ORDER BY r.number DESC LIMIT :limit',
             [
                 ':assign_actor' => $actorId,
                 ':active_assign_actor' => $actorId,
+                ':active_expert_actor' => $actorId,
+                ':expert_actor' => $actorId,
                 ':start_manager' => $actorId,
                 ':active_start_actor' => $actorId,
                 ':start_executor' => $actorId,
@@ -122,10 +134,15 @@ final class RequestRepository
             . 'r.supplier, r.sample_quantity, r.test_method, r.lock_version AS lockVersion, '
             . 'r.created_at, r.updated_at, u.display_name AS initiator_name, u.department, '
             . 'executor.id AS executor_id, executor.display_name AS executor_name, '
+            . 'expert.id AS expert_id, expert.display_name AS expert_name, '
             . "(r.status = 'registered' AND EXISTS(SELECT 1 FROM {{%user_roles}} aur "
             . 'JOIN {{%roles}} ar ON ar.id = aur.role_id '
             . "WHERE aur.user_id = :assign_actor AND ar.code IN ('ic_manager', 'laboratory_manager'))) "
             . 'AS can_assign_executor, '
+            . "(r.status = 'opinion_preparation' AND EXISTS(SELECT 1 FROM {{%user_roles}} eur "
+            . 'JOIN {{%roles}} er ON er.id = eur.role_id '
+            . "WHERE eur.user_id = :expert_actor AND er.code IN ('ic_manager', 'laboratory_manager'))) "
+            . 'AS can_assign_expert, '
             . "(r.status = 'registered' AND (EXISTS(SELECT 1 FROM {{%user_roles}} sur "
             . 'JOIN {{%roles}} sr ON sr.id = sur.role_id '
             . "WHERE sur.user_id = :start_manager AND sr.code IN ('ic_manager', 'laboratory_manager')) "
@@ -146,11 +163,15 @@ final class RequestRepository
             . 'LEFT JOIN {{%request_assignments}} current_executor ON current_executor.request_id = r.id '
             . "AND current_executor.assignment_type = 'executor' AND current_executor.valid_to IS NULL "
             . 'LEFT JOIN {{%users}} executor ON executor.id = current_executor.user_id '
+            . 'LEFT JOIN {{%request_assignments}} current_expert ON current_expert.request_id = r.id '
+            . "AND current_expert.assignment_type = 'expert' AND current_expert.valid_to IS NULL "
+            . 'LEFT JOIN {{%users}} expert ON expert.id = current_expert.user_id '
             . 'WHERE r.id = :request_id',
             [
                 ':request_id' => $requestId,
                 ':actor_id' => $actorId,
                 ':assign_actor' => $actorId,
+                ':expert_actor' => $actorId,
                 ':start_manager' => $actorId,
                 ':start_executor' => $actorId,
                 ':start_executor_role' => $actorId,
@@ -168,11 +189,12 @@ final class RequestRepository
             . 'u.display_name AS actorName FROM {{%request_transitions}} t '
             . 'JOIN {{%users}} u ON u.id = t.actor_id WHERE t.request_id = :transition_request_id '
             . 'UNION ALL '
-            . 'SELECT a.id, \'assignment\' AS kind, \'assign_executor\' AS action, NULL, NULL, '
+            . "SELECT a.id, 'assignment' AS kind, CASE a.event_type "
+            . "WHEN 'request.executor_assigned' THEN 'assign_executor' ELSE 'assign_expert' END AS action, NULL, NULL, "
             . "a.rule_id, DATE_FORMAT(a.created_at, '%Y-%m-%dT%H:%i:%s.%fZ'), u.display_name FROM {{%audit_events}} a "
             . 'JOIN {{%users}} u ON u.id = a.actor_id '
             . "WHERE a.entity_type = 'request' AND a.entity_id = :audit_request_id "
-            . "AND a.event_type = 'request.executor_assigned' "
+            . "AND a.event_type IN ('request.executor_assigned', 'request.expert_assigned') "
             . 'ORDER BY occurredAt DESC, kind DESC, id DESC',
             [':transition_request_id' => $requestId, ':audit_request_id' => $requestId],
         )->queryAll();
@@ -312,6 +334,103 @@ final class RequestRepository
             . 'JOIN {{%roles}} r ON r.id = ur.role_id '
             . "WHERE u.is_active = 1 AND r.code = 'ic_executor' ORDER BY u.display_name",
         )->queryAll();
+    }
+
+    /** @return list<array{id: int, displayName: string}> */
+    public function findActiveExperts(): array
+    {
+        return $this->db->createCommand(
+            'SELECT u.id, u.display_name AS displayName FROM {{%users}} u '
+            . 'JOIN {{%user_roles}} ur ON ur.user_id = u.id '
+            . 'JOIN {{%roles}} r ON r.id = ur.role_id '
+            . "WHERE u.is_active = 1 AND r.code = 'expert' ORDER BY u.display_name",
+        )->queryAll();
+    }
+
+    /** @return array<string, mixed> */
+    public function assignExpert(int $requestId, int $expertId, int $expectedLockVersion, int $actorId): array
+    {
+        $transaction = $this->db->beginTransaction();
+        try {
+            $request = $this->db->createCommand(
+                'SELECT status, lock_version FROM {{%requests}} WHERE id = :id FOR UPDATE',
+                [':id' => $requestId],
+            )->queryOne();
+            if ($request === false) {
+                throw new AssignmentTargetNotFound('Request not found');
+            }
+            if ((int) $request['lock_version'] !== $expectedLockVersion) {
+                throw new ConcurrentRequestModification();
+            }
+            $expert = $this->db->createCommand(
+                'SELECT id, is_active FROM {{%users}} WHERE id = :id',
+                [':id' => $expertId],
+            )->queryOne();
+            if ($expert === false) {
+                throw new AssignmentTargetNotFound('Expert not found');
+            }
+            (new ExpertAssignmentPolicy())->assertCanAssign(
+                RequestStatus::from((string) $request['status']),
+                $this->rolesFor($actorId),
+                $this->isActiveUser($actorId),
+                $this->rolesFor($expertId),
+                (bool) $expert['is_active'],
+            );
+
+            $now = gmdate('Y-m-d H:i:s.u');
+            $nextLockVersion = $expectedLockVersion + 1;
+            $updated = $this->db->createCommand()->update(
+                '{{%requests}}',
+                ['lock_version' => $nextLockVersion, 'updated_at' => $now],
+                ['id' => $requestId, 'status' => RequestStatus::OpinionPreparation->value, 'lock_version' => $expectedLockVersion],
+            )->execute();
+            if ($updated !== 1) {
+                throw new ConcurrentRequestModification();
+            }
+            $this->db->createCommand()->update(
+                '{{%request_assignments}}',
+                ['valid_to' => $now],
+                ['request_id' => $requestId, 'assignment_type' => 'expert', 'valid_to' => null],
+            )->execute();
+            $this->db->createCommand()->insert('{{%request_assignments}}', [
+                'request_id' => $requestId,
+                'assignment_type' => 'expert',
+                'user_id' => $expertId,
+                'assigned_by' => $actorId,
+                'valid_from' => $now,
+            ])->execute();
+            $assignmentId = (int) $this->db->getLastInsertID();
+            $this->db->createCommand()->insert('{{%audit_events}}', [
+                'event_type' => 'request.expert_assigned',
+                'entity_type' => 'request',
+                'entity_id' => $requestId,
+                'actor_id' => $actorId,
+                'rule_id' => 'WF-010',
+                'payload_json' => json_encode(['expert_id' => $expertId, 'assignment_id' => $assignmentId, 'lock_version' => $nextLockVersion], JSON_THROW_ON_ERROR),
+                'created_at' => $now,
+            ])->execute();
+            $transaction->commit();
+            return ['id' => $assignmentId, 'requestId' => $requestId, 'expertId' => $expertId, 'assignedBy' => $actorId, 'assignedAt' => $now, 'lockVersion' => $nextLockVersion];
+        } catch (\Throwable $error) {
+            $transaction->rollBack();
+            throw $error;
+        }
+    }
+
+    public function recordRejectedExpertAssignment(int $requestId, int $expertId, int $actorId, string $ruleId): void
+    {
+        if (!$this->isActiveUser($actorId) && $this->db->createCommand('SELECT 1 FROM {{%users}} WHERE id = :id', [':id' => $actorId])->queryScalar() === false) {
+            return;
+        }
+        $this->db->createCommand()->insert('{{%audit_events}}', [
+            'event_type' => 'request.expert_assignment_denied',
+            'entity_type' => 'request',
+            'entity_id' => $requestId,
+            'actor_id' => $actorId,
+            'rule_id' => $ruleId,
+            'payload_json' => json_encode(['expert_id' => $expertId], JSON_THROW_ON_ERROR),
+            'created_at' => gmdate('Y-m-d H:i:s.u'),
+        ])->execute();
     }
 
     /** @return array<string, mixed> */

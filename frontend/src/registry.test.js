@@ -16,7 +16,10 @@ const registered = {
   lockVersion: 3,
   executor_id: 2,
   executor_name: 'Сергей Кашин',
+  expert_id: 4,
+  expert_name: 'Анна Смирнова',
   can_assign_executor: 1,
+  can_assign_expert: 0,
   can_start: 1,
   can_comment: 1,
   can_upload_document: 1,
@@ -31,8 +34,10 @@ it('maps the API contract to a registry row', () => {
     manufacturer: 'Завод',
     sampleQuantity: 2,
     executor: 'Сергей Кашин',
+    expert: 'Анна Смирнова',
     lockVersion: 3,
     canAssignExecutor: true,
+    canAssignExpert: false,
     canStart: true,
     canComment: true,
     canUploadDocument: true,
@@ -53,15 +58,20 @@ it('hides the start action after the request leaves registered status', () => {
 })
 
 it('maps the report stage, permission and history label', () => {
-  expect(fromApi({ ...registered, status: 'opinion_preparation', can_upload_report: 1 })).toMatchObject({
+  expect(fromApi({ ...registered, status: 'opinion_preparation', can_upload_report: 1, can_assign_expert: 1 })).toMatchObject({
     status: 'Подготовка заключения',
     tone: 'violet',
     canUploadReport: true,
+    canAssignExpert: true,
   })
   expect(historyFromApi({
     id: 10, kind: 'transition', action: 'upload_report', actorName: 'Исполнитель',
     ruleId: 'DOC-002', occurredAt: '2026-07-28T10:00:00Z',
   }).description).toBe('загрузил(а) отчёт испытаний')
+  expect(historyFromApi({
+    id: 11, kind: 'assignment', action: 'assign_expert', actorName: 'Руководитель',
+    ruleId: 'WF-010', occurredAt: '2026-07-28T10:01:00Z',
+  }).description).toBe('назначил(а) эксперта')
 })
 
 it('maps a safe history event without audit payload', () => {

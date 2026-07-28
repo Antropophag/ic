@@ -48,6 +48,7 @@ export const requestApi = {
     return response.blob()
   },
   executors: () => request('/api/v1/executors'),
+  experts: () => request('/api/v1/experts'),
   create: (data) => request('/api/v1/requests', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -57,6 +58,11 @@ export const requestApi = {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ executorId, lockVersion }),
+  }),
+  assignExpert: (requestId, expertId, lockVersion) => request(`/api/v1/requests/${requestId}/expert`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ expertId, lockVersion }),
   }),
   start: (requestId, lockVersion) => request(`/api/v1/requests/${requestId}/start`, {
     method: 'POST',

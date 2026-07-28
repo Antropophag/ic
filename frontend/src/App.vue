@@ -28,6 +28,8 @@ const reportLoading = ref(false)
 const reportError = ref('')
 const executors = ref([])
 const executorChoice = ref('')
+const experts = ref([])
+const expertChoice = ref('')
 const detailRequestGuard = createLatestRequestGuard()
 const commentRequestGuard = createLatestRequestGuard()
 const commentsPageRequestGuard = createLatestRequestGuard()
@@ -65,7 +67,9 @@ async function loadRequestDetails(item) {
   detailError.value = ''
   detailLoading.value = true
   executorChoice.value = item.executorId || ''
+  expertChoice.value = item.expertId || ''
   if (item.canAssignExecutor && !executors.value.length) loadExecutors()
+  if (item.canAssignExpert && !experts.value.length) loadExperts()
   try {
     const result = await requestApi.get(item.backendId)
     if (!detailRequestGuard.isCurrent(requestToken, selected.value?.backendId)) return
@@ -77,6 +81,9 @@ async function loadRequestDetails(item) {
       documents: result.documents.map(documentFromApi),
     }
     executorChoice.value = selected.value.executorId || ''
+    expertChoice.value = selected.value.expertId || ''
+    if (selected.value.canAssignExecutor && !executors.value.length) loadExecutors()
+    if (selected.value.canAssignExpert && !experts.value.length) loadExperts()
   } catch (error) {
     if (!detailRequestGuard.isCurrent(requestToken, selected.value?.backendId)) return
     detailError.value = error.status === 404
@@ -322,9 +329,23 @@ async function loadExecutors() {
   }
 }
 
+async function loadExperts() {
+  try {
+    const result = await requestApi.experts()
+    experts.value = result.items
+  } catch {
+    actionError.value = 'Не удалось загрузить список экспертов.'
+  }
+}
+
 async function refreshSelected(requestId) {
   if (selected.value?.backendId === requestId) {
-    selected.value = { ...selected.value, canAssignExecutor: false, canStart: false }
+    selected.value = {
+      ...selected.value,
+      canAssignExecutor: false,
+      canAssignExpert: false,
+      canStart: false,
+    }
   }
   await loadRequests(true)
   if (selected.value?.backendId !== requestId) return
@@ -369,6 +390,36 @@ async function assignExecutor() {
       actionError.value = error.status === 403
         ? 'У вас нет права назначать исполнителя.'
         : 'Не удалось назначить исполнителя. Обновите страницу и повторите попытку.'
+    }
+  } finally {
+    actionLoading.value = false
+  }
+}
+
+async function assignExpert() {
+  if (!expertChoice.value) {
+    actionError.value = 'Выберите эксперта.'
+    return
+  }
+  if (!window.confirm('Назначить выбранного эксперта на заявку?')) return
+
+  actionLoading.value = true
+  actionError.value = ''
+  const requestId = selected.value.backendId
+  try {
+    await requestApi.assignExpert(requestId, Number(expertChoice.value), selected.value.lockVersion)
+    try {
+      await refreshSelected(requestId)
+    } catch {
+      actionError.value = 'Эксперт назначен, но обновить карточку не удалось. Устаревшие действия отключены.'
+    }
+  } catch (error) {
+    if (error.status === 409) {
+      await recoverConflict(requestId, 'Заявка уже изменена.')
+    } else {
+      actionError.value = error.status === 403
+        ? 'У вас нет права назначать эксперта.'
+        : 'Не удалось назначить эксперта. Обновите страницу и повторите попытку.'
     }
   } finally {
     actionLoading.value = false
@@ -497,10 +548,14 @@ onMounted(loadRequests)
             </article>
           </div>
           <aside class="stack side-column">
-            <article class="card summary"><h3>Исполнение</h3><p><span>Исполнитель</span><b>{{ selected.executor }}</b></p><p><span>Эксперт</span><b>А. В. Смирнов</b></p><p><span>Отметка СБ</span><b>—</b></p>
+            <article class="card summary"><h3>Исполнение</h3><p><span>Исполнитель</span><b>{{ selected.executor }}</b></p><p><span>Эксперт</span><b>{{ selected.expert }}</b></p><p><span>Отметка СБ</span><b>—</b></p>
               <div v-if="selected.canAssignExecutor" class="execution-action">
                 <label>Назначить исполнителя<select v-model="executorChoice" :disabled="actionLoading"><option value="">Выберите сотрудника</option><option v-for="executor in executors" :key="executor.id" :value="executor.id">{{ executor.displayName }}</option></select></label>
                 <button class="secondary" :disabled="actionLoading" @click="assignExecutor">{{ actionLoading ? 'Сохранение…' : 'Назначить' }}</button>
+              </div>
+              <div v-if="selected.canAssignExpert" class="execution-action">
+                <label>Назначить эксперта<select v-model="expertChoice" :disabled="actionLoading"><option value="">Выберите сотрудника</option><option v-for="expert in experts" :key="expert.id" :value="expert.id">{{ expert.displayName }}</option></select></label>
+                <button class="secondary" :disabled="actionLoading" @click="assignExpert">{{ actionLoading ? 'Сохранение…' : 'Назначить' }}</button>
               </div>
               <button v-if="selected.canStart" class="primary action-wide" :disabled="actionLoading" @click="startRequest">{{ actionLoading ? 'Запуск…' : 'Начать работу' }}</button>
               <p v-if="actionError" class="action-error">{{ actionError }}</p>

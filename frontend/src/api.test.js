@@ -107,6 +107,22 @@ it('assigns an executor and starts a request with optimistic locking', async () 
   }))
 })
 
+it('loads and assigns an expert with optimistic locking', async () => {
+  const fetchMock = vi.fn()
+    .mockResolvedValueOnce(new Response(JSON.stringify({ items: [] }), { status: 200 }))
+    .mockResolvedValueOnce(new Response('{}', { status: 200 }))
+  vi.stubGlobal('fetch', fetchMock)
+
+  await requestApi.experts()
+  await requestApi.assignExpert(7, 4, 5)
+
+  expect(fetchMock).toHaveBeenNthCalledWith(1, '/api/v1/experts', expect.any(Object))
+  expect(fetchMock).toHaveBeenNthCalledWith(2, '/api/v1/requests/7/expert', expect.objectContaining({
+    method: 'POST',
+    body: JSON.stringify({ expertId: 4, lockVersion: 5 }),
+  }))
+})
+
 it('loads active executors from the server', async () => {
   const payload = { items: [{ id: 2, displayName: 'Исполнитель' }] }
   vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(JSON.stringify(payload), { status: 200 })))

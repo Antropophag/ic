@@ -162,6 +162,29 @@ curl --fail --silent --show-error \
   "$base_url/api/v1/document-versions/$report_version_id/download"
 cmp "$smoke_dir/report.pdf" "$smoke_dir/downloaded-report.pdf"
 
+experts=$(curl --fail --silent --show-error \
+  --header "X-Dev-User-ID: $dev_user_id" \
+  "$base_url/api/v1/experts")
+printf '%s' "$experts" | grep '"displayName":"Анна Смирнова"' >/dev/null
+expert_assignment=$(curl --fail --silent --show-error \
+  --request POST \
+  --header "X-Dev-User-ID: $dev_user_id" \
+  --header 'Content-Type: application/json' \
+  --data '{"expertId":4,"lockVersion":4}' \
+  "$base_url/api/v1/requests/$request_id/expert")
+printf '%s' "$expert_assignment" | grep '"expertId":4' >/dev/null
+printf '%s' "$expert_assignment" | grep '"lockVersion":5' >/dev/null
+stale_expert_status=$(curl --silent --output /dev/null --write-out '%{http_code}' \
+  --request POST \
+  --header "X-Dev-User-ID: $dev_user_id" \
+  --header 'Content-Type: application/json' \
+  --data '{"expertId":4,"lockVersion":4}' \
+  "$base_url/api/v1/requests/$request_id/expert")
+[ "$stale_expert_status" = '409' ] || {
+  echo "Expected stale expert assignment status 409, got $stale_expert_status" >&2
+  exit 1
+}
+
 printf '%%PDF-1.4\n%% smoke report revision 2\n' >"$smoke_dir/report-v2.pdf"
 report_v2=$(curl --fail --silent --show-error \
   --request POST \
@@ -169,7 +192,7 @@ report_v2=$(curl --fail --silent --show-error \
   --form "file=@$smoke_dir/report-v2.pdf;type=application/pdf" \
   "$base_url/api/v1/requests/$request_id/report")
 printf '%s' "$report_v2" | grep '"version":2' >/dev/null
-printf '%s' "$report_v2" | grep '"lockVersion":4' >/dev/null
+printf '%s' "$report_v2" | grep '"lockVersion":5' >/dev/null
 report_v2_version_id=$(printf '%s' "$report_v2" | sed -n 's/.*"versionId":\([0-9][0-9]*\).*/\1/p')
 [ -n "$report_v2_version_id" ] || {
   echo 'Second report revision has no version id' >&2
@@ -187,6 +210,8 @@ printf '%s' "$details" | grep '"can_comment":1' >/dev/null
 printf '%s' "$details" | grep '"can_upload_document":1' >/dev/null
 printf '%s' "$details" | grep '"version":2' >/dev/null
 printf '%s' "$details" | grep '"status":"opinion_preparation"' >/dev/null
+printf '%s' "$details" | grep '"expert_name":"Анна Смирнова"' >/dev/null
+printf '%s' "$details" | grep '"action":"assign_expert"' >/dev/null
 printf '%s' "$details" | grep '"documentType":"report"' >/dev/null
 report_history_count=$(printf '%s' "$details" | grep -o '"documentType":"report"' | wc -l | tr -d ' ')
 [ "$report_history_count" = '2' ] || {
