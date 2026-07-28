@@ -1,0 +1,108 @@
+<?php
+
+declare(strict_types=1);
+
+namespace Tests\Unit\Application\Import;
+
+use App\Application\Import\LegacyRequestMapper;
+use App\Domain\Request\RequestStatus;
+use PHPUnit\Framework\Attributes\DataProvider;
+use PHPUnit\Framework\TestCase;
+use UnexpectedValueException;
+
+final class LegacyRequestMapperTest extends TestCase
+{
+    public function testMapsWhitelistedLegacyFields(): void
+    {
+        $details = [
+            'nameType' => 'Редуктор',
+            'manufacturer' => 'Завод',
+            'supplier' => 'Поставщик',
+            'countTestItems' => '2 шт',
+            'testMethod' => 'Методика',
+            'status' => 'Выполнено',
+            'dateCreate' => '2025-02-03T10:20:30+03:00',
+            'creator' => ['ID' => '77', 'NAME' => 'Иван', 'LAST_NAME' => 'Иванов', 'PERSONAL_PHONE' => 'secret'],
+            'department' => ['ID' => '3', 'NAME' => 'Лаборатория'],
+            'supportingDocFiles' => [['id' => 1]],
+            'reportFiles' => [['id' => 2], ['id' => 3]],
+        ];
+
+        $request = (new LegacyRequestMapper())->map([
+            'ID' => '42',
+            'DETAIL_TEXT' => json_encode($details, JSON_THROW_ON_ERROR),
+        ], 114);
+
+        self::assertSame('bitrix24:114:42', $request->legacyId);
+        self::assertSame(RequestStatus::Completed, $request->status);
+        self::assertSame(2, $request->sampleQuantity);
+        self::assertSame('Иванов Иван', $request->creatorDisplayName);
+        self::assertSame(1, $request->supportingDocumentCount);
+        self::assertSame(2, $request->reportCount);
+        self::assertObjectNotHasProperty('personalPhone', $request);
+    }
+
+    public function testRejectsUnknownStatus(): void
+    {
+        $this->expectException(UnexpectedValueException::class);
+        (new LegacyRequestMapper())->map([
+            'ID' => '42',
+            'DETAIL_TEXT' => json_encode([
+                'nameType' => 'Редуктор',
+                'manufacturer' => 'Завод',
+                'supplier' => 'Поставщик',
+                'countTestItems' => '1',
+                'status' => 'Новый неизвестный статус',
+                'dateCreate' => '2025-02-03T10:20:30+03:00',
+                'creator' => ['ID' => '77'],
+            ], JSON_THROW_ON_ERROR),
+        ], 114);
+    }
+
+    #[DataProvider('knownStatuses')]
+    public function testMapsEveryKnownStatus(string $legacyStatus, RequestStatus $expected): void
+    {
+        $request = (new LegacyRequestMapper())->map($this->element([
+            'status' => $legacyStatus,
+            'countTestItems' => '3.000',
+        ]), 114);
+
+        self::assertSame($expected, $request->status);
+        self::assertSame(3, $request->sampleQuantity);
+        self::assertSame(0, $request->reportCount);
+    }
+
+    /** @return iterable<string, array{string, RequestStatus}> */
+    public static function knownStatuses(): iterable
+    {
+        yield 'зарегистрирована' => ['Заявка зарегистрирована', RequestStatus::Registered];
+        yield 'в работе' => ['Заявка в работе', RequestStatus::InProgress];
+        yield 'приостановлена' => ['Работы приостановлены', RequestStatus::Suspended];
+        yield 'заключение' => ['Подготовка заключения', RequestStatus::OpinionPreparation];
+        yield 'контроль СБ' => ['Контроль СБ', RequestStatus::SecurityReview];
+        yield 'выполнена' => ['Заявка выполнена', RequestStatus::Completed];
+        yield 'отказана' => ['Отказано', RequestStatus::Rejected];
+        yield 'отозвана' => ['Заявка отозвана', RequestStatus::Withdrawn];
+    }
+
+    /** @param array<string, mixed> $overrides
+     *  @return array<string, mixed>
+     */
+    private function element(array $overrides = []): array
+    {
+        return [
+            'ID' => '42',
+            'DETAIL_TEXT' => json_encode([
+                'nameType' => 'Редуктор',
+                'manufacturer' => 'Завод',
+                'supplier' => 'Поставщик',
+                'countTestItems' => '1',
+                'testMethod' => '',
+                'status' => 'Выполнено',
+                'dateCreate' => '2025-02-03T10:20:30+03:00',
+                'creator' => ['ID' => '77'],
+                ...$overrides,
+            ], JSON_THROW_ON_ERROR),
+        ];
+    }
+}
