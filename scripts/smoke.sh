@@ -50,6 +50,26 @@ assigned=$(curl --fail --silent --show-error \
 printf '%s' "$assigned" | grep '"executorId":2' >/dev/null
 printf '%s' "$assigned" | grep '"lockVersion":2' >/dev/null
 
+comment_marker="Комментарий $marker"
+comment=$(curl --fail --silent --show-error \
+  --request POST \
+  --header "X-Dev-User-ID: $dev_user_id" \
+  --header 'Content-Type: application/json' \
+  --data "{\"body\":\"$comment_marker\"}" \
+  "$base_url/api/v1/requests/$request_id/comments")
+printf '%s' "$comment" | grep "$comment_marker" >/dev/null
+
+invalid_comment_status=$(curl --silent --output /dev/null --write-out '%{http_code}' \
+  --request POST \
+  --header "X-Dev-User-ID: $dev_user_id" \
+  --header 'Content-Type: application/json' \
+  --data '{"body":"   "}' \
+  "$base_url/api/v1/requests/$request_id/comments")
+[ "$invalid_comment_status" = '422' ] || {
+  echo "Expected invalid comment status 422, got $invalid_comment_status" >&2
+  exit 1
+}
+
 denied_status=$(curl --silent --output /dev/null --write-out '%{http_code}' \
   --request POST \
   --header 'X-Dev-User-ID: 2' \
@@ -82,6 +102,9 @@ details=$(curl --fail --silent --show-error \
 printf '%s' "$details" | grep "$marker" >/dev/null
 printf '%s' "$details" | grep '"action":"start"' >/dev/null
 printf '%s' "$details" | grep '"action":"assign_executor"' >/dev/null
+printf '%s' "$details" | grep "$comment_marker" >/dev/null
+printf '%s' "$details" | grep '"can_comment":1' >/dev/null
+printf '%s' "$details" | grep -E '"(occurredAt|createdAt)":"[^"]+Z"' >/dev/null
 if printf '%s' "$details" | grep 'payload_json' >/dev/null; then
   echo 'Request details must not expose audit payloads' >&2
   exit 1
@@ -106,4 +129,4 @@ stale_status=$(curl --silent --output /dev/null --write-out '%{http_code}' \
   exit 1
 }
 
-echo "Smoke test passed: health, validation, creation, assignment, start, registry and request details."
+echo "Smoke test passed: health, validation, creation, comments, assignment, start, registry and details."

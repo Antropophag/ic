@@ -50,6 +50,13 @@ erDiagram
         datetime(6) valid_from
         datetime(6) valid_to
     }
+    request_comments {
+        bigint(20)_unsigned id PK
+        bigint(20)_unsigned request_id FK "-> requests.id"
+        bigint(20)_unsigned author_id FK "-> users.id"
+        text body
+        datetime(6) created_at
+    }
     request_number_sequence {
         tinyint(3)_unsigned id PK
         bigint(20)_unsigned value
@@ -92,6 +99,8 @@ erDiagram
     requests ||--o{ request_assignments : "request_id"
     users ||--o{ request_assignments : "user_id"
     users ||--o{ request_assignments : "assigned_by"
+    requests ||--o{ request_comments : "request_id"
+    users ||--o{ request_comments : "author_id"
     requests ||--o{ request_transitions : "request_id"
     users ||--o{ request_transitions : "actor_id"
     users ||--o{ user_roles : "user_id"
