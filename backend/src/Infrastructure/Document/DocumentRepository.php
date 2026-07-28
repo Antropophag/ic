@@ -10,6 +10,7 @@ use App\Domain\Request\OpinionPolicy;
 use App\Domain\Request\RequestNotFound;
 use App\Domain\Request\RequestStatus;
 use App\Domain\Request\ReportPolicy;
+use App\Infrastructure\Notification\NotificationOutbox;
 use yii\db\Connection;
 
 final class DocumentRepository
@@ -338,6 +339,20 @@ final class DocumentRepository
                 'payload_json' => json_encode(['revision' => $revision, 'document_version_id' => $versionId], JSON_THROW_ON_ERROR),
                 'created_at' => $now,
             ])->execute();
+            // Аналог ТЗ 4.9: сотрудники СБ уведомляются о поступлении
+            // заключения на контроль.
+            $outbox = new NotificationOutbox($this->db);
+            foreach ($this->activeUsersWithRoles(['security_officer']) as $officer) {
+                $outbox->enqueue(
+                    $requestId,
+                    'request.opinion_published',
+                    $officer['email'],
+                    $officer['name'],
+                    'Заключение поступило на контроль СБ',
+                    'Экспертное заключение опубликовано и ожидает контроля службы безопасности. '
+                    . 'Откройте карточку заявки в портале.',
+                );
+            }
             $transaction->commit();
 
             return [
@@ -540,5 +555,31 @@ final class DocumentRepository
             'created_at' => gmdate('Y-m-d H:i:s.u'),
         ])->execute();
         return (int) $this->db->getLastInsertID();
+    }
+
+    /**
+     * @param list<string> $roleCodes
+     * @return list<array{email: string, name: string}>
+     */
+    private function activeUsersWithRoles(array $roleCodes): array
+    {
+        if ($roleCodes === []) {
+            return [];
+        }
+        $placeholders = [];
+        $params = [];
+        foreach ($roleCodes as $index => $code) {
+            $placeholders[] = ":role{$index}";
+            $params[":role{$index}"] = $code;
+        }
+
+        return $this->db->createCommand(
+            'SELECT DISTINCT u.email, u.display_name AS name FROM {{%users}} u '
+            . 'JOIN {{%user_roles}} ur ON ur.user_id = u.id '
+            . 'JOIN {{%roles}} r ON r.id = ur.role_id '
+            . "WHERE u.is_active = 1 AND u.email IS NOT NULL AND u.email != '' "
+            . 'AND r.code IN (' . implode(',', $placeholders) . ')',
+            $params,
+        )->queryAll();
     }
 }

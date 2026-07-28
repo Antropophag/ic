@@ -9,6 +9,7 @@ return yii\helpers\ArrayHelper::merge($common, [
     'controllerMap' => [
         'dev' => App\Console\DevController::class,
         'bitrix' => App\Console\BitrixController::class,
+        'notification' => App\Console\NotificationController::class,
         'migrate' => [
             'class' => yii\console\controllers\MigrateController::class,
             'migrationPath' => '@app/migrations',

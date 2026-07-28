@@ -17,6 +17,7 @@ use App\Domain\Request\RequestWorkflow;
 use App\Domain\Request\Role;
 use App\Domain\Request\SecurityDecisionPolicy;
 use App\Domain\Request\StartRequestPolicy;
+use App\Infrastructure\Notification\NotificationOutbox;
 use yii\db\Connection;
 
 final class RequestRepository
@@ -60,6 +61,24 @@ final class RequestRepository
                 'rule_id' => 'REQ-007',
                 'created_at' => $now,
             ])->execute();
+            // REQ-008: руководители ИЦ и лаборатории уведомляются о новой заявке.
+            $outbox = new NotificationOutbox($this->db);
+            foreach ($this->activeUsersWithRoles(['ic_manager', 'laboratory_manager']) as $manager) {
+                $outbox->enqueue(
+                    $id,
+                    'request.created',
+                    $manager['email'],
+                    $manager['name'],
+                    sprintf('Новая заявка №%06d зарегистрирована', $number),
+                    sprintf(
+                        "Зарегистрирована новая заявка №%06d на проведение испытаний.\n"
+                        . "Объект испытаний: %s.\n\n"
+                        . 'Откройте реестр заявок в портале, чтобы назначить исполнителя.',
+                        $number,
+                        $input->productName,
+                    ),
+                );
+            }
             $transaction->commit();
 
             return $this->findOne($id);
@@ -159,6 +178,34 @@ final class RequestRepository
                 'payload_json' => json_encode(['decision' => $decision, 'reason' => $reason], JSON_THROW_ON_ERROR),
                 'created_at' => $now,
             ])->execute();
+            $outbox = new NotificationOutbox($this->db);
+            if ($decision === 'approve') {
+                $initiator = $this->initiatorContact($requestId);
+                if ($initiator !== null) {
+                    $outbox->enqueue(
+                        $requestId,
+                        'request.completed',
+                        $initiator['email'],
+                        $initiator['name'],
+                        'Испытания завершены',
+                        'Испытания по вашей заявке завершены, контроль службы безопасности пройден. '
+                        . 'Отчёт и заключение доступны в портале.',
+                    );
+                }
+            } else {
+                $executor = $this->currentAssigneeContact($requestId, 'executor');
+                if ($executor !== null) {
+                    $outbox->enqueue(
+                        $requestId,
+                        'request.returned',
+                        $executor['email'],
+                        $executor['name'],
+                        'Заявка возвращена на доработку',
+                        "Служба безопасности вернула заявку на доработку.\nПричина: {$reason}\n\n"
+                        . 'Загрузите исправленный отчёт в портале.',
+                    );
+                }
+            }
             $transaction->commit();
 
             return ['requestId' => $requestId, 'decision' => $decision, 'status' => $targetStatus->value, 'lockVersion' => $nextLockVersion];
@@ -453,6 +500,23 @@ final class RequestRepository
                 'payload_json' => json_encode(['comment_id' => $commentId], JSON_THROW_ON_ERROR),
                 'created_at' => $now,
             ])->execute();
+            // COM-006: участники процесса уведомляются о новом комментарии,
+            // кроме его автора.
+            $outbox = new NotificationOutbox($this->db);
+            foreach ($this->processParticipants($requestId) as $participant) {
+                if ((int) $participant['id'] === $actorId) {
+                    continue;
+                }
+                $outbox->enqueue(
+                    $requestId,
+                    'request.commented',
+                    $participant['email'],
+                    $participant['name'],
+                    'Новый комментарий по заявке',
+                    'В заявке появился новый комментарий. '
+                    . 'Откройте карточку заявки в портале, чтобы прочитать его.',
+                );
+            }
             $comment = $this->db->createCommand(
                 "SELECT c.id, c.body, DATE_FORMAT(c.created_at, '%Y-%m-%dT%H:%i:%s.%fZ') AS createdAt, "
                 . 'u.display_name AS authorName '
@@ -551,6 +615,18 @@ final class RequestRepository
                 'payload_json' => json_encode(['expert_id' => $expertId, 'assignment_id' => $assignmentId, 'lock_version' => $nextLockVersion], JSON_THROW_ON_ERROR),
                 'created_at' => $now,
             ])->execute();
+            $expertContact = $this->userContact($expertId);
+            if ($expertContact !== null) {
+                (new NotificationOutbox($this->db))->enqueue(
+                    $requestId,
+                    'request.expert_assigned',
+                    $expertContact['email'],
+                    $expertContact['name'],
+                    'Вам назначена заявка для экспертного заключения',
+                    'Вам назначена заявка на подготовку экспертного заключения. '
+                    . 'Откройте карточку заявки в портале, чтобы сформировать заключение.',
+                );
+            }
             $transaction->commit();
             return ['id' => $assignmentId, 'requestId' => $requestId, 'expertId' => $expertId, 'assignedBy' => $actorId, 'assignedAt' => $now, 'lockVersion' => $nextLockVersion];
         } catch (\Throwable $error) {
@@ -649,6 +725,18 @@ final class RequestRepository
                 ),
                 'created_at' => $now,
             ])->execute();
+            $executorContact = $this->userContact($executorId);
+            if ($executorContact !== null) {
+                (new NotificationOutbox($this->db))->enqueue(
+                    $requestId,
+                    'request.executor_assigned',
+                    $executorContact['email'],
+                    $executorContact['name'],
+                    'Вам назначена заявка на проведение испытаний',
+                    'Вам назначена заявка на проведение испытаний. '
+                    . 'Откройте карточку заявки в портале, чтобы принять её в работу.',
+                );
+            }
             $transaction->commit();
 
             return [
@@ -828,6 +916,87 @@ final class RequestRepository
             'SELECT 1 FROM {{%users}} WHERE id = :id AND is_active = 1',
             [':id' => $userId],
         )->queryScalar() !== false;
+    }
+
+    /**
+     * @param list<string> $roleCodes
+     * @return list<array{email: string, name: string}>
+     */
+    private function activeUsersWithRoles(array $roleCodes): array
+    {
+        if ($roleCodes === []) {
+            return [];
+        }
+        $placeholders = [];
+        $params = [];
+        foreach ($roleCodes as $index => $code) {
+            $placeholders[] = ":role{$index}";
+            $params[":role{$index}"] = $code;
+        }
+
+        return $this->db->createCommand(
+            'SELECT DISTINCT u.email, u.display_name AS name FROM {{%users}} u '
+            . 'JOIN {{%user_roles}} ur ON ur.user_id = u.id '
+            . 'JOIN {{%roles}} r ON r.id = ur.role_id '
+            . "WHERE u.is_active = 1 AND u.email IS NOT NULL AND u.email != '' "
+            . 'AND r.code IN (' . implode(',', $placeholders) . ')',
+            $params,
+        )->queryAll();
+    }
+
+    /** @return array{email: string, name: string}|null */
+    private function userContact(int $userId): ?array
+    {
+        $row = $this->db->createCommand(
+            'SELECT email, display_name AS name FROM {{%users}} '
+            . "WHERE id = :id AND is_active = 1 AND email IS NOT NULL AND email != ''",
+            [':id' => $userId],
+        )->queryOne();
+
+        return $row === false ? null : $row;
+    }
+
+    /** @return array{email: string, name: string}|null */
+    private function initiatorContact(int $requestId): ?array
+    {
+        $row = $this->db->createCommand(
+            'SELECT u.email, u.display_name AS name FROM {{%requests}} r '
+            . 'JOIN {{%users}} u ON u.id = r.initiator_id '
+            . "WHERE r.id = :request_id AND u.is_active = 1 AND u.email IS NOT NULL AND u.email != ''",
+            [':request_id' => $requestId],
+        )->queryOne();
+
+        return $row === false ? null : $row;
+    }
+
+    /** @return array{email: string, name: string}|null */
+    private function currentAssigneeContact(int $requestId, string $assignmentType): ?array
+    {
+        $row = $this->db->createCommand(
+            'SELECT u.email, u.display_name AS name FROM {{%request_assignments}} a '
+            . 'JOIN {{%users}} u ON u.id = a.user_id '
+            . 'WHERE a.request_id = :request_id AND a.assignment_type = :assignment_type '
+            . "AND a.valid_to IS NULL AND u.is_active = 1 AND u.email IS NOT NULL AND u.email != ''",
+            [':request_id' => $requestId, ':assignment_type' => $assignmentType],
+        )->queryOne();
+
+        return $row === false ? null : $row;
+    }
+
+    /** @return list<array{id: int, email: string, name: string}> */
+    private function processParticipants(int $requestId): array
+    {
+        return $this->db->createCommand(
+            'SELECT u.id, u.email, u.display_name AS name FROM {{%requests}} r '
+            . 'JOIN {{%users}} u ON u.id = r.initiator_id '
+            . "WHERE r.id = :request_id1 AND u.is_active = 1 AND u.email IS NOT NULL AND u.email != '' "
+            . 'UNION '
+            . 'SELECT u.id, u.email, u.display_name AS name FROM {{%request_assignments}} a '
+            . 'JOIN {{%users}} u ON u.id = a.user_id '
+            . 'WHERE a.request_id = :request_id2 AND a.valid_to IS NULL '
+            . "AND u.is_active = 1 AND u.email IS NOT NULL AND u.email != ''",
+            [':request_id1' => $requestId, ':request_id2' => $requestId],
+        )->queryAll();
     }
 
     /** @return array<string, mixed> */
