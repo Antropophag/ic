@@ -11,6 +11,16 @@
 
 ```mermaid
 erDiagram
+    audit_events {
+        bigint(20)_unsigned id PK
+        varchar(64) event_type
+        varchar(64) entity_type
+        bigint(20)_unsigned entity_id
+        bigint(20)_unsigned actor_id FK "-> users.id"
+        varchar(16) rule_id
+        longtext payload_json
+        datetime(6) created_at
+    }
     migration {
         varchar(180) version PK
         int(11) apply_time
@@ -55,6 +65,11 @@ erDiagram
         varchar(16) rule_id
         datetime(6) created_at
     }
+    roles {
+        int(10)_unsigned id PK
+        varchar(64) code
+        varchar(128) name
+    }
     users {
         bigint(20)_unsigned id PK
         varchar(128) ad_login
@@ -66,12 +81,22 @@ erDiagram
         datetime(6) created_at
         datetime(6) updated_at
     }
+    user_roles {
+        bigint(20)_unsigned user_id PK,FK "-> users.id"
+        int(11)_unsigned role_id PK,FK "-> roles.id"
+        bigint(20)_unsigned assigned_by FK "-> users.id"
+        datetime(6) created_at
+    }
+    users ||--o{ audit_events : "actor_id"
     users ||--o{ requests : "initiator_id"
     requests ||--o{ request_assignments : "request_id"
     users ||--o{ request_assignments : "user_id"
     users ||--o{ request_assignments : "assigned_by"
     requests ||--o{ request_transitions : "request_id"
     users ||--o{ request_transitions : "actor_id"
+    users ||--o{ user_roles : "user_id"
+    roles ||--o{ user_roles : "role_id"
+    users |o--o{ user_roles : "assigned_by"
 ```
 
 <!-- schema-diagram:end -->

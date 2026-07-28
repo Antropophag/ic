@@ -5,7 +5,10 @@ declare(strict_types=1);
 namespace App\Infrastructure\Request;
 
 use App\Application\Request\CreateRequestInput;
+use App\Domain\Request\AssignmentPolicy;
+use App\Domain\Request\AssignmentTargetNotFound;
 use App\Domain\Request\RequestStatus;
+use App\Domain\Request\Role;
 use yii\db\Connection;
 
 final class RequestRepository
@@ -69,6 +72,114 @@ final class RequestRepository
             . 'ORDER BY r.number DESC LIMIT :limit',
             [':limit' => $limit],
         )->queryAll();
+    }
+
+    /** @return array<string, mixed> */
+    public function assignExecutor(int $requestId, int $executorId, int $actorId): array
+    {
+        $transaction = $this->db->beginTransaction();
+        try {
+            $requestExists = $this->db->createCommand(
+                'SELECT id FROM {{%requests}} WHERE id = :id FOR UPDATE',
+                [':id' => $requestId],
+            )->queryScalar();
+            if ($requestExists === false) {
+                throw new AssignmentTargetNotFound('Request not found');
+            }
+
+            $executor = $this->db->createCommand(
+                'SELECT id, is_active FROM {{%users}} WHERE id = :id',
+                [':id' => $executorId],
+            )->queryOne();
+            if ($executor === false) {
+                throw new AssignmentTargetNotFound('Executor not found');
+            }
+
+            (new AssignmentPolicy())->assertCanAssign(
+                $this->rolesFor($actorId),
+                (bool) $executor['is_active'],
+                $this->rolesFor($executorId),
+            );
+
+            $now = gmdate('Y-m-d H:i:s.u');
+            $this->db->createCommand()->update(
+                '{{%request_assignments}}',
+                ['valid_to' => $now],
+                ['request_id' => $requestId, 'assignment_type' => 'executor', 'valid_to' => null],
+            )->execute();
+            $this->db->createCommand()->insert('{{%request_assignments}}', [
+                'request_id' => $requestId,
+                'assignment_type' => 'executor',
+                'user_id' => $executorId,
+                'assigned_by' => $actorId,
+                'valid_from' => $now,
+            ])->execute();
+            $assignmentId = (int) $this->db->getLastInsertID();
+            $this->db->createCommand()->insert('{{%audit_events}}', [
+                'event_type' => 'request.executor_assigned',
+                'entity_type' => 'request',
+                'entity_id' => $requestId,
+                'actor_id' => $actorId,
+                'rule_id' => 'WF-001',
+                'payload_json' => json_encode(
+                    ['executor_id' => $executorId, 'assignment_id' => $assignmentId],
+                    JSON_THROW_ON_ERROR,
+                ),
+                'created_at' => $now,
+            ])->execute();
+            $transaction->commit();
+
+            return [
+                'id' => $assignmentId,
+                'requestId' => $requestId,
+                'executorId' => $executorId,
+                'assignedBy' => $actorId,
+                'assignedAt' => $now,
+            ];
+        } catch (\Throwable $error) {
+            $transaction->rollBack();
+            throw $error;
+        }
+    }
+
+    public function recordRejectedAssignment(
+        int $requestId,
+        int $executorId,
+        int $actorId,
+        string $ruleId,
+    ): void {
+        $actorExists = $this->db->createCommand(
+            'SELECT 1 FROM {{%users}} WHERE id = :id',
+            [':id' => $actorId],
+        )->queryScalar();
+        if ($actorExists === false) {
+            return;
+        }
+
+        $this->db->createCommand()->insert('{{%audit_events}}', [
+            'event_type' => 'request.executor_assignment_denied',
+            'entity_type' => 'request',
+            'entity_id' => $requestId,
+            'actor_id' => $actorId,
+            'rule_id' => $ruleId,
+            'payload_json' => json_encode(['executor_id' => $executorId], JSON_THROW_ON_ERROR),
+            'created_at' => gmdate('Y-m-d H:i:s.u'),
+        ])->execute();
+    }
+
+    /** @return list<Role> */
+    private function rolesFor(int $userId): array
+    {
+        $codes = $this->db->createCommand(
+            'SELECT r.code FROM {{%roles}} r '
+            . 'JOIN {{%user_roles}} ur ON ur.role_id = r.id WHERE ur.user_id = :user_id',
+            [':user_id' => $userId],
+        )->queryColumn();
+
+        return array_values(array_filter(array_map(
+            static fn (string $code): ?Role => Role::tryFrom($code),
+            $codes,
+        )));
     }
 
     /** @return array<string, mixed> */

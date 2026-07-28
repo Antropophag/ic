@@ -5,11 +5,16 @@ declare(strict_types=1);
 namespace App\Http\Controller;
 
 use App\Application\Request\CreateRequestInput;
+use App\Application\Request\AssignExecutorInput;
+use App\Domain\Request\AssignmentDenied;
+use App\Domain\Request\AssignmentTargetNotFound;
 use App\Infrastructure\Identity\CurrentUser;
 use App\Infrastructure\Request\RequestRepository;
 use Yii;
 use yii\rest\Controller;
 use yii\web\Response;
+use yii\web\ForbiddenHttpException;
+use yii\web\NotFoundHttpException;
 
 final class RequestController extends Controller
 {
@@ -56,6 +61,50 @@ final class RequestController extends Controller
         Yii::$app->response->statusCode = 201;
         Yii::$app->response->headers->set('Location', '/api/v1/requests/' . $request['id']);
         return $request;
+    }
+
+    /** @return array<string, mixed> */
+    public function actionAssignExecutor(int $id): array
+    {
+        $input = new AssignExecutorInput();
+        $input->load(Yii::$app->request->bodyParams, '');
+        if (!$input->validate()) {
+            Yii::$app->response->statusCode = 422;
+            return ['errors' => $input->getErrors()];
+        }
+
+        $executorId = (int) $input->executorId;
+        $actorId = (new CurrentUser())->id(Yii::$app->request);
+
+        try {
+            return $this->repository()->assignExecutor(
+                $id,
+                $executorId,
+                $actorId,
+            );
+        } catch (AssignmentTargetNotFound $error) {
+            throw new NotFoundHttpException($error->getMessage());
+        } catch (AssignmentDenied $error) {
+            try {
+                $this->repository()->recordRejectedAssignment(
+                    $id,
+                    $executorId,
+                    $actorId,
+                    $error->ruleId,
+                );
+            } catch (\Throwable $auditError) {
+                Yii::error([
+                    'message' => 'Не удалось записать аудит отклонённого назначения.',
+                    'requestId' => $id,
+                    'executorId' => $executorId,
+                    'actorId' => $actorId,
+                    'ruleId' => $error->ruleId,
+                    'exception' => $auditError,
+                ], __METHOD__);
+            }
+
+            throw new ForbiddenHttpException($error->getMessage());
+        }
     }
 
     private function repository(): RequestRepository
