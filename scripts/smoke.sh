@@ -35,9 +35,33 @@ created=$(curl --fail --silent --show-error \
   --data "{\"productName\":\"$marker\",\"manufacturer\":\"Тестовый производитель\",\"supplier\":\"Тестовый поставщик\",\"sampleQuantity\":1,\"testMethod\":\"Smoke-проверка\"}" \
   "$base_url/api/v1/requests")
 printf '%s' "$created" | grep '"status":"registered"' >/dev/null
+request_id=$(printf '%s' "$created" | sed -n 's/.*"id":\([0-9][0-9]*\).*/\1/p')
+[ -n "$request_id" ] || {
+  echo "Created request does not contain an id" >&2
+  exit 1
+}
+
+assigned=$(curl --fail --silent --show-error \
+  --request POST \
+  --header "X-Dev-User-ID: $dev_user_id" \
+  --header 'Content-Type: application/json' \
+  --data '{"executorId":2}' \
+  "$base_url/api/v1/requests/$request_id/executor")
+printf '%s' "$assigned" | grep '"executorId":2' >/dev/null
+
+denied_status=$(curl --silent --output /dev/null --write-out '%{http_code}' \
+  --request POST \
+  --header 'X-Dev-User-ID: 2' \
+  --header 'Content-Type: application/json' \
+  --data '{"executorId":2}' \
+  "$base_url/api/v1/requests/$request_id/executor")
+[ "$denied_status" = '403' ] || {
+  echo "Expected forbidden assignment status 403, got $denied_status" >&2
+  exit 1
+}
 
 curl --fail --silent --show-error \
   --header "X-Dev-User-ID: $dev_user_id" \
   "$base_url/api/v1/requests" | grep "$marker" >/dev/null
 
-echo "Smoke test passed: health, validation, creation and registry."
+echo "Smoke test passed: health, validation, creation, assignment and registry."
