@@ -3,6 +3,7 @@ set -eu
 
 base_url=${BASE_URL:-http://localhost:8080}
 dev_user_id=${DEV_USER_ID:-1}
+initiator_user_id=${INITIATOR_USER_ID:-3}
 
 attempts=0
 until curl --fail --silent --show-error "$base_url/health/ready" >/dev/null; do
@@ -30,7 +31,7 @@ invalid_status=$(curl --silent --output /dev/null --write-out '%{http_code}' \
 marker="Smoke $(date -u +%Y%m%d%H%M%S)"
 created=$(curl --fail --silent --show-error \
   --request POST \
-  --header "X-Dev-User-ID: $dev_user_id" \
+  --header "X-Dev-User-ID: $initiator_user_id" \
   --header 'Content-Type: application/json' \
   --data "{\"productName\":\"$marker\",\"manufacturer\":\"Тестовый производитель\",\"supplier\":\"Тестовый поставщик\",\"sampleQuantity\":1,\"testMethod\":\"Smoke-проверка\"}" \
   "$base_url/api/v1/requests")
@@ -347,7 +348,7 @@ public_report_count=$(printf '%s' "$public_details" | grep -o '"documentType":"r
 
 imported=$(curl --fail --silent --show-error \
   --request POST \
-  --header "X-Dev-User-ID: $dev_user_id" \
+  --header "X-Dev-User-ID: $initiator_user_id" \
   --header 'Content-Type: application/json' \
   --data "{\"productName\":\"Imported $marker\",\"manufacturer\":\"Тестовый производитель\",\"supplier\":\"Тестовый поставщик\",\"sampleQuantity\":1,\"testMethod\":\"Импортированный статус\"}" \
   "$base_url/api/v1/requests")
