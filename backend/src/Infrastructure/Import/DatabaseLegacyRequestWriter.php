@@ -8,6 +8,7 @@ use App\Application\Import\LegacyImportOutcome;
 use App\Application\Import\LegacyRequestData;
 use App\Application\Import\LegacyRequestWriter;
 use yii\db\Connection;
+use yii\db\IntegrityException;
 
 final class DatabaseLegacyRequestWriter implements LegacyRequestWriter
 {
@@ -73,10 +74,24 @@ final class DatabaseLegacyRequestWriter implements LegacyRequestWriter
             ])->execute();
             $transaction->commit();
             return LegacyImportOutcome::Created;
+        } catch (IntegrityException $error) {
+            $transaction->rollBack();
+            if ($this->legacyRequestExists($request->legacyId)) {
+                return LegacyImportOutcome::Skipped;
+            }
+            throw $error;
         } catch (\Throwable $error) {
             $transaction->rollBack();
             throw $error;
         }
+    }
+
+    private function legacyRequestExists(string $legacyId): bool
+    {
+        return $this->db->createCommand(
+            'SELECT 1 FROM {{%requests}} WHERE legacy_id = :legacy_id',
+            [':legacy_id' => $legacyId],
+        )->queryScalar() !== false;
     }
 
     private function initiatorId(LegacyRequestData $request): int

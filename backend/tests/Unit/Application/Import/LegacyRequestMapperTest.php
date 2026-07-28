@@ -90,6 +90,22 @@ final class LegacyRequestMapperTest extends TestCase
         ]), 114);
     }
 
+    public function testRejectsStringLongerThanDatabaseColumn(): void
+    {
+        $this->expectException(UnexpectedValueException::class);
+        (new LegacyRequestMapper())->map($this->element([
+            'nameType' => str_repeat('Я', 501),
+        ]), 114);
+    }
+
+    public function testRejectsQuantityOutsideUnsignedDatabaseInteger(): void
+    {
+        $this->expectException(UnexpectedValueException::class);
+        (new LegacyRequestMapper())->map($this->element([
+            'countTestItems' => '4294967296',
+        ]), 114);
+    }
+
     #[DataProvider('knownStatuses')]
     public function testMapsEveryKnownStatus(string $legacyStatus, RequestStatus $expected): void
     {

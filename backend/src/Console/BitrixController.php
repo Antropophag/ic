@@ -17,7 +17,7 @@ use yii\console\ExitCode;
 final class BitrixController extends Controller
 {
     public int $maxPages = 1;
-    public bool $apply = false;
+    public string $apply = '0';
 
     public function options($actionID): array
     {
@@ -61,13 +61,19 @@ final class BitrixController extends Controller
 
     public function actionImport(): int
     {
-        $writer = $this->apply ? new DatabaseLegacyRequestWriter(Yii::$app->db) : null;
+        if (!in_array($this->apply, ['0', '1'], true)) {
+            $this->stderr("--apply accepts only 0 or 1; database was not changed.\n");
+            return ExitCode::USAGE;
+        }
+
+        $shouldApply = $this->apply === '1';
+        $writer = $shouldApply ? new DatabaseLegacyRequestWriter(Yii::$app->db) : null;
         $summary = (new LegacyRequestImporter(new LegacyRequestMapper()))->import(
             $this->client()->elements($this->maxPages),
             $this->listId(),
             $writer,
         );
-        $result = ['mode' => $this->apply ? 'apply' : 'dry-run', ...$summary];
+        $result = ['mode' => $shouldApply ? 'apply' : 'dry-run', ...$summary];
         $this->stdout(json_encode($result, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR) . "\n");
 
         return $summary['invalid'] === 0 ? ExitCode::OK : ExitCode::DATAERR;

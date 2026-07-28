@@ -81,7 +81,7 @@ Backend-порог вычисляется по исполняемым statements
 или противоречивый отчёт считается ошибкой сборки.
 
 На 28.07.2026 зафиксирован baseline выше обязательного минимума: backend
-domain/application — 96,09% statements, frontend API/registry logic — 100% строк и
+domain/application — 95,54% statements, frontend API/registry logic — 100% строк и
 86,20% ветвей. Pipeline падает при снижении ниже порога. Все правила `WF`, `DOC`, `SEC` и `ACL`
 должны иметь прямой позитивный и негативный тест независимо от общего процента.
 
