@@ -20,6 +20,7 @@ const registered = {
   can_start: 1,
   can_comment: 1,
   can_upload_document: 1,
+  can_upload_report: 0,
 }
 
 it('maps the API contract to a registry row', () => {
@@ -35,6 +36,7 @@ it('maps the API contract to a registry row', () => {
     canStart: true,
     canComment: true,
     canUploadDocument: true,
+    canUploadReport: false,
   })
 })
 
@@ -48,6 +50,18 @@ it('hides the start action after the request leaves registered status', () => {
     tone: 'cyan',
     canStart: false,
   })
+})
+
+it('maps the report stage, permission and history label', () => {
+  expect(fromApi({ ...registered, status: 'opinion_preparation', can_upload_report: 1 })).toMatchObject({
+    status: 'Подготовка заключения',
+    tone: 'violet',
+    canUploadReport: true,
+  })
+  expect(historyFromApi({
+    id: 10, kind: 'transition', action: 'upload_report', actorName: 'Исполнитель',
+    ruleId: 'DOC-002', occurredAt: '2026-07-28T10:00:00Z',
+  }).description).toBe('загрузил(а) отчёт испытаний')
 })
 
 it('maps a safe history event without audit payload', () => {
@@ -83,7 +97,7 @@ it('maps the latest document version without exposing its storage key', () => {
     id: '4', title: 'report.pdf', versionId: '12', version: '2', originalName: 'report.pdf',
     mimeType: 'application/pdf', sizeBytes: 1500, sha256: 'a'.repeat(64),
     uploadedBy: 'Иван Иванов', createdAt: '2026-07-28T10:00:00Z',
-  })).toMatchObject({ id: 4, versionId: 12, version: 2, size: '2 КБ' })
+  })).toMatchObject({ id: 4, documentType: 'attachment', versionId: 12, version: 2, size: '2 КБ' })
 })
 
 describe('registry filters', () => {

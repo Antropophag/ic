@@ -31,6 +31,11 @@ export const requestApi = {
     body.append('file', file)
     return request(`/api/v1/requests/${requestId}/documents`, { method: 'POST', body })
   },
+  uploadReport: (requestId, file) => {
+    const body = new FormData()
+    body.append('file', file)
+    return request(`/api/v1/requests/${requestId}/report`, { method: 'POST', body })
+  },
   downloadDocument: async (versionId) => {
     const response = await fetch(`/api/v1/document-versions/${versionId}/download`, {
       headers: { ...DEV_HEADERS },
