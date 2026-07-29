@@ -14,13 +14,27 @@ use Tests\Integration\IntegrationTestCase;
 final class DocumentRepositoryTest extends IntegrationTestCase
 {
     private ?string $storageRoot = null;
+    /** @var list<string> */
+    private array $tempFiles = [];
 
     protected function tearDown(): void
     {
-        if ($this->storageRoot !== null && is_dir($this->storageRoot)) {
-            $this->removeDirectory($this->storageRoot);
+        // parent::tearDown() откатывает транзакцию теста — должен выполниться
+        // даже если очистка временных файлов ниже упадёт, иначе следующий
+        // тест унаследует незакоммиченное состояние текущего.
+        try {
+            foreach ($this->tempFiles as $path) {
+                if (is_file($path)) {
+                    // nosemgrep: php.lang.security.unlink-use.unlink-use -- tempnam-created fixture under sys_get_temp_dir()
+                    unlink($path);
+                }
+            }
+            if ($this->storageRoot !== null && is_dir($this->storageRoot)) {
+                $this->removeDirectory($this->storageRoot);
+            }
+        } finally {
+            parent::tearDown();
         }
-        parent::tearDown();
     }
 
     private function storage(): DocumentStorage
@@ -37,6 +51,7 @@ final class DocumentRepositoryTest extends IntegrationTestCase
     {
         $path = tempnam(sys_get_temp_dir(), 'ic-report-');
         file_put_contents($path, $content);
+        $this->tempFiles[] = $path;
         return ['path' => $path, 'size' => strlen($content), 'mime' => 'application/pdf', 'name' => 'report.pdf'];
     }
 
