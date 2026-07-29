@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { canSubmitComment, commentFromApi, documentFromApi, filterRequests, fromApi, historyFromApi, paginate, withoutStaleActions } from './registry'
+import { buildFeed, canSubmitComment, commentFromApi, documentFromApi, filterRequests, fromApi, historyFromApi, paginate, withoutStaleActions } from './registry'
 
 const registered = {
   id: 4,
@@ -251,4 +251,51 @@ describe('registry sorting and pagination', () => {
   it('never returns a page below 1', () => {
     expect(paginate([1, 2, 3], 0, 10).page).toBe(1)
   })
+})
+
+it('merges history and comments into one chronological feed', () => {
+  const history = [
+    historyFromApi({ id: 1, kind: 'transition', action: 'start', actorName: 'А', ruleId: 'WF-004', occurredAt: '2026-07-28T10:02:00Z' }),
+  ]
+  const comments = [
+    commentFromApi({ id: 5, authorName: 'Б', body: 'раньше всех', createdAt: '2026-07-28T10:00:00Z' }),
+    commentFromApi({ id: 6, authorName: 'В', body: 'позже всех', createdAt: '2026-07-28T10:05:00Z' }),
+  ]
+
+  const feed = buildFeed(history, comments)
+
+  expect(feed.map(entry => entry.id)).toEqual([5, 'transition-1', 6])
+  expect(feed.map(entry => entry.type)).toEqual(['comment', 'milestone', 'comment'])
+})
+
+it('keeps chronological order within a feed when entries share the same second', () => {
+  // Backend отдаёт history/comments в порядке "новые сначала" (для
+  // постраничной подгрузки); при равных occurredAt (секундная точность,
+  // несколько действий подряд) стабильная сортировка обязана сохранить
+  // правильный ASC-порядок внутри каждого источника, а не DESC-порядок API.
+  const sameSecond = '2026-07-29T19:08:23.000000Z'
+  const history = [
+    historyFromApi({ id: 2, kind: 'transition', action: 'upload_report', actorName: 'Исполнитель', ruleId: 'DOC-002', occurredAt: sameSecond }),
+    historyFromApi({ id: 1, kind: 'assignment', action: 'assign_executor', actorName: 'Руководитель', ruleId: 'WF-001', occurredAt: sameSecond }),
+  ]
+
+  const feed = buildFeed(history, [])
+
+  expect(feed.map(entry => entry.id)).toEqual(['assignment-1', 'transition-2'])
+})
+
+it('does not re-reverse comments that the backend already returns in ascending order', () => {
+  // queryCommentsPage() на backend уже делает array_reverse() после ORDER BY
+  // c.id DESC — comments приходят в buildFeed уже в правильном ASC-порядке,
+  // в отличие от history. Повторный reverse() внутри buildFeed сломал бы
+  // порядок именно при одинаковом createdAt (секундная точность).
+  const sameSecond = '2026-07-29T19:08:23.000000Z'
+  const comments = [
+    commentFromApi({ id: 10, authorName: 'А', body: 'первый по id, пришёл первым от backend', createdAt: sameSecond }),
+    commentFromApi({ id: 11, authorName: 'Б', body: 'второй по id, пришёл вторым от backend', createdAt: sameSecond }),
+  ]
+
+  const feed = buildFeed([], comments)
+
+  expect(feed.map(entry => entry.id)).toEqual([10, 11])
 })

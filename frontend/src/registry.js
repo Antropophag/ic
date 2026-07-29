@@ -96,21 +96,47 @@ const HISTORY_LABELS = {
 export function historyFromApi(item) {
   const description = HISTORY_LABELS[item.action] || item.action
   return {
+    type: 'milestone',
     id: `${item.kind}-${item.id}`,
     actor: item.actorName,
     description: item.reason ? `${description}: ${item.reason}` : description,
     ruleId: item.ruleId,
     occurredAt: new Date(item.occurredAt).toLocaleString('ru-RU'),
+    sortAt: item.occurredAt,
   }
 }
 
 export function commentFromApi(item) {
   return {
+    type: 'comment',
     id: Number(item.id),
     author: item.authorName,
     body: item.body,
     createdAt: new Date(item.createdAt).toLocaleString('ru-RU'),
+    sortAt: item.createdAt,
   }
+}
+
+// Единая хронологическая лента заявки (переходы статуса вперемешку с
+// обсуждением, как в таймлайне GitHub PR) — заменяет разрозненные вкладку
+// «Обсуждение» и отдельную модалку «История»: одна история вместо двух.
+// Видимость документов (DOC-003/ACL-002) лента не затрагивает — она
+// показывает только сам факт события, а не содержимое документа.
+//
+// history приходит от backend в порядке «новые сначала» (ORDER BY ... DESC —
+// удобно для будущей постраничной подгрузки), а comments backend уже
+// разворачивает в ASC перед возвратом (queryCommentsPage: array_reverse
+// после ORDER BY id DESC, чтобы новая порция старых записей при подгрузке
+// вставала в начало массива и сохраняла хронологический порядок). Поэтому
+// разворачиваем перед merge-сортировкой только history — реверс уже ASC
+// comments заново сломал бы их порядок. Array.prototype.sort стабилен, но
+// секундная точность occurredAt/createdAt означает, что несколько событий
+// подряд (например, быстрая смена статусов) могут получить одинаковый
+// sortAt — без предварительного разворота history стабильная сортировка
+// сохранила бы его неверный DESC-порядок внутри одной секунды.
+export function buildFeed(history, comments) {
+  const orderedHistory = [...history].reverse()
+  return [...orderedHistory, ...comments].sort((a, b) => new Date(a.sortAt) - new Date(b.sortAt))
 }
 
 export function canSubmitComment(item, detailLoading) {
