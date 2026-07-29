@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Infrastructure\Notification;
 
+use App\Infrastructure\Clock;
 use yii\db\Connection;
 
 final class NotificationOutbox
@@ -25,7 +26,7 @@ final class NotificationOutbox
         string $subject,
         string $body,
     ): void {
-        $now = gmdate('Y-m-d H:i:s.u');
+        $now = Clock::now();
         $this->db->createCommand()->insert('{{%notification_outbox}}', [
             'request_id' => $requestId,
             'event_type' => $eventType,

@@ -9,6 +9,7 @@ use App\Domain\Request\AssignmentDenied;
 use App\Domain\Request\ConcurrentRequestModification;
 use App\Domain\Request\RejectDenied;
 use App\Domain\Request\WithdrawDenied;
+use App\Infrastructure\Clock;
 use App\Infrastructure\Request\RequestRepository;
 use Tests\Integration\IntegrationTestCase;
 
@@ -87,7 +88,7 @@ final class RequestRepositoryTest extends IntegrationTestCase
         $expert = $this->createUser('dev.it.expert1', 'Тестовый эксперт');
         $request = $this->createRegisteredRequest($initiator, 'withdraw-after-sb');
         $requestId = (int) $request['id'];
-        $now = gmdate('Y-m-d H:i:s.u');
+        $now = Clock::now();
 
         // Имитируем прохождение контроля СБ напрямую в БД — минимальная
         // цепочка FK (документ → версия → заключение → security_checks),
@@ -252,7 +253,7 @@ final class RequestRepositoryTest extends IntegrationTestCase
         $outsider = $this->createUser('dev.it.outsider2', 'Посторонний сотрудник');
         $request = $this->createRegisteredRequest($initiator, 'expert-report-visibility');
         $requestId = (int) $request['id'];
-        $now = gmdate('Y-m-d H:i:s.u');
+        $now = Clock::now();
 
         $this->db()->createCommand()->update(
             '{{%requests}}',

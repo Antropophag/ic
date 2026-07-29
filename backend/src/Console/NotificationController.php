@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Console;
 
+use App\Infrastructure\Clock;
 use App\Infrastructure\Notification\Mailer;
 use App\Infrastructure\Notification\NotificationTestRedirect;
 use Yii;
@@ -30,12 +31,12 @@ final class NotificationController extends Controller
         $ids = Yii::$app->db->createCommand(
             "SELECT id FROM {{%notification_outbox}} WHERE status IN ('pending', 'sending') "
             . 'AND next_attempt_at <= :now ORDER BY next_attempt_at LIMIT :limit',
-            [':now' => gmdate('Y-m-d H:i:s.u'), ':limit' => self::BATCH_SIZE],
+            [':now' => Clock::now(), ':limit' => self::BATCH_SIZE],
         )->queryColumn();
 
         foreach ($ids as $id) {
             $id = (int) $id;
-            $now = gmdate('Y-m-d H:i:s.u');
+            $now = Clock::now();
 
             // Атомарный захват: срабатывает и на обычный pending, и на
             // просроченную аренду sending (зависший после сбоя обработчик).
@@ -81,7 +82,7 @@ final class NotificationController extends Controller
                     '{{%notification_outbox}}',
                     [
                         'status' => 'sent',
-                        'sent_at' => gmdate('Y-m-d H:i:s.u'),
+                        'sent_at' => Clock::now(),
                         'last_error' => null,
                         'body' => '[доставлено, тело удалено после отправки]',
                     ],

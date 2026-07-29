@@ -21,6 +21,7 @@ use App\Domain\Request\Role;
 use App\Domain\Request\SecurityDecisionPolicy;
 use App\Domain\Request\StartRequestPolicy;
 use App\Domain\Request\WithdrawPolicy;
+use App\Infrastructure\Clock;
 use App\Infrastructure\Document\DocumentDownloadUrl;
 use App\Infrastructure\Notification\NotificationOutbox;
 use yii\db\Connection;
@@ -48,7 +49,7 @@ final class RequestRepository
                 . 'SET value = LAST_INSERT_ID(value + 1) WHERE id = 1'
             )->execute();
             $number = (int) $this->db->createCommand('SELECT LAST_INSERT_ID()')->queryScalar();
-            $now = gmdate('Y-m-d H:i:s.u');
+            $now = Clock::now();
             $this->db->createCommand()->insert('{{%requests}}', [
                 'number' => $number,
                 'initiator_id' => $initiatorId,
@@ -165,7 +166,7 @@ final class RequestRepository
                 throw new \RuntimeException('Current expert opinion not found or already checked.');
             }
 
-            $now = gmdate('Y-m-d H:i:s.u');
+            $now = Clock::now();
             $this->db->createCommand()->insert('{{%security_checks}}', [
                 'request_id' => $requestId,
                 'expert_opinion_id' => (int) $opinionId,
@@ -271,7 +272,7 @@ final class RequestRepository
             'actor_id' => $actorId,
             'rule_id' => $ruleId,
             'payload_json' => json_encode(['outcome' => 'rejected'], JSON_THROW_ON_ERROR),
-            'created_at' => gmdate('Y-m-d H:i:s.u'),
+            'created_at' => Clock::now(),
         ])->execute();
     }
 
@@ -604,7 +605,7 @@ final class RequestRepository
             }
             (new CommentPolicy())->assertCanAdd(RequestStatus::from((string) $request['status']));
 
-            $now = gmdate('Y-m-d H:i:s.u');
+            $now = Clock::now();
             $this->db->createCommand()->insert('{{%request_comments}}', [
                 'request_id' => $requestId,
                 'author_id' => $actorId,
@@ -789,7 +790,7 @@ final class RequestRepository
         string $ruleId,
         bool $notifyTarget,
     ): array {
-        $now = gmdate('Y-m-d H:i:s.u');
+        $now = Clock::now();
         $nextLockVersion = $expectedLockVersion + 1;
         $updated = $this->db->createCommand()->update(
             '{{%requests}}',
@@ -865,7 +866,7 @@ final class RequestRepository
             'actor_id' => $actorId,
             'rule_id' => $ruleId,
             'payload_json' => json_encode(['expert_id' => $expertId], JSON_THROW_ON_ERROR),
-            'created_at' => gmdate('Y-m-d H:i:s.u'),
+            'created_at' => Clock::now(),
         ])->execute();
     }
 
@@ -913,7 +914,7 @@ final class RequestRepository
                 $this->isCurrentExecutor($requestId, $executorId),
             );
 
-            $now = gmdate('Y-m-d H:i:s.u');
+            $now = Clock::now();
             $nextLockVersion = $expectedLockVersion + 1;
             $this->db->createCommand()->update(
                 '{{%requests}}',
@@ -1012,7 +1013,7 @@ final class RequestRepository
             'actor_id' => $actorId,
             'rule_id' => $ruleId,
             'payload_json' => json_encode(['executor_id' => $executorId], JSON_THROW_ON_ERROR),
-            'created_at' => gmdate('Y-m-d H:i:s.u'),
+            'created_at' => Clock::now(),
         ])->execute();
     }
 
@@ -1037,7 +1038,7 @@ final class RequestRepository
                 $this->isActiveUser($actorId),
             );
 
-            $now = gmdate('Y-m-d H:i:s.u');
+            $now = Clock::now();
             $nextLockVersion = $expectedLockVersion + 1;
             $this->db->createCommand()->update(
                 '{{%requests}}',
@@ -1079,7 +1080,7 @@ final class RequestRepository
             'actor_id' => $actorId,
             'rule_id' => $ruleId,
             'payload_json' => json_encode([], JSON_THROW_ON_ERROR),
-            'created_at' => gmdate('Y-m-d H:i:s.u'),
+            'created_at' => Clock::now(),
         ])->execute();
     }
 
@@ -1115,7 +1116,7 @@ final class RequestRepository
                 $roles,
             );
             $nextLockVersion = $currentLockVersion + 1;
-            $now = gmdate('Y-m-d H:i:s.u');
+            $now = Clock::now();
             $updated = $this->db->createCommand()->update(
                 '{{%requests}}',
                 [
@@ -1187,7 +1188,7 @@ final class RequestRepository
             'actor_id' => $actorId,
             'rule_id' => $ruleId,
             'payload_json' => json_encode([], JSON_THROW_ON_ERROR),
-            'created_at' => gmdate('Y-m-d H:i:s.u'),
+            'created_at' => Clock::now(),
         ])->execute();
     }
 
@@ -1204,7 +1205,7 @@ final class RequestRepository
             'actor_id' => $actorId,
             'rule_id' => $ruleId,
             'payload_json' => json_encode([], JSON_THROW_ON_ERROR),
-            'created_at' => gmdate('Y-m-d H:i:s.u'),
+            'created_at' => Clock::now(),
         ])->execute();
     }
 
@@ -1230,7 +1231,7 @@ final class RequestRepository
 
             (new RejectPolicy())->assertCanReject($this->rolesFor($actorId), $this->isActiveUser($actorId));
 
-            $now = gmdate('Y-m-d H:i:s.u');
+            $now = Clock::now();
             $nextLockVersion = $expectedLockVersion + 1;
             $updated = $this->db->createCommand()->update('{{%requests}}', [
                 'status' => RequestStatus::Rejected->value,
@@ -1304,7 +1305,7 @@ final class RequestRepository
             'actor_id' => $actorId,
             'rule_id' => $ruleId,
             'payload_json' => json_encode([], JSON_THROW_ON_ERROR),
-            'created_at' => gmdate('Y-m-d H:i:s.u'),
+            'created_at' => Clock::now(),
         ])->execute();
     }
 
@@ -1345,7 +1346,7 @@ final class RequestRepository
             $isInitiator = (int) $request['initiator_id'] === $actorId;
             (new WithdrawPolicy())->assertCanWithdraw($isInitiator, $this->isActiveUser($actorId));
 
-            $now = gmdate('Y-m-d H:i:s.u');
+            $now = Clock::now();
             $nextLockVersion = $expectedLockVersion + 1;
             $updated = $this->db->createCommand()->update('{{%requests}}', [
                 'status' => RequestStatus::Withdrawn->value,
@@ -1432,7 +1433,7 @@ final class RequestRepository
             'actor_id' => $actorId,
             'rule_id' => $ruleId,
             'payload_json' => json_encode([], JSON_THROW_ON_ERROR),
-            'created_at' => gmdate('Y-m-d H:i:s.u'),
+            'created_at' => Clock::now(),
         ])->execute();
     }
 
@@ -1516,7 +1517,7 @@ final class RequestRepository
         $this->db->createCommand()->insert('{{%document_download_links}}', [
             'document_version_id' => $documentVersionId,
             'token_hash' => hash('sha256', $token),
-            'created_at' => gmdate('Y-m-d H:i:s.u'),
+            'created_at' => Clock::now(),
         ])->execute();
 
         return $token;

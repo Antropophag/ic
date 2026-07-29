@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Infrastructure\Identity;
 
+use App\Infrastructure\Clock;
 use App\Infrastructure\Ldap\LdapClient;
 use App\Infrastructure\Ldap\LdapProfile;
 use yii\db\Connection;
@@ -48,7 +49,7 @@ final class LdapAuthenticator
                 'SELECT id, is_active, display_name FROM {{%users}} WHERE ad_login = :login FOR UPDATE',
                 [':login' => $profile->login],
             )->queryOne();
-            $now = gmdate('Y-m-d H:i:s.u');
+            $now = Clock::now();
 
             if ($existing === false) {
                 // AUTH-002: первый вход создаёт локальный профиль с базовой
