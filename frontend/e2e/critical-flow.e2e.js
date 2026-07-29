@@ -49,8 +49,8 @@ test('заявка проходит критический путь до сог�
   await page.goto('/')
   await page.getByRole('row').filter({ hasText: marker }).click()
   await expect(page.getByText('Контроль СБ', { exact: true })).toBeVisible()
-  page.once('dialog', dialog => dialog.accept())
   await page.getByRole('button', { name: 'Согласовать и завершить' }).click()
+  await page.getByRole('button', { name: 'Согласовать', exact: true }).click()
   await expect(page.getByText('Заявка выполнена', { exact: true })).toBeVisible()
   await expect(page.getByRole('button', { name: 'Согласовать и завершить' })).toHaveCount(0)
 
