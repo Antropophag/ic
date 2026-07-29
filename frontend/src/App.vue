@@ -1209,7 +1209,7 @@ onMounted(bootstrapAuth)
                 <div v-if="selected.canReassignExpert" class="hero-block hero-block-compact">
                   <h4>Переназначить эксперту</h4>
                   <div class="reassign-row">
-                    <select v-model="expertChoice" :disabled="reassignLoading"><option value="">Выберите эксперта</option><option v-for="expert in experts.filter(candidate => candidate.id !== selected.expertId)" :key="expert.id" :value="expert.id">{{ expert.displayName }}</option></select>
+                    <select v-model="expertChoice" :disabled="reassignLoading" aria-label="Новый эксперт"><option value="">Выберите эксперта</option><option v-for="expert in experts.filter(candidate => candidate.id !== selected.expertId)" :key="expert.id" :value="expert.id">{{ expert.displayName }}</option></select>
                     <button class="secondary" :disabled="reassignLoading" @click="reassignExpert">{{ reassignLoading ? 'Сохранение…' : 'Переназначить' }}</button>
                   </div>
                   <p v-if="reassignError" class="action-error">{{ reassignError }}</p>
