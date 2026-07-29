@@ -237,6 +237,75 @@ final class RequestRepositoryTest extends IntegrationTestCase
         self::assertEmpty($outsiderDetails['documents']);
     }
 
+    public function testManagerCanReassignExecutorAfterWorkStarted(): void
+    {
+        // Issue #72: до этого изменения переназначение работало только в
+        // registered — руководитель не мог исправить ошибочное назначение
+        // после того, как исполнитель уже начал работу.
+        $manager = $this->createUser('dev.it.manager4', 'Тестовый руководитель 4');
+        $this->grantRole($manager, 'ic_manager');
+        $initiator = $this->createUser('dev.it.initiator9', 'Тестовый инициатор 9');
+        $firstExecutor = $this->createUser('dev.it.executor2', 'Первый исполнитель');
+        $this->grantRole($firstExecutor, 'ic_executor');
+        $secondExecutor = $this->createUser('dev.it.executor3', 'Второй исполнитель');
+        $this->grantRole($secondExecutor, 'ic_executor');
+        $request = $this->createRegisteredRequest($initiator, 'reassign-in-progress');
+        $requestId = (int) $request['id'];
+
+        $repository = new RequestRepository($this->db());
+        $assigned = $repository->assignExecutor($requestId, $firstExecutor, (int) $request['lock_version'], $manager);
+        $started = $repository->startRequest($requestId, (int) $assigned['lockVersion'], $manager);
+
+        $reassigned = $repository->assignExecutor(
+            $requestId,
+            $secondExecutor,
+            (int) $started['lockVersion'],
+            $manager,
+        );
+
+        self::assertSame($secondExecutor, $reassigned['executorId']);
+        self::assertSame((int) $started['lockVersion'] + 1, $reassigned['lockVersion']);
+        self::assertSame(
+            'in_progress',
+            $this->scalar('SELECT status FROM {{%requests}} WHERE id = :id', [':id' => $requestId]),
+        );
+
+        $activeAssignments = $this->scalar(
+            "SELECT COUNT(*) FROM {{%request_assignments}} WHERE request_id = :id "
+            . "AND assignment_type = 'executor' AND valid_to IS NULL",
+            [':id' => $requestId],
+        );
+        self::assertSame(1, (int) $activeAssignments);
+
+        $closedForFirstExecutor = $this->scalar(
+            "SELECT COUNT(*) FROM {{%request_assignments}} WHERE request_id = :id "
+            . "AND assignment_type = 'executor' AND user_id = :executor AND valid_to IS NOT NULL",
+            [':id' => $requestId, ':executor' => $firstExecutor],
+        );
+        self::assertSame(1, (int) $closedForFirstExecutor);
+    }
+
+    public function testCannotAssignExecutorAfterOpinionPreparationStarted(): void
+    {
+        $manager = $this->createUser('dev.it.manager5', 'Тестовый руководитель 5');
+        $this->grantRole($manager, 'ic_manager');
+        $initiator = $this->createUser('dev.it.initiator10', 'Тестовый инициатор 10');
+        $executor = $this->createUser('dev.it.executor4', 'Исполнитель');
+        $this->grantRole($executor, 'ic_executor');
+        $request = $this->createRegisteredRequest($initiator, 'reassign-too-late');
+        $requestId = (int) $request['id'];
+
+        $this->db()->createCommand()->update(
+            '{{%requests}}',
+            ['status' => 'opinion_preparation'],
+            ['id' => $requestId],
+        )->execute();
+
+        $repository = new RequestRepository($this->db());
+        $this->expectException(ConcurrentRequestModification::class);
+        $repository->assignExecutor($requestId, $executor, (int) $request['lock_version'], $manager);
+    }
+
     /**
      * @param list<array<string, mixed>> $rows
      * @return array<string, mixed>

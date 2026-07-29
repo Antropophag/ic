@@ -277,7 +277,7 @@ final class RequestRepository
             . 'AND EXISTS(SELECT 1 FROM {{%user_roles}} clr JOIN {{%roles}} clrole ON clrole.id = clr.role_id '
             . "WHERE clr.user_id = :color_actor_role AND clrole.code IN ('ic_manager', 'laboratory_manager'))) "
             . 'AS can_set_color, '
-            . "(r.status = 'registered' AND EXISTS(SELECT 1 FROM {{%users}} aau "
+            . "(r.status IN ('registered', 'in_progress', 'suspended') AND EXISTS(SELECT 1 FROM {{%users}} aau "
             . 'WHERE aau.id = :active_assign_actor AND aau.is_active = 1) '
             . 'AND EXISTS(SELECT 1 FROM {{%user_roles}} aur '
             . 'JOIN {{%roles}} ar ON ar.id = aur.role_id '
@@ -366,7 +366,7 @@ final class RequestRepository
             . 'EXISTS(SELECT 1 FROM {{%user_roles}} clr JOIN {{%roles}} clrole ON clrole.id = clr.role_id '
             . "WHERE clr.user_id = :color_actor AND clrole.code IN ('ic_manager', 'laboratory_manager')) "
             . 'AS can_set_color, '
-            . "(r.status = 'registered' AND EXISTS(SELECT 1 FROM {{%user_roles}} aur "
+            . "(r.status IN ('registered', 'in_progress', 'suspended') AND EXISTS(SELECT 1 FROM {{%user_roles}} aur "
             . 'JOIN {{%roles}} ar ON ar.id = aur.role_id '
             . "WHERE aur.user_id = :assign_actor AND ar.code IN ('ic_manager', 'laboratory_manager'))) "
             . 'AS can_assign_executor, '
@@ -865,8 +865,13 @@ final class RequestRepository
             if ($request === false) {
                 throw new AssignmentTargetNotFound('Request not found');
             }
+            $reassignableStatuses = [
+                RequestStatus::Registered->value,
+                RequestStatus::InProgress->value,
+                RequestStatus::Suspended->value,
+            ];
             if (
-                (string) $request['status'] !== RequestStatus::Registered->value
+                !in_array((string) $request['status'], $reassignableStatuses, true)
                 || (int) $request['lock_version'] !== $expectedLockVersion
             ) {
                 throw new ConcurrentRequestModification();
