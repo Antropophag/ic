@@ -75,6 +75,8 @@ smoke-тесты и E2E, и ещё шесть исполнителей ИЦ по
 Поле `documents` содержит только последние версии документов и не раскрывает
 физические пути или ключи хранилища. `item.can_upload_document` управляет
 видимостью загрузки, но не заменяет серверную проверку.
+Как и в `GET /api/v1/requests`, `item` содержит `color` и `security_mark`
+(`approve`/`return`/`null` — решение последнего контроля СБ).
 
 ### `GET /api/v1/requests/{id}/comments?beforeId={id}`
 
