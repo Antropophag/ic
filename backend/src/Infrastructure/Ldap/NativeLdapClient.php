@@ -75,6 +75,16 @@ final class NativeLdapClient implements LdapClient
 
         $entries = ldap_get_entries($connection, $result);
         if ($entries === false || (int) $entries['count'] === 0) {
+            // Bind учётными данными уже прошёл успешно — это отдельный класс
+            // проблемы (неверный LDAP_BASE_DN, sAMAccountName не совпадает с
+            // login, ограничение прав на self-search), а не неверный пароль.
+            // Наружу возвращаем тот же null (см. authenticate()) — не
+            // раскрывать посторонним факт успешного bind, но для
+            // администратора это отличимо только в логе.
+            error_log(
+                "LDAP self-lookup found no entry for sAMAccountName='{$login}' under base DN "
+                . "'{$this->baseDn}' after a successful bind — check LDAP_BASE_DN and sAMAccountName mapping.",
+            );
             return null;
         }
 
