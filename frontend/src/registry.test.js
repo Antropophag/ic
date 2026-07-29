@@ -283,3 +283,19 @@ it('keeps chronological order within a feed when entries share the same second',
 
   expect(feed.map(entry => entry.id)).toEqual(['assignment-1', 'transition-2'])
 })
+
+it('does not re-reverse comments that the backend already returns in ascending order', () => {
+  // queryCommentsPage() на backend уже делает array_reverse() после ORDER BY
+  // c.id DESC — comments приходят в buildFeed уже в правильном ASC-порядке,
+  // в отличие от history. Повторный reverse() внутри buildFeed сломал бы
+  // порядок именно при одинаковом createdAt (секундная точность).
+  const sameSecond = '2026-07-29T19:08:23.000000Z'
+  const comments = [
+    commentFromApi({ id: 10, authorName: 'А', body: 'первый по id, пришёл первым от backend', createdAt: sameSecond }),
+    commentFromApi({ id: 11, authorName: 'Б', body: 'второй по id, пришёл вторым от backend', createdAt: sameSecond }),
+  ]
+
+  const feed = buildFeed([], comments)
+
+  expect(feed.map(entry => entry.id)).toEqual([10, 11])
+})

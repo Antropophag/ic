@@ -1232,7 +1232,7 @@ onMounted(bootstrapAuth)
                     <span class="avatar small" :class="{ 'blue-avatar': entry.type === 'comment' }">●</span>
                     <div class="entry-body">
                       <template v-if="entry.type === 'milestone'">
-                        <div class="entry-head"><b>{{ entry.actor }} — {{ entry.description }}</b><time>{{ entry.occurredAt }}</time></div>
+                        <div class="entry-head"><b>{{ entry.actor }} — {{ entry.description }}</b><time>{{ entry.occurredAt }} · {{ entry.ruleId }}</time></div>
                       </template>
                       <template v-else>
                         <div class="entry-head"><b>{{ entry.author }}</b><time>{{ entry.createdAt }}</time></div>

@@ -123,17 +123,20 @@ export function commentFromApi(item) {
 // Видимость документов (DOC-003/ACL-002) лента не затрагивает — она
 // показывает только сам факт события, а не содержимое документа.
 //
-// Backend отдаёт оба источника в порядке «новые сначала» (ORDER BY ... DESC —
-// удобно для постраничной подгрузки старых записей), а лента должна читаться
-// по возрастанию времени, как переписка. Array.prototype.sort стабилен, но
+// history приходит от backend в порядке «новые сначала» (ORDER BY ... DESC —
+// удобно для будущей постраничной подгрузки), а comments backend уже
+// разворачивает в ASC перед возвратом (queryCommentsPage: array_reverse
+// после ORDER BY id DESC, чтобы новая порция старых записей при подгрузке
+// вставала в начало массива и сохраняла хронологический порядок). Поэтому
+// разворачиваем перед merge-сортировкой только history — реверс уже ASC
+// comments заново сломал бы их порядок. Array.prototype.sort стабилен, но
 // секундная точность occurredAt/createdAt означает, что несколько событий
 // подряд (например, быстрая смена статусов) могут получить одинаковый
-// sortAt — без предварительного разворота каждого источника стабильная
-// сортировка сохранила бы их неверный DESC-порядок внутри одной секунды.
+// sortAt — без предварительного разворота history стабильная сортировка
+// сохранила бы его неверный DESC-порядок внутри одной секунды.
 export function buildFeed(history, comments) {
   const orderedHistory = [...history].reverse()
-  const orderedComments = [...comments].reverse()
-  return [...orderedHistory, ...orderedComments].sort((a, b) => new Date(a.sortAt) - new Date(b.sortAt))
+  return [...orderedHistory, ...comments].sort((a, b) => new Date(a.sortAt) - new Date(b.sortAt))
 }
 
 export function canSubmitComment(item, detailLoading) {
