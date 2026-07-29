@@ -7,6 +7,7 @@
     "php": "^8.3",
     "ext-dom": "*",
     "ext-json": "*",
+    "ext-ldap": "*",
     "ext-mbstring": "*",
     "ext-pdo": "*",
     "ext-zip": "*",
