@@ -210,6 +210,38 @@ final class RequestRepositoryTest extends IntegrationTestCase
         self::assertStringContainsString('зарегистрирована', $notification['body']);
     }
 
+    public function testWhitespaceOnlyEmailIsTreatedAsMissingAndSurroundingSpacesAreTrimmed(): void
+    {
+        // LDAP-синхронизация не гарантирует, что email придёт без пробелов
+        // по краям — ни пробельная строка не должна считаться валидным
+        // адресом, ни сохранённый в notification_outbox адрес не должен
+        // нести пробелы, иначе Mailer упадёт при построении Address.
+        $whitespaceOnlyEmailManager = $this->createUser('dev.it.manager8', 'Руководитель без адреса', '   ');
+        $this->grantRole($whitespaceOnlyEmailManager, 'ic_manager');
+        $paddedEmailInitiator = $this->createUser(
+            'dev.it.initiator9notify',
+            'Инициатор с пробелами в адресе',
+            '  padded@example.invalid  ',
+        );
+
+        $request = $this->createRegisteredRequest($paddedEmailInitiator, 'notify-trim');
+
+        $managerNotified = $this->scalar(
+            "SELECT COUNT(*) FROM {{%notification_outbox}} "
+            . "WHERE request_id = :id AND recipient_email LIKE '%manager%'",
+            [':id' => $request['id']],
+        );
+        self::assertSame(0, (int) $managerNotified, 'Пробельный email не должен считаться валидным получателем');
+
+        $initiatorRecipient = $this->scalar(
+            "SELECT recipient_email FROM {{%notification_outbox}} "
+            . "WHERE request_id = :id AND event_type = 'request.created' "
+            . "AND recipient_email LIKE '%padded%'",
+            [':id' => $request['id']],
+        );
+        self::assertSame('padded@example.invalid', $initiatorRecipient);
+    }
+
     public function testAssignedExpertSeesTheReportInDocumentsList(): void
     {
         // Issue #73: без этой видимости эксперт не может открыть отчёт,
