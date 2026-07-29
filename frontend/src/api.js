@@ -14,6 +14,10 @@ export function setCsrfToken(token) {
   csrfToken = token || ''
 }
 
+export function hasCsrfToken() {
+  return csrfToken !== ''
+}
+
 function authHeaders() {
   return { ...devHeaders(), ...(csrfToken ? { 'X-CSRF-Token': csrfToken } : {}) }
 }

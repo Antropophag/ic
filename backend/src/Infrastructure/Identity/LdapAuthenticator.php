@@ -5,7 +5,9 @@ declare(strict_types=1);
 namespace App\Infrastructure\Identity;
 
 use App\Infrastructure\Ldap\LdapClient;
+use App\Infrastructure\Ldap\LdapProfile;
 use yii\db\Connection;
+use yii\db\IntegrityException;
 
 final class LdapAuthenticator
 {
@@ -23,6 +25,23 @@ final class LdapAuthenticator
             throw new AuthenticationDenied();
         }
 
+        try {
+            return $this->syncProfile($profile);
+        } catch (IntegrityException $error) {
+            // AUTH-002: SELECT ... FOR UPDATE не сериализует вставку ещё не
+            // существующей строки — два параллельных первых входа одной
+            // учётки (двойной submit, два устройства) могут оба увидеть
+            // отсутствие строки, и один INSERT неизбежно упадёт на unique
+            // constraint ad_login. Повторная попытка находит уже
+            // созданную конкурентом строку и продолжает как обычный
+            // повторный вход.
+            return $this->syncProfile($profile);
+        }
+    }
+
+    /** @return array{id: int, displayName: string} */
+    private function syncProfile(LdapProfile $profile): array
+    {
         $transaction = $this->db->beginTransaction();
         try {
             $existing = $this->db->createCommand(

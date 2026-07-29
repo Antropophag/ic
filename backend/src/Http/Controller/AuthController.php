@@ -129,7 +129,7 @@ final class AuthController extends Controller
         $useTls = strtolower((string) (getenv('LDAP_USE_TLS') ?: 'false')) === 'true';
         $client = new NativeLdapClient(
             $this->requiredEnv('LDAP_HOST'),
-            (int) $this->requiredEnv('LDAP_PORT'),
+            $this->requiredPortEnv('LDAP_PORT'),
             $this->requiredEnv('LDAP_DOMAIN'),
             $this->requiredEnv('LDAP_BASE_DN'),
             $useTls,
@@ -145,5 +145,20 @@ final class AuthController extends Controller
             throw new \RuntimeException("Required environment variable {$name} is missing");
         }
         return $value;
+    }
+
+    private function requiredPortEnv(string $name): int
+    {
+        // Некорректный порт (пустая строка, буквы, вне диапазона) должен
+        // явно ломать конфигурацию сервиса, а не тихо превращаться в 0 и
+        // маскировать ошибку деплоя — это самый частый способ, которым
+        // .env вида "LDAP_PORT=389 " или опечатка остаются незамеченными.
+        $port = filter_var($this->requiredEnv($name), FILTER_VALIDATE_INT, [
+            'options' => ['min_range' => 1, 'max_range' => 65535],
+        ]);
+        if ($port === false) {
+            throw new \RuntimeException("Environment variable {$name} must be a valid TCP port");
+        }
+        return $port;
     }
 }

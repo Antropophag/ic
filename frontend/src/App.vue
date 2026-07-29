@@ -1,6 +1,6 @@
 <script setup>
 import { computed, onMounted, reactive, ref, watch } from 'vue'
-import { authApi, requestApi, setCsrfToken } from './api'
+import { authApi, hasCsrfToken, requestApi, setCsrfToken } from './api'
 import { DEV_USERS, getDevUserId, setDevUserId } from './devUsers'
 import { createLatestRequestGuard } from './latestRequestGuard'
 import { ACTIVE_STATUSES, REGISTRY_PAGE_SIZE, REQUEST_COLORS, canSubmitComment, commentFromApi, documentFromApi, filterRequests, fromApi, historyFromApi, paginate, withoutStaleActions } from './registry'
@@ -129,6 +129,13 @@ async function login() {
   loginLoading.value = true
   loginError.value = ''
   try {
+    if (!hasCsrfToken()) {
+      // Начальный /auth/me мог не выполниться (сеть/сервер) — без токена
+      // сам логин будет отклонён CSRF-проверкой вне dev, поэтому сначала
+      // добираем токен перед попыткой входа.
+      const bootstrap = await authApi.me()
+      setCsrfToken(bootstrap.csrfToken)
+    }
     const result = await authApi.login(loginForm.login, loginForm.password)
     setCsrfToken(result.csrfToken)
     authUser.value = result.user

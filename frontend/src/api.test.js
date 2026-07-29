@@ -1,5 +1,5 @@
 import { afterEach, expect, it, vi } from 'vitest'
-import { authApi, requestApi, setCsrfToken } from './api'
+import { authApi, hasCsrfToken, requestApi, setCsrfToken } from './api'
 import { setDevUserId } from './devUsers'
 
 afterEach(() => {
@@ -265,6 +265,16 @@ it('sends the CSRF token once set, on every request', async () => {
   expect(fetchMock).toHaveBeenCalledWith('/api/v1/requests', expect.objectContaining({
     headers: expect.objectContaining({ 'X-CSRF-Token': 'token-value' }),
   }))
+})
+
+it('reports whether a CSRF token is currently set', () => {
+  expect(hasCsrfToken()).toBe(false)
+
+  setCsrfToken('token-value')
+  expect(hasCsrfToken()).toBe(true)
+
+  setCsrfToken('')
+  expect(hasCsrfToken()).toBe(false)
 })
 
 it('fetches the current session and stores its csrf token', async () => {

@@ -35,29 +35,33 @@ final class NativeLdapClient implements LdapClient
         ldap_set_option($connection, LDAP_OPT_REFERRALS, 0);
         ldap_set_option($connection, LDAP_OPT_NETWORK_TIMEOUT, self::NETWORK_TIMEOUT_SECONDS);
 
-        if ($this->useTls && !@ldap_start_tls($connection)) {
-            throw new LdapConnectionException('LDAP StartTLS negotiation failed: ' . ldap_error($connection));
-        }
-
-        // Простой bind под именем самого пользователя — так же, как для
-        // Bitrix24, права намеренно не шире необходимого (это же соединение
-        // и учётные данные ниже используются для чтения собственного
-        // профиля, отдельный сервисный аккаунт не заводится).
-        $bound = @ldap_bind($connection, "{$login}@{$this->domain}", $password);
-        if (!$bound) {
-            $errorCode = ldap_errno($connection);
-            // 0x31 (invalid credentials) и его варианты — обычный отказ
-            // логина/пароля, а не сбой инфраструктуры.
-            if (in_array($errorCode, [0x31, 0x32, 0x34], true)) {
-                return null;
+        try {
+            if ($this->useTls && !@ldap_start_tls($connection)) {
+                throw new LdapConnectionException('LDAP StartTLS negotiation failed: ' . ldap_error($connection));
             }
-            throw new LdapConnectionException('LDAP bind failed: ' . ldap_error($connection));
+
+            // Простой bind под именем самого пользователя — так же, как для
+            // Bitrix24, права намеренно не шире необходимого (это же соединение
+            // и учётные данные ниже используются для чтения собственного
+            // профиля, отдельный сервисный аккаунт не заводится).
+            $bound = @ldap_bind($connection, "{$login}@{$this->domain}", $password);
+            if (!$bound) {
+                $errorCode = ldap_errno($connection);
+                // 0x31 (invalid credentials) и его варианты — обычный отказ
+                // логина/пароля, а не сбой инфраструктуры.
+                if (in_array($errorCode, [0x31, 0x32, 0x34], true)) {
+                    return null;
+                }
+                throw new LdapConnectionException('LDAP bind failed: ' . ldap_error($connection));
+            }
+
+            return $this->fetchProfile($connection, $login);
+        } finally {
+            // Долгоживущие php-fpm воркеры не должны копить открытые LDAP-
+            // соединения на путях ошибок (StartTLS/bind/search) — закрываем
+            // соединение при любом выходе из блока, не только на happy-path.
+            @ldap_unbind($connection);
         }
-
-        $profile = $this->fetchProfile($connection, $login);
-        ldap_unbind($connection);
-
-        return $profile;
     }
 
     /** @param \LDAP\Connection $connection */
