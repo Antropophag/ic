@@ -6,6 +6,7 @@ namespace Tests\Integration\Document;
 
 use App\Application\Request\CreateRequestInput;
 use App\Domain\Request\ReportDenied;
+use App\Domain\Request\RequestNotFound;
 use App\Infrastructure\Document\DocumentRepository;
 use App\Infrastructure\Document\DocumentStorage;
 use App\Infrastructure\Request\RequestRepository;
@@ -169,6 +170,38 @@ final class DocumentRepositoryTest extends IntegrationTestCase
             [':id' => $requestId],
         );
         self::assertSame(2, (int) $versionCount);
+    }
+
+    public function testAssignedExpertCanDownloadTheReportButUnrelatedEmployeeCannot(): void
+    {
+        // Issue #73: эксперт, закреплённый за заявкой на подготовке
+        // заключения, обязан видеть отчёт — иначе ему не по чему готовить
+        // заключение. Посторонний сотрудник по-прежнему не должен иметь
+        // доступа (DOC-003).
+        $initiator = $this->createUser('dev.it.doc.initiator4', 'Инициатор');
+        $executor = $this->createUser('dev.it.doc.executor4', 'Исполнитель');
+        $expert = $this->createUser('dev.it.doc.expert3', 'Эксперт');
+        $outsider = $this->createUser('dev.it.doc.outsider2', 'Посторонний сотрудник');
+        $request = $this->createInProgressRequestWithExecutor($initiator, $executor, 'report-expert-visibility');
+        $requestId = (int) $request['id'];
+
+        $repository = new DocumentRepository($this->db(), $this->storage());
+        $file = $this->tempPdf();
+        $uploaded = $repository->uploadReport($requestId, $executor, $file['name'], $file['mime'], $file['size'], $file['path']);
+
+        $this->db()->createCommand()->insert('{{%request_assignments}}', [
+            'request_id' => $requestId,
+            'assignment_type' => 'expert',
+            'user_id' => $expert,
+            'assigned_by' => $expert,
+            'valid_from' => gmdate('Y-m-d H:i:s.u'),
+        ])->execute();
+
+        $version = $repository->findVersionForDownload((int) $uploaded['versionId'], $expert);
+        self::assertSame($requestId, $version['requestId']);
+
+        $this->expectException(RequestNotFound::class);
+        $repository->findVersionForDownload((int) $uploaded['versionId'], $outsider);
     }
 
     private function removeDirectory(string $path): void
