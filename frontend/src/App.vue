@@ -66,6 +66,7 @@ const withdrawRequestGuard = createLatestRequestGuard()
 const claimRequestGuard = createLatestRequestGuard()
 const reassignRequestGuard = createLatestRequestGuard()
 const deleteReportRequestGuard = createLatestRequestGuard()
+const adminRequestGuard = createLatestRequestGuard()
 const draft = reactive({
   productName: '', manufacturer: '', supplier: '', sampleQuantity: 1, testMethod: '',
 })
@@ -184,18 +185,25 @@ async function openAdmin() {
   showAdmin.value = true
   adminError.value = ''
   adminLoading.value = true
+  const requestToken = adminRequestGuard.begin(true)
   try {
     const [usersResult, rolesResult] = await Promise.all([adminApi.users(), adminApi.roles()])
+    if (!adminRequestGuard.isCurrent(requestToken, true)) return
     adminUsers.value = usersResult.items
     adminRoles.value = rolesResult.items
   } catch {
-    adminError.value = 'Не удалось загрузить список пользователей.'
+    if (adminRequestGuard.isCurrent(requestToken, true)) {
+      adminError.value = 'Не удалось загрузить список пользователей.'
+    }
   } finally {
-    adminLoading.value = false
+    if (adminRequestGuard.isCurrent(requestToken, true)) {
+      adminLoading.value = false
+    }
   }
 }
 
 function closeAdmin() {
+  adminRequestGuard.invalidate()
   showAdmin.value = false
 }
 

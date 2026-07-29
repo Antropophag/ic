@@ -131,6 +131,23 @@ final class DevController extends Controller
 
         $now = gmdate('Y-m-d H:i:s');
         foreach (self::CORE_USERS as $userId => $user) {
+            // Фиксированный id безопасен только пока под ним либо ещё нет
+            // строки, либо уже сидированный тем же ad_login профиль — иначе
+            // upsert по id молча перепишет чужого реального пользователя на
+            // персистентной demo-базе тем же способом, которого намеренно
+            // избегают ADDITIONAL_EXECUTORS/ADDITIONAL_EXPERTS ниже.
+            $existingAdLogin = Yii::$app->db->createCommand(
+                'SELECT ad_login FROM {{%users}} WHERE id = :id',
+                [':id' => $userId],
+            )->queryScalar();
+            if ($existingAdLogin !== false && $existingAdLogin !== $user['ad_login']) {
+                $this->stderr(
+                    "Refusing to seed core user id={$userId}: existing ad_login "
+                    . "'{$existingAdLogin}' does not match seed ad_login '{$user['ad_login']}' — "
+                    . "this id is already taken by a different real profile.\n",
+                );
+                return ExitCode::UNSPECIFIED_ERROR;
+            }
             Yii::$app->db->createCommand()->upsert('{{%users}}', [
                 'id' => $userId,
                 'ad_login' => $user['ad_login'],

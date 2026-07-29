@@ -73,58 +73,67 @@ final class UserAdministrationRepository
     public function createPlaceholder(string $adLogin, string $displayName, int $actorId): array
     {
         $now = gmdate('Y-m-d H:i:s.u');
+        $transaction = $this->db->beginTransaction();
         try {
-            $this->db->createCommand()->insert('{{%users}}', [
-                'ad_login' => $adLogin,
-                'display_name' => $displayName,
-                'is_active' => true,
-                'created_at' => $now,
-                'updated_at' => $now,
-            ])->execute();
-        } catch (IntegrityException $error) {
-            throw new DuplicateAdLogin($adLogin);
-        }
-        $userId = (int) $this->db->getLastInsertID();
+            try {
+                $this->db->createCommand()->insert('{{%users}}', [
+                    'ad_login' => $adLogin,
+                    'display_name' => $displayName,
+                    'is_active' => true,
+                    'created_at' => $now,
+                    'updated_at' => $now,
+                ])->execute();
+            } catch (IntegrityException $error) {
+                throw new DuplicateAdLogin($adLogin);
+            }
+            $userId = (int) $this->db->getLastInsertID();
 
-        $this->db->createCommand()->insert('{{%audit_events}}', [
-            'event_type' => 'user.pre_provisioned',
-            'entity_type' => 'user',
-            'entity_id' => $userId,
-            'actor_id' => $actorId,
-            'rule_id' => 'AUTH-007',
-            'payload_json' => json_encode(
-                ['ad_login' => $adLogin, 'display_name' => $displayName],
-                JSON_THROW_ON_ERROR | JSON_UNESCAPED_UNICODE,
-            ),
-            'created_at' => $now,
-        ])->execute();
-
-        // AUTH-002: обычный первый вход даёт базовую роль «Сотрудник» —
-        // pre-provisioning должен приводить к тому же исходному состоянию,
-        // иначе заранее заведённый профиль будет отличаться от того, что
-        // получил бы тот же человек, просто залогинившись сам.
-        $employeeRoleId = $this->db->createCommand(
-            "SELECT id FROM {{%roles}} WHERE code = 'employee'",
-        )->queryScalar();
-        if ($employeeRoleId !== false) {
-            $this->db->createCommand()->insert('{{%user_roles}}', [
-                'user_id' => $userId,
-                'role_id' => (int) $employeeRoleId,
-                'assigned_by' => $actorId,
+            $this->db->createCommand()->insert('{{%audit_events}}', [
+                'event_type' => 'user.pre_provisioned',
+                'entity_type' => 'user',
+                'entity_id' => $userId,
+                'actor_id' => $actorId,
+                'rule_id' => 'AUTH-007',
+                'payload_json' => json_encode(
+                    ['ad_login' => $adLogin, 'display_name' => $displayName],
+                    JSON_THROW_ON_ERROR | JSON_UNESCAPED_UNICODE,
+                ),
                 'created_at' => $now,
             ])->execute();
+
+            // AUTH-002: обычный первый вход даёт базовую роль «Сотрудник» —
+            // pre-provisioning должен приводить к тому же исходному состоянию,
+            // иначе заранее заведённый профиль будет отличаться от того, что
+            // получил бы тот же человек, просто залогинившись сам.
+            $employeeRoleId = $this->db->createCommand(
+                "SELECT id FROM {{%roles}} WHERE code = 'employee'",
+            )->queryScalar();
+            if ($employeeRoleId !== false) {
+                $this->db->createCommand()->insert('{{%user_roles}}', [
+                    'user_id' => $userId,
+                    'role_id' => (int) $employeeRoleId,
+                    'assigned_by' => $actorId,
+                    'created_at' => $now,
+                ])->execute();
+            }
+
+            $result = [
+                'id' => $userId,
+                'adLogin' => $adLogin,
+                'displayName' => $displayName,
+                'email' => null,
+                'department' => null,
+                'position' => null,
+                'isActive' => true,
+                'roles' => $this->rolesOf($userId),
+            ];
+            $transaction->commit();
+        } catch (\Throwable $error) {
+            $transaction->rollBack();
+            throw $error;
         }
 
-        return [
-            'id' => $userId,
-            'adLogin' => $adLogin,
-            'displayName' => $displayName,
-            'email' => null,
-            'department' => null,
-            'position' => null,
-            'isActive' => true,
-            'roles' => $this->rolesOf($userId),
-        ];
+        return $result;
     }
 
     /** @return list<array<string, mixed>> */
@@ -146,12 +155,20 @@ final class UserAdministrationRepository
 
         if (!$alreadyAssigned) {
             $now = gmdate('Y-m-d H:i:s.u');
-            $this->db->createCommand()->insert('{{%user_roles}}', [
-                'user_id' => $userId,
-                'role_id' => $roleId,
-                'assigned_by' => $actorId,
-                'created_at' => $now,
-            ])->execute();
+            try {
+                $this->db->createCommand()->insert('{{%user_roles}}', [
+                    'user_id' => $userId,
+                    'role_id' => $roleId,
+                    'assigned_by' => $actorId,
+                    'created_at' => $now,
+                ])->execute();
+            } catch (IntegrityException $error) {
+                // Гонка check-then-insert: другой параллельный запрос успел
+                // назначить эту же роль между нашей проверкой и вставкой —
+                // тот же идемпотентный результат, что и alreadyAssigned,
+                // без дублирующей записи аудита.
+                return $this->rolesOf($userId);
+            }
             $this->db->createCommand()->insert('{{%audit_events}}', [
                 'event_type' => 'user.role_assigned',
                 'entity_type' => 'user',
