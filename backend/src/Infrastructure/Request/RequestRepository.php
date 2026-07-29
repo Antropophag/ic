@@ -89,6 +89,26 @@ final class RequestRepository
                     ),
                 );
             }
+            // REQ-009: инициатора отдельно уведомляют о приёме его же заявки —
+            // без этого письма у него нет подтверждения, что регистрация
+            // прошла успешно и заявка действительно попала в процесс.
+            $initiatorContact = $this->userContact($initiatorId);
+            if ($initiatorContact !== null) {
+                $outbox->enqueue(
+                    $id,
+                    'request.created',
+                    $initiatorContact['email'],
+                    $initiatorContact['name'],
+                    sprintf('Заявка №%06d принята в работу', $number),
+                    sprintf(
+                        "Ваша заявка №%06d на проведение испытаний зарегистрирована.\n"
+                        . "Объект испытаний: %s.\n\n"
+                        . 'Вы получите следующее уведомление, когда испытательный центр назначит исполнителя.',
+                        $number,
+                        $input->productName,
+                    ),
+                );
+            }
             $transaction->commit();
 
             return $this->findOne($id);

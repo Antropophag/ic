@@ -177,6 +177,30 @@ final class RequestRepositoryTest extends IntegrationTestCase
         self::assertSame(1, (int) $notifiedCount);
     }
 
+    public function testInitiatorIsNotifiedOfOwnRequestRegistration(): void
+    {
+        // REQ-009: инициатор получает отдельное подтверждающее письмо о
+        // регистрации своей заявки, помимо уведомления руководителей.
+        $initiator = $this->createUser(
+            'dev.it.initiator8notify',
+            'Тестовый инициатор для уведомления',
+            'initiator-notify@example.invalid',
+        );
+
+        $request = $this->createRegisteredRequest($initiator, 'notify-initiator');
+
+        $notification = $this->db()->createCommand(
+            "SELECT subject, body FROM {{%notification_outbox}} "
+            . "WHERE request_id = :id AND event_type = 'request.created' "
+            . "AND recipient_email = 'initiator-notify@example.invalid'",
+            [':id' => $request['id']],
+        )->queryOne();
+
+        self::assertNotFalse($notification);
+        self::assertStringContainsString('принята в работу', $notification['subject']);
+        self::assertStringContainsString('зарегистрирована', $notification['body']);
+    }
+
     public function testAssignedExpertSeesTheReportInDocumentsList(): void
     {
         // Issue #73: без этой видимости эксперт не может открыть отчёт,
