@@ -74,12 +74,12 @@ function switchDevUser(rawId) {
 }
 
 const requests = ref([
-  { id: '000146', date: '27.07.2026', initiator: 'Максим Умнов', department: 'Бюро приводной техники', product: 'Лебёдка Furder VT40K', supplier: 'ООО «Вектор Технологий»', executor: 'С. И. Кашин', status: 'Заявка зарегистрирована', tone: 'blue' },
-  { id: '000145', date: '27.07.2026', initiator: 'Виктор Медведев', department: 'Отдел производственных закупок', product: 'IP-видеокамера DS-2CD2543G2-IS', supplier: 'ООО «Видеотехнология»', executor: 'С. В. Наумов', status: 'Заявка в работе', tone: 'cyan' },
-  { id: '000144', date: '24.07.2026', initiator: 'Андрей Соколов', department: 'Отдел главного конструктора', product: 'Ограничитель скорости ОС-2', supplier: 'АО «Лифткомплект»', executor: 'С. В. Прикуль', status: 'Работы приостановлены', tone: 'orange' },
-  { id: '000143', date: '22.07.2026', initiator: 'Елена Орлова', department: 'Служба закупок', product: 'Частотный преобразователь 15 кВт', supplier: 'ООО «Электропривод»', executor: 'С. Д. Шапошников', status: 'Подготовка заключения', tone: 'violet' },
-  { id: '000142', date: '21.07.2026', initiator: 'Павел Зимин', department: 'Управление качества', product: 'Буфер полиуретановый БП-100', supplier: 'ООО «Полимер»', executor: 'В. Я. Галкин', status: 'Контроль СБ', tone: 'yellow' },
-  { id: '000141', date: '18.07.2026', initiator: 'Ирина Белова', department: 'Служба закупок', product: 'Датчик положения кабины', supplier: 'ООО «Сенсорика»', executor: 'В. В. Козлов', status: 'Заявка выполнена', tone: 'green' },
+  { id: '000146', date: '27.07.2026', initiator: 'Максим Умнов', department: 'Бюро приводной техники', product: 'Лебёдка Furder VT40K', supplier: 'ООО «Вектор Технологий»', executor: 'С. И. Кашин', status: 'Заявка зарегистрирована', tone: 'blue', color: 'white', securityMark: '—' },
+  { id: '000145', date: '27.07.2026', initiator: 'Виктор Медведев', department: 'Отдел производственных закупок', product: 'IP-видеокамера DS-2CD2543G2-IS', supplier: 'ООО «Видеотехнология»', executor: 'С. В. Наумов', status: 'Заявка в работе', tone: 'cyan', color: 'white', securityMark: '—' },
+  { id: '000144', date: '24.07.2026', initiator: 'Андрей Соколов', department: 'Отдел главного конструктора', product: 'Ограничитель скорости ОС-2', supplier: 'АО «Лифткомплект»', executor: 'С. В. Прикуль', status: 'Работы приостановлены', tone: 'orange', color: 'white', securityMark: '—' },
+  { id: '000143', date: '22.07.2026', initiator: 'Елена Орлова', department: 'Служба закупок', product: 'Частотный преобразователь 15 кВт', supplier: 'ООО «Электропривод»', executor: 'С. Д. Шапошников', status: 'Подготовка заключения', tone: 'violet', color: 'white', securityMark: '—' },
+  { id: '000142', date: '21.07.2026', initiator: 'Павел Зимин', department: 'Управление качества', product: 'Буфер полиуретановый БП-100', supplier: 'ООО «Полимер»', executor: 'В. Я. Галкин', status: 'Контроль СБ', tone: 'yellow', color: 'white', securityMark: '✕' },
+  { id: '000141', date: '18.07.2026', initiator: 'Ирина Белова', department: 'Служба закупок', product: 'Датчик положения кабины', supplier: 'ООО «Сенсорика»', executor: 'В. В. Козлов', status: 'Заявка выполнена', tone: 'green', color: 'white', securityMark: '✓' },
 ])
 
 const tabs = computed(() => [
@@ -723,13 +723,7 @@ onMounted(loadRequests)
               <h1>{{ selected ? `Заявка ${selected.id}` : 'Регистратор испытаний' }}</h1>
             </div>
           </div>
-          <nav class="topnav">
-            <button class="active">Заявки</button>
-            <button>Справочники</button>
-          </nav>
           <div class="profile">
-            <span class="avatar">{{ currentInitials }}</span>
-            <span><b>{{ currentProfile.displayName }}</b><small>{{ currentProfile.position }}</small></span>
             <select
               class="dev-user-switch"
               title="Временный переключатель пользователя до подключения LDAP"
@@ -738,6 +732,8 @@ onMounted(loadRequests)
             >
               <option v-for="user in DEV_USERS" :key="user.id" :value="user.id">{{ user.displayName }} — {{ user.position }}</option>
             </select>
+            <span class="avatar">{{ currentInitials }}</span>
+            <span><b>{{ currentProfile.displayName }}</b><small>{{ currentProfile.position }}</small></span>
           </div>
         </div>
       </header>
@@ -761,17 +757,17 @@ onMounted(loadRequests)
           <div class="toolbar">
             <label class="search">⌕ <input v-model="query" placeholder="Поиск по заявкам" /></label>
             <select v-model="statusFilter"><option value="">Все статусы</option><option v-for="status in statuses" :key="status">{{ status }}</option></select>
-            <button class="secondary">☷ Настроить таблицу</button>
           </div>
           <div class="table-wrap">
             <table>
-              <thead><tr><th class="sortable" @click="toggleSort">№ заявки {{ sortDirection === 'desc' ? '↓' : '↑' }}</th><th>Дата</th><th>Объект испытаний</th><th>Инициатор</th><th>Исполнитель</th><th>Статус</th><th></th></tr></thead>
+              <thead><tr><th class="sortable" @click="toggleSort">№ заявки {{ sortDirection === 'desc' ? '↓' : '↑' }}</th><th>Дата</th><th>Объект испытаний</th><th>Инициатор</th><th>Исполнитель</th><th>Статус</th><th>Отметка СБ</th><th></th></tr></thead>
               <tbody>
                 <tr v-for="item in paged.items" :key="item.id" :class="'row-color-' + item.color" @click="openRequest(item)">
                   <td class="number">{{ item.id }}</td><td>{{ item.date }}</td>
                   <td><b>{{ item.product }}</b><small>{{ item.supplier }}</small></td>
                   <td>{{ item.initiator }}<small>{{ item.department }}</small></td>
-                  <td>{{ item.executor }}</td><td><span class="badge" :class="item.tone">{{ item.status }}</span></td><td>›</td>
+                  <td>{{ item.executor }}</td><td><span class="badge" :class="item.tone">{{ item.status }}</span></td>
+                  <td>{{ item.securityMark }}</td><td>›</td>
                 </tr>
               </tbody>
             </table>
@@ -793,7 +789,6 @@ onMounted(loadRequests)
           <button class="back" @click="closeRequest">‹</button>
           <span class="badge" :class="selected.tone">{{ selected.status }}</span>
           <button class="secondary" @click="showHistory = true">◷ История</button>
-          <button class="primary">Действия ▾</button>
         </div>
         <p v-if="detailLoading" class="detail-state">Загрузка актуальной карточки…</p>
         <p v-if="detailError" class="detail-state error">{{ detailError }}</p>
@@ -819,7 +814,7 @@ onMounted(loadRequests)
             </article>
           </div>
           <aside class="stack side-column">
-            <article class="card summary"><h3>Исполнение</h3><p><span>Исполнитель</span><b>{{ selected.executor }}</b></p><p><span>Эксперт</span><b>{{ selected.expert }}</b></p><p><span>Отметка СБ</span><b>—</b></p>
+            <article class="card summary"><h3>Исполнение</h3><p><span>Исполнитель</span><b>{{ selected.executor }}</b></p><p><span>Эксперт</span><b>{{ selected.expert }}</b></p><p><span>Отметка СБ</span><b>{{ selected.securityMark }}</b></p>
               <div v-if="selected.canSetColor" class="color-picker">
                 <button
                   v-for="color in REQUEST_COLORS"

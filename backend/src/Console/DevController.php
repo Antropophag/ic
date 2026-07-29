@@ -19,8 +19,8 @@ final class DevController extends Controller
     private const CORE_USERS = [
         1 => [
             'ad_login' => 'dev.user', 'display_name' => 'Максим Умнов',
-            'email' => 'dev.user@example.invalid', 'position' => 'Разработчик',
-            'department' => 'Тестовое подразделение', 'roles' => ['employee', 'ic_manager'],
+            'email' => 'dev.user@example.invalid', 'position' => 'Руководитель ИЦ',
+            'department' => 'Испытательный центр', 'roles' => ['employee', 'ic_manager'],
         ],
         2 => [
             'ad_login' => 'dev.executor', 'display_name' => 'Сергей Кашин',
