@@ -74,17 +74,28 @@ final class NativeLdapClient implements LdapClient
         }
 
         $entries = ldap_get_entries($connection, $result);
-        if ($entries === false || (int) $entries['count'] === 0) {
+        if ($entries === false) {
+            // Отличать от "0 записей" ниже: здесь сам вызов ldap_get_entries()
+            // упал (сбой чтения результата), а не успешно нашёл пустой набор —
+            // смешение этих случаев в одном логе увело бы диагностику не туда
+            // (на LDAP_BASE_DN вместо реального сбоя инфраструктуры).
+            throw new LdapConnectionException('LDAP entries retrieval failed: ' . ldap_error($connection));
+        }
+        if ((int) $entries['count'] === 0) {
             // Bind учётными данными уже прошёл успешно — это отдельный класс
             // проблемы (неверный LDAP_BASE_DN, sAMAccountName не совпадает с
             // login, ограничение прав на self-search), а не неверный пароль.
             // Наружу возвращаем тот же null (см. authenticate()) — не
             // раскрывать посторонним факт успешного bind, но для
-            // администратора это отличимо только в логе.
-            error_log(
-                "LDAP self-lookup found no entry for sAMAccountName='{$login}' under base DN "
-                . "'{$this->baseDn}' after a successful bind — check LDAP_BASE_DN and sAMAccountName mapping.",
-            );
+            // администратора это отличимо только в логе. Логин экранируется
+            // от управляющих символов — он приходит из пользовательского
+            // ввода и не должен ломать построчный формат лога.
+            error_log(sprintf(
+                "LDAP self-lookup found no entry for sAMAccountName=%s under base DN '%s' after a successful"
+                . ' bind — check LDAP_BASE_DN and sAMAccountName mapping.',
+                json_encode($login, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
+                $this->baseDn,
+            ));
             return null;
         }
 
