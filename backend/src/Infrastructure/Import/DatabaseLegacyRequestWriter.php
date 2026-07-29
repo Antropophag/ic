@@ -7,6 +7,7 @@ namespace App\Infrastructure\Import;
 use App\Application\Import\LegacyImportOutcome;
 use App\Application\Import\LegacyRequestData;
 use App\Application\Import\LegacyRequestWriter;
+use App\Infrastructure\Clock;
 use yii\db\Connection;
 use yii\db\IntegrityException;
 
@@ -70,7 +71,7 @@ final class DatabaseLegacyRequestWriter implements LegacyRequestWriter
                     ['legacyId' => $request->legacyId],
                     JSON_THROW_ON_ERROR | JSON_UNESCAPED_UNICODE,
                 ),
-                'created_at' => gmdate('Y-m-d H:i:s.u'),
+                'created_at' => Clock::now(),
             ])->execute();
             $transaction->commit();
             return LegacyImportOutcome::Created;
@@ -97,7 +98,7 @@ final class DatabaseLegacyRequestWriter implements LegacyRequestWriter
     private function initiatorId(LegacyRequestData $request): int
     {
         $login = 'legacy.bitrix24.' . $request->creatorLegacyId;
-        $now = gmdate('Y-m-d H:i:s.u');
+        $now = Clock::now();
         $this->db->createCommand()->upsert('{{%users}}', [
             'ad_login' => $login,
             'display_name' => $request->creatorDisplayName !== ''

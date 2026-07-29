@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Tests\Integration;
 
+use App\Infrastructure\Clock;
 use PHPUnit\Framework\TestCase;
 use yii\db\Connection;
 use yii\db\Transaction;
@@ -62,7 +63,7 @@ abstract class IntegrationTestCase extends TestCase
         ?string $email = null,
         bool $isActive = true,
     ): int {
-        $now = gmdate('Y-m-d H:i:s.u');
+        $now = Clock::now();
         $this->db()->createCommand()->insert('{{%users}}', [
             'ad_login' => $adLogin,
             'display_name' => $displayName,
@@ -86,7 +87,7 @@ abstract class IntegrationTestCase extends TestCase
         $this->db()->createCommand()->insert('{{%user_roles}}', [
             'user_id' => $userId,
             'role_id' => (int) $roleId,
-            'created_at' => gmdate('Y-m-d H:i:s.u'),
+            'created_at' => Clock::now(),
         ])->execute();
     }
 

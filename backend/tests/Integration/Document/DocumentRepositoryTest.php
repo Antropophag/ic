@@ -7,6 +7,7 @@ namespace Tests\Integration\Document;
 use App\Application\Request\CreateRequestInput;
 use App\Domain\Request\ReportDenied;
 use App\Domain\Request\RequestNotFound;
+use App\Infrastructure\Clock;
 use App\Infrastructure\Document\DocumentRepository;
 use App\Infrastructure\Document\DocumentStorage;
 use App\Infrastructure\Request\RequestRepository;
@@ -67,7 +68,7 @@ final class DocumentRepositoryTest extends IntegrationTestCase
         $input->testMethod = 'Интеграционный тест';
         $request = (new RequestRepository($this->db()))->create($input, $initiatorId);
         $requestId = (int) $request['id'];
-        $now = gmdate('Y-m-d H:i:s.u');
+        $now = Clock::now();
 
         $this->db()->createCommand()->update('{{%requests}}', ['status' => 'in_progress'], ['id' => $requestId])->execute();
         $this->db()->createCommand()->insert('{{%request_assignments}}', [
@@ -194,7 +195,7 @@ final class DocumentRepositoryTest extends IntegrationTestCase
             'assignment_type' => 'expert',
             'user_id' => $expert,
             'assigned_by' => $expert,
-            'valid_from' => gmdate('Y-m-d H:i:s.u'),
+            'valid_from' => Clock::now(),
         ])->execute();
 
         $version = $repository->findVersionForDownload((int) $uploaded['versionId'], $expert);
