@@ -724,8 +724,6 @@ onMounted(loadRequests)
             </div>
           </div>
           <div class="profile">
-            <span class="avatar">{{ currentInitials }}</span>
-            <span><b>{{ currentProfile.displayName }}</b><small>{{ currentProfile.position }}</small></span>
             <select
               class="dev-user-switch"
               title="Временный переключатель пользователя до подключения LDAP"
@@ -734,6 +732,8 @@ onMounted(loadRequests)
             >
               <option v-for="user in DEV_USERS" :key="user.id" :value="user.id">{{ user.displayName }} — {{ user.position }}</option>
             </select>
+            <span class="avatar">{{ currentInitials }}</span>
+            <span><b>{{ currentProfile.displayName }}</b><small>{{ currentProfile.position }}</small></span>
           </div>
         </div>
       </header>
