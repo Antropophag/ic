@@ -2,6 +2,7 @@
 import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { adminApi, authApi, hasCsrfToken, requestApi, setCsrfToken } from './api'
 import { DEV_USERS, getDevUserId, setDevUserId } from './devUsers'
+import { createConfirmDialog } from './confirmDialog'
 import { createLatestRequestGuard } from './latestRequestGuard'
 import { ACTIVE_STATUSES, REGISTRY_PAGE_SIZE, REQUEST_COLORS, buildFeed, canSubmitComment, commentFromApi, documentFromApi, filterRequests, fromApi, historyFromApi, paginate, withoutStaleActions } from './registry'
 
@@ -66,8 +67,9 @@ const claimRequestGuard = createLatestRequestGuard()
 const reassignRequestGuard = createLatestRequestGuard()
 const deleteReportRequestGuard = createLatestRequestGuard()
 const adminRequestGuard = createLatestRequestGuard()
+const confirmDialog = createConfirmDialog()
 const draft = reactive({
-  productName: '', manufacturer: '', supplier: '', sampleQuantity: 1, testMethod: '',
+  productName: '', manufacturer: '', supplier: '', sampleQuantity: 1, testMethod: '', comment: '',
 })
 const devUserId = ref(getDevUserId())
 // Пессимистичный старт (dev-режим), пока /auth/me не ответит — не мигаем
@@ -595,8 +597,20 @@ async function createRequest() {
       failedFiles.push(`${file.name} (${reason})`)
     }
   }
-  Object.assign(draft, { productName: '', manufacturer: '', supplier: '', sampleQuantity: 1, testMethod: '' })
+
+  const comment = draft.comment.trim()
+  let commentFailed = false
+  if (comment) {
+    try {
+      await requestApi.addComment(created.id, comment)
+    } catch {
+      commentFailed = true
+    }
+  }
+
+  Object.assign(draft, { productName: '', manufacturer: '', supplier: '', sampleQuantity: 1, testMethod: '', comment: '' })
   draftFiles.value = []
+  const commentMessage = commentFailed ? ' Комментарий не удалось сохранить.' : ''
   try {
     await loadRequests(true)
     const createdItem = requests.value.find(item => item.backendId === created.id)
@@ -605,12 +619,15 @@ async function createRequest() {
       if (failedFiles.length) {
         documentError.value = `Заявка создана, но не удалось загрузить: ${failedFiles.join(', ')}.`
       }
+      if (commentFailed) {
+        commentError.value = 'Заявка создана, но комментарий не удалось сохранить.'
+      }
     } else {
-      registryError.value = 'Заявка создана, но пока не появилась в реестре. Не создавайте её повторно; обновите страницу.'
+      registryError.value = `Заявка создана, но пока не появилась в реестре. Не создавайте её повторно; обновите страницу.${commentMessage}`
     }
   } catch {
     const fileMessage = failedFiles.length ? ` Не загружены: ${failedFiles.join(', ')}.` : ''
-    registryError.value = `Заявка создана, но обновить реестр не удалось. Не создавайте её повторно; обновите страницу.${fileMessage}`
+    registryError.value = `Заявка создана, но обновить реестр не удалось. Не создавайте её повторно; обновите страницу.${fileMessage}${commentMessage}`
   } finally {
     showCreate.value = false
     createLoading.value = false
@@ -695,7 +712,7 @@ async function setColorMark(color) {
 
 async function rejectRequest() {
   if (rejectLoading.value) return
-  if (!window.confirm('Отказать в проведении испытаний по этой заявке?')) return
+  if (!(await confirmDialog.ask('Отказать в проведении испытаний по этой заявке?', { confirmLabel: 'Отказать' }))) return
   const requestId = selected.value.backendId
   const requestToken = rejectRequestGuard.begin(requestId)
   rejectLoading.value = true
@@ -727,7 +744,7 @@ async function rejectRequest() {
 
 async function withdrawRequest() {
   if (withdrawLoading.value) return
-  if (!window.confirm('Отозвать эту заявку?')) return
+  if (!(await confirmDialog.ask('Отозвать эту заявку?', { confirmLabel: 'Отозвать' }))) return
   const requestId = selected.value.backendId
   const requestToken = withdrawRequestGuard.begin(requestId)
   withdrawLoading.value = true
@@ -762,7 +779,7 @@ async function assignExecutor() {
     actionError.value = 'Выберите исполнителя.'
     return
   }
-  if (!window.confirm('Назначить выбранного исполнителя на заявку?')) return
+  if (!(await confirmDialog.ask('Назначить выбранного исполнителя на заявку?', { confirmLabel: 'Назначить' }))) return
 
   actionLoading.value = true
   actionError.value = ''
@@ -824,7 +841,7 @@ async function reassignExpert() {
     reassignError.value = 'Выберите эксперта.'
     return
   }
-  if (!window.confirm('Переназначить заявку выбранному эксперту?')) return
+  if (!(await confirmDialog.ask('Переназначить заявку выбранному эксперту?', { confirmLabel: 'Переназначить' }))) return
 
   const requestId = selected.value.backendId
   const requestToken = reassignRequestGuard.begin(requestId)
@@ -857,7 +874,7 @@ async function reassignExpert() {
 
 async function deleteReport() {
   if (deleteReportLoading.value) return
-  if (!window.confirm('Удалить загруженный отчёт испытаний? Отчёт и заключение по нему станут недоступны.')) return
+  if (!(await confirmDialog.ask('Удалить загруженный отчёт испытаний? Отчёт и заключение по нему станут недоступны.', { confirmLabel: 'Удалить', danger: true }))) return
   const requestId = selected.value.backendId
   const requestToken = deleteReportRequestGuard.begin(requestId)
   deleteReportLoading.value = true
@@ -893,7 +910,7 @@ async function publishOpinion() {
     opinionError.value = 'Заключение должно содержать не менее 10 символов.'
     return
   }
-  if (!window.confirm('Опубликовать заключение и передать заявку на контроль СБ?')) return
+  if (!(await confirmDialog.ask('Опубликовать заключение и передать заявку на контроль СБ?', { confirmLabel: 'Опубликовать' }))) return
 
   const requestId = selected.value.backendId
   const requestToken = opinionRequestGuard.begin(requestId)
@@ -936,7 +953,8 @@ async function decideSecurity(decision) {
   const prompt = decision === 'approve'
     ? 'Согласовать заключение и завершить заявку?'
     : 'Вернуть заявку исполнителю с указанной причиной?'
-  if (!window.confirm(prompt)) return
+  const confirmLabel = decision === 'approve' ? 'Согласовать' : 'Вернуть'
+  if (!(await confirmDialog.ask(prompt, { confirmLabel }))) return
 
   const requestId = selected.value.backendId
   const requestToken = securityRequestGuard.begin(requestId)
@@ -971,7 +989,7 @@ async function decideSecurity(decision) {
 }
 
 async function startRequest() {
-  if (!window.confirm('Перевести заявку в работу?')) return
+  if (!(await confirmDialog.ask('Перевести заявку в работу?', { confirmLabel: 'Начать работу' }))) return
 
   actionLoading.value = true
   actionError.value = ''
@@ -1297,11 +1315,21 @@ onMounted(bootstrapAuth)
             <label>Поставщик *<input v-model="draft.supplier" required placeholder="Наименование поставщика" /></label>
             <label class="wide">Метод испытаний *<textarea v-model="draft.testMethod" required placeholder="Опишите метод или программу испытаний"></textarea></label>
             <label class="wide">Сопроводительная документация<div class="dropzone"><input type="file" multiple accept=".pdf,.png,.jpg,.jpeg,.docx,.xlsx" :disabled="createLoading" @change="selectDraftFiles" /><span>Перетащите файлы сюда или <b>выберите на компьютере</b></span><small v-if="draftFiles.length">Выбрано: {{ draftFiles.map(file => file.name).join(', ') }}</small></div></label>
-            <label class="wide">Комментарий<textarea placeholder="Дополнительная информация"></textarea></label>
+            <label class="wide">Комментарий<textarea v-model="draft.comment" :disabled="createLoading" maxlength="10000" placeholder="Дополнительная информация"></textarea></label>
           </div>
           <p v-if="createError" class="form-error">{{ createError }}</p>
           <div class="modal-actions"><button type="button" class="secondary" :disabled="createLoading" @click="showCreate = false">Отмена</button><button class="primary" :disabled="createLoading">{{ createLoading ? 'Создание…' : 'Создать заявку' }}</button></div>
         </form>
+      </div>
+
+      <div v-if="confirmDialog.state.open" class="overlay" @click.self="confirmDialog.cancel">
+        <div class="modal confirm-modal">
+          <p>{{ confirmDialog.state.message }}</p>
+          <div class="modal-actions">
+            <button type="button" class="secondary" @click="confirmDialog.cancel">Отмена</button>
+            <button type="button" class="primary" :class="{ danger: confirmDialog.state.danger }" @click="confirmDialog.accept">{{ confirmDialog.state.confirmLabel }}</button>
+          </div>
+        </div>
       </div>
     </template>
   </div>

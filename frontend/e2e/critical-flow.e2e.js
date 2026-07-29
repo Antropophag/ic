@@ -49,12 +49,30 @@ test('заявка проходит критический путь до сог�
   await page.goto('/')
   await page.getByRole('row').filter({ hasText: marker }).click()
   await expect(page.getByText('Контроль СБ', { exact: true })).toBeVisible()
-  page.once('dialog', dialog => dialog.accept())
   await page.getByRole('button', { name: 'Согласовать и завершить' }).click()
+  await page.getByRole('button', { name: 'Согласовать', exact: true }).click()
   await expect(page.getByText('Заявка выполнена', { exact: true })).toBeVisible()
   await expect(page.getByRole('button', { name: 'Согласовать и завершить' })).toHaveCount(0)
 
   await Promise.all([initiator.dispose(), manager.dispose(), executor.dispose(), expert.dispose()])
+})
+
+test('комментарий, оставленный при создании заявки, появляется в её ленте', async ({ page }) => {
+  const marker = `E2E-comment-${Date.now()}`
+  const comment = 'Срочно, испытания нужны до конца недели.'
+
+  await page.goto('/')
+  await page.selectOption('.dev-user-switch', '3')
+  await page.getByRole('button', { name: '＋ Новая заявка' }).click()
+  await page.getByPlaceholder('Введите наименование продукции').fill(marker)
+  await page.getByPlaceholder('Наименование производителя').fill('Тестовый производитель')
+  await page.getByPlaceholder('Наименование поставщика').fill('Тестовый поставщик')
+  await page.getByPlaceholder('Опишите метод или программу испытаний').fill('Комментарий при создании — E2E')
+  await page.getByPlaceholder('Дополнительная информация').fill(comment)
+  await page.getByRole('button', { name: 'Создать заявку' }).click()
+
+  await expect(page.getByRole('heading', { name: /^Заявка \d+$/ })).toBeVisible()
+  await expect(page.getByText(comment)).toBeVisible()
 })
 
 test('администратор управляет ролями и возвращается в реестр без ошибок рендера', async ({ page }) => {
