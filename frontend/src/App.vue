@@ -608,6 +608,7 @@ async function createRequest() {
 
   Object.assign(draft, { productName: '', manufacturer: '', supplier: '', sampleQuantity: 1, testMethod: '', comment: '' })
   draftFiles.value = []
+  const commentMessage = commentFailed ? ' Комментарий не удалось сохранить.' : ''
   try {
     await loadRequests(true)
     const createdItem = requests.value.find(item => item.backendId === created.id)
@@ -620,11 +621,11 @@ async function createRequest() {
         commentError.value = 'Заявка создана, но комментарий не удалось сохранить.'
       }
     } else {
-      registryError.value = 'Заявка создана, но пока не появилась в реестре. Не создавайте её повторно; обновите страницу.'
+      registryError.value = `Заявка создана, но пока не появилась в реестре. Не создавайте её повторно; обновите страницу.${commentMessage}`
     }
   } catch {
     const fileMessage = failedFiles.length ? ` Не загружены: ${failedFiles.join(', ')}.` : ''
-    registryError.value = `Заявка создана, но обновить реестр не удалось. Не создавайте её повторно; обновите страницу.${fileMessage}`
+    registryError.value = `Заявка создана, но обновить реестр не удалось. Не создавайте её повторно; обновите страницу.${fileMessage}${commentMessage}`
   } finally {
     showCreate.value = false
     createLoading.value = false
