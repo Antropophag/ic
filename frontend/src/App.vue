@@ -1159,7 +1159,7 @@ onMounted(bootstrapAuth)
           <div class="request-grid">
             <div class="stack">
               <article v-if="hasHeroAction" class="card hero">
-                <p class="hero-eyebrow">Ваше действие</p>
+                <p class="hero-eyebrow">Доступные действия</p>
 
                 <div v-if="selected.canAssignExecutor" class="hero-block">
                   <h4>Назначить исполнителя</h4>
@@ -1192,14 +1192,6 @@ onMounted(bootstrapAuth)
                   <a class="help-link" href="/help/expert-opinion.html" target="_blank">Инструкция по формированию заключения</a>
                 </div>
 
-                <div v-if="selected.canReassignExpert" class="hero-block">
-                  <h4>Переназначить эксперту</h4>
-                  <label>Новый эксперт<select v-model="expertChoice" :disabled="reassignLoading"><option value="">Выберите сотрудника</option><option v-for="expert in experts.filter(candidate => candidate.id !== selected.expertId)" :key="expert.id" :value="expert.id">{{ expert.displayName }}</option></select></label>
-                  <div class="hero-actions"><button class="primary big" :disabled="reassignLoading" @click="reassignExpert">{{ reassignLoading ? 'Сохранение…' : 'Переназначить' }}</button></div>
-                  <p v-if="reassignError" class="action-error">{{ reassignError }}</p>
-                  <a class="help-link" href="/help/expert-opinion.html" target="_blank">Инструкция по формированию заключения</a>
-                </div>
-
                 <div v-if="selected.canPublishOpinion" class="hero-block">
                   <h4>Экспертное заключение</h4>
                   <p class="hero-sub">Заявка перейдёт на контроль СБ сразу после публикации</p>
@@ -1211,10 +1203,19 @@ onMounted(bootstrapAuth)
 
                 <div v-if="selected.canSecurityDecide" class="hero-block">
                   <h4>Решение по заключению</h4>
-                  <label>Комментарий<textarea v-model="securityReason" :disabled="securityLoading" maxlength="5000" placeholder="Обязателен при возврате заявки"></textarea></label>
                   <div class="hero-actions"><button class="primary big confirm" :disabled="securityLoading" @click="decideSecurity('approve')">{{ securityLoading ? 'Сохранение…' : 'Согласовать и завершить' }}</button><button class="secondary big" :disabled="securityLoading" @click="decideSecurity('return')">Вернуть в работу</button></div>
+                  <label>Комментарий<textarea v-model="securityReason" :disabled="securityLoading" maxlength="5000" placeholder="Обязателен при возврате заявки"></textarea></label>
                   <p v-if="securityError" class="action-error">{{ securityError }}</p>
                   <a class="help-link" href="/help/security-review.html" target="_blank">Инструкция по контролю СБ</a>
+                </div>
+
+                <div v-if="selected.canReassignExpert" class="hero-block hero-block-compact">
+                  <h4>Переназначить эксперту</h4>
+                  <div class="reassign-row">
+                    <select v-model="expertChoice" :disabled="reassignLoading" aria-label="Новый эксперт"><option value="">Выберите эксперта</option><option v-for="expert in experts.filter(candidate => candidate.id !== selected.expertId)" :key="expert.id" :value="expert.id">{{ expert.displayName }}</option></select>
+                    <button class="secondary" :disabled="reassignLoading" @click="reassignExpert">{{ reassignLoading ? 'Сохранение…' : 'Переназначить' }}</button>
+                  </div>
+                  <p v-if="reassignError" class="action-error">{{ reassignError }}</p>
                 </div>
 
                 <div v-if="selected.canReject || selected.canWithdraw || selected.canDeleteReport" class="hero-block hero-secondary">
