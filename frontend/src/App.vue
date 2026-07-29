@@ -1207,7 +1207,7 @@ onMounted(bootstrapAuth)
                 </div>
 
                 <div v-if="selected.canSecurityDecide" class="hero-block">
-                  <h4>Контроль СБ</h4>
+                  <h4>Решение по заключению</h4>
                   <label>Комментарий<textarea v-model="securityReason" :disabled="securityLoading" maxlength="5000" placeholder="Обязателен при возврате заявки"></textarea></label>
                   <div class="hero-actions"><button class="primary big confirm" :disabled="securityLoading" @click="decideSecurity('approve')">{{ securityLoading ? 'Сохранение…' : 'Согласовать и завершить' }}</button><button class="secondary big" :disabled="securityLoading" @click="decideSecurity('return')">Вернуть в работу</button></div>
                   <p v-if="securityError" class="action-error">{{ securityError }}</p>
