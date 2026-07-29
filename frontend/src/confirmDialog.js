@@ -5,6 +5,10 @@ export function createConfirmDialog() {
   let resolveCurrent = null
 
   function ask(message, { confirmLabel = 'Подтвердить', danger = false } = {}) {
+    // Реентрантный вызов до ответа на предыдущий prompt отменяет его —
+    // иначе резолвер первого промиса теряется, и await confirmDialog.ask()
+    // вызывающей функции повисает навсегда.
+    resolveCurrent?.(false)
     state.open = true
     state.message = message
     state.confirmLabel = confirmLabel

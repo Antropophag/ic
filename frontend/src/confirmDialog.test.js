@@ -29,21 +29,16 @@ describe('confirm dialog', () => {
     expect(dialog.state.open).toBe(false)
   })
 
-  it('only settles the most recent prompt when a new one is asked before resolving', async () => {
+  it('cancels a pending prompt instead of leaving it unresolved when asked again', async () => {
     const dialog = createConfirmDialog()
     const first = dialog.ask('Первое действие?')
     const second = dialog.ask('Второе действие?')
+
+    await expect(first).resolves.toBe(false)
 
     dialog.accept()
 
     await expect(second).resolves.toBe(true)
     expect(dialog.state.message).toBe('Второе действие?')
-    // Первый промис так и не был разрешён — вызывающая функция для него уже
-    // не важна, но и не должна повиснуть навсегда: проверяем, что accept()
-    // не пытается разрешить его повторно другим значением.
-    let firstSettled = false
-    first.then(() => { firstSettled = true })
-    await Promise.resolve()
-    expect(firstSettled).toBe(false)
   })
 })
