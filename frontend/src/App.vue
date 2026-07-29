@@ -1288,11 +1288,11 @@ onMounted(bootstrapAuth)
               <article class="card summary"><h3>Объект испытаний</h3>
                 <p><span>Инициатор</span><b>{{ selected.initiator }}</b></p>
                 <p><span>Подразделение</span><b>{{ selected.department }}</b></p>
-                <p><span>Наименование и тип</span><b>{{ selected.product }}</b></p>
                 <p><span>Производитель</span><b>{{ selected.manufacturer || '—' }}</b></p>
                 <p><span>Поставщик</span><b>{{ selected.supplier }}</b></p>
                 <p><span>Количество образцов</span><b>{{ selected.sampleQuantity || '—' }} шт.</b></p>
-                <p><span>Метод испытаний</span><b>{{ selected.testMethod || '—' }}</b></p>
+                <p class="wide"><span>Наименование и тип</span><b>{{ selected.product }}</b></p>
+                <p class="wide"><span>Метод испытаний</span><b>{{ selected.testMethod || '—' }}</b></p>
               </article>
               <article class="card documents"><h3>Документы <span>{{ selected.documents?.length || 0 }}</span></h3>
                 <button v-for="document in selected.documents || []" :key="document.versionId" class="document-row" @click="downloadDocument(document)"><span>▣</span><span><b>{{ document.title }}</b><small>Версия {{ document.version }} · {{ document.size }} · {{ document.createdAt }}</small></span></button>
