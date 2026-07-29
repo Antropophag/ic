@@ -1,11 +1,12 @@
 const STORAGE_KEY = 'shlz-dev-user-id'
 
 export const DEV_USERS = [
-  { id: 1, displayName: 'Максим Умнов', position: 'Руководитель ИЦ', department: 'Испытательный центр' },
-  { id: 2, displayName: 'Сергей Кашин', position: 'Исполнитель ИЦ', department: 'Испытательный центр' },
-  { id: 3, displayName: 'Тестовый сотрудник', position: 'Сотрудник', department: 'Тестовое подразделение' },
-  { id: 4, displayName: 'Анна Смирнова', position: 'Эксперт', department: 'Испытательный центр' },
-  { id: 5, displayName: 'Олег Воронцов', position: 'Сотрудник СБ', department: 'Служба безопасности' },
+  { id: 1, displayName: 'Максим Умнов', position: 'Руководитель ИЦ', department: 'Испытательный центр', roles: ['employee', 'ic_manager'] },
+  { id: 2, displayName: 'Сергей Кашин', position: 'Исполнитель ИЦ', department: 'Испытательный центр', roles: ['employee', 'ic_executor'] },
+  { id: 3, displayName: 'Тестовый сотрудник', position: 'Сотрудник', department: 'Тестовое подразделение', roles: ['employee'] },
+  { id: 4, displayName: 'Анна Смирнова', position: 'Эксперт', department: 'Испытательный центр', roles: ['employee', 'expert'] },
+  { id: 5, displayName: 'Олег Воронцов', position: 'Сотрудник СБ', department: 'Служба безопасности', roles: ['employee', 'security_officer'] },
+  { id: 6, displayName: 'Дарья Королёва', position: 'Администратор портала', department: 'ИТ', roles: ['employee', 'administrator'] },
   // Второй тестовый эксперт (Виктор Дорохов, dev.expert2) сознательно не
   // включён сюда: его id не фиксирован (см. DevController::ADDITIONAL_EXPERTS)
   // и определяется на конкретной базе через GET /api/v1/experts.

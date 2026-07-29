@@ -135,3 +135,21 @@ export const authApi = {
   }),
   logout: () => request('/api/v1/auth/logout', { method: 'POST' }),
 }
+
+export const adminApi = {
+  users: () => request('/api/v1/admin/users'),
+  roles: () => request('/api/v1/admin/roles'),
+  createUser: (adLogin, displayName) => request('/api/v1/admin/users', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ adLogin, displayName }),
+  }),
+  assignRole: (userId, roleId) => request(`/api/v1/admin/users/${userId}/roles`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ roleId }),
+  }),
+  revokeRole: (userId, roleId) => request(`/api/v1/admin/users/${userId}/roles/${roleId}/revoke`, {
+    method: 'POST',
+  }),
+}

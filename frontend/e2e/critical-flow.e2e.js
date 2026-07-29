@@ -56,3 +56,25 @@ test('заявка проходит критический путь до сог�
 
   await Promise.all([initiator.dispose(), manager.dispose(), executor.dispose(), expert.dispose()])
 })
+
+test('администратор управляет ролями и возвращается в реестр без ошибок рендера', async ({ page }) => {
+  // Регрессия: v-else детального экрана заявки был привязан не к тому
+  // v-if и срабатывал, когда открыт экран администрирования (selected
+  // оставался null) — рендер падал на обращении к полю несуществующей
+  // заявки. Экран администрирования должен открываться и закрываться,
+  // не ломая реестр заявок.
+  const errors = []
+  page.on('pageerror', error => errors.push(error.message))
+
+  await page.goto('/')
+  await page.selectOption('.dev-user-switch', '6')
+  await page.getByRole('button', { name: 'Администрирование' }).click()
+  await expect(page.getByRole('heading', { name: 'Пользователи и роли' })).toBeVisible()
+  await expect(page.getByRole('cell', { name: 'Тестовый сотрудник' })).toBeVisible()
+
+  await page.getByRole('button', { name: '← К реестру заявок' }).click()
+  await expect(page.getByRole('heading', { name: 'Пользователи и роли' })).toHaveCount(0)
+  await expect(page.getByPlaceholder('Поиск по заявкам')).toBeVisible()
+
+  expect(errors).toEqual([])
+})

@@ -1,6 +1,6 @@
 <script setup>
 import { computed, onMounted, reactive, ref, watch } from 'vue'
-import { authApi, hasCsrfToken, requestApi, setCsrfToken } from './api'
+import { adminApi, authApi, hasCsrfToken, requestApi, setCsrfToken } from './api'
 import { DEV_USERS, getDevUserId, setDevUserId } from './devUsers'
 import { createLatestRequestGuard } from './latestRequestGuard'
 import { ACTIVE_STATUSES, REGISTRY_PAGE_SIZE, REQUEST_COLORS, canSubmitComment, commentFromApi, documentFromApi, filterRequests, fromApi, historyFromApi, paginate, withoutStaleActions } from './registry'
@@ -87,10 +87,12 @@ const currentProfile = computed(() => {
     displayName: authUser.value?.displayName || '',
     position: authUser.value?.position || '',
     department: authUser.value?.department || '',
+    roles: authUser.value?.roles || [],
   }
 })
 const currentInitials = computed(() => (currentProfile.value.displayName
   .split(' ').map(part => part[0]).join('').slice(0, 2).toUpperCase()) || '?')
+const isAdministrator = computed(() => (currentProfile.value.roles || []).includes('administrator'))
 
 function switchDevUser(rawId) {
   const id = Number(rawId)
@@ -163,6 +165,89 @@ async function logout() {
     selected.value = null
     requests.value = []
   }
+}
+
+const showAdmin = ref(false)
+const adminUsers = ref([])
+const adminRoles = ref([])
+const adminLoading = ref(false)
+const adminError = ref('')
+const newUserAdLogin = ref('')
+const newUserDisplayName = ref('')
+const createUserLoading = ref(false)
+const createUserError = ref('')
+const roleChoiceByUser = reactive({})
+const roleActionError = ref('')
+
+async function openAdmin() {
+  selected.value = null
+  showAdmin.value = true
+  adminError.value = ''
+  adminLoading.value = true
+  try {
+    const [usersResult, rolesResult] = await Promise.all([adminApi.users(), adminApi.roles()])
+    adminUsers.value = usersResult.items
+    adminRoles.value = rolesResult.items
+  } catch {
+    adminError.value = 'Не удалось загрузить список пользователей.'
+  } finally {
+    adminLoading.value = false
+  }
+}
+
+function closeAdmin() {
+  showAdmin.value = false
+}
+
+async function createAdminUser() {
+  if (createUserLoading.value) return
+  if (!newUserAdLogin.value || !newUserDisplayName.value) {
+    createUserError.value = 'Заполните логин AD и отображаемое имя.'
+    return
+  }
+  createUserLoading.value = true
+  createUserError.value = ''
+  try {
+    const user = await adminApi.createUser(newUserAdLogin.value, newUserDisplayName.value)
+    adminUsers.value = [...adminUsers.value, user].sort((a, b) => a.displayName.localeCompare(b.displayName, 'ru'))
+    newUserAdLogin.value = ''
+    newUserDisplayName.value = ''
+  } catch (error) {
+    createUserError.value = error.status === 409
+      ? 'Пользователь с таким логином AD уже существует.'
+      : error.status === 422
+        ? 'Логин AD может содержать только латинские буквы, цифры, точку, дефис и подчёркивание.'
+        : 'Не удалось создать пользователя.'
+  } finally {
+    createUserLoading.value = false
+  }
+}
+
+async function assignAdminRole(userId) {
+  const roleId = Number(roleChoiceByUser[userId])
+  if (!roleId) return
+  roleActionError.value = ''
+  try {
+    const result = await adminApi.assignRole(userId, roleId)
+    updateAdminUserRoles(userId, result.items)
+    roleChoiceByUser[userId] = ''
+  } catch {
+    roleActionError.value = 'Не удалось назначить роль.'
+  }
+}
+
+async function revokeAdminRole(userId, roleId) {
+  roleActionError.value = ''
+  try {
+    const result = await adminApi.revokeRole(userId, roleId)
+    updateAdminUserRoles(userId, result.items)
+  } catch {
+    roleActionError.value = 'Не удалось отозвать роль.'
+  }
+}
+
+function updateAdminUserRoles(userId, roles) {
+  adminUsers.value = adminUsers.value.map(user => (user.id === userId ? { ...user, roles } : user))
 }
 
 const requests = ref([
@@ -291,6 +376,7 @@ function closeRequest() {
   reassignRequestGuard.invalidate()
   deleteReportRequestGuard.invalidate()
   selected.value = null
+  showAdmin.value = false
   detailLoading.value = false
   detailError.value = ''
   commentLoading.value = false
@@ -958,12 +1044,56 @@ onMounted(bootstrapAuth)
               </select>
               <span class="avatar">{{ currentInitials }}</span>
               <span><b>{{ currentProfile.displayName }}</b><small>{{ currentProfile.position }}</small></span>
+              <button v-if="isAdministrator" type="button" class="secondary" @click="openAdmin">Администрирование</button>
               <button v-if="!authDevMode" type="button" class="secondary" @click="logout">Выйти</button>
             </div>
           </div>
         </header>
 
-        <section v-if="!selected" class="page">
+        <section v-if="showAdmin" class="page admin-page">
+          <div class="card">
+            <div class="section-title"><h3>Пользователи и роли</h3><button class="secondary" @click="closeAdmin">← К реестру заявок</button></div>
+            <p v-if="adminError" class="detail-state error">{{ adminError }}</p>
+            <p v-if="adminLoading" class="detail-state">Загрузка…</p>
+            <form v-else class="admin-create-user" @submit.prevent="createAdminUser">
+              <label>Логин AD<input v-model="newUserAdLogin" placeholder="ivanov" :disabled="createUserLoading" /></label>
+              <label>Отображаемое имя<input v-model="newUserDisplayName" placeholder="Иван Иванов" :disabled="createUserLoading" /></label>
+              <button class="primary" :disabled="createUserLoading">{{ createUserLoading ? 'Добавление…' : 'Добавить заранее' }}</button>
+            </form>
+            <p v-if="createUserError" class="action-error">{{ createUserError }}</p>
+            <p class="hint">Заведённый заранее профиль автоматически получит роль «Сотрудник» и найдётся по
+              этому же логину при первом реальном входе через LDAP — назначенные ниже роли сохранятся.</p>
+            <p v-if="roleActionError" class="action-error">{{ roleActionError }}</p>
+            <div v-if="!adminLoading" class="table-wrap">
+              <table>
+                <thead><tr><th>ФИО</th><th>Логин AD</th><th>Email</th><th>Активен</th><th>Роли</th></tr></thead>
+                <tbody>
+                  <tr v-for="user in adminUsers" :key="user.id">
+                    <td><b>{{ user.displayName }}</b></td>
+                    <td>{{ user.adLogin }}</td>
+                    <td>{{ user.email || '—' }}</td>
+                    <td>{{ user.isActive ? 'да' : 'нет' }}</td>
+                    <td>
+                      <span v-for="role in user.roles" :key="role.id" class="role-chip">
+                        {{ role.name }}
+                        <button type="button" title="Отозвать роль" @click="revokeAdminRole(user.id, role.id)">×</button>
+                      </span>
+                      <span class="role-assign">
+                        <select v-model="roleChoiceByUser[user.id]">
+                          <option value="">Добавить роль…</option>
+                          <option v-for="role in adminRoles" :key="role.id" :value="role.id">{{ role.name }}</option>
+                        </select>
+                        <button type="button" class="secondary" @click="assignAdminRole(user.id)">+</button>
+                      </span>
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+
+        <section v-else-if="!selected" class="page">
           <p v-if="registryError" class="detail-state error">{{ registryError }}</p>
 
           <div class="card registry">
