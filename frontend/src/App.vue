@@ -50,6 +50,8 @@ const claimLoading = ref(false)
 const claimError = ref('')
 const reassignLoading = ref(false)
 const reassignError = ref('')
+const deleteReportLoading = ref(false)
+const deleteReportError = ref('')
 const detailRequestGuard = createLatestRequestGuard()
 const commentRequestGuard = createLatestRequestGuard()
 const commentsPageRequestGuard = createLatestRequestGuard()
@@ -63,6 +65,7 @@ const rejectRequestGuard = createLatestRequestGuard()
 const withdrawRequestGuard = createLatestRequestGuard()
 const claimRequestGuard = createLatestRequestGuard()
 const reassignRequestGuard = createLatestRequestGuard()
+const deleteReportRequestGuard = createLatestRequestGuard()
 const draft = reactive({
   productName: '', manufacturer: '', supplier: '', sampleQuantity: 1, testMethod: '',
 })
@@ -159,6 +162,7 @@ async function openRequest(item) {
   withdrawRequestGuard.invalidate()
   claimRequestGuard.invalidate()
   reassignRequestGuard.invalidate()
+  deleteReportRequestGuard.invalidate()
   commentLoading.value = false
   commentError.value = ''
   commentDraft.value = ''
@@ -182,6 +186,8 @@ async function openRequest(item) {
   claimError.value = ''
   reassignLoading.value = false
   reassignError.value = ''
+  deleteReportLoading.value = false
+  deleteReportError.value = ''
   showHistory.value = false
   actionError.value = ''
   await loadRequestDetails(item)
@@ -200,6 +206,7 @@ function closeRequest() {
   withdrawRequestGuard.invalidate()
   claimRequestGuard.invalidate()
   reassignRequestGuard.invalidate()
+  deleteReportRequestGuard.invalidate()
   selected.value = null
   detailLoading.value = false
   detailError.value = ''
@@ -224,6 +231,8 @@ function closeRequest() {
   claimError.value = ''
   reassignLoading.value = false
   reassignError.value = ''
+  deleteReportLoading.value = false
+  deleteReportError.value = ''
 }
 
 async function uploadReport(event) {
@@ -655,6 +664,38 @@ async function reassignExpert() {
   }
 }
 
+async function deleteReport() {
+  if (deleteReportLoading.value) return
+  if (!window.confirm('Удалить загруженный отчёт испытаний? Отчёт и заключение по нему станут недоступны.')) return
+  const requestId = selected.value.backendId
+  const requestToken = deleteReportRequestGuard.begin(requestId)
+  deleteReportLoading.value = true
+  deleteReportError.value = ''
+  try {
+    await requestApi.deleteReport(requestId, selected.value.lockVersion)
+    if (!deleteReportRequestGuard.isCurrent(requestToken, selected.value?.backendId)) return
+    try {
+      await refreshSelected(requestId)
+    } catch {
+      if (!deleteReportRequestGuard.isCurrent(requestToken, selected.value?.backendId)) return
+      deleteReportError.value = 'Отчёт удалён, но обновить карточку не удалось. Устаревшие действия отключены.'
+    }
+  } catch (error) {
+    if (!deleteReportRequestGuard.isCurrent(requestToken, selected.value?.backendId)) return
+    if (error.status === 409) {
+      await recoverConflict(requestId, 'Заявка уже изменена.')
+    } else {
+      deleteReportError.value = error.status === 403
+        ? 'Удалить отчёт может только исполнитель или руководитель.'
+        : 'Не удалось удалить отчёт. Обновите страницу и повторите попытку.'
+    }
+  } finally {
+    if (deleteReportRequestGuard.isCurrent(requestToken, selected.value?.backendId)) {
+      deleteReportLoading.value = false
+    }
+  }
+}
+
 async function publishOpinion() {
   const body = opinionDraft.value.trim()
   if (body.length < 10) {
@@ -929,6 +970,8 @@ onMounted(loadRequests)
               <label v-if="selected.canUploadReport" class="primary upload-button">{{ reportLoading ? 'Загрузка отчёта…' : 'Загрузить отчёт испытаний' }}<input type="file" :disabled="reportLoading" accept=".pdf,application/pdf" @change="uploadReport" /></label>
               <a v-if="selected.canUploadReport" class="help-link" href="/help/report.html" target="_blank">Инструкция по загрузке отчёта испытаний</a>
               <p v-if="reportError" class="action-error">{{ reportError }}</p>
+              <button v-if="selected.canDeleteReport" class="secondary action-wide" :disabled="deleteReportLoading" @click="deleteReport">{{ deleteReportLoading ? 'Удаление…' : 'Удалить отчёт' }}</button>
+              <p v-if="deleteReportError" class="action-error">{{ deleteReportError }}</p>
               <button v-for="document in selected.documents || []" :key="document.versionId" class="document-row" @click="downloadDocument(document)"><span>▣</span><span><b>{{ document.title }}</b><small>Версия {{ document.version }} · {{ document.size }} · {{ document.createdAt }}</small></span></button>
               <p v-if="!selected.documents?.length" class="placeholder-copy">Документов пока нет.</p>
               <label v-if="selected.canUploadDocument" class="secondary upload-button">{{ documentLoading ? 'Загрузка…' : 'Загрузить документ' }}<input type="file" :disabled="documentLoading" accept=".pdf,.png,.jpg,.jpeg,.docx,.xlsx" @change="uploadDocument" /></label>

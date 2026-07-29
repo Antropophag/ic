@@ -48,6 +48,7 @@ export function fromApi(item) {
     canComment: Boolean(Number(item.can_comment)),
     canUploadDocument: Boolean(Number(item.can_upload_document)),
     canUploadReport: Boolean(Number(item.can_upload_report)),
+    canDeleteReport: Boolean(Number(item.can_delete_report)),
     canPublishOpinion: Boolean(Number(item.can_publish_opinion)),
     canSecurityDecide: Boolean(Number(item.can_security_decide)),
     canSetColor: Boolean(Number(item.can_set_color)),
@@ -72,6 +73,7 @@ export function withoutStaleActions(item) {
     canSetColor: false,
     canReject: false,
     canWithdraw: false,
+    canDeleteReport: false,
   }
 }
 
@@ -83,6 +85,7 @@ const HISTORY_LABELS = {
   reassign_expert: 'переназначил(а) эксперта',
   start: 'перевёл(а) заявку в работу',
   upload_report: 'загрузил(а) отчёт испытаний',
+  delete_report: 'удалил(а) отчёт испытаний',
   publish_opinion: 'опубликовал(а) экспертное заключение',
   security_approve: 'согласовал(а) заключение',
   security_return: 'вернул(а) заявку в работу',

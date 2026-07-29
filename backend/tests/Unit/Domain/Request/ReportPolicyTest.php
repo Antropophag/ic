@@ -14,29 +14,40 @@ final class ReportPolicyTest extends TestCase
 {
     public function testAllowsAssignedExecutorInProgress(): void
     {
-        (new ReportPolicy())->assertCanUpload(RequestStatus::InProgress, true, false);
+        (new ReportPolicy())->assertCanUpload(RequestStatus::InProgress, true, false, true);
         self::addToAssertionCount(1);
     }
 
     public function testAllowsManagerToAddRevisionDuringOpinionPreparation(): void
     {
-        (new ReportPolicy())->assertCanUpload(RequestStatus::OpinionPreparation, false, true);
+        (new ReportPolicy())->assertCanUpload(RequestStatus::OpinionPreparation, false, true, true);
+        self::addToAssertionCount(1);
+    }
+
+    public function testAllowsReuploadAfterCompletedDeletion(): void
+    {
+        (new ReportPolicy())->assertCanUpload(RequestStatus::Completed, true, false, false);
         self::addToAssertionCount(1);
     }
 
     #[DataProvider('deniedUploads')]
-    public function testRejectsWrongActorOrStatus(RequestStatus $status, bool $executor, bool $manager): void
-    {
+    public function testRejectsWrongActorStatusOrExistingReport(
+        RequestStatus $status,
+        bool $executor,
+        bool $manager,
+        bool $hasActiveReport,
+    ): void {
         $this->expectException(ReportDenied::class);
-        (new ReportPolicy())->assertCanUpload($status, $executor, $manager);
+        (new ReportPolicy())->assertCanUpload($status, $executor, $manager, $hasActiveReport);
     }
 
-    /** @return iterable<string, array{RequestStatus, bool, bool}> */
+    /** @return iterable<string, array{RequestStatus, bool, bool, bool}> */
     public static function deniedUploads(): iterable
     {
-        yield 'other employee' => [RequestStatus::InProgress, false, false];
-        yield 'registered' => [RequestStatus::Registered, true, false];
-        yield 'security review' => [RequestStatus::SecurityReview, false, true];
+        yield 'other employee' => [RequestStatus::InProgress, false, false, true];
+        yield 'registered' => [RequestStatus::Registered, true, false, true];
+        yield 'security review' => [RequestStatus::SecurityReview, false, true, true];
+        yield 'completed with an active report still present' => [RequestStatus::Completed, true, false, true];
     }
 
     public function testOnlyAcceptsPdf(): void

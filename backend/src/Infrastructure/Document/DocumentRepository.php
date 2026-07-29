@@ -7,6 +7,7 @@ namespace App\Infrastructure\Document;
 use App\Domain\Request\AttachmentPolicy;
 use App\Domain\Request\ConcurrentRequestModification;
 use App\Domain\Request\OpinionPolicy;
+use App\Domain\Request\ReportDeletionPolicy;
 use App\Domain\Request\RequestNotFound;
 use App\Domain\Request\RequestStatus;
 use App\Domain\Request\ReportPolicy;
@@ -126,7 +127,9 @@ final class DocumentRepository
                 'SELECT r.status, r.lock_version AS lockVersion, '
                 . '(executor.user_id = :executor_actor) AS isExecutor, '
                 . "EXISTS(SELECT 1 FROM {{%user_roles}} ur JOIN {{%roles}} role ON role.id = ur.role_id "
-                . "WHERE ur.user_id = :manager_actor AND role.code IN ('ic_manager', 'laboratory_manager')) AS isManager "
+                . "WHERE ur.user_id = :manager_actor AND role.code IN ('ic_manager', 'laboratory_manager')) AS isManager, "
+                . "EXISTS(SELECT 1 FROM {{%request_documents}} existing_report WHERE existing_report.request_id = r.id "
+                . "AND existing_report.document_type = 'report' AND existing_report.deleted_at IS NULL) AS hasActiveReport "
                 . 'FROM {{%requests}} r JOIN {{%users}} actor ON actor.id = :actor_id AND actor.is_active = 1 '
                 . 'LEFT JOIN {{%request_assignments}} executor ON executor.request_id = r.id '
                 . "AND executor.assignment_type = 'executor' AND executor.valid_to IS NULL "
@@ -142,9 +145,15 @@ final class DocumentRepository
                 throw new RequestNotFound('Request not found');
             }
             $status = RequestStatus::from((string) $request['status']);
-            $policy->assertCanUpload($status, (bool) $request['isExecutor'], (bool) $request['isManager']);
+            $policy->assertCanUpload(
+                $status,
+                (bool) $request['isExecutor'],
+                (bool) $request['isManager'],
+                (bool) $request['hasActiveReport'],
+            );
 
-            $documentId = $this->findOrCreateReport($requestId, $actorId);
+            $report = $this->findOrCreateReport($requestId, $actorId);
+            $documentId = $report['id'];
             $version = (int) $this->db->createCommand(
                 'SELECT COALESCE(MAX(version), 0) + 1 FROM {{%request_document_versions}} '
                 . 'WHERE document_id = :document_id',
@@ -164,8 +173,15 @@ final class DocumentRepository
                 'created_at' => $now,
             ])->execute();
             $versionId = (int) $this->db->getLastInsertID();
-            $statusChanges = $status === RequestStatus::InProgress;
-            $requestChanges = $version === 1 || $statusChanges;
+            // Загрузка отчёта в статусе "в работе" всегда переводит заявку на
+            // подготовку заключения (независимо от номера версии — так и
+            // возврат отчёта на доработку после ✕ СБ снова запускает цикл).
+            // ТЗ 7.8: то же самое происходит и при повторной загрузке после
+            // удаления отчёта (DOC-011), даже если заявка уже была выполнена.
+            $isFirstOrRevived = $version === 1 || $report['wasDeleted'];
+            $statusChanges = $status === RequestStatus::InProgress
+                || ($report['wasDeleted'] && $status !== RequestStatus::OpinionPreparation);
+            $requestChanges = $isFirstOrRevived || $statusChanges;
             $nextLockVersion = (int) $request['lockVersion'] + ($requestChanges ? 1 : 0);
             $targetStatus = $statusChanges ? RequestStatus::OpinionPreparation : $status;
             if ($requestChanges) {
@@ -186,10 +202,10 @@ final class DocumentRepository
                 $this->db->createCommand()->insert('{{%request_transitions}}', [
                     'request_id' => $requestId,
                     'actor_id' => $actorId,
-                    'from_status' => RequestStatus::InProgress->value,
+                    'from_status' => $status->value,
                     'to_status' => RequestStatus::OpinionPreparation->value,
                     'action' => 'upload_report',
-                    'rule_id' => 'DOC-002',
+                    'rule_id' => $report['wasDeleted'] ? 'DOC-012' : 'DOC-002',
                     'created_at' => $now,
                 ])->execute();
             }
@@ -219,7 +235,7 @@ final class DocumentRepository
                 'entity_type' => 'request',
                 'entity_id' => $requestId,
                 'actor_id' => $actorId,
-                'rule_id' => $version === 1 ? 'DOC-002' : 'DOC-008',
+                'rule_id' => $isFirstOrRevived ? ($report['wasDeleted'] ? 'DOC-012' : 'DOC-002') : 'DOC-008',
                 'payload_json' => json_encode(
                     ['document_id' => $documentId, 'version_id' => $versionId, 'version' => $version],
                     JSON_THROW_ON_ERROR,
@@ -248,6 +264,86 @@ final class DocumentRepository
             if ($storageKey !== null) {
                 $this->storage->delete($storageKey);
             }
+            throw $error;
+        }
+    }
+
+    /** @return array{status: string, lockVersion: int} */
+    public function deleteReport(int $requestId, int $expectedLockVersion, int $actorId): array
+    {
+        $transaction = $this->db->beginTransaction();
+        try {
+            $request = $this->db->createCommand(
+                'SELECT r.status, r.lock_version AS lockVersion, '
+                . '(executor.user_id = :executor_actor) AS isExecutor, '
+                . "EXISTS(SELECT 1 FROM {{%user_roles}} ur JOIN {{%roles}} role ON role.id = ur.role_id "
+                . "WHERE ur.user_id = :manager_actor AND role.code IN ('ic_manager', 'laboratory_manager')) AS isManager "
+                . 'FROM {{%requests}} r JOIN {{%users}} actor ON actor.id = :actor_id AND actor.is_active = 1 '
+                . 'LEFT JOIN {{%request_assignments}} executor ON executor.request_id = r.id '
+                . "AND executor.assignment_type = 'executor' AND executor.valid_to IS NULL "
+                . 'WHERE r.id = :request_id FOR UPDATE',
+                [
+                    ':request_id' => $requestId,
+                    ':actor_id' => $actorId,
+                    ':executor_actor' => $actorId,
+                    ':manager_actor' => $actorId,
+                ],
+            )->queryOne();
+            if ($request === false) {
+                throw new RequestNotFound('Request not found');
+            }
+            $document = $this->db->createCommand(
+                "SELECT id FROM {{%request_documents}} WHERE request_id = :request_id "
+                . "AND document_type = 'report' AND deleted_at IS NULL FOR UPDATE",
+                [':request_id' => $requestId],
+            )->queryOne();
+            (new ReportDeletionPolicy())->assertCanDelete(
+                (bool) $request['isExecutor'],
+                (bool) $request['isManager'],
+                $document !== false,
+            );
+            if ((int) $request['lockVersion'] !== $expectedLockVersion) {
+                throw new ConcurrentRequestModification();
+            }
+
+            $now = gmdate('Y-m-d H:i:s.u');
+            // DOC-011: версии удалённого отчёта помечаются удалёнными
+            // безвозвратно — при повторной загрузке "оживает" только сам
+            // документ (иначе не даёт создать новую запись уникальность
+            // request_id+title), но старые ревизии и выданные на них
+            // email-ссылки не должны снова становиться доступны.
+            $this->db->createCommand()->update('{{%request_document_versions}}', [
+                'deleted_at' => $now,
+            ], ['document_id' => (int) $document['id'], 'deleted_at' => null])->execute();
+            $this->db->createCommand()->update('{{%request_documents}}', [
+                'deleted_at' => $now,
+                'deleted_by' => $actorId,
+            ], ['id' => (int) $document['id']])->execute();
+            $nextLockVersion = $expectedLockVersion + 1;
+            $updated = $this->db->createCommand()->update('{{%requests}}', [
+                'lock_version' => $nextLockVersion,
+                'updated_at' => $now,
+            ], [
+                'id' => $requestId,
+                'lock_version' => $expectedLockVersion,
+            ])->execute();
+            if ($updated !== 1) {
+                throw new ConcurrentRequestModification();
+            }
+            $this->db->createCommand()->insert('{{%audit_events}}', [
+                'event_type' => 'request.report_deleted',
+                'entity_type' => 'request',
+                'entity_id' => $requestId,
+                'actor_id' => $actorId,
+                'rule_id' => 'DOC-011',
+                'payload_json' => json_encode(['document_id' => (int) $document['id']], JSON_THROW_ON_ERROR),
+                'created_at' => $now,
+            ])->execute();
+            $transaction->commit();
+
+            return ['status' => (string) $request['status'], 'lockVersion' => $nextLockVersion];
+        } catch (\Throwable $error) {
+            $transaction->rollBack();
             throw $error;
         }
     }
@@ -416,7 +512,8 @@ final class DocumentRepository
             . 'JOIN {{%users}} viewer ON viewer.id = :actor_id AND viewer.is_active = 1 '
             . 'LEFT JOIN {{%request_assignments}} executor ON executor.request_id = r.id '
             . "AND executor.assignment_type = 'executor' AND executor.valid_to IS NULL "
-            . "WHERE v.id = :version_id AND (d.document_type NOT IN ('report', 'opinion') "
+            . "WHERE v.id = :version_id AND d.deleted_at IS NULL AND v.deleted_at IS NULL "
+            . "AND (d.document_type NOT IN ('report', 'opinion') "
             . "OR (d.document_type = 'report' AND ((r.status = 'completed' AND v.version = (SELECT MAX(public_version.version) "
             . 'FROM {{%request_document_versions}} public_version WHERE public_version.document_id = d.id)) '
             . 'OR executor.user_id = :report_actor OR EXISTS(SELECT 1 FROM {{%user_roles}} ur '
@@ -453,7 +550,8 @@ final class DocumentRepository
             'SELECT v.storage_key AS storageKey, v.original_name AS originalName, v.mime_type AS mimeType '
             . 'FROM {{%document_download_links}} l '
             . 'JOIN {{%request_document_versions}} v ON v.id = l.document_version_id '
-            . 'WHERE l.token_hash = :hash',
+            . 'JOIN {{%request_documents}} d ON d.id = v.document_id '
+            . 'WHERE l.token_hash = :hash AND d.deleted_at IS NULL AND v.deleted_at IS NULL',
             [':hash' => hash('sha256', $token)],
         )->queryOne();
     }
@@ -520,6 +618,27 @@ final class DocumentRepository
         ])->execute();
     }
 
+    public function recordRejectedReportDeletion(int $requestId, int $actorId, string $ruleId): void
+    {
+        $allowedReferences = $this->db->createCommand(
+            'SELECT 1 FROM {{%requests}} r JOIN {{%users}} actor ON actor.id = :actor_id '
+            . 'WHERE r.id = :request_id',
+            [':request_id' => $requestId, ':actor_id' => $actorId],
+        )->queryScalar();
+        if ($allowedReferences === false) {
+            return;
+        }
+        $this->db->createCommand()->insert('{{%audit_events}}', [
+            'event_type' => 'request.report_deletion_rejected',
+            'entity_type' => 'request',
+            'entity_id' => $requestId,
+            'actor_id' => $actorId,
+            'rule_id' => $ruleId,
+            'payload_json' => json_encode(['outcome' => 'rejected'], JSON_THROW_ON_ERROR),
+            'created_at' => gmdate('Y-m-d H:i:s.u'),
+        ])->execute();
+    }
+
     public function recordRejectedOpinion(int $requestId, int $actorId, string $ruleId): void
     {
         $allowedReferences = $this->db->createCommand(
@@ -559,14 +678,26 @@ final class DocumentRepository
         return (int) $this->db->getLastInsertID();
     }
 
-    private function findOrCreateReport(int $requestId, int $actorId): int
+    /** @return array{id: int, wasDeleted: bool} */
+    private function findOrCreateReport(int $requestId, int $actorId): array
     {
-        $documentId = $this->db->createCommand(
-            "SELECT id FROM {{%request_documents}} WHERE request_id = :request_id AND document_type = 'report' FOR UPDATE",
+        // uq_document_request_title запрещает вторую строку 'Отчёт испытаний'
+        // для той же заявки, поэтому после удаления (DOC-011) строка не
+        // создаётся заново, а оживает — deleted_at сбрасывается.
+        $document = $this->db->createCommand(
+            "SELECT id, deleted_at AS deletedAt FROM {{%request_documents}} "
+            . "WHERE request_id = :request_id AND document_type = 'report' FOR UPDATE",
             [':request_id' => $requestId],
-        )->queryScalar();
-        if ($documentId !== false) {
-            return (int) $documentId;
+        )->queryOne();
+        if ($document !== false) {
+            $wasDeleted = $document['deletedAt'] !== null;
+            if ($wasDeleted) {
+                $this->db->createCommand()->update('{{%request_documents}}', [
+                    'deleted_at' => null,
+                    'deleted_by' => null,
+                ], ['id' => (int) $document['id']])->execute();
+            }
+            return ['id' => (int) $document['id'], 'wasDeleted' => $wasDeleted];
         }
         $this->db->createCommand()->insert('{{%request_documents}}', [
             'request_id' => $requestId,
@@ -575,7 +706,7 @@ final class DocumentRepository
             'created_by' => $actorId,
             'created_at' => gmdate('Y-m-d H:i:s.u'),
         ])->execute();
-        return (int) $this->db->getLastInsertID();
+        return ['id' => (int) $this->db->getLastInsertID(), 'wasDeleted' => false];
     }
 
     private function findOrCreateOpinion(int $requestId, int $actorId): int
