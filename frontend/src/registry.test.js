@@ -86,6 +86,7 @@ it('disables every version-sensitive action before conflict recovery', () => {
     canSetColor: true,
     canReject: true,
     canWithdraw: true,
+    canDeleteReport: true,
   })).toMatchObject({
     canAssignExecutor: false,
     canClaimExpert: false,
@@ -96,6 +97,7 @@ it('disables every version-sensitive action before conflict recovery', () => {
     canSetColor: false,
     canReject: false,
     canWithdraw: false,
+    canDeleteReport: false,
   })
 })
 
@@ -136,6 +138,16 @@ it('maps the reassign-expert history label', () => {
     id: 16, kind: 'assignment', action: 'reassign_expert', actorName: 'Эксперт',
     ruleId: 'WF-011', occurredAt: '2026-07-28T10:06:00Z',
   }).description).toBe('переназначил(а) эксперта')
+})
+
+it('maps the delete-report permission and history label', () => {
+  expect(fromApi({ ...registered, status: 'completed', can_delete_report: 1 }))
+    .toMatchObject({ canDeleteReport: true })
+  expect(fromApi(registered)).toMatchObject({ canDeleteReport: false })
+  expect(historyFromApi({
+    id: 17, kind: 'assignment', action: 'delete_report', actorName: 'Исполнитель',
+    ruleId: 'DOC-011', occurredAt: '2026-07-28T10:07:00Z',
+  }).description).toBe('удалил(а) отчёт испытаний')
 })
 
 it('maps permission and history for publishing an expert opinion', () => {

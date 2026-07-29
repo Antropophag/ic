@@ -44,6 +44,7 @@
   "scripts": {
     "lint": "phpcs -n",
     "analyse": "phpstan analyse --no-progress --memory-limit=512M",
-    "test": "phpunit --colors=always"
+    "test": "phpunit --colors=always",
+    "test:integration": "phpunit -c phpunit.integration.xml --colors=always"
   }
 }

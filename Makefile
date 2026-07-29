@@ -1,6 +1,6 @@
 .DEFAULT_GOAL := help
 
-.PHONY: help init up down setup check backend-quality coverage frontend-quality frontend-coverage e2e repo-quality smoke demo-bundle frontend-build schema-diagram schema-diagram-check
+.PHONY: help init up down setup check backend-quality coverage backend-integration frontend-quality frontend-coverage e2e repo-quality smoke demo-bundle frontend-build schema-diagram schema-diagram-check
 
 help:
 	@echo "up                    Build and start the development stack"
@@ -10,6 +10,7 @@ help:
 	@echo "check                 Run the same checks as CI before push"
 	@echo "backend-quality       Run PHP style, static analysis and dependency audit"
 	@echo "coverage              Enforce backend domain/application coverage >= 90%"
+	@echo "backend-integration   Run Infrastructure repository tests against real MariaDB"
 	@echo "frontend-quality      Run frontend lint and dependency audit"
 	@echo "frontend-coverage     Enforce frontend logic coverage >= 80%"
 	@echo "e2e                   Run critical browser flow against the running stack"
@@ -54,6 +55,9 @@ coverage:
 		exit 1; \
 	fi
 	python3 scripts/check_coverage.py backend/build/coverage/clover.xml --minimum 90
+
+backend-integration:
+	sh scripts/backend-integration.sh
 
 frontend-coverage:
 	npm --prefix frontend ci --no-audit --no-fund

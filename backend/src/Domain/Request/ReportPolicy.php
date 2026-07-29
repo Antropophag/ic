@@ -6,12 +6,14 @@ namespace App\Domain\Request;
 
 final class ReportPolicy
 {
-    public function assertCanUpload(RequestStatus $status, bool $isExecutor, bool $isManager): void
+    public function assertCanUpload(RequestStatus $status, bool $isExecutor, bool $isManager, bool $hasActiveReport): void
     {
-        if (
-            !in_array($status, [RequestStatus::InProgress, RequestStatus::OpinionPreparation], true)
-            || (!$isExecutor && !$isManager)
-        ) {
+        // ТЗ 7.8: после удаления отчёта его можно загрузить заново, даже
+        // если заявка уже выполнена — цикл ГК → СБ запускается повторно
+        // (см. DocumentRepository::uploadReport()).
+        $statusAllowed = in_array($status, [RequestStatus::InProgress, RequestStatus::OpinionPreparation], true)
+            || ($status === RequestStatus::Completed && !$hasActiveReport);
+        if (!$statusAllowed || (!$isExecutor && !$isManager)) {
             throw new ReportDenied();
         }
     }

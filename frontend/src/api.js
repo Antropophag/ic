@@ -38,6 +38,11 @@ export const requestApi = {
     body.append('file', file)
     return request(`/api/v1/requests/${requestId}/report`, { method: 'POST', body })
   },
+  deleteReport: (requestId, lockVersion) => request(`/api/v1/requests/${requestId}/report/delete`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ lockVersion }),
+  }),
   downloadDocument: async (versionId) => {
     const response = await fetch(`/api/v1/document-versions/${versionId}/download`, {
       headers: { ...devHeaders() },
