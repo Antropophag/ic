@@ -70,9 +70,18 @@ final class NotificationController extends Controller
                     (string) $row['subject'],
                     (string) $row['body'],
                 );
+                // ACL-005/AUD-003: тело письма могло содержать одноразовые
+                // download-токены (см. DocumentDownloadUrl) — после успешной
+                // отправки они больше не нужны и не должны бессрочно
+                // храниться в БД открытым текстом.
                 Yii::$app->db->createCommand()->update(
                     '{{%notification_outbox}}',
-                    ['status' => 'sent', 'sent_at' => gmdate('Y-m-d H:i:s.u'), 'last_error' => null],
+                    [
+                        'status' => 'sent',
+                        'sent_at' => gmdate('Y-m-d H:i:s.u'),
+                        'last_error' => null,
+                        'body' => '[доставлено, тело удалено после отправки]',
+                    ],
                     ['id' => $id, 'status' => 'sending'],
                 )->execute();
                 $sent++;

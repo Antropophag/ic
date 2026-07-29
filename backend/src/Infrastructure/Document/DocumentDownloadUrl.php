@@ -8,8 +8,11 @@ final class DocumentDownloadUrl
 {
     public static function build(string $token): string
     {
-        $base = rtrim((getenv('APP_PUBLIC_URL') ?: 'http://localhost:8080'), '/');
+        $base = getenv('APP_PUBLIC_URL');
+        if ($base === false || $base === '') {
+            throw new \RuntimeException('Required environment variable APP_PUBLIC_URL is missing');
+        }
 
-        return $base . '/api/v1/document-links/' . $token . '/download';
+        return rtrim($base, '/') . '/api/v1/document-links/' . $token . '/download';
     }
 }
