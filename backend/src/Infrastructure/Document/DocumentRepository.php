@@ -518,7 +518,9 @@ final class DocumentRepository
             . 'FROM {{%request_document_versions}} public_version WHERE public_version.document_id = d.id)) '
             . 'OR executor.user_id = :report_actor OR EXISTS(SELECT 1 FROM {{%user_roles}} ur '
             . 'JOIN {{%roles}} role ON role.id = ur.role_id WHERE ur.user_id = :manager_actor '
-            . "AND role.code IN ('ic_manager', 'laboratory_manager')))) "
+            . "AND role.code IN ('ic_manager', 'laboratory_manager')) "
+            . 'OR EXISTS(SELECT 1 FROM {{%request_assignments}} ra WHERE ra.request_id = r.id '
+            . "AND ra.assignment_type = 'expert' AND ra.valid_to IS NULL AND ra.user_id = :report_expert_actor))) "
             . "OR (d.document_type = 'opinion' AND ((r.status = 'completed' AND v.version = (SELECT MAX(public_opinion.version) "
             . 'FROM {{%request_document_versions}} public_opinion WHERE public_opinion.document_id = d.id)) '
             . 'OR EXISTS(SELECT 1 FROM {{%request_assignments}} oa WHERE oa.request_id = r.id '
@@ -532,6 +534,7 @@ final class DocumentRepository
                 ':actor_id' => $actorId,
                 ':report_actor' => $actorId,
                 ':manager_actor' => $actorId,
+                ':report_expert_actor' => $actorId,
                 ':opinion_actor' => $actorId,
                 ':opinion_author' => $actorId,
                 ':opinion_privileged' => $actorId,

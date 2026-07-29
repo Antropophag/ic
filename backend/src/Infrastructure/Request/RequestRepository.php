@@ -494,6 +494,7 @@ final class RequestRepository
             . 'AND v.version = (SELECT MAX(attachment_version.version) FROM {{%request_document_versions}} attachment_version '
             . "WHERE attachment_version.document_id = d.id)) OR (d.document_type = 'report' AND ("
             . 'current_report_executor.user_id = :report_viewer '
+            . 'OR current_expert.user_id = :report_expert_viewer '
             . 'OR EXISTS(SELECT 1 FROM {{%user_roles}} rvur JOIN {{%roles}} rvr ON rvr.id = rvur.role_id '
             . "WHERE rvur.user_id = :report_manager_viewer AND rvr.code IN ('ic_manager', 'laboratory_manager')) "
             . "OR (d.document_type = 'report' AND item_request.status = 'completed' "
@@ -511,6 +512,7 @@ final class RequestRepository
             [
                 ':document_request_id' => $requestId,
                 ':report_viewer' => $actorId,
+                ':report_expert_viewer' => $actorId,
                 ':report_manager_viewer' => $actorId,
                 ':opinion_viewer' => $actorId,
                 ':opinion_author_viewer' => $actorId,

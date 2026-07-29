@@ -176,6 +176,67 @@ final class RequestRepositoryTest extends IntegrationTestCase
         self::assertSame(1, (int) $notifiedCount);
     }
 
+    public function testAssignedExpertSeesTheReportInDocumentsList(): void
+    {
+        // Issue #73: без этой видимости эксперт не может открыть отчёт,
+        // на основании которого должен сформировать заключение.
+        $initiator = $this->createUser('dev.it.initiator8', 'Инициатор');
+        $executor = $this->createUser('dev.it.executor1', 'Исполнитель');
+        $expert = $this->createUser('dev.it.expert2', 'Эксперт');
+        $outsider = $this->createUser('dev.it.outsider2', 'Посторонний сотрудник');
+        $request = $this->createRegisteredRequest($initiator, 'expert-report-visibility');
+        $requestId = (int) $request['id'];
+        $now = gmdate('Y-m-d H:i:s.u');
+
+        $this->db()->createCommand()->update(
+            '{{%requests}}',
+            ['status' => 'opinion_preparation'],
+            ['id' => $requestId],
+        )->execute();
+        $this->db()->createCommand()->insert('{{%request_assignments}}', [
+            'request_id' => $requestId,
+            'assignment_type' => 'executor',
+            'user_id' => $executor,
+            'assigned_by' => $initiator,
+            'valid_from' => $now,
+        ])->execute();
+        $this->db()->createCommand()->insert('{{%request_assignments}}', [
+            'request_id' => $requestId,
+            'assignment_type' => 'expert',
+            'user_id' => $expert,
+            'assigned_by' => $expert,
+            'valid_from' => $now,
+        ])->execute();
+        $this->db()->createCommand()->insert('{{%request_documents}}', [
+            'request_id' => $requestId,
+            'document_type' => 'report',
+            'title' => 'Отчёт испытаний',
+            'created_by' => $executor,
+            'created_at' => $now,
+        ])->execute();
+        $documentId = (int) $this->db()->getLastInsertID();
+        $this->db()->createCommand()->insert('{{%request_document_versions}}', [
+            'document_id' => $documentId,
+            'version' => 1,
+            'storage_key' => str_repeat('a', 64),
+            'original_name' => 'report.pdf',
+            'mime_type' => 'application/pdf',
+            'size_bytes' => 1,
+            'sha256' => str_repeat('0', 64),
+            'uploaded_by' => $executor,
+            'created_at' => $now,
+        ])->execute();
+
+        $repository = new RequestRepository($this->db());
+
+        $expertDetails = $repository->findDetails($requestId, $expert);
+        self::assertNotEmpty($expertDetails['documents']);
+        self::assertSame('report', $expertDetails['documents'][0]['documentType']);
+
+        $outsiderDetails = $repository->findDetails($requestId, $outsider);
+        self::assertEmpty($outsiderDetails['documents']);
+    }
+
     /**
      * @param list<array<string, mixed>> $rows
      * @return array<string, mixed>
