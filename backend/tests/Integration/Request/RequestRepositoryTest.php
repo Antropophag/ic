@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Tests\Integration\Request;
 
 use App\Application\Request\CreateRequestInput;
+use App\Domain\Request\AssignmentDenied;
 use App\Domain\Request\ConcurrentRequestModification;
 use App\Domain\Request\RejectDenied;
 use App\Domain\Request\WithdrawDenied;
@@ -235,6 +236,143 @@ final class RequestRepositoryTest extends IntegrationTestCase
 
         $outsiderDetails = $repository->findDetails($requestId, $outsider);
         self::assertEmpty($outsiderDetails['documents']);
+    }
+
+    public function testManagerCanReassignExecutorAfterWorkStarted(): void
+    {
+        // Issue #72: до этого изменения переназначение работало только в
+        // registered — руководитель не мог исправить ошибочное назначение
+        // после того, как исполнитель уже начал работу.
+        $manager = $this->createUser('dev.it.manager4', 'Тестовый руководитель 4');
+        $this->grantRole($manager, 'ic_manager');
+        $initiator = $this->createUser('dev.it.initiator9', 'Тестовый инициатор 9');
+        $firstExecutor = $this->createUser('dev.it.executor2', 'Первый исполнитель');
+        $this->grantRole($firstExecutor, 'ic_executor');
+        $secondExecutor = $this->createUser('dev.it.executor3', 'Второй исполнитель');
+        $this->grantRole($secondExecutor, 'ic_executor');
+        $request = $this->createRegisteredRequest($initiator, 'reassign-in-progress');
+        $requestId = (int) $request['id'];
+
+        $repository = new RequestRepository($this->db());
+        $assigned = $repository->assignExecutor($requestId, $firstExecutor, (int) $request['lock_version'], $manager);
+        $started = $repository->startRequest($requestId, (int) $assigned['lockVersion'], $manager);
+
+        $reassigned = $repository->assignExecutor(
+            $requestId,
+            $secondExecutor,
+            (int) $started['lockVersion'],
+            $manager,
+        );
+
+        self::assertSame($secondExecutor, $reassigned['executorId']);
+        self::assertSame((int) $started['lockVersion'] + 1, $reassigned['lockVersion']);
+        self::assertSame(
+            'in_progress',
+            $this->scalar('SELECT status FROM {{%requests}} WHERE id = :id', [':id' => $requestId]),
+        );
+
+        $activeAssignments = $this->scalar(
+            "SELECT COUNT(*) FROM {{%request_assignments}} WHERE request_id = :id "
+            . "AND assignment_type = 'executor' AND valid_to IS NULL",
+            [':id' => $requestId],
+        );
+        self::assertSame(1, (int) $activeAssignments);
+
+        $closedForFirstExecutor = $this->scalar(
+            "SELECT COUNT(*) FROM {{%request_assignments}} WHERE request_id = :id "
+            . "AND assignment_type = 'executor' AND user_id = :executor AND valid_to IS NOT NULL",
+            [':id' => $requestId, ':executor' => $firstExecutor],
+        );
+        self::assertSame(1, (int) $closedForFirstExecutor);
+    }
+
+    public function testReassigningCurrentExecutorIsRejected(): void
+    {
+        // WF-013: назначение того же исполнителя — no-op, который бесполезно
+        // плодит запись истории, увеличивает lock_version и шлёт письмо.
+        $manager = $this->createUser('dev.it.manager6', 'Тестовый руководитель 6');
+        $this->grantRole($manager, 'ic_manager');
+        $initiator = $this->createUser('dev.it.initiator11', 'Тестовый инициатор 11');
+        $executor = $this->createUser('dev.it.executor5', 'Исполнитель');
+        $this->grantRole($executor, 'ic_executor');
+        $request = $this->createRegisteredRequest($initiator, 'reassign-noop');
+        $requestId = (int) $request['id'];
+
+        $repository = new RequestRepository($this->db());
+        $assigned = $repository->assignExecutor($requestId, $executor, (int) $request['lock_version'], $manager);
+
+        try {
+            $repository->assignExecutor($requestId, $executor, (int) $assigned['lockVersion'], $manager);
+            self::fail('Повторное назначение того же исполнителя должно быть отклонено');
+        } catch (AssignmentDenied $error) {
+            self::assertSame('WF-013', $error->ruleId);
+        }
+
+        self::assertSame(
+            (int) $assigned['lockVersion'],
+            (int) $this->scalar('SELECT lock_version FROM {{%requests}} WHERE id = :id', [':id' => $requestId]),
+        );
+        $activeAssignments = $this->scalar(
+            "SELECT COUNT(*) FROM {{%request_assignments}} WHERE request_id = :id "
+            . "AND assignment_type = 'executor' AND valid_to IS NULL",
+            [':id' => $requestId],
+        );
+        self::assertSame(1, (int) $activeAssignments);
+    }
+
+    public function testReassignmentEmailReflectsInProgressStatus(): void
+    {
+        // Issue #72/WF-012: переназначенному исполнителю не нужно «принимать
+        // в работу» заявку, которая уже в работе — письмо должно отражать
+        // реальный статус, а не всегда говорить про первичное назначение.
+        $manager = $this->createUser('dev.it.manager7', 'Тестовый руководитель 7');
+        $this->grantRole($manager, 'ic_manager');
+        $initiator = $this->createUser('dev.it.initiator12', 'Тестовый инициатор 12');
+        $firstExecutor = $this->createUser('dev.it.executor6', 'Первый исполнитель', 'first.executor@example.invalid');
+        $this->grantRole($firstExecutor, 'ic_executor');
+        $secondExecutor = $this->createUser(
+            'dev.it.executor7',
+            'Второй исполнитель',
+            'second.executor@example.invalid',
+        );
+        $this->grantRole($secondExecutor, 'ic_executor');
+        $request = $this->createRegisteredRequest($initiator, 'reassign-email-text');
+        $requestId = (int) $request['id'];
+
+        $repository = new RequestRepository($this->db());
+        $assigned = $repository->assignExecutor($requestId, $firstExecutor, (int) $request['lock_version'], $manager);
+        $started = $repository->startRequest($requestId, (int) $assigned['lockVersion'], $manager);
+        $repository->assignExecutor($requestId, $secondExecutor, (int) $started['lockVersion'], $manager);
+
+        $body = $this->scalar(
+            "SELECT body FROM {{%notification_outbox}} WHERE request_id = :id "
+            . "AND recipient_email = 'second.executor@example.invalid'",
+            [':id' => $requestId],
+        );
+        self::assertIsString($body);
+        self::assertStringContainsString('уже в работе', $body);
+        self::assertStringNotContainsString('принять её в работу', $body);
+    }
+
+    public function testCannotAssignExecutorAfterOpinionPreparationStarted(): void
+    {
+        $manager = $this->createUser('dev.it.manager5', 'Тестовый руководитель 5');
+        $this->grantRole($manager, 'ic_manager');
+        $initiator = $this->createUser('dev.it.initiator10', 'Тестовый инициатор 10');
+        $executor = $this->createUser('dev.it.executor4', 'Исполнитель');
+        $this->grantRole($executor, 'ic_executor');
+        $request = $this->createRegisteredRequest($initiator, 'reassign-too-late');
+        $requestId = (int) $request['id'];
+
+        $this->db()->createCommand()->update(
+            '{{%requests}}',
+            ['status' => 'opinion_preparation'],
+            ['id' => $requestId],
+        )->execute();
+
+        $repository = new RequestRepository($this->db());
+        $this->expectException(ConcurrentRequestModification::class);
+        $repository->assignExecutor($requestId, $executor, (int) $request['lock_version'], $manager);
     }
 
     /**

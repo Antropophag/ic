@@ -277,7 +277,7 @@ final class RequestRepository
             . 'AND EXISTS(SELECT 1 FROM {{%user_roles}} clr JOIN {{%roles}} clrole ON clrole.id = clr.role_id '
             . "WHERE clr.user_id = :color_actor_role AND clrole.code IN ('ic_manager', 'laboratory_manager'))) "
             . 'AS can_set_color, '
-            . "(r.status = 'registered' AND EXISTS(SELECT 1 FROM {{%users}} aau "
+            . "(r.status IN ('registered', 'in_progress', 'suspended') AND EXISTS(SELECT 1 FROM {{%users}} aau "
             . 'WHERE aau.id = :active_assign_actor AND aau.is_active = 1) '
             . 'AND EXISTS(SELECT 1 FROM {{%user_roles}} aur '
             . 'JOIN {{%roles}} ar ON ar.id = aur.role_id '
@@ -366,7 +366,7 @@ final class RequestRepository
             . 'EXISTS(SELECT 1 FROM {{%user_roles}} clr JOIN {{%roles}} clrole ON clrole.id = clr.role_id '
             . "WHERE clr.user_id = :color_actor AND clrole.code IN ('ic_manager', 'laboratory_manager')) "
             . 'AS can_set_color, '
-            . "(r.status = 'registered' AND EXISTS(SELECT 1 FROM {{%user_roles}} aur "
+            . "(r.status IN ('registered', 'in_progress', 'suspended') AND EXISTS(SELECT 1 FROM {{%user_roles}} aur "
             . 'JOIN {{%roles}} ar ON ar.id = aur.role_id '
             . "WHERE aur.user_id = :assign_actor AND ar.code IN ('ic_manager', 'laboratory_manager'))) "
             . 'AS can_assign_executor, '
@@ -865,8 +865,13 @@ final class RequestRepository
             if ($request === false) {
                 throw new AssignmentTargetNotFound('Request not found');
             }
+            $reassignableStatuses = [
+                RequestStatus::Registered->value,
+                RequestStatus::InProgress->value,
+                RequestStatus::Suspended->value,
+            ];
             if (
-                (string) $request['status'] !== RequestStatus::Registered->value
+                !in_array((string) $request['status'], $reassignableStatuses, true)
                 || (int) $request['lock_version'] !== $expectedLockVersion
             ) {
                 throw new ConcurrentRequestModification();
@@ -885,6 +890,7 @@ final class RequestRepository
                 (bool) $executor['is_active'],
                 $this->rolesFor($executorId),
                 $this->isActiveUser($actorId),
+                $this->isCurrentExecutor($requestId, $executorId),
             );
 
             $now = gmdate('Y-m-d H:i:s.u');
@@ -925,14 +931,28 @@ final class RequestRepository
             ])->execute();
             $executorContact = $this->userContact($executorId);
             if ($executorContact !== null) {
+                // WF-012: помимо первичного назначения (registered) заявку
+                // можно переназначить и после того, как она уже в работе —
+                // получателю в этом случае не нужно «принимать в работу»
+                // то, что уже идёт, текст письма отражает реальный статус.
+                $body = match ((string) $request['status']) {
+                    RequestStatus::InProgress->value =>
+                        'Вам переназначена заявка на проведение испытаний, она уже в работе. '
+                        . 'Откройте карточку заявки в портале, чтобы продолжить выполнение.',
+                    RequestStatus::Suspended->value =>
+                        'Вам переназначена заявка на проведение испытаний, работы по ней приостановлены. '
+                        . 'Откройте карточку заявки в портале, чтобы ознакомиться с текущим статусом.',
+                    default =>
+                        'Вам назначена заявка на проведение испытаний. '
+                        . 'Откройте карточку заявки в портале, чтобы принять её в работу.',
+                };
                 (new NotificationOutbox($this->db))->enqueue(
                     $requestId,
                     'request.executor_assigned',
                     $executorContact['email'],
                     $executorContact['name'],
                     'Вам назначена заявка на проведение испытаний',
-                    'Вам назначена заявка на проведение испытаний. '
-                    . 'Откройте карточку заявки в портале, чтобы принять её в работу.',
+                    $body,
                 );
             }
             $transaction->commit();
