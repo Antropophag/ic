@@ -189,10 +189,19 @@ final class RequestRepositoryTest extends IntegrationTestCase
 
         $request = $this->createRegisteredRequest($initiator, 'notify-initiator');
 
+        $notificationCount = $this->scalar(
+            "SELECT COUNT(*) FROM {{%notification_outbox}} "
+            . "WHERE request_id = :id AND event_type = 'request.created' "
+            . "AND recipient_email = 'initiator-notify@example.invalid'",
+            [':id' => $request['id']],
+        );
+        self::assertSame(1, (int) $notificationCount);
+
         $notification = $this->db()->createCommand(
             "SELECT subject, body FROM {{%notification_outbox}} "
             . "WHERE request_id = :id AND event_type = 'request.created' "
-            . "AND recipient_email = 'initiator-notify@example.invalid'",
+            . "AND recipient_email = 'initiator-notify@example.invalid' "
+            . 'ORDER BY id DESC LIMIT 1',
             [':id' => $request['id']],
         )->queryOne();
 
