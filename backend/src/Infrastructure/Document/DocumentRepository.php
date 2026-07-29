@@ -11,6 +11,7 @@ use App\Domain\Request\ReportDeletionPolicy;
 use App\Domain\Request\RequestNotFound;
 use App\Domain\Request\RequestStatus;
 use App\Domain\Request\ReportPolicy;
+use App\Infrastructure\Clock;
 use App\Infrastructure\Notification\NotificationOutbox;
 use yii\db\Connection;
 
@@ -59,7 +60,7 @@ final class DocumentRepository
                 [':document_id' => $documentId],
             )->queryScalar();
             $storageKey = $this->storage->store($temporaryPath);
-            $now = gmdate('Y-m-d H:i:s.u');
+            $now = Clock::now();
             $this->db->createCommand()->insert('{{%request_document_versions}}', [
                 'document_id' => $documentId,
                 'version' => $version,
@@ -160,7 +161,7 @@ final class DocumentRepository
                 [':document_id' => $documentId],
             )->queryScalar();
             $storageKey = $this->storage->store($temporaryPath);
-            $now = gmdate('Y-m-d H:i:s.u');
+            $now = Clock::now();
             $this->db->createCommand()->insert('{{%request_document_versions}}', [
                 'document_id' => $documentId,
                 'version' => $version,
@@ -306,7 +307,7 @@ final class DocumentRepository
                 throw new ConcurrentRequestModification();
             }
 
-            $now = gmdate('Y-m-d H:i:s.u');
+            $now = Clock::now();
             // DOC-011: версии удалённого отчёта помечаются удалёнными
             // безвозвратно — при повторной загрузке "оживает" только сам
             // документ (иначе не даёт создать новую запись уникальность
@@ -403,7 +404,7 @@ final class DocumentRepository
             $storageKey = $this->storage->store($temporaryPath);
             $sha256 = hash('sha256', $pdf);
             $size = strlen($pdf);
-            $now = gmdate('Y-m-d H:i:s.u');
+            $now = Clock::now();
             $documentId = $this->findOrCreateOpinion($requestId, $actorId);
             $this->db->createCommand()->insert('{{%request_document_versions}}', [
                 'document_id' => $documentId,
@@ -568,7 +569,7 @@ final class DocumentRepository
             'actor_id' => $actorId,
             'rule_id' => 'ACL-007',
             'payload_json' => json_encode(['version_id' => $versionId], JSON_THROW_ON_ERROR),
-            'created_at' => gmdate('Y-m-d H:i:s.u'),
+            'created_at' => Clock::now(),
         ])->execute();
     }
 
@@ -596,7 +597,7 @@ final class DocumentRepository
                 ['version_id' => $versionId, 'outcome' => 'rejected', 'reason' => $reason],
                 JSON_THROW_ON_ERROR,
             ),
-            'created_at' => gmdate('Y-m-d H:i:s.u'),
+            'created_at' => Clock::now(),
         ])->execute();
     }
 
@@ -617,7 +618,7 @@ final class DocumentRepository
             'actor_id' => $actorId,
             'rule_id' => $ruleId,
             'payload_json' => json_encode(['outcome' => 'rejected'], JSON_THROW_ON_ERROR),
-            'created_at' => gmdate('Y-m-d H:i:s.u'),
+            'created_at' => Clock::now(),
         ])->execute();
     }
 
@@ -638,7 +639,7 @@ final class DocumentRepository
             'actor_id' => $actorId,
             'rule_id' => $ruleId,
             'payload_json' => json_encode(['outcome' => 'rejected'], JSON_THROW_ON_ERROR),
-            'created_at' => gmdate('Y-m-d H:i:s.u'),
+            'created_at' => Clock::now(),
         ])->execute();
     }
 
@@ -659,7 +660,7 @@ final class DocumentRepository
             'actor_id' => $actorId,
             'rule_id' => $ruleId,
             'payload_json' => json_encode(['outcome' => 'rejected'], JSON_THROW_ON_ERROR),
-            'created_at' => gmdate('Y-m-d H:i:s.u'),
+            'created_at' => Clock::now(),
         ])->execute();
     }
 
@@ -676,7 +677,7 @@ final class DocumentRepository
             'request_id' => $requestId,
             'title' => $title,
             'created_by' => $actorId,
-            'created_at' => gmdate('Y-m-d H:i:s.u'),
+            'created_at' => Clock::now(),
         ])->execute();
         return (int) $this->db->getLastInsertID();
     }
@@ -707,7 +708,7 @@ final class DocumentRepository
             'document_type' => 'report',
             'title' => 'Отчёт испытаний',
             'created_by' => $actorId,
-            'created_at' => gmdate('Y-m-d H:i:s.u'),
+            'created_at' => Clock::now(),
         ])->execute();
         return ['id' => (int) $this->db->getLastInsertID(), 'wasDeleted' => false];
     }
@@ -726,7 +727,7 @@ final class DocumentRepository
             'document_type' => 'opinion',
             'title' => 'Экспертное заключение',
             'created_by' => $actorId,
-            'created_at' => gmdate('Y-m-d H:i:s.u'),
+            'created_at' => Clock::now(),
         ])->execute();
         return (int) $this->db->getLastInsertID();
     }
@@ -779,7 +780,7 @@ final class DocumentRepository
         $this->db->createCommand()->insert('{{%document_download_links}}', [
             'document_version_id' => $documentVersionId,
             'token_hash' => hash('sha256', $token),
-            'created_at' => gmdate('Y-m-d H:i:s.u'),
+            'created_at' => Clock::now(),
         ])->execute();
 
         return $token;

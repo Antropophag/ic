@@ -130,10 +130,13 @@ export function commentFromApi(item) {
 // вставала в начало массива и сохраняла хронологический порядок). Поэтому
 // разворачиваем перед merge-сортировкой только history — реверс уже ASC
 // comments заново сломал бы их порядок. Array.prototype.sort стабилен, но
-// секундная точность occurredAt/createdAt означает, что несколько событий
-// подряд (например, быстрая смена статусов) могут получить одинаковый
-// sortAt — без предварительного разворота history стабильная сортировка
-// сохранила бы его неверный DESC-порядок внутри одной секунды.
+// occurredAt/createdAt приходят с backend с реальной микросекундной
+// точностью (App\Infrastructure\Clock, issue #86), а new Date() в JS хранит
+// только миллисекунды — два события, случившиеся в пределах одной
+// миллисекунды (например, запись в request_transitions и в audit_events в
+// одной транзакции), всё ещё могут получить одинаковый sortAt. Без
+// предварительного разворота history стабильная сортировка сохранила бы
+// его неверный DESC-порядок при таком совпадении.
 export function buildFeed(history, comments) {
   const orderedHistory = [...history].reverse()
   return [...orderedHistory, ...comments].sort((a, b) => new Date(a.sortAt) - new Date(b.sortAt))

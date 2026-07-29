@@ -7,6 +7,7 @@ namespace App\Infrastructure\Identity;
 use App\Domain\Identity\DuplicateAdLogin;
 use App\Domain\Identity\UserAdministrationTargetNotFound;
 use App\Domain\Request\Role;
+use App\Infrastructure\Clock;
 use yii\db\Connection;
 use yii\db\IntegrityException;
 
@@ -72,7 +73,7 @@ final class UserAdministrationRepository
      */
     public function createPlaceholder(string $adLogin, string $displayName, int $actorId): array
     {
-        $now = gmdate('Y-m-d H:i:s.u');
+        $now = Clock::now();
         $transaction = $this->db->beginTransaction();
         try {
             try {
@@ -154,7 +155,7 @@ final class UserAdministrationRepository
         )->queryScalar() !== false;
 
         if (!$alreadyAssigned) {
-            $now = gmdate('Y-m-d H:i:s.u');
+            $now = Clock::now();
             try {
                 $this->db->createCommand()->insert('{{%user_roles}}', [
                     'user_id' => $userId,
@@ -200,7 +201,7 @@ final class UserAdministrationRepository
                 'actor_id' => $actorId,
                 'rule_id' => 'AUTH-007',
                 'payload_json' => json_encode(['role_id' => $roleId], JSON_THROW_ON_ERROR),
-                'created_at' => gmdate('Y-m-d H:i:s.u'),
+                'created_at' => Clock::now(),
             ])->execute();
         }
 
