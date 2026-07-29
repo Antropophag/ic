@@ -92,6 +92,17 @@ jobs:
           sudo install -m 0755 actionlint /usr/local/bin/actionlint
       - run: make repo-quality
 
+  backend-integration:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - run: cp .env.example .env
+      - run: make backend-integration
+      - if: always()
+        run: docker compose down --volumes
+
   api-smoke:
     runs-on: ubuntu-latest
     steps:

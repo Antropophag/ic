@@ -36,12 +36,19 @@
 
 1. статический анализ и форматирование;
 2. все domain unit tests;
-3. integration tests на чистой MariaDB;
+3. integration tests на чистой MariaDB (`make backend-integration`,
+   CI job `backend-integration`) — `RequestRepository`/`DocumentRepository`
+   против применённых с нуля миграций в отдельной базе `ic_test`, каждый
+   тест в своей транзакции с откатом после теста;
 4. миграция БД с нуля;
 5. frontend unit tests и production build;
 6. критический smoke-набор Playwright;
 7. проверка, что production bundle не содержит внешних HTTP-зависимостей;
 8. отчёт покрытия и JUnit-отчёты в GitLab.
+
+Integration-контур сознательно не входит в локальный `make check`/pre-push
+hook (как и `make smoke`/`make e2e`) — требует поднятия реальной MariaDB и
+замедлил бы каждый push; он обязателен только как отдельный CI job.
 
 ## Критические E2E-сценарии
 

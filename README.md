@@ -71,6 +71,14 @@ make init
 make smoke
 ```
 
+Интеграционные тесты `RequestRepository`/`DocumentRepository` против отдельной
+тестовой базы `ic_test` в том же сервисе MariaDB (не требует полного запуска
+`make init`, поднимает только `mariadb`):
+
+```bash
+make backend-integration
+```
+
 ## Демо на чистой Windows-машине
 
 Если на целевой машине есть доступ к GitHub и Docker Hub, самый быстрый путь —
