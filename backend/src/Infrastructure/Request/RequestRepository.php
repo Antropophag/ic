@@ -389,7 +389,10 @@ final class RequestRepository
             . "'security_review')) AS can_comment, "
             . "(r.status IN ('registered', 'in_progress', 'suspended', 'opinion_preparation', "
             . "'security_review')) AS can_upload_document "
-            . ", (r.status IN ('in_progress', 'opinion_preparation') AND "
+            . ", ((r.status IN ('in_progress', 'opinion_preparation') OR (r.status = 'completed' "
+            . "AND NOT EXISTS(SELECT 1 FROM {{%request_documents}} upload_report "
+            . "WHERE upload_report.request_id = r.id AND upload_report.document_type = 'report' "
+            . 'AND upload_report.deleted_at IS NULL))) AND '
             . '(current_executor.user_id = :report_actor OR EXISTS(SELECT 1 FROM {{%user_roles}} rur '
             . 'JOIN {{%roles}} rr ON rr.id = rur.role_id WHERE rur.user_id = :report_manager '
             . "AND rr.code IN ('ic_manager', 'laboratory_manager')))) AS can_upload_report "
@@ -486,7 +489,7 @@ final class RequestRepository
             . 'LEFT JOIN {{%request_assignments}} current_expert '
             . 'ON current_expert.request_id = item_request.id '
             . "AND current_expert.assignment_type = 'expert' AND current_expert.valid_to IS NULL "
-            . "WHERE d.request_id = :document_request_id AND d.deleted_at IS NULL "
+            . "WHERE d.request_id = :document_request_id AND d.deleted_at IS NULL AND v.deleted_at IS NULL "
             . "AND ((d.document_type NOT IN ('report', 'opinion') "
             . 'AND v.version = (SELECT MAX(attachment_version.version) FROM {{%request_document_versions}} attachment_version '
             . "WHERE attachment_version.document_id = d.id)) OR (d.document_type = 'report' AND ("

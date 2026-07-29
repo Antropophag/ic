@@ -73,6 +73,7 @@ export function withoutStaleActions(item) {
     canSetColor: false,
     canReject: false,
     canWithdraw: false,
+    canDeleteReport: false,
   }
 }
 

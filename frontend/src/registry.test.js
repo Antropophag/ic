@@ -86,6 +86,7 @@ it('disables every version-sensitive action before conflict recovery', () => {
     canSetColor: true,
     canReject: true,
     canWithdraw: true,
+    canDeleteReport: true,
   })).toMatchObject({
     canAssignExecutor: false,
     canClaimExpert: false,
@@ -96,6 +97,7 @@ it('disables every version-sensitive action before conflict recovery', () => {
     canSetColor: false,
     canReject: false,
     canWithdraw: false,
+    canDeleteReport: false,
   })
 })
 

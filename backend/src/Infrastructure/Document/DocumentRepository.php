@@ -307,6 +307,14 @@ final class DocumentRepository
             }
 
             $now = gmdate('Y-m-d H:i:s.u');
+            // DOC-011: версии удалённого отчёта помечаются удалёнными
+            // безвозвратно — при повторной загрузке "оживает" только сам
+            // документ (иначе не даёт создать новую запись уникальность
+            // request_id+title), но старые ревизии и выданные на них
+            // email-ссылки не должны снова становиться доступны.
+            $this->db->createCommand()->update('{{%request_document_versions}}', [
+                'deleted_at' => $now,
+            ], ['document_id' => (int) $document['id'], 'deleted_at' => null])->execute();
             $this->db->createCommand()->update('{{%request_documents}}', [
                 'deleted_at' => $now,
                 'deleted_by' => $actorId,
@@ -504,7 +512,8 @@ final class DocumentRepository
             . 'JOIN {{%users}} viewer ON viewer.id = :actor_id AND viewer.is_active = 1 '
             . 'LEFT JOIN {{%request_assignments}} executor ON executor.request_id = r.id '
             . "AND executor.assignment_type = 'executor' AND executor.valid_to IS NULL "
-            . "WHERE v.id = :version_id AND d.deleted_at IS NULL AND (d.document_type NOT IN ('report', 'opinion') "
+            . "WHERE v.id = :version_id AND d.deleted_at IS NULL AND v.deleted_at IS NULL "
+            . "AND (d.document_type NOT IN ('report', 'opinion') "
             . "OR (d.document_type = 'report' AND ((r.status = 'completed' AND v.version = (SELECT MAX(public_version.version) "
             . 'FROM {{%request_document_versions}} public_version WHERE public_version.document_id = d.id)) '
             . 'OR executor.user_id = :report_actor OR EXISTS(SELECT 1 FROM {{%user_roles}} ur '
@@ -542,7 +551,7 @@ final class DocumentRepository
             . 'FROM {{%document_download_links}} l '
             . 'JOIN {{%request_document_versions}} v ON v.id = l.document_version_id '
             . 'JOIN {{%request_documents}} d ON d.id = v.document_id '
-            . 'WHERE l.token_hash = :hash AND d.deleted_at IS NULL',
+            . 'WHERE l.token_hash = :hash AND d.deleted_at IS NULL AND v.deleted_at IS NULL',
             [':hash' => hash('sha256', $token)],
         )->queryOne();
     }

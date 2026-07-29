@@ -535,6 +535,34 @@ curl --fail --silent --show-error \
   "$base_url/api/v1/document-links/$reupload_report_token/download"
 cmp "$smoke_dir/report-v3.pdf" "$smoke_dir/link-report-v3.pdf"
 
+# DOC-011/DOC-012: восстановление документа при повторной загрузке не должно
+# "оживлять" ревизии и email-ссылки, выданные до удаления, — они остаются
+# недоступны навсегда, доступна только новая версия.
+still_missing_report_status=$(curl --silent --output /dev/null --write-out '%{http_code}' \
+  --header 'X-Dev-User-ID: 2' \
+  "$base_url/api/v1/document-versions/$report_v2_version_id/download")
+[ "$still_missing_report_status" = '404' ] || {
+  echo "Expected pre-deletion report version to stay 404 after revival, got $still_missing_report_status" >&2
+  exit 1
+}
+still_missing_link_report_status=$(curl --silent --output /dev/null --write-out '%{http_code}' \
+  "$base_url/api/v1/document-links/$initiator_report_token/download")
+[ "$still_missing_link_report_status" = '404' ] || {
+  echo "Expected pre-deletion report email link to stay 404 after revival, got $still_missing_link_report_status" >&2
+  exit 1
+}
+still_missing_expert_link_status=$(curl --silent --output /dev/null --write-out '%{http_code}' \
+  "$base_url/api/v1/document-links/$expert_report_token/download")
+[ "$still_missing_expert_link_status" = '404' ] || {
+  echo "Expected the original report-uploaded email link to stay 404 after revival, got $still_missing_expert_link_status" >&2
+  exit 1
+}
+reupload_report_revision_count=$(printf '%s' "$reupload_details" | grep -o '"documentType":"report"' | wc -l | tr -d ' ')
+[ "$reupload_report_revision_count" = '1' ] || {
+  echo "Expected only the post-revival report revision to be listed, got $reupload_report_revision_count" >&2
+  exit 1
+}
+
 imported=$(curl --fail --silent --show-error \
   --request POST \
   --header "X-Dev-User-ID: $initiator_user_id" \
