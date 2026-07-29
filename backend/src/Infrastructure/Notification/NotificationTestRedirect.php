@@ -21,6 +21,7 @@ final class NotificationTestRedirect
         string $body,
         ?string $redirectTo,
     ): array {
+        $redirectTo = $redirectTo !== null ? trim($redirectTo) : null;
         if ($redirectTo === null || $redirectTo === '') {
             return [$recipientEmail, $subject, $body];
         }

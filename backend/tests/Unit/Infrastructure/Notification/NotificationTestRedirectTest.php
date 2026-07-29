@@ -21,6 +21,24 @@ final class NotificationTestRedirectTest extends TestCase
         self::assertSame(['user@example.com', 'Тема', 'Тело'], $result);
     }
 
+    public function testPassesThroughUnchangedWhenRedirectIsWhitespaceOnly(): void
+    {
+        $result = NotificationTestRedirect::apply('user@example.com', 'Иван Иванов', 'Тема', 'Тело', "  \t ");
+        self::assertSame(['user@example.com', 'Тема', 'Тело'], $result);
+    }
+
+    public function testTrimsWhitespaceAroundConfiguredRedirectAddress(): void
+    {
+        [$email] = NotificationTestRedirect::apply(
+            'user@example.com',
+            'Иван Иванов',
+            'Тема',
+            'Тело',
+            "  tester@shlz.ru\n",
+        );
+        self::assertSame('tester@shlz.ru', $email);
+    }
+
     public function testRedirectsAndPreservesOriginalRecipientForTraceability(): void
     {
         [$email, $subject, $body] = NotificationTestRedirect::apply(
