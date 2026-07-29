@@ -643,6 +643,17 @@ sb_withdraw_status=$(curl --silent --output /dev/null --write-out '%{http_code}'
 # назначается (уведомление уходит всем активным экспертам), любой эксперт
 # берёт заявку сам, может перехватить заявку у коллеги (например, если тот
 # в отпуске) и может передать её конкретному коллеге явно.
+# id второго тестового эксперта не фиксирован (может быть занят на
+# персистентной демо-базе) — резолвится через список активных экспертов.
+experts_list=$(curl --fail --silent --show-error \
+  --header "X-Dev-User-ID: $dev_user_id" \
+  "$base_url/api/v1/experts")
+expert2_id=$(printf '%s' "$experts_list" | sed -n 's/.*{"id":\([0-9][0-9]*\),"displayName":"Виктор Дорохов"}.*/\1/p')
+[ -n "$expert2_id" ] || {
+  echo 'Second seeded expert (Виктор Дорохов) not found via GET /api/v1/experts' >&2
+  exit 1
+}
+
 expert_created=$(curl --fail --silent --show-error \
   --request POST \
   --header "X-Dev-User-ID: $initiator_user_id" \
@@ -689,18 +700,18 @@ denied_expert_claim_status=$(curl --silent --output /dev/null --write-out '%{htt
   exit 1
 }
 
-# Эксперт 6 берёт свободную заявку в работу (self-claim).
-claimed_by_six=$(curl --fail --silent --show-error \
+# Второй эксперт берёт свободную заявку в работу (self-claim).
+claimed_by_second=$(curl --fail --silent --show-error \
   --request POST \
-  --header 'X-Dev-User-ID: 6' \
+  --header "X-Dev-User-ID: $expert2_id" \
   --header 'Content-Type: application/json' \
   --data '{"lockVersion":4}' \
   "$base_url/api/v1/requests/$expert_request_id/expert/claim")
-printf '%s' "$claimed_by_six" | grep '"expertId":6' >/dev/null
-printf '%s' "$claimed_by_six" | grep '"lockVersion":5' >/dev/null
+printf '%s' "$claimed_by_second" | grep "\"expertId\":$expert2_id" >/dev/null
+printf '%s' "$claimed_by_second" | grep '"lockVersion":5' >/dev/null
 
-# Эксперт 4 перехватывает заявку у эксперта 6 (например, тот в отпуске) —
-# тем же self-claim, без чьего-либо разрешения.
+# Эксперт 4 перехватывает заявку у второго эксперта (например, тот в
+# отпуске) — тем же self-claim, без чьего-либо разрешения.
 taken_over_by_four=$(curl --fail --silent --show-error \
   --request POST \
   --header 'X-Dev-User-ID: 4' \
@@ -710,27 +721,52 @@ taken_over_by_four=$(curl --fail --silent --show-error \
 printf '%s' "$taken_over_by_four" | grep '"expertId":4' >/dev/null
 printf '%s' "$taken_over_by_four" | grep '"lockVersion":6' >/dev/null
 
-# Эксперт 6 (уже не текущий) не может переназначить заявку.
+# Эксперт 4 уже текущий — повторный self-claim собственной заявки запрещён
+# сервером независимо от того, что кнопка в UI для этого случая скрыта.
+denied_reclaim_status=$(curl --silent --output /dev/null --write-out '%{http_code}' \
+  --request POST \
+  --header 'X-Dev-User-ID: 4' \
+  --header 'Content-Type: application/json' \
+  --data '{"lockVersion":6}' \
+  "$base_url/api/v1/requests/$expert_request_id/expert/claim")
+[ "$denied_reclaim_status" = '403' ] || {
+  echo "Expected forbidden reclaim status 403 for the already-current expert, got $denied_reclaim_status" >&2
+  exit 1
+}
+
+# Второй эксперт (уже не текущий) не может переназначить заявку.
 denied_reassign_status=$(curl --silent --output /dev/null --write-out '%{http_code}' \
   --request POST \
-  --header 'X-Dev-User-ID: 6' \
+  --header "X-Dev-User-ID: $expert2_id" \
   --header 'Content-Type: application/json' \
-  --data '{"expertId":6,"lockVersion":6}' \
+  --data "{\"expertId\":$expert2_id,\"lockVersion\":6}" \
   "$base_url/api/v1/requests/$expert_request_id/expert/reassign")
 [ "$denied_reassign_status" = '403' ] || {
   echo "Expected forbidden reassign status 403 for a non-current expert, got $denied_reassign_status" >&2
   exit 1
 }
 
-# Эксперт 4 (текущий) явно передаёт заявку конкретному коллеге.
-reassigned_to_six=$(curl --fail --silent --show-error \
+# Эксперт 4 (текущий) не может «переназначить» заявку самому себе.
+denied_self_reassign_status=$(curl --silent --output /dev/null --write-out '%{http_code}' \
   --request POST \
   --header 'X-Dev-User-ID: 4' \
   --header 'Content-Type: application/json' \
-  --data '{"expertId":6,"lockVersion":6}' \
+  --data '{"expertId":4,"lockVersion":6}' \
   "$base_url/api/v1/requests/$expert_request_id/expert/reassign")
-printf '%s' "$reassigned_to_six" | grep '"expertId":6' >/dev/null
-printf '%s' "$reassigned_to_six" | grep '"lockVersion":7' >/dev/null
+[ "$denied_self_reassign_status" = '403' ] || {
+  echo "Expected forbidden self-reassign status 403, got $denied_self_reassign_status" >&2
+  exit 1
+}
+
+# Эксперт 4 (текущий) явно передаёт заявку конкретному коллеге.
+reassigned_to_second=$(curl --fail --silent --show-error \
+  --request POST \
+  --header 'X-Dev-User-ID: 4' \
+  --header 'Content-Type: application/json' \
+  --data "{\"expertId\":$expert2_id,\"lockVersion\":6}" \
+  "$base_url/api/v1/requests/$expert_request_id/expert/reassign")
+printf '%s' "$reassigned_to_second" | grep "\"expertId\":$expert2_id" >/dev/null
+printf '%s' "$reassigned_to_second" | grep '"lockVersion":7' >/dev/null
 
 reassign_notified_body=$(sql_scalar "SELECT body FROM notification_outbox WHERE request_id = $expert_request_id AND event_type = 'request.expert_reassigned' AND recipient_email = 'dev.expert2@example.invalid' ORDER BY id DESC LIMIT 1")
 reassign_report_token=$(printf '%s' "$reassign_notified_body" | sed -n 's#.*document-links/\([a-f0-9]\{64\}\)/download.*#\1#p')
@@ -743,7 +779,7 @@ reassign_report_token=$(printf '%s' "$reassign_notified_body" | sed -n 's#.*docu
 # состоянии, и проверяем устаревшую версию блокировки.
 curl --fail --silent --show-error \
   --request POST \
-  --header 'X-Dev-User-ID: 6' \
+  --header "X-Dev-User-ID: $expert2_id" \
   --header 'Content-Type: application/json' \
   --data '{"expertId":4,"lockVersion":7}' \
   "$base_url/api/v1/requests/$expert_request_id/expert/reassign" >/dev/null

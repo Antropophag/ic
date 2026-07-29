@@ -16,24 +16,30 @@ final class ExpertAssignmentPolicyTest extends TestCase
     public function testActiveExpertCanClaimDuringOpinionPreparation(): void
     {
         $this->expectNotToPerformAssertions();
-        (new ExpertAssignmentPolicy())->assertCanClaim(RequestStatus::OpinionPreparation, true, [Role::Expert]);
+        (new ExpertAssignmentPolicy())->assertCanClaim(RequestStatus::OpinionPreparation, true, [Role::Expert], false);
     }
 
     /** @param list<Role> $actorRoles */
     #[DataProvider('claimDeniedCases')]
-    public function testClaimDeniedCases(string $ruleId, RequestStatus $status, bool $actorActive, array $actorRoles): void
-    {
+    public function testClaimDeniedCases(
+        string $ruleId,
+        RequestStatus $status,
+        bool $actorActive,
+        array $actorRoles,
+        bool $actorIsCurrentExpert,
+    ): void {
         $this->expectException(ExpertAssignmentDenied::class);
         $this->expectExceptionMessage($ruleId);
-        (new ExpertAssignmentPolicy())->assertCanClaim($status, $actorActive, $actorRoles);
+        (new ExpertAssignmentPolicy())->assertCanClaim($status, $actorActive, $actorRoles, $actorIsCurrentExpert);
     }
 
-    /** @return iterable<string, array{string, RequestStatus, bool, list<Role>}> */
+    /** @return iterable<string, array{string, RequestStatus, bool, list<Role>, bool}> */
     public static function claimDeniedCases(): iterable
     {
-        yield 'неактивный эксперт' => ['AUTH-003', RequestStatus::OpinionPreparation, false, [Role::Expert]];
-        yield 'не эксперт' => ['WF-010', RequestStatus::OpinionPreparation, true, [Role::Employee]];
-        yield 'неверный этап' => ['DOC-005', RequestStatus::InProgress, true, [Role::Expert]];
+        yield 'неактивный эксперт' => ['AUTH-003', RequestStatus::OpinionPreparation, false, [Role::Expert], false];
+        yield 'не эксперт' => ['WF-010', RequestStatus::OpinionPreparation, true, [Role::Employee], false];
+        yield 'уже текущий эксперт' => ['WF-010', RequestStatus::OpinionPreparation, true, [Role::Expert], true];
+        yield 'неверный этап' => ['DOC-005', RequestStatus::InProgress, true, [Role::Expert], false];
     }
 
     public function testCurrentExpertCanReassignToActiveExpert(): void
@@ -44,6 +50,7 @@ final class ExpertAssignmentPolicyTest extends TestCase
             true,
             [Role::Expert],
             true,
+            false,
             true,
             [Role::Expert],
         );
@@ -60,6 +67,7 @@ final class ExpertAssignmentPolicyTest extends TestCase
         bool $actorActive,
         array $actorRoles,
         bool $actorIsCurrentExpert,
+        bool $isSelfTarget,
         bool $targetActive,
         array $targetRoles,
     ): void {
@@ -70,31 +78,35 @@ final class ExpertAssignmentPolicyTest extends TestCase
             $actorActive,
             $actorRoles,
             $actorIsCurrentExpert,
+            $isSelfTarget,
             $targetActive,
             $targetRoles,
         );
     }
 
-    /** @return iterable<string, array{string, RequestStatus, bool, list<Role>, bool, bool, list<Role>}> */
+    /** @return iterable<string, array{string, RequestStatus, bool, list<Role>, bool, bool, bool, list<Role>}> */
     public static function reassignDeniedCases(): iterable
     {
         yield 'неактивный эксперт' => [
-            'AUTH-003', RequestStatus::OpinionPreparation, false, [Role::Expert], true, true, [Role::Expert],
+            'AUTH-003', RequestStatus::OpinionPreparation, false, [Role::Expert], true, false, true, [Role::Expert],
         ];
         yield 'не текущий эксперт заявки' => [
-            'WF-011', RequestStatus::OpinionPreparation, true, [Role::Expert], false, true, [Role::Expert],
+            'WF-011', RequestStatus::OpinionPreparation, true, [Role::Expert], false, false, true, [Role::Expert],
         ];
         yield 'роль эксперта отозвана' => [
-            'WF-011', RequestStatus::OpinionPreparation, true, [Role::Employee], true, true, [Role::Expert],
+            'WF-011', RequestStatus::OpinionPreparation, true, [Role::Employee], true, false, true, [Role::Expert],
         ];
         yield 'неверный этап' => [
-            'DOC-005', RequestStatus::InProgress, true, [Role::Expert], true, true, [Role::Expert],
+            'DOC-005', RequestStatus::InProgress, true, [Role::Expert], true, false, true, [Role::Expert],
         ];
         yield 'кандидат без роли эксперта' => [
-            'WF-011', RequestStatus::OpinionPreparation, true, [Role::Expert], true, true, [Role::Employee],
+            'WF-011', RequestStatus::OpinionPreparation, true, [Role::Expert], true, false, true, [Role::Employee],
         ];
         yield 'неактивный кандидат' => [
-            'WF-011', RequestStatus::OpinionPreparation, true, [Role::Expert], true, false, [Role::Expert],
+            'WF-011', RequestStatus::OpinionPreparation, true, [Role::Expert], true, false, false, [Role::Expert],
+        ];
+        yield 'переназначение самому себе' => [
+            'WF-011', RequestStatus::OpinionPreparation, true, [Role::Expert], true, true, true, [Role::Expert],
         ];
     }
 }

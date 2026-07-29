@@ -7,12 +7,16 @@ namespace App\Domain\Request;
 final class ExpertAssignmentPolicy
 {
     /** @param list<Role> $actorRoles */
-    public function assertCanClaim(RequestStatus $status, bool $actorIsActive, array $actorRoles): void
-    {
+    public function assertCanClaim(
+        RequestStatus $status,
+        bool $actorIsActive,
+        array $actorRoles,
+        bool $actorIsCurrentExpert,
+    ): void {
         if (!$actorIsActive) {
             throw new ExpertAssignmentDenied('AUTH-003');
         }
-        if (!in_array(Role::Expert, $actorRoles, true)) {
+        if (!in_array(Role::Expert, $actorRoles, true) || $actorIsCurrentExpert) {
             throw new ExpertAssignmentDenied('WF-010');
         }
         if ($status !== RequestStatus::OpinionPreparation) {
@@ -29,6 +33,7 @@ final class ExpertAssignmentPolicy
         bool $actorIsActive,
         array $actorRoles,
         bool $actorIsCurrentExpert,
+        bool $isSelfTarget,
         bool $targetIsActive,
         array $targetRoles,
     ): void {
@@ -41,7 +46,7 @@ final class ExpertAssignmentPolicy
         if ($status !== RequestStatus::OpinionPreparation) {
             throw new ExpertAssignmentDenied('DOC-005');
         }
-        if (!$targetIsActive || !in_array(Role::Expert, $targetRoles, true)) {
+        if ($isSelfTarget || !$targetIsActive || !in_array(Role::Expert, $targetRoles, true)) {
             throw new ExpertAssignmentDenied('WF-011');
         }
     }

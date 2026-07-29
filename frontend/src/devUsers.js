@@ -6,7 +6,9 @@ export const DEV_USERS = [
   { id: 3, displayName: 'Тестовый сотрудник', position: 'Сотрудник', department: 'Тестовое подразделение' },
   { id: 4, displayName: 'Анна Смирнова', position: 'Эксперт', department: 'Испытательный центр' },
   { id: 5, displayName: 'Олег Воронцов', position: 'Сотрудник СБ', department: 'Служба безопасности' },
-  { id: 6, displayName: 'Виктор Дорохов', position: 'Эксперт', department: 'Испытательный центр' },
+  // Второй тестовый эксперт (Виктор Дорохов, dev.expert2) сознательно не
+  // включён сюда: его id не фиксирован (см. DevController::ADDITIONAL_EXPERTS)
+  // и определяется на конкретной базе через GET /api/v1/experts.
 ]
 
 let overrideId = null

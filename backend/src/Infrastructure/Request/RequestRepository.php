@@ -645,19 +645,25 @@ final class RequestRepository
         $transaction = $this->db->beginTransaction();
         try {
             $request = $this->db->createCommand(
-                'SELECT status, lock_version FROM {{%requests}} WHERE id = :id FOR UPDATE',
-                [':id' => $requestId],
+                'SELECT r.status, r.lock_version AS lockVersion, '
+                . '(current_expert.user_id = :actor_expert) AS isCurrentExpert '
+                . 'FROM {{%requests}} r '
+                . 'LEFT JOIN {{%request_assignments}} current_expert ON current_expert.request_id = r.id '
+                . "AND current_expert.assignment_type = 'expert' AND current_expert.valid_to IS NULL "
+                . 'WHERE r.id = :id FOR UPDATE',
+                [':id' => $requestId, ':actor_expert' => $actorId],
             )->queryOne();
             if ($request === false) {
                 throw new AssignmentTargetNotFound('Request not found');
             }
-            if ((int) $request['lock_version'] !== $expectedLockVersion) {
+            if ((int) $request['lockVersion'] !== $expectedLockVersion) {
                 throw new ConcurrentRequestModification();
             }
             (new ExpertAssignmentPolicy())->assertCanClaim(
                 RequestStatus::from((string) $request['status']),
                 $this->isActiveUser($actorId),
                 $this->rolesFor($actorId),
+                (bool) $request['isCurrentExpert'],
             );
 
             $result = $this->performExpertAssignment(
@@ -709,6 +715,7 @@ final class RequestRepository
                 $this->isActiveUser($actorId),
                 $this->rolesFor($actorId),
                 (bool) $request['isCurrentExpert'],
+                $actorId === $targetExpertId,
                 (bool) $target['is_active'],
                 $this->rolesFor($targetExpertId),
             );

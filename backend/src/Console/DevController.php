@@ -42,11 +42,6 @@ final class DevController extends Controller
             'email' => 'dev.security@example.invalid', 'position' => 'Сотрудник СБ',
             'department' => 'Служба безопасности', 'roles' => ['employee', 'security_officer'],
         ],
-        6 => [
-            'ad_login' => 'dev.expert2', 'display_name' => 'Виктор Дорохов',
-            'email' => 'dev.expert2@example.invalid', 'position' => 'Эксперт',
-            'department' => 'Испытательный центр', 'roles' => ['employee', 'expert'],
-        ],
     ];
 
     /**
@@ -85,6 +80,22 @@ final class DevController extends Controller
         ],
     ];
 
+    /**
+     * Второй тестовый эксперт — нужен только для проверки переназначения и
+     * перехвата заявки между экспертами, в ТЗ 7.5 не входит. Без
+     * фиксированного id по той же причине, что и ADDITIONAL_EXECUTORS: на
+     * персистентной демо-базе фиксированный id мог уже органически занять
+     * другой пользователь.
+     *
+     * @var array<string, array{display_name: string, email: string, position: string, department: string, roles: list<string>}>
+     */
+    private const ADDITIONAL_EXPERTS = [
+        'dev.expert2' => [
+            'display_name' => 'Виктор Дорохов', 'email' => 'dev.expert2@example.invalid',
+            'position' => 'Эксперт', 'department' => 'Испытательный центр', 'roles' => ['employee', 'expert'],
+        ],
+    ];
+
     public function actionSeed(): int
     {
         if (YII_ENV !== 'dev') {
@@ -95,6 +106,7 @@ final class DevController extends Controller
         $allRoles = array_merge(
             array_column(self::CORE_USERS, 'roles'),
             array_column(self::ADDITIONAL_EXECUTORS, 'roles'),
+            array_column(self::ADDITIONAL_EXPERTS, 'roles'),
         );
         $roleCodes = array_unique(array_merge(...$allRoles));
         $roleIds = [];
@@ -128,7 +140,20 @@ final class DevController extends Controller
             $this->assignRoles($userId, $user['roles'], $roleIds, $now);
         }
 
-        foreach (self::ADDITIONAL_EXECUTORS as $adLogin => $user) {
+        $this->seedByAdLogin(self::ADDITIONAL_EXECUTORS, $roleIds, $now);
+        $this->seedByAdLogin(self::ADDITIONAL_EXPERTS, $roleIds, $now);
+
+        $this->stdout("Development users and roles are ready.\n");
+        return ExitCode::OK;
+    }
+
+    /**
+     * @param array<string, array{display_name: string, email: string, position: string, department: string, roles: list<string>}> $users
+     * @param array<string, int> $roleIds
+     */
+    private function seedByAdLogin(array $users, array $roleIds, string $now): void
+    {
+        foreach ($users as $adLogin => $user) {
             Yii::$app->db->createCommand()->upsert('{{%users}}', [
                 'ad_login' => $adLogin,
                 'display_name' => $user['display_name'],
@@ -145,9 +170,6 @@ final class DevController extends Controller
             )->queryScalar();
             $this->assignRoles($userId, $user['roles'], $roleIds, $now);
         }
-
-        $this->stdout("Development users and roles are ready.\n");
-        return ExitCode::OK;
     }
 
     /**
