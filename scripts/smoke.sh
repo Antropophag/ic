@@ -6,8 +6,11 @@ dev_user_id=${DEV_USER_ID:-1}
 initiator_user_id=${INITIATOR_USER_ID:-3}
 
 sql_scalar() {
+  # --raw отключает клиентское экранирование `\n`/`\t` в текстовых полях
+  # (иначе многострочные значения, например тело письма, приходят одной
+  # строкой с буквальным "\n" вместо перевода строки).
   docker compose exec -T mariadb sh -lc \
-    'mariadb --user=root --password="$MARIADB_ROOT_PASSWORD" --skip-column-names "$MARIADB_DATABASE" --execute "$1"' \
+    'mariadb --raw --user=root --password="$MARIADB_ROOT_PASSWORD" --skip-column-names "$MARIADB_DATABASE" --execute "$1"' \
     sh "$1"
 }
 
@@ -181,6 +184,20 @@ expert_assignment=$(curl --fail --silent --show-error \
   "$base_url/api/v1/requests/$request_id/expert")
 printf '%s' "$expert_assignment" | grep '"expertId":4' >/dev/null
 printf '%s' "$expert_assignment" | grep '"lockVersion":5' >/dev/null
+
+# ТЗ 4.6/ACL-003..006: письмо эксперту содержит активную ссылку на
+# скачивание отчёта, работающую без входа в портал.
+expert_notified_body=$(sql_scalar "SELECT body FROM notification_outbox WHERE request_id = $request_id AND event_type = 'request.expert_assigned' ORDER BY id DESC LIMIT 1")
+expert_report_token=$(printf '%s' "$expert_notified_body" | sed -n 's#.*document-links/\([a-f0-9]\{64\}\)/download.*#\1#p')
+[ -n "$expert_report_token" ] || {
+  echo 'Expert assignment notification is missing a document link token' >&2
+  exit 1
+}
+curl --fail --silent --show-error \
+  --output "$smoke_dir/link-report.pdf" \
+  "$base_url/api/v1/document-links/$expert_report_token/download"
+cmp "$smoke_dir/report.pdf" "$smoke_dir/link-report.pdf"
+
 stale_expert_status=$(curl --silent --output /dev/null --write-out '%{http_code}' \
   --request POST \
   --header "X-Dev-User-ID: $dev_user_id" \
@@ -260,6 +277,33 @@ opinion_version_id=$(printf '%s' "$opinion" | sed -n 's/.*"documentVersionId":\(
   echo 'Published opinion has no document version id' >&2
   exit 1
 }
+
+# ТЗ 4.9/ACL-003..006: письмо СБ содержит активные ссылки на отчёт и
+# заключение, работающие без входа в портал.
+security_notified_body=$(sql_scalar "SELECT body FROM notification_outbox WHERE request_id = $request_id AND event_type = 'request.opinion_published' AND recipient_email = 'dev.security@example.invalid' ORDER BY id DESC LIMIT 1")
+security_link_tokens=$(printf '%s' "$security_notified_body" | sed -n 's#.*document-links/\([a-f0-9]\{64\}\)/download.*#\1#p')
+security_link_token_count=$(printf '%s\n' "$security_link_tokens" | grep -c .)
+[ "$security_link_token_count" = '2' ] || {
+  echo "Expected two document link tokens in the security notification, got $security_link_token_count" >&2
+  exit 1
+}
+security_opinion_token=$(printf '%s\n' "$security_link_tokens" | head -n1)
+security_report_token=$(printf '%s\n' "$security_link_tokens" | tail -n1)
+curl --fail --silent --show-error \
+  --output "$smoke_dir/link-opinion.pdf" \
+  "$base_url/api/v1/document-links/$security_opinion_token/download"
+curl --fail --silent --show-error \
+  --output "$smoke_dir/link-report-v2.pdf" \
+  "$base_url/api/v1/document-links/$security_report_token/download"
+cmp "$smoke_dir/report-v2.pdf" "$smoke_dir/link-report-v2.pdf"
+
+unknown_link_status=$(curl --silent --output /dev/null --write-out '%{http_code}' \
+  "$base_url/api/v1/document-links/$(printf '0%.0s' $(seq 1 64))/download")
+[ "$unknown_link_status" = '404' ] || {
+  echo "Expected unknown document link status 404, got $unknown_link_status" >&2
+  exit 1
+}
+
 stale_opinion_status=$(curl --silent --output /dev/null --write-out '%{http_code}' \
   --request POST \
   --header 'X-Dev-User-ID: 4' \
@@ -275,6 +319,7 @@ curl --fail --silent --show-error \
   --output "$smoke_dir/opinion.pdf" \
   "$base_url/api/v1/document-versions/$opinion_version_id/download"
 grep '%PDF-' "$smoke_dir/opinion.pdf" >/dev/null
+cmp "$smoke_dir/opinion.pdf" "$smoke_dir/link-opinion.pdf"
 private_opinion_status=$(curl --silent --output /dev/null --write-out '%{http_code}' \
   --header 'X-Dev-User-ID: 3' \
   "$base_url/api/v1/document-versions/$opinion_version_id/download")
@@ -310,6 +355,27 @@ security_decision=$(curl --fail --silent --show-error \
   "$base_url/api/v1/requests/$request_id/security-decision")
 printf '%s' "$security_decision" | grep '"status":"completed"' >/dev/null
 printf '%s' "$security_decision" | grep '"lockVersion":7' >/dev/null
+
+# ТЗ 4.10/ACL-003..006: письмо инициатору о завершении испытаний содержит
+# активные ссылки на отчёт и заключение, работающие без входа в портал.
+initiator_notified_body=$(sql_scalar "SELECT body FROM notification_outbox WHERE request_id = $request_id AND event_type = 'request.completed' ORDER BY id DESC LIMIT 1")
+initiator_link_tokens=$(printf '%s' "$initiator_notified_body" | sed -n 's#.*document-links/\([a-f0-9]\{64\}\)/download.*#\1#p')
+initiator_link_token_count=$(printf '%s\n' "$initiator_link_tokens" | grep -c .)
+[ "$initiator_link_token_count" = '2' ] || {
+  echo "Expected two document link tokens in the completion notification, got $initiator_link_token_count" >&2
+  exit 1
+}
+initiator_report_token=$(printf '%s\n' "$initiator_link_tokens" | head -n1)
+initiator_opinion_token=$(printf '%s\n' "$initiator_link_tokens" | tail -n1)
+curl --fail --silent --show-error \
+  --output "$smoke_dir/link-final-report.pdf" \
+  "$base_url/api/v1/document-links/$initiator_report_token/download"
+cmp "$smoke_dir/report-v2.pdf" "$smoke_dir/link-final-report.pdf"
+curl --fail --silent --show-error \
+  --output "$smoke_dir/link-final-opinion.pdf" \
+  "$base_url/api/v1/document-links/$initiator_opinion_token/download"
+cmp "$smoke_dir/opinion.pdf" "$smoke_dir/link-final-opinion.pdf"
+
 repeated_security_status=$(curl --silent --output /dev/null --write-out '%{http_code}' \
   --request POST \
   --header 'X-Dev-User-ID: 5' \

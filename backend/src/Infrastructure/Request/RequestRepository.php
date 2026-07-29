@@ -21,6 +21,7 @@ use App\Domain\Request\Role;
 use App\Domain\Request\SecurityDecisionPolicy;
 use App\Domain\Request\StartRequestPolicy;
 use App\Domain\Request\WithdrawPolicy;
+use App\Infrastructure\Document\DocumentDownloadUrl;
 use App\Infrastructure\Notification\NotificationOutbox;
 use yii\db\Connection;
 
@@ -191,6 +192,15 @@ final class RequestRepository
             if ($decision === 'approve') {
                 $initiator = $this->initiatorContact($requestId);
                 if ($initiator !== null) {
+                    $links = '';
+                    $reportVersionId = $this->latestDocumentVersionId($requestId, 'report');
+                    if ($reportVersionId !== null) {
+                        $links .= "\nСсылка на отчёт: " . DocumentDownloadUrl::build($this->issueDocumentLink($reportVersionId));
+                    }
+                    $opinionVersionId = $this->latestDocumentVersionId($requestId, 'opinion');
+                    if ($opinionVersionId !== null) {
+                        $links .= "\nСсылка на заключение: " . DocumentDownloadUrl::build($this->issueDocumentLink($opinionVersionId));
+                    }
                     $outbox->enqueue(
                         $requestId,
                         'request.completed',
@@ -198,7 +208,8 @@ final class RequestRepository
                         $initiator['name'],
                         'Испытания завершены',
                         'Испытания по вашей заявке завершены, контроль службы безопасности пройден. '
-                        . 'Отчёт и заключение доступны в портале.',
+                        . 'Отчёт и заключение доступны в портале.'
+                        . $links,
                     );
                 }
             } else {
@@ -667,6 +678,10 @@ final class RequestRepository
             ])->execute();
             $expertContact = $this->userContact($expertId);
             if ($expertContact !== null) {
+                $reportVersionId = $this->latestDocumentVersionId($requestId, 'report');
+                $reportLink = $reportVersionId === null
+                    ? ''
+                    : "\nСсылка на отчёт: " . DocumentDownloadUrl::build($this->issueDocumentLink($reportVersionId));
                 (new NotificationOutbox($this->db))->enqueue(
                     $requestId,
                     'request.expert_assigned',
@@ -674,7 +689,8 @@ final class RequestRepository
                     $expertContact['name'],
                     'Вам назначена заявка для экспертного заключения',
                     'Вам назначена заявка на подготовку экспертного заключения. '
-                    . 'Откройте карточку заявки в портале, чтобы сформировать заключение.',
+                    . 'Откройте карточку заявки в портале, чтобы сформировать заключение.'
+                    . $reportLink,
                 );
             }
             $transaction->commit();
@@ -1304,6 +1320,34 @@ final class RequestRepository
             . 'AND r.code IN (' . implode(',', $placeholders) . ')',
             $params,
         )->queryAll();
+    }
+
+    private function latestDocumentVersionId(int $requestId, string $documentType): ?int
+    {
+        $id = $this->db->createCommand(
+            'SELECT v.id FROM {{%request_document_versions}} v '
+            . 'JOIN {{%request_documents}} d ON d.id = v.document_id '
+            . 'WHERE d.request_id = :request_id AND d.document_type = :document_type '
+            . 'ORDER BY v.version DESC LIMIT 1',
+            [':request_id' => $requestId, ':document_type' => $documentType],
+        )->queryScalar();
+
+        return $id === false ? null : (int) $id;
+    }
+
+    // ACL-003..006: письмо-уведомление содержит активную ссылку на скачивание
+    // документа без входа в портал (ТЗ 4.6/4.9/4.10), в т.ч. пока обычный
+    // доступ через портал ещё не открыт.
+    private function issueDocumentLink(int $documentVersionId): string
+    {
+        $token = bin2hex(random_bytes(32));
+        $this->db->createCommand()->insert('{{%document_download_links}}', [
+            'document_version_id' => $documentVersionId,
+            'token_hash' => hash('sha256', $token),
+            'created_at' => gmdate('Y-m-d H:i:s.u'),
+        ])->execute();
+
+        return $token;
     }
 
     /** @return array{email: string, name: string}|null */

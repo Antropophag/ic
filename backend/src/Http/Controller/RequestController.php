@@ -226,6 +226,24 @@ final class RequestController extends Controller
             'inline' => false,
         ]);
     }
+
+    // ACL-003..006: ссылка из уведомления работает без входа в портал (ТЗ
+    // 4.6/4.9/4.10) — сюда сознательно не подключается CurrentUser.
+    public function actionDownloadDocumentLink(string $token): Response
+    {
+        $version = $this->documents()->findVersionByToken($token);
+        if ($version === false) {
+            throw new NotFoundHttpException('Document link not found');
+        }
+        $path = $this->storage()->path((string) $version['storageKey']);
+        if (!is_file($path)) {
+            throw new NotFoundHttpException('Document version not found');
+        }
+        return Yii::$app->response->sendFile($path, (string) $version['originalName'], [
+            'mimeType' => (string) $version['mimeType'],
+            'inline' => false,
+        ]);
+    }
     /** @return array{items: list<array{id: int, displayName: string}>} */
     public function actionExecutors(): array
     {
