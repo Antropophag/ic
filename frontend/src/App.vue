@@ -1,6 +1,6 @@
 <script setup>
 import { computed, onMounted, reactive, ref, watch } from 'vue'
-import { requestApi } from './api'
+import { authApi, hasCsrfToken, requestApi, setCsrfToken } from './api'
 import { DEV_USERS, getDevUserId, setDevUserId } from './devUsers'
 import { createLatestRequestGuard } from './latestRequestGuard'
 import { ACTIVE_STATUSES, REGISTRY_PAGE_SIZE, REQUEST_COLORS, canSubmitComment, commentFromApi, documentFromApi, filterRequests, fromApi, historyFromApi, paginate, withoutStaleActions } from './registry'
@@ -70,9 +70,27 @@ const draft = reactive({
   productName: '', manufacturer: '', supplier: '', sampleQuantity: 1, testMethod: '',
 })
 const devUserId = ref(getDevUserId())
-const currentProfile = computed(() => DEV_USERS.find(user => user.id === devUserId.value) ?? DEV_USERS[0])
-const currentInitials = computed(() => currentProfile.value.displayName
-  .split(' ').map(part => part[0]).join('').slice(0, 2).toUpperCase())
+// Пессимистичный старт (dev-режим), пока /auth/me не ответит — не мигаем
+// формой логина в единственном реально dev-развёртывании (локальная разработка/CI).
+const authDevMode = ref(true)
+const authLoading = ref(true)
+const authUser = ref(null)
+const loginForm = reactive({ login: '', password: '' })
+const loginLoading = ref(false)
+const loginError = ref('')
+
+const currentProfile = computed(() => {
+  if (authDevMode.value) {
+    return DEV_USERS.find(user => user.id === devUserId.value) ?? DEV_USERS[0]
+  }
+  return {
+    displayName: authUser.value?.displayName || '',
+    position: authUser.value?.position || '',
+    department: authUser.value?.department || '',
+  }
+})
+const currentInitials = computed(() => (currentProfile.value.displayName
+  .split(' ').map(part => part[0]).join('').slice(0, 2).toUpperCase()) || '?')
 
 function switchDevUser(rawId) {
   const id = Number(rawId)
@@ -80,6 +98,71 @@ function switchDevUser(rawId) {
   devUserId.value = id
   selected.value = null
   loadRequests()
+}
+
+async function bootstrapAuth() {
+  authLoading.value = true
+  try {
+    const result = await authApi.me()
+    setCsrfToken(result.csrfToken)
+    authDevMode.value = Boolean(result.devMode)
+    authUser.value = result.user
+    if (authDevMode.value || authUser.value) {
+      await loadRequests()
+    }
+  } catch {
+    // /auth/me недоступен (сеть/сервер) — остаёмся на форме логина, если
+    // не dev; повторная попытка доступна через кнопку логина.
+    authDevMode.value = false
+    authUser.value = null
+  } finally {
+    authLoading.value = false
+  }
+}
+
+async function login() {
+  if (loginLoading.value) return
+  if (!loginForm.login || !loginForm.password) {
+    loginError.value = 'Введите логин и пароль.'
+    return
+  }
+  loginLoading.value = true
+  loginError.value = ''
+  try {
+    if (!hasCsrfToken()) {
+      // Начальный /auth/me мог не выполниться (сеть/сервер) — без токена
+      // сам логин будет отклонён CSRF-проверкой вне dev, поэтому сначала
+      // добираем токен перед попыткой входа.
+      const bootstrap = await authApi.me()
+      setCsrfToken(bootstrap.csrfToken)
+    }
+    const result = await authApi.login(loginForm.login, loginForm.password)
+    setCsrfToken(result.csrfToken)
+    authUser.value = result.user
+    loginForm.password = ''
+    await loadRequests()
+  } catch (error) {
+    loginError.value = error.status === 401
+      ? 'Неверный логин или пароль.'
+      : error.status === 403
+        ? 'Учётная запись отключена в портале. Обратитесь к администратору.'
+        : 'Не удалось войти. Попробуйте ещё раз.'
+  } finally {
+    loginLoading.value = false
+  }
+}
+
+async function logout() {
+  try {
+    const result = await authApi.logout()
+    setCsrfToken(result.csrfToken)
+  } catch {
+    setCsrfToken('')
+  } finally {
+    authUser.value = null
+    selected.value = null
+    requests.value = []
+  }
 }
 
 const requests = ref([
@@ -814,205 +897,227 @@ async function startRequest() {
   }
 }
 
-onMounted(loadRequests)
+onMounted(bootstrapAuth)
 </script>
 
 <template>
   <div class="shell">
-    <main>
-      <header class="topbar">
-        <div class="topbar-inner">
-          <div class="brand-block">
-            <button
-              type="button"
-              class="brand-mark-btn"
-              title="На главную"
-              :disabled="!selected"
-              @click="closeRequest"
-            >
-              <svg class="brand-mark" width="48" height="48" viewBox="0 0 40 40" fill="none" aria-hidden="true">
-                <rect x="2" y="2" width="36" height="36" rx="10" fill="currentColor" />
-                <path d="M12 25a8 8 0 1 1 16 0" stroke="#fff" stroke-width="2" stroke-linecap="round" />
-                <path d="M12 25h2M26 25h2M20 15v2" stroke="#fff" stroke-width="1.6" stroke-linecap="round" />
-                <path d="M20 25l5-6.5" stroke="#fff" stroke-width="2" stroke-linecap="round" />
-                <circle cx="20" cy="25" r="1.6" fill="#fff" />
-              </svg>
-            </button>
-            <div>
-              <p class="eyebrow">АО «ЩЛЗ» · Испытательный центр</p>
-              <h1>{{ selected ? `Заявка ${selected.id}` : 'Заявки на проведение испытаний' }}</h1>
-              <p v-if="!selected" class="tagline">Регистрация, испытания и согласование результатов</p>
-            </div>
-          </div>
-          <div class="profile">
-            <select
-              class="dev-user-switch"
-              title="Временный переключатель пользователя до подключения LDAP"
-              :value="devUserId"
-              @change="switchDevUser($event.target.value)"
-            >
-              <option v-for="user in DEV_USERS" :key="user.id" :value="user.id">{{ user.displayName }} — {{ user.position }}</option>
-            </select>
-            <span class="avatar">{{ currentInitials }}</span>
-            <span><b>{{ currentProfile.displayName }}</b><small>{{ currentProfile.position }}</small></span>
-          </div>
-        </div>
-      </header>
-
-      <section v-if="!selected" class="page">
-        <p v-if="registryError" class="detail-state error">{{ registryError }}</p>
-
-        <div class="card registry">
-          <div class="tabs">
-            <button v-for="tab in tabs" :key="tab.id" :class="{active: activeTab === tab.id}" @click="activeTab = tab.id">
-              {{ tab.label }} <span>{{ tab.count }}</span>
-            </button>
-            <button class="primary tabs-cta" @click="showCreate = true">＋ Новая заявка</button>
-          </div>
-          <div class="toolbar">
-            <label class="search">⌕ <input v-model="query" placeholder="Поиск по заявкам" /></label>
-            <select v-model="statusFilter"><option value="">Все статусы</option><option v-for="status in statuses" :key="status">{{ status }}</option></select>
-          </div>
-          <div class="table-wrap">
-            <table>
-              <thead><tr><th class="sortable" @click="toggleSort">№ заявки {{ sortDirection === 'desc' ? '↓' : '↑' }}</th><th>Дата</th><th>Объект испытаний</th><th>Инициатор</th><th>Исполнитель</th><th>Статус</th><th>Отметка СБ</th><th></th></tr></thead>
-              <tbody>
-                <tr v-for="item in paged.items" :key="item.id" :class="'row-color-' + item.color" @click="openRequest(item)">
-                  <td class="number">{{ item.id }}</td><td>{{ item.date }}</td>
-                  <td><b>{{ item.product }}</b><small>{{ item.supplier }}</small></td>
-                  <td>{{ item.initiator }}<small>{{ item.department }}</small></td>
-                  <td>{{ item.executor }}</td><td><span class="badge" :class="item.tone">{{ item.status }}</span></td>
-                  <td>{{ item.securityMark }}</td><td>›</td>
-                </tr>
-              </tbody>
-            </table>
-            <div v-if="!filtered.length" class="empty"><div>⌕</div><h3>Ничего не найдено</h3><p>Измените запрос или очистите фильтры</p></div>
-          </div>
-          <footer v-if="filtered.length" class="pagination">
-            <span>{{ (paged.page - 1) * pageSize + 1 }}–{{ Math.min(paged.page * pageSize, paged.total) }} из {{ paged.total }}</span>
-            <span>
-              <button :disabled="paged.page <= 1" @click="currentPage = paged.page - 1">‹</button>
-              <button v-for="pageNumber in pageNumbers" :key="pageNumber" :class="{ current: pageNumber === paged.page }" @click="currentPage = pageNumber">{{ pageNumber }}</button>
-              <button :disabled="paged.page >= paged.pageCount" @click="currentPage = paged.page + 1">›</button>
-            </span>
-          </footer>
-        </div>
-      </section>
-
-      <section v-else class="page request-page">
-        <div class="request-actions">
-          <button class="back" @click="closeRequest">‹</button>
-          <span class="badge" :class="selected.tone">{{ selected.status }}</span>
-          <button class="secondary" @click="showHistory = true">◷ История</button>
-        </div>
-        <p v-if="detailLoading" class="detail-state">Загрузка актуальной карточки…</p>
-        <p v-if="detailError" class="detail-state error">{{ detailError }}</p>
-        <div class="request-grid">
-          <div class="stack">
-            <article class="card details">
-              <h3>Общая информация</h3>
-              <dl>
-                <div><dt>Инициатор</dt><dd>{{ selected.initiator }}</dd></div><div><dt>Подразделение</dt><dd>{{ selected.department }}</dd></div>
-                <div><dt>Наименование и тип</dt><dd>{{ selected.product }}</dd></div><div><dt>Производитель</dt><dd>{{ selected.manufacturer || '—' }}</dd></div>
-                <div><dt>Поставщик</dt><dd>{{ selected.supplier }}</dd></div><div><dt>Количество образцов</dt><dd>{{ selected.sampleQuantity || '—' }} шт.</dd></div>
-                <div class="wide"><dt>Метод испытаний</dt><dd>{{ selected.testMethod || '—' }}</dd></div>
-              </dl>
-            </article>
-            <article class="card comments">
-              <div class="section-title"><h3>Обсуждение <span>{{ selected.comments?.length || 0 }}</span></h3></div>
-              <button v-if="selected.commentsPage?.hasMore" class="secondary" :disabled="olderCommentsLoading" @click="loadOlderComments">{{ olderCommentsLoading ? 'Загрузка…' : 'Показать предыдущие' }}</button>
-              <div v-for="comment in selected.comments || []" :key="comment.id" class="comment"><span class="avatar small">●</span><div><b>{{ comment.author }}</b><time>{{ comment.createdAt }}</time><p>{{ comment.body }}</p></div></div>
-              <p v-if="!selected.comments?.length" class="placeholder-copy">Комментариев пока нет.</p>
-              <form v-if="canSubmitComment(selected, detailLoading)" class="comment-input" @submit.prevent="addComment"><span class="avatar small">МУ</span><input v-model="commentDraft" :disabled="commentLoading" maxlength="10000" placeholder="Оставьте комментарий…" /><button :disabled="commentLoading">➤</button></form>
-              <p v-else class="placeholder-copy">На текущем этапе новые комментарии недоступны.</p>
-              <p v-if="commentError" class="action-error">{{ commentError }}</p>
-            </article>
-          </div>
-          <aside class="stack side-column">
-            <article class="card summary"><h3>Исполнение</h3><p><span>Исполнитель</span><b>{{ selected.executor }}</b></p><p><span>Эксперт</span><b>{{ selected.expert }}</b></p><p><span>Отметка СБ</span><b>{{ selected.securityMark }}</b></p>
-              <div v-if="selected.canSetColor" class="color-picker">
-                <button
-                  v-for="color in REQUEST_COLORS"
-                  :key="color"
-                  type="button"
-                  class="color-swatch"
-                  :class="[color, { active: selected.color === color }]"
-                  :disabled="colorLoading"
-                  :title="color"
-                  @click="setColorMark(color)"
-                ></button>
-              </div>
-              <p v-if="colorError" class="action-error">{{ colorError }}</p>
-              <div v-if="selected.canAssignExecutor" class="execution-action">
-                <label>Назначить исполнителя<select v-model="executorChoice" :disabled="actionLoading"><option value="">Выберите сотрудника</option><option v-for="executor in executors" :key="executor.id" :value="executor.id">{{ executor.displayName }}</option></select></label>
-                <button class="secondary" :disabled="actionLoading" @click="assignExecutor">{{ actionLoading ? 'Сохранение…' : 'Назначить' }}</button>
-              </div>
-              <button v-if="selected.canClaimExpert" class="secondary action-wide" :disabled="claimLoading" @click="claimExpert">{{ claimLoading ? 'Сохранение…' : 'Взять в работу' }}</button>
-              <p v-if="claimError" class="action-error">{{ claimError }}</p>
-              <div v-if="selected.canReassignExpert" class="execution-action">
-                <label>Переназначить эксперту<select v-model="expertChoice" :disabled="reassignLoading"><option value="">Выберите сотрудника</option><option v-for="expert in experts.filter(candidate => candidate.id !== selected.expertId)" :key="expert.id" :value="expert.id">{{ expert.displayName }}</option></select></label>
-                <button class="secondary" :disabled="reassignLoading" @click="reassignExpert">{{ reassignLoading ? 'Сохранение…' : 'Переназначить' }}</button>
-              </div>
-              <p v-if="reassignError" class="action-error">{{ reassignError }}</p>
-              <button v-if="selected.canStart" class="primary action-wide" :disabled="actionLoading" @click="startRequest">{{ actionLoading ? 'Запуск…' : 'Начать работу' }}</button>
-              <div v-if="selected.canPublishOpinion" class="execution-action">
-                <label>Экспертное заключение<textarea v-model="opinionDraft" :disabled="opinionLoading" minlength="10" maxlength="20000" placeholder="Введите итоговое заключение по результатам испытаний"></textarea></label>
-                <button class="primary action-wide" :disabled="opinionLoading" @click="publishOpinion">{{ opinionLoading ? 'Публикация…' : 'Опубликовать и передать в СБ' }}</button>
-              </div>
-              <p v-if="opinionError" class="action-error">{{ opinionError }}</p>
-              <div v-if="selected.canSecurityDecide" class="execution-action">
-                <label>Комментарий СБ<textarea v-model="securityReason" :disabled="securityLoading" maxlength="5000" placeholder="Обязателен при возврате заявки"></textarea></label>
-                <button class="primary action-wide" :disabled="securityLoading" @click="decideSecurity('approve')">{{ securityLoading ? 'Сохранение…' : 'Согласовать и завершить' }}</button>
-                <button class="secondary action-wide" :disabled="securityLoading" @click="decideSecurity('return')">Вернуть в работу</button>
-              </div>
-              <p v-if="securityError" class="action-error">{{ securityError }}</p>
-              <button v-if="selected.canReject" class="secondary action-wide" :disabled="rejectLoading" @click="rejectRequest">{{ rejectLoading ? 'Сохранение…' : 'Отказать в проведении испытаний' }}</button>
-              <p v-if="rejectError" class="action-error">{{ rejectError }}</p>
-              <button v-if="selected.canWithdraw" class="secondary action-wide" :disabled="withdrawLoading" @click="withdrawRequest">{{ withdrawLoading ? 'Сохранение…' : 'Отозвать заявку' }}</button>
-              <p v-if="withdrawError" class="action-error">{{ withdrawError }}</p>
-              <p v-if="actionError" class="action-error">{{ actionError }}</p>
-              <a v-if="selected.canAssignExecutor || selected.canStart" class="help-link" href="/help/assignment.html" target="_blank">Инструкция по назначению и началу работы</a>
-              <a v-if="selected.canClaimExpert || selected.canReassignExpert || selected.canPublishOpinion" class="help-link" href="/help/expert-opinion.html" target="_blank">Инструкция по формированию заключения</a>
-              <a v-if="selected.canSecurityDecide" class="help-link" href="/help/security-review.html" target="_blank">Инструкция по контролю СБ</a>
-            </article>
-            <article class="card documents"><h3>Документы <span>{{ selected.documents?.length || 0 }}</span></h3>
-              <label v-if="selected.canUploadReport" class="primary upload-button">{{ reportLoading ? 'Загрузка отчёта…' : 'Загрузить отчёт испытаний' }}<input type="file" :disabled="reportLoading" accept=".pdf,application/pdf" @change="uploadReport" /></label>
-              <a v-if="selected.canUploadReport" class="help-link" href="/help/report.html" target="_blank">Инструкция по загрузке отчёта испытаний</a>
-              <p v-if="reportError" class="action-error">{{ reportError }}</p>
-              <button v-if="selected.canDeleteReport" class="secondary action-wide" :disabled="deleteReportLoading" @click="deleteReport">{{ deleteReportLoading ? 'Удаление…' : 'Удалить отчёт' }}</button>
-              <p v-if="deleteReportError" class="action-error">{{ deleteReportError }}</p>
-              <button v-for="document in selected.documents || []" :key="document.versionId" class="document-row" @click="downloadDocument(document)"><span>▣</span><span><b>{{ document.title }}</b><small>Версия {{ document.version }} · {{ document.size }} · {{ document.createdAt }}</small></span></button>
-              <p v-if="!selected.documents?.length" class="placeholder-copy">Документов пока нет.</p>
-              <label v-if="selected.canUploadDocument" class="secondary upload-button">{{ documentLoading ? 'Загрузка…' : 'Загрузить документ' }}<input type="file" :disabled="documentLoading" accept=".pdf,.png,.jpg,.jpeg,.docx,.xlsx" @change="uploadDocument" /></label>
-              <p v-if="documentError" class="action-error">{{ documentError }}</p>
-            </article>
-            <article class="card timeline"><h3>Последние события</h3><p v-for="event in (selected.history || []).slice(0, 4)" :key="event.id" class="done">{{ event.description }}<small>{{ event.occurredAt }}</small></p><p v-if="!selected.history?.length">История пока пуста</p></article>
-          </aside>
-        </div>
-      </section>
-    </main>
-
-    <div v-if="showCreate" class="overlay" @click.self="!createLoading && (showCreate = false)">
-      <form class="modal" @submit.prevent="createRequest">
-        <div class="modal-head"><div><p class="eyebrow">Новая заявка</p><h2>Проведение испытаний</h2></div><button type="button" :disabled="createLoading" @click="showCreate = false">×</button></div>
-        <div class="form-grid">
-          <label>Наименование и тип *<input v-model="draft.productName" required placeholder="Введите наименование продукции" /></label>
-          <label>Количество образцов *<input v-model.number="draft.sampleQuantity" required type="number" min="1" /></label>
-          <label>Производитель *<input v-model="draft.manufacturer" required placeholder="Наименование производителя" /></label>
-          <label>Поставщик *<input v-model="draft.supplier" required placeholder="Наименование поставщика" /></label>
-          <label class="wide">Метод испытаний *<textarea v-model="draft.testMethod" required placeholder="Опишите метод или программу испытаний"></textarea></label>
-          <label class="wide">Сопроводительная документация<div class="dropzone"><input type="file" multiple accept=".pdf,.png,.jpg,.jpeg,.docx,.xlsx" :disabled="createLoading" @change="selectDraftFiles" /><span>Перетащите файлы сюда или <b>выберите на компьютере</b></span><small v-if="draftFiles.length">Выбрано: {{ draftFiles.map(file => file.name).join(', ') }}</small></div></label>
-          <label class="wide">Комментарий<textarea placeholder="Дополнительная информация"></textarea></label>
-        </div>
-        <p v-if="createError" class="form-error">{{ createError }}</p>
-        <div class="modal-actions"><button type="button" class="secondary" :disabled="createLoading" @click="showCreate = false">Отмена</button><button class="primary" :disabled="createLoading">{{ createLoading ? 'Создание…' : 'Создать заявку' }}</button></div>
+    <div v-if="authLoading" class="auth-loading">Загрузка…</div>
+    <div v-else-if="!authDevMode && !authUser" class="auth-screen">
+      <form class="auth-card" @submit.prevent="login">
+        <svg class="brand-mark" width="48" height="48" viewBox="0 0 40 40" fill="none" aria-hidden="true">
+          <rect x="2" y="2" width="36" height="36" rx="10" fill="currentColor" />
+          <path d="M12 25a8 8 0 1 1 16 0" stroke="#fff" stroke-width="2" stroke-linecap="round" />
+          <path d="M12 25h2M26 25h2M20 15v2" stroke="#fff" stroke-width="1.6" stroke-linecap="round" />
+          <path d="M20 25l5-6.5" stroke="#fff" stroke-width="2" stroke-linecap="round" />
+          <circle cx="20" cy="25" r="1.6" fill="#fff" />
+        </svg>
+        <p class="eyebrow">АО «ЩЛЗ» · Испытательный центр</p>
+        <h1>Вход в портал</h1>
+        <label>Логин<input v-model="loginForm.login" autocomplete="username" required :disabled="loginLoading" /></label>
+        <label>Пароль<input v-model="loginForm.password" type="password" autocomplete="current-password" required :disabled="loginLoading" /></label>
+        <p v-if="loginError" class="form-error">{{ loginError }}</p>
+        <button class="primary" type="submit" :disabled="loginLoading">{{ loginLoading ? 'Вход…' : 'Войти' }}</button>
       </form>
     </div>
+    <template v-else>
+      <main>
+        <header class="topbar">
+          <div class="topbar-inner">
+            <div class="brand-block">
+              <button
+                type="button"
+                class="brand-mark-btn"
+                title="На главную"
+                :disabled="!selected"
+                @click="closeRequest"
+              >
+                <svg class="brand-mark" width="48" height="48" viewBox="0 0 40 40" fill="none" aria-hidden="true">
+                  <rect x="2" y="2" width="36" height="36" rx="10" fill="currentColor" />
+                  <path d="M12 25a8 8 0 1 1 16 0" stroke="#fff" stroke-width="2" stroke-linecap="round" />
+                  <path d="M12 25h2M26 25h2M20 15v2" stroke="#fff" stroke-width="1.6" stroke-linecap="round" />
+                  <path d="M20 25l5-6.5" stroke="#fff" stroke-width="2" stroke-linecap="round" />
+                  <circle cx="20" cy="25" r="1.6" fill="#fff" />
+                </svg>
+              </button>
+              <div>
+                <p class="eyebrow">АО «ЩЛЗ» · Испытательный центр</p>
+                <h1>{{ selected ? `Заявка ${selected.id}` : 'Заявки на проведение испытаний' }}</h1>
+                <p v-if="!selected" class="tagline">Регистрация, испытания и согласование результатов</p>
+              </div>
+            </div>
+            <div class="profile">
+              <select
+                v-if="authDevMode"
+                class="dev-user-switch"
+                title="Dev-переключатель пользователя (только APP_ENV=dev)"
+                :value="devUserId"
+                @change="switchDevUser($event.target.value)"
+              >
+                <option v-for="user in DEV_USERS" :key="user.id" :value="user.id">{{ user.displayName }} — {{ user.position }}</option>
+              </select>
+              <span class="avatar">{{ currentInitials }}</span>
+              <span><b>{{ currentProfile.displayName }}</b><small>{{ currentProfile.position }}</small></span>
+              <button v-if="!authDevMode" type="button" class="secondary" @click="logout">Выйти</button>
+            </div>
+          </div>
+        </header>
 
-    <div v-if="showHistory" class="overlay drawer-overlay" @click.self="showHistory = false">
-      <aside class="drawer"><div class="modal-head"><h2>История изменений</h2><button @click="showHistory = false">×</button></div>
-        <div class="history"><div v-for="event in selected.history || []" :key="event.id"><b>{{ event.actor }}</b><p>{{ event.description }} · {{ event.ruleId }}</p><time>{{ event.occurredAt }}</time></div><p v-if="!selected.history?.length" class="placeholder-copy">История пока пуста.</p></div>
-      </aside>
-    </div>
+        <section v-if="!selected" class="page">
+          <p v-if="registryError" class="detail-state error">{{ registryError }}</p>
+
+          <div class="card registry">
+            <div class="tabs">
+              <button v-for="tab in tabs" :key="tab.id" :class="{active: activeTab === tab.id}" @click="activeTab = tab.id">
+                {{ tab.label }} <span>{{ tab.count }}</span>
+              </button>
+              <button class="primary tabs-cta" @click="showCreate = true">＋ Новая заявка</button>
+            </div>
+            <div class="toolbar">
+              <label class="search">⌕ <input v-model="query" placeholder="Поиск по заявкам" /></label>
+              <select v-model="statusFilter"><option value="">Все статусы</option><option v-for="status in statuses" :key="status">{{ status }}</option></select>
+            </div>
+            <div class="table-wrap">
+              <table>
+                <thead><tr><th class="sortable" @click="toggleSort">№ заявки {{ sortDirection === 'desc' ? '↓' : '↑' }}</th><th>Дата</th><th>Объект испытаний</th><th>Инициатор</th><th>Исполнитель</th><th>Статус</th><th>Отметка СБ</th><th></th></tr></thead>
+                <tbody>
+                  <tr v-for="item in paged.items" :key="item.id" :class="'row-color-' + item.color" @click="openRequest(item)">
+                    <td class="number">{{ item.id }}</td><td>{{ item.date }}</td>
+                    <td><b>{{ item.product }}</b><small>{{ item.supplier }}</small></td>
+                    <td>{{ item.initiator }}<small>{{ item.department }}</small></td>
+                    <td>{{ item.executor }}</td><td><span class="badge" :class="item.tone">{{ item.status }}</span></td>
+                    <td>{{ item.securityMark }}</td><td>›</td>
+                  </tr>
+                </tbody>
+              </table>
+              <div v-if="!filtered.length" class="empty"><div>⌕</div><h3>Ничего не найдено</h3><p>Измените запрос или очистите фильтры</p></div>
+            </div>
+            <footer v-if="filtered.length" class="pagination">
+              <span>{{ (paged.page - 1) * pageSize + 1 }}–{{ Math.min(paged.page * pageSize, paged.total) }} из {{ paged.total }}</span>
+              <span>
+                <button :disabled="paged.page <= 1" @click="currentPage = paged.page - 1">‹</button>
+                <button v-for="pageNumber in pageNumbers" :key="pageNumber" :class="{ current: pageNumber === paged.page }" @click="currentPage = pageNumber">{{ pageNumber }}</button>
+                <button :disabled="paged.page >= paged.pageCount" @click="currentPage = paged.page + 1">›</button>
+              </span>
+            </footer>
+          </div>
+        </section>
+
+        <section v-else class="page request-page">
+          <div class="request-actions">
+            <button class="back" @click="closeRequest">‹</button>
+            <span class="badge" :class="selected.tone">{{ selected.status }}</span>
+            <button class="secondary" @click="showHistory = true">◷ История</button>
+          </div>
+          <p v-if="detailLoading" class="detail-state">Загрузка актуальной карточки…</p>
+          <p v-if="detailError" class="detail-state error">{{ detailError }}</p>
+          <div class="request-grid">
+            <div class="stack">
+              <article class="card details">
+                <h3>Общая информация</h3>
+                <dl>
+                  <div><dt>Инициатор</dt><dd>{{ selected.initiator }}</dd></div><div><dt>Подразделение</dt><dd>{{ selected.department }}</dd></div>
+                  <div><dt>Наименование и тип</dt><dd>{{ selected.product }}</dd></div><div><dt>Производитель</dt><dd>{{ selected.manufacturer || '—' }}</dd></div>
+                  <div><dt>Поставщик</dt><dd>{{ selected.supplier }}</dd></div><div><dt>Количество образцов</dt><dd>{{ selected.sampleQuantity || '—' }} шт.</dd></div>
+                  <div class="wide"><dt>Метод испытаний</dt><dd>{{ selected.testMethod || '—' }}</dd></div>
+                </dl>
+              </article>
+              <article class="card comments">
+                <div class="section-title"><h3>Обсуждение <span>{{ selected.comments?.length || 0 }}</span></h3></div>
+                <button v-if="selected.commentsPage?.hasMore" class="secondary" :disabled="olderCommentsLoading" @click="loadOlderComments">{{ olderCommentsLoading ? 'Загрузка…' : 'Показать предыдущие' }}</button>
+                <div v-for="comment in selected.comments || []" :key="comment.id" class="comment"><span class="avatar small">●</span><div><b>{{ comment.author }}</b><time>{{ comment.createdAt }}</time><p>{{ comment.body }}</p></div></div>
+                <p v-if="!selected.comments?.length" class="placeholder-copy">Комментариев пока нет.</p>
+                <form v-if="canSubmitComment(selected, detailLoading)" class="comment-input" @submit.prevent="addComment"><span class="avatar small">МУ</span><input v-model="commentDraft" :disabled="commentLoading" maxlength="10000" placeholder="Оставьте комментарий…" /><button :disabled="commentLoading">➤</button></form>
+                <p v-else class="placeholder-copy">На текущем этапе новые комментарии недоступны.</p>
+                <p v-if="commentError" class="action-error">{{ commentError }}</p>
+              </article>
+            </div>
+            <aside class="stack side-column">
+              <article class="card summary"><h3>Исполнение</h3><p><span>Исполнитель</span><b>{{ selected.executor }}</b></p><p><span>Эксперт</span><b>{{ selected.expert }}</b></p><p><span>Отметка СБ</span><b>{{ selected.securityMark }}</b></p>
+                <div v-if="selected.canSetColor" class="color-picker">
+                  <button
+                    v-for="color in REQUEST_COLORS"
+                    :key="color"
+                    type="button"
+                    class="color-swatch"
+                    :class="[color, { active: selected.color === color }]"
+                    :disabled="colorLoading"
+                    :title="color"
+                    @click="setColorMark(color)"
+                  ></button>
+                </div>
+                <p v-if="colorError" class="action-error">{{ colorError }}</p>
+                <div v-if="selected.canAssignExecutor" class="execution-action">
+                  <label>Назначить исполнителя<select v-model="executorChoice" :disabled="actionLoading"><option value="">Выберите сотрудника</option><option v-for="executor in executors" :key="executor.id" :value="executor.id">{{ executor.displayName }}</option></select></label>
+                  <button class="secondary" :disabled="actionLoading" @click="assignExecutor">{{ actionLoading ? 'Сохранение…' : 'Назначить' }}</button>
+                </div>
+                <button v-if="selected.canClaimExpert" class="secondary action-wide" :disabled="claimLoading" @click="claimExpert">{{ claimLoading ? 'Сохранение…' : 'Взять в работу' }}</button>
+                <p v-if="claimError" class="action-error">{{ claimError }}</p>
+                <div v-if="selected.canReassignExpert" class="execution-action">
+                  <label>Переназначить эксперту<select v-model="expertChoice" :disabled="reassignLoading"><option value="">Выберите сотрудника</option><option v-for="expert in experts.filter(candidate => candidate.id !== selected.expertId)" :key="expert.id" :value="expert.id">{{ expert.displayName }}</option></select></label>
+                  <button class="secondary" :disabled="reassignLoading" @click="reassignExpert">{{ reassignLoading ? 'Сохранение…' : 'Переназначить' }}</button>
+                </div>
+                <p v-if="reassignError" class="action-error">{{ reassignError }}</p>
+                <button v-if="selected.canStart" class="primary action-wide" :disabled="actionLoading" @click="startRequest">{{ actionLoading ? 'Запуск…' : 'Начать работу' }}</button>
+                <div v-if="selected.canPublishOpinion" class="execution-action">
+                  <label>Экспертное заключение<textarea v-model="opinionDraft" :disabled="opinionLoading" minlength="10" maxlength="20000" placeholder="Введите итоговое заключение по результатам испытаний"></textarea></label>
+                  <button class="primary action-wide" :disabled="opinionLoading" @click="publishOpinion">{{ opinionLoading ? 'Публикация…' : 'Опубликовать и передать в СБ' }}</button>
+                </div>
+                <p v-if="opinionError" class="action-error">{{ opinionError }}</p>
+                <div v-if="selected.canSecurityDecide" class="execution-action">
+                  <label>Комментарий СБ<textarea v-model="securityReason" :disabled="securityLoading" maxlength="5000" placeholder="Обязателен при возврате заявки"></textarea></label>
+                  <button class="primary action-wide" :disabled="securityLoading" @click="decideSecurity('approve')">{{ securityLoading ? 'Сохранение…' : 'Согласовать и завершить' }}</button>
+                  <button class="secondary action-wide" :disabled="securityLoading" @click="decideSecurity('return')">Вернуть в работу</button>
+                </div>
+                <p v-if="securityError" class="action-error">{{ securityError }}</p>
+                <button v-if="selected.canReject" class="secondary action-wide" :disabled="rejectLoading" @click="rejectRequest">{{ rejectLoading ? 'Сохранение…' : 'Отказать в проведении испытаний' }}</button>
+                <p v-if="rejectError" class="action-error">{{ rejectError }}</p>
+                <button v-if="selected.canWithdraw" class="secondary action-wide" :disabled="withdrawLoading" @click="withdrawRequest">{{ withdrawLoading ? 'Сохранение…' : 'Отозвать заявку' }}</button>
+                <p v-if="withdrawError" class="action-error">{{ withdrawError }}</p>
+                <p v-if="actionError" class="action-error">{{ actionError }}</p>
+                <a v-if="selected.canAssignExecutor || selected.canStart" class="help-link" href="/help/assignment.html" target="_blank">Инструкция по назначению и началу работы</a>
+                <a v-if="selected.canClaimExpert || selected.canReassignExpert || selected.canPublishOpinion" class="help-link" href="/help/expert-opinion.html" target="_blank">Инструкция по формированию заключения</a>
+                <a v-if="selected.canSecurityDecide" class="help-link" href="/help/security-review.html" target="_blank">Инструкция по контролю СБ</a>
+              </article>
+              <article class="card documents"><h3>Документы <span>{{ selected.documents?.length || 0 }}</span></h3>
+                <label v-if="selected.canUploadReport" class="primary upload-button">{{ reportLoading ? 'Загрузка отчёта…' : 'Загрузить отчёт испытаний' }}<input type="file" :disabled="reportLoading" accept=".pdf,application/pdf" @change="uploadReport" /></label>
+                <a v-if="selected.canUploadReport" class="help-link" href="/help/report.html" target="_blank">Инструкция по загрузке отчёта испытаний</a>
+                <p v-if="reportError" class="action-error">{{ reportError }}</p>
+                <button v-if="selected.canDeleteReport" class="secondary action-wide" :disabled="deleteReportLoading" @click="deleteReport">{{ deleteReportLoading ? 'Удаление…' : 'Удалить отчёт' }}</button>
+                <p v-if="deleteReportError" class="action-error">{{ deleteReportError }}</p>
+                <button v-for="document in selected.documents || []" :key="document.versionId" class="document-row" @click="downloadDocument(document)"><span>▣</span><span><b>{{ document.title }}</b><small>Версия {{ document.version }} · {{ document.size }} · {{ document.createdAt }}</small></span></button>
+                <p v-if="!selected.documents?.length" class="placeholder-copy">Документов пока нет.</p>
+                <label v-if="selected.canUploadDocument" class="secondary upload-button">{{ documentLoading ? 'Загрузка…' : 'Загрузить документ' }}<input type="file" :disabled="documentLoading" accept=".pdf,.png,.jpg,.jpeg,.docx,.xlsx" @change="uploadDocument" /></label>
+                <p v-if="documentError" class="action-error">{{ documentError }}</p>
+              </article>
+              <article class="card timeline"><h3>Последние события</h3><p v-for="event in (selected.history || []).slice(0, 4)" :key="event.id" class="done">{{ event.description }}<small>{{ event.occurredAt }}</small></p><p v-if="!selected.history?.length">История пока пуста</p></article>
+            </aside>
+          </div>
+        </section>
+      </main>
+
+      <div v-if="showCreate" class="overlay" @click.self="!createLoading && (showCreate = false)">
+        <form class="modal" @submit.prevent="createRequest">
+          <div class="modal-head"><div><p class="eyebrow">Новая заявка</p><h2>Проведение испытаний</h2></div><button type="button" :disabled="createLoading" @click="showCreate = false">×</button></div>
+          <div class="form-grid">
+            <label>Наименование и тип *<input v-model="draft.productName" required placeholder="Введите наименование продукции" /></label>
+            <label>Количество образцов *<input v-model.number="draft.sampleQuantity" required type="number" min="1" /></label>
+            <label>Производитель *<input v-model="draft.manufacturer" required placeholder="Наименование производителя" /></label>
+            <label>Поставщик *<input v-model="draft.supplier" required placeholder="Наименование поставщика" /></label>
+            <label class="wide">Метод испытаний *<textarea v-model="draft.testMethod" required placeholder="Опишите метод или программу испытаний"></textarea></label>
+            <label class="wide">Сопроводительная документация<div class="dropzone"><input type="file" multiple accept=".pdf,.png,.jpg,.jpeg,.docx,.xlsx" :disabled="createLoading" @change="selectDraftFiles" /><span>Перетащите файлы сюда или <b>выберите на компьютере</b></span><small v-if="draftFiles.length">Выбрано: {{ draftFiles.map(file => file.name).join(', ') }}</small></div></label>
+            <label class="wide">Комментарий<textarea placeholder="Дополнительная информация"></textarea></label>
+          </div>
+          <p v-if="createError" class="form-error">{{ createError }}</p>
+          <div class="modal-actions"><button type="button" class="secondary" :disabled="createLoading" @click="showCreate = false">Отмена</button><button class="primary" :disabled="createLoading">{{ createLoading ? 'Создание…' : 'Создать заявку' }}</button></div>
+        </form>
+      </div>
+
+      <div v-if="showHistory" class="overlay drawer-overlay" @click.self="showHistory = false">
+        <aside class="drawer"><div class="modal-head"><h2>История изменений</h2><button @click="showHistory = false">×</button></div>
+          <div class="history"><div v-for="event in selected.history || []" :key="event.id"><b>{{ event.actor }}</b><p>{{ event.description }} · {{ event.ruleId }}</p><time>{{ event.occurredAt }}</time></div><p v-if="!selected.history?.length" class="placeholder-copy">История пока пуста.</p></div>
+        </aside>
+      </div>
+    </template>
   </div>
 </template>

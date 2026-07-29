@@ -60,11 +60,10 @@ final class RequestController extends Controller
 
     public function beforeAction($action): bool
     {
-        // JSON API использует dev-заголовок только в локальном контуре. После
-        // LDAP входа production остаётся защищён стандартным CSRF Yii.
-        if (YII_ENV === 'dev') {
-            $this->enableCsrfValidation = false;
-        }
+        // yii\rest\Controller отключает CSRF по умолчанию (рассчитан на
+        // token-based auth без cookie) — вне dev включаем явно, иначе
+        // LDAP-сессия (реальные cookie) останется без защиты от CSRF.
+        $this->enableCsrfValidation = YII_ENV !== 'dev';
 
         return parent::beforeAction($action);
     }
@@ -72,14 +71,14 @@ final class RequestController extends Controller
     /** @return array{items: list<array<string, mixed>>} */
     public function actionIndex(): array
     {
-        $actorId = (new CurrentUser())->id(Yii::$app->request);
+        $actorId = $this->currentUserId();
         return ['items' => $this->repository()->findLatest($actorId)];
     }
 
     /** @return array{item: array<string, mixed>, history: list<array<string, mixed>>, comments: list<array<string, mixed>>, commentsPage: array{hasMore: bool, nextBeforeId: int|null}, documents: list<array<string, mixed>>} */
     public function actionView(int $id): array
     {
-        $actorId = (new CurrentUser())->id(Yii::$app->request);
+        $actorId = $this->currentUserId();
         try {
             return $this->repository()->findDetails($id, $actorId);
         } catch (RequestNotFound $error) {
@@ -100,7 +99,7 @@ final class RequestController extends Controller
         try {
             $comment = $this->repository()->addComment(
                 $id,
-                (new CurrentUser())->id(Yii::$app->request),
+                $this->currentUserId(),
                 (string) $input->body,
             );
             Yii::$app->response->statusCode = 201;
@@ -124,7 +123,7 @@ final class RequestController extends Controller
         try {
             return $this->repository()->findCommentsPage(
                 $id,
-                (new CurrentUser())->id(Yii::$app->request),
+                $this->currentUserId(),
                 $beforeId === false ? null : $beforeId,
             );
         } catch (RequestNotFound $error) {
@@ -135,7 +134,7 @@ final class RequestController extends Controller
     /** @return array<string, mixed> */
     public function actionUploadDocument(int $id): array
     {
-        $actorId = (new CurrentUser())->id(Yii::$app->request);
+        $actorId = $this->currentUserId();
         $file = UploadedFile::getInstanceByName('file');
         if ($file === null || $file->error !== UPLOAD_ERR_OK) {
             Yii::$app->response->statusCode = 422;
@@ -173,7 +172,7 @@ final class RequestController extends Controller
     /** @return array<string, mixed> */
     public function actionUploadReport(int $id): array
     {
-        $actorId = (new CurrentUser())->id(Yii::$app->request);
+        $actorId = $this->currentUserId();
         $file = UploadedFile::getInstanceByName('file');
         if ($file === null || $file->error !== UPLOAD_ERR_OK) {
             $this->recordRejectedReportSafely($id, $actorId, 'DOC-002A');
@@ -219,7 +218,7 @@ final class RequestController extends Controller
             return ['errors' => $input->getErrors()];
         }
 
-        $actorId = (new CurrentUser())->id(Yii::$app->request);
+        $actorId = $this->currentUserId();
         try {
             return $this->documents()->deleteReport($id, (int) $input->lockVersion, $actorId);
         } catch (RequestNotFound $error) {
@@ -235,7 +234,7 @@ final class RequestController extends Controller
 
     public function actionDownloadDocument(int $id): Response
     {
-        $actorId = (new CurrentUser())->id(Yii::$app->request);
+        $actorId = $this->currentUserId();
         try {
             $version = $this->documents()->findVersionForDownload($id, $actorId);
         } catch (RequestNotFound $error) {
@@ -274,14 +273,14 @@ final class RequestController extends Controller
     /** @return array{items: list<array{id: int, displayName: string}>} */
     public function actionExecutors(): array
     {
-        (new CurrentUser())->id(Yii::$app->request);
+        $this->currentUserId();
         return ['items' => $this->repository()->findActiveExecutors()];
     }
 
     /** @return array{items: list<array{id: int, displayName: string}>} */
     public function actionExperts(): array
     {
-        (new CurrentUser())->id(Yii::$app->request);
+        $this->currentUserId();
         return ['items' => $this->repository()->findActiveExperts()];
     }
 
@@ -295,7 +294,7 @@ final class RequestController extends Controller
             return ['errors' => $input->getErrors()];
         }
 
-        $actorId = (new CurrentUser())->id(Yii::$app->request);
+        $actorId = $this->currentUserId();
         try {
             $request = $this->repository()->create($input, $actorId);
         } catch (RequestCreationDenied $error) {
@@ -317,7 +316,7 @@ final class RequestController extends Controller
             return ['errors' => $input->getErrors()];
         }
 
-        $actorId = (new CurrentUser())->id(Yii::$app->request);
+        $actorId = $this->currentUserId();
 
         try {
             return $this->repository()->setColor($id, (string) $input->color, (int) $input->lockVersion, $actorId);
@@ -343,7 +342,7 @@ final class RequestController extends Controller
         }
 
         $executorId = (int) $input->executorId;
-        $actorId = (new CurrentUser())->id(Yii::$app->request);
+        $actorId = $this->currentUserId();
 
         try {
             return $this->repository()->assignExecutor(
@@ -373,7 +372,7 @@ final class RequestController extends Controller
             return ['errors' => $input->getErrors()];
         }
 
-        $actorId = (new CurrentUser())->id(Yii::$app->request);
+        $actorId = $this->currentUserId();
         try {
             return $this->repository()->claimExpert($id, (int) $input->lockVersion, $actorId);
         } catch (AssignmentTargetNotFound $error) {
@@ -398,7 +397,7 @@ final class RequestController extends Controller
         }
 
         $expertId = (int) $input->expertId;
-        $actorId = (new CurrentUser())->id(Yii::$app->request);
+        $actorId = $this->currentUserId();
         try {
             return $this->repository()->reassignExpert($id, $expertId, (int) $input->lockVersion, $actorId);
         } catch (AssignmentTargetNotFound $error) {
@@ -422,7 +421,7 @@ final class RequestController extends Controller
             return ['errors' => $input->getErrors()];
         }
 
-        $actorId = (new CurrentUser())->id(Yii::$app->request);
+        $actorId = $this->currentUserId();
         try {
             return $this->documents()->publishOpinion(
                 $id,
@@ -452,7 +451,7 @@ final class RequestController extends Controller
             return ['errors' => $input->getErrors()];
         }
 
-        $actorId = (new CurrentUser())->id(Yii::$app->request);
+        $actorId = $this->currentUserId();
         try {
             return $this->repository()->decideSecurity(
                 $id,
@@ -482,7 +481,7 @@ final class RequestController extends Controller
             return ['errors' => $input->getErrors()];
         }
 
-        $actorId = (new CurrentUser())->id(Yii::$app->request);
+        $actorId = $this->currentUserId();
         try {
             return $this->repository()->startRequest($id, (int) $input->lockVersion, $actorId);
         } catch (RequestNotFound $error) {
@@ -506,7 +505,7 @@ final class RequestController extends Controller
             return ['errors' => $input->getErrors()];
         }
 
-        $actorId = (new CurrentUser())->id(Yii::$app->request);
+        $actorId = $this->currentUserId();
         try {
             return $this->repository()->rejectRequest($id, (int) $input->lockVersion, $actorId);
         } catch (RequestNotFound $error) {
@@ -530,7 +529,7 @@ final class RequestController extends Controller
             return ['errors' => $input->getErrors()];
         }
 
-        $actorId = (new CurrentUser())->id(Yii::$app->request);
+        $actorId = $this->currentUserId();
         try {
             return $this->repository()->withdrawRequest($id, (int) $input->lockVersion, $actorId);
         } catch (RequestNotFound $error) {
@@ -731,6 +730,11 @@ final class RequestController extends Controller
                 'exception' => $auditError,
             ], __METHOD__);
         }
+    }
+
+    private function currentUserId(): int
+    {
+        return (new CurrentUser(Yii::$app->db))->id(Yii::$app->request);
     }
 
     private function repository(): RequestRepository

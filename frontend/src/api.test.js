@@ -1,10 +1,11 @@
 import { afterEach, expect, it, vi } from 'vitest'
-import { requestApi } from './api'
+import { authApi, hasCsrfToken, requestApi, setCsrfToken } from './api'
 import { setDevUserId } from './devUsers'
 
 afterEach(() => {
   vi.unstubAllGlobals()
   setDevUserId(1)
+  setCsrfToken('')
 })
 
 it('loads the registry as JSON', async () => {
@@ -242,4 +243,66 @@ it('sends the currently selected dev user as the actor header', async () => {
   expect(fetchMock).toHaveBeenCalledWith('/api/v1/requests', expect.objectContaining({
     headers: expect.objectContaining({ 'X-Dev-User-ID': '4' }),
   }))
+})
+
+it('omits the CSRF header until a token is set', async () => {
+  const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({ items: [] }), { status: 200 }))
+  vi.stubGlobal('fetch', fetchMock)
+
+  await requestApi.list()
+
+  const headers = fetchMock.mock.calls[0][1].headers
+  expect(headers).not.toHaveProperty('X-CSRF-Token')
+})
+
+it('sends the CSRF token once set, on every request', async () => {
+  const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({ items: [] }), { status: 200 }))
+  vi.stubGlobal('fetch', fetchMock)
+  setCsrfToken('token-value')
+
+  await requestApi.list()
+
+  expect(fetchMock).toHaveBeenCalledWith('/api/v1/requests', expect.objectContaining({
+    headers: expect.objectContaining({ 'X-CSRF-Token': 'token-value' }),
+  }))
+})
+
+it('reports whether a CSRF token is currently set', () => {
+  expect(hasCsrfToken()).toBe(false)
+
+  setCsrfToken('token-value')
+  expect(hasCsrfToken()).toBe(true)
+
+  setCsrfToken('')
+  expect(hasCsrfToken()).toBe(false)
+})
+
+it('fetches the current session and stores its csrf token', async () => {
+  const payload = { csrfToken: 'abc', devMode: false, user: { id: 1, displayName: 'Иван Иванов' } }
+  const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify(payload), { status: 200 }))
+  vi.stubGlobal('fetch', fetchMock)
+
+  await expect(authApi.me()).resolves.toEqual(payload)
+  expect(fetchMock).toHaveBeenCalledWith('/api/v1/auth/me', expect.any(Object))
+})
+
+it('logs in with login and password as JSON', async () => {
+  const fetchMock = vi.fn().mockResolvedValue(new Response('{}', { status: 200 }))
+  vi.stubGlobal('fetch', fetchMock)
+
+  await authApi.login('ivanov', 'secret')
+
+  expect(fetchMock).toHaveBeenCalledWith('/api/v1/auth/login', expect.objectContaining({
+    method: 'POST',
+    body: JSON.stringify({ login: 'ivanov', password: 'secret' }),
+  }))
+})
+
+it('logs out with a plain POST', async () => {
+  const fetchMock = vi.fn().mockResolvedValue(new Response('{}', { status: 200 }))
+  vi.stubGlobal('fetch', fetchMock)
+
+  await authApi.logout()
+
+  expect(fetchMock).toHaveBeenCalledWith('/api/v1/auth/logout', expect.objectContaining({ method: 'POST' }))
 })
