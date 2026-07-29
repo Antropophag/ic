@@ -88,6 +88,23 @@ invalid_file_status=$(curl --silent --output /dev/null --write-out '%{http_code}
   exit 1
 }
 
+# Регрессия на client_max_body_size шлюза: nginx по умолчанию режет запросы
+# крупнее 1 МБ, что раньше молча блокировало любую загрузку выше этого
+# порога ещё до проверки приложения (лимит приложения — 10 МБ).
+{
+  printf '%%PDF-1.4\n'
+  head -c 5242880 /dev/urandom
+} >"$smoke_dir/midsize.pdf"
+midsize_status=$(curl --silent --output /dev/null --write-out '%{http_code}' \
+  --request POST \
+  --header "X-Dev-User-ID: $dev_user_id" \
+  --form "file=@$smoke_dir/midsize.pdf;type=application/pdf" \
+  "$base_url/api/v1/requests/$request_id/documents")
+[ "$midsize_status" = '201' ] || {
+  echo "Expected 5 MB upload to succeed with 201 (gateway client_max_body_size regression), got $midsize_status" >&2
+  exit 1
+}
+
 assigned=$(curl --fail --silent --show-error \
   --request POST \
   --header "X-Dev-User-ID: $dev_user_id" \

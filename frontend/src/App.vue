@@ -250,11 +250,13 @@ async function uploadReport(event) {
     await loadRequests()
   } catch (error) {
     if (!reportRequestGuard.isCurrent(requestToken, selected.value?.backendId)) return
-    reportError.value = error.status === 422
-      ? 'Отчёт должен быть PDF-файлом размером до 10 МБ.'
-      : error.status === 403
-        ? 'Загрузить отчёт может назначенный исполнитель или руководитель.'
-        : 'Не удалось загрузить отчёт.'
+    reportError.value = error.status === 413
+      ? 'Файл слишком большой. Максимальный размер отчёта — 10 МБ.'
+      : error.status === 422
+        ? 'Отчёт должен быть PDF-файлом размером до 10 МБ.'
+        : error.status === 403
+          ? 'Загрузить отчёт может назначенный исполнитель или руководитель.'
+          : 'Не удалось загрузить отчёт.'
   } finally {
     if (reportRequestGuard.isCurrent(requestToken, selected.value?.backendId)) {
       reportLoading.value = false
@@ -276,11 +278,13 @@ async function uploadDocument(event) {
     await loadRequestDetails(selected.value)
   } catch (error) {
     if (!documentRequestGuard.isCurrent(requestToken, selected.value?.backendId)) return
-    documentError.value = error.status === 422
-      ? 'Разрешены PDF, PNG, JPG, DOCX и XLSX размером до 10 МБ.'
-      : error.status === 409
-        ? 'На текущем этапе загрузка документов запрещена.'
-        : 'Не удалось загрузить документ.'
+    documentError.value = error.status === 413
+      ? 'Файл слишком большой. Максимальный размер — 10 МБ.'
+      : error.status === 422
+        ? 'Разрешены PDF, PNG, JPG, DOCX и XLSX размером до 10 МБ.'
+        : error.status === 409
+          ? 'На текущем этапе загрузка документов запрещена.'
+          : 'Не удалось загрузить документ.'
   } finally {
     if (documentRequestGuard.isCurrent(requestToken, selected.value?.backendId)) {
       documentLoading.value = false
@@ -400,8 +404,13 @@ async function createRequest() {
   for (const file of draftFiles.value) {
     try {
       await requestApi.uploadDocument(created.id, file)
-    } catch {
-      failedFiles.push(file.name)
+    } catch (error) {
+      const reason = error.status === 413
+        ? 'файл слишком большой, максимум 10 МБ'
+        : error.status === 422
+          ? 'недопустимый формат или размер'
+          : 'ошибка загрузки'
+      failedFiles.push(`${file.name} (${reason})`)
     }
   }
   Object.assign(draft, { productName: '', manufacturer: '', supplier: '', sampleQuantity: 1, testMethod: '' })
