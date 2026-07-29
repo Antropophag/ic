@@ -89,6 +89,26 @@ final class RequestRepository
                     ),
                 );
             }
+            // REQ-009: инициатора отдельно уведомляют о приёме его же заявки —
+            // без этого письма у него нет подтверждения, что регистрация
+            // прошла успешно и заявка действительно попала в процесс.
+            $initiatorContact = $this->userContact($initiatorId);
+            if ($initiatorContact !== null) {
+                $outbox->enqueue(
+                    $id,
+                    'request.created',
+                    $initiatorContact['email'],
+                    $initiatorContact['name'],
+                    sprintf('Заявка №%06d принята в работу', $number),
+                    sprintf(
+                        "Ваша заявка №%06d на проведение испытаний зарегистрирована.\n"
+                        . "Объект испытаний: %s.\n\n"
+                        . 'Вы получите следующее уведомление, когда испытательный центр назначит исполнителя.',
+                        $number,
+                        $input->productName,
+                    ),
+                );
+            }
             $transaction->commit();
 
             return $this->findOne($id);
@@ -1465,10 +1485,10 @@ final class RequestRepository
         }
 
         return $this->db->createCommand(
-            'SELECT DISTINCT u.email, u.display_name AS name FROM {{%users}} u '
+            'SELECT DISTINCT TRIM(u.email) AS email, u.display_name AS name FROM {{%users}} u '
             . 'JOIN {{%user_roles}} ur ON ur.user_id = u.id '
             . 'JOIN {{%roles}} r ON r.id = ur.role_id '
-            . "WHERE u.is_active = 1 AND u.email IS NOT NULL AND u.email != '' "
+            . "WHERE u.is_active = 1 AND u.email IS NOT NULL AND TRIM(u.email) != '' "
             . 'AND r.code IN (' . implode(',', $placeholders) . ')',
             $params,
         )->queryAll();
@@ -1506,8 +1526,8 @@ final class RequestRepository
     private function userContact(int $userId): ?array
     {
         $row = $this->db->createCommand(
-            'SELECT email, display_name AS name FROM {{%users}} '
-            . "WHERE id = :id AND is_active = 1 AND email IS NOT NULL AND email != ''",
+            'SELECT TRIM(email) AS email, display_name AS name FROM {{%users}} '
+            . "WHERE id = :id AND is_active = 1 AND email IS NOT NULL AND TRIM(email) != ''",
             [':id' => $userId],
         )->queryOne();
 
@@ -1518,9 +1538,9 @@ final class RequestRepository
     private function initiatorContact(int $requestId): ?array
     {
         $row = $this->db->createCommand(
-            'SELECT u.email, u.display_name AS name FROM {{%requests}} r '
+            'SELECT TRIM(u.email) AS email, u.display_name AS name FROM {{%requests}} r '
             . 'JOIN {{%users}} u ON u.id = r.initiator_id '
-            . "WHERE r.id = :request_id AND u.is_active = 1 AND u.email IS NOT NULL AND u.email != ''",
+            . "WHERE r.id = :request_id AND u.is_active = 1 AND u.email IS NOT NULL AND TRIM(u.email) != ''",
             [':request_id' => $requestId],
         )->queryOne();
 
@@ -1531,10 +1551,10 @@ final class RequestRepository
     private function currentAssigneeContact(int $requestId, string $assignmentType): ?array
     {
         $row = $this->db->createCommand(
-            'SELECT u.email, u.display_name AS name FROM {{%request_assignments}} a '
+            'SELECT TRIM(u.email) AS email, u.display_name AS name FROM {{%request_assignments}} a '
             . 'JOIN {{%users}} u ON u.id = a.user_id '
             . 'WHERE a.request_id = :request_id AND a.assignment_type = :assignment_type '
-            . "AND a.valid_to IS NULL AND u.is_active = 1 AND u.email IS NOT NULL AND u.email != ''",
+            . "AND a.valid_to IS NULL AND u.is_active = 1 AND u.email IS NOT NULL AND TRIM(u.email) != ''",
             [':request_id' => $requestId, ':assignment_type' => $assignmentType],
         )->queryOne();
 
@@ -1545,14 +1565,14 @@ final class RequestRepository
     private function processParticipants(int $requestId): array
     {
         return $this->db->createCommand(
-            'SELECT u.id, u.email, u.display_name AS name FROM {{%requests}} r '
+            'SELECT u.id, TRIM(u.email) AS email, u.display_name AS name FROM {{%requests}} r '
             . 'JOIN {{%users}} u ON u.id = r.initiator_id '
-            . "WHERE r.id = :request_id1 AND u.is_active = 1 AND u.email IS NOT NULL AND u.email != '' "
+            . "WHERE r.id = :request_id1 AND u.is_active = 1 AND u.email IS NOT NULL AND TRIM(u.email) != '' "
             . 'UNION '
-            . 'SELECT u.id, u.email, u.display_name AS name FROM {{%request_assignments}} a '
+            . 'SELECT u.id, TRIM(u.email) AS email, u.display_name AS name FROM {{%request_assignments}} a '
             . 'JOIN {{%users}} u ON u.id = a.user_id '
             . 'WHERE a.request_id = :request_id2 AND a.valid_to IS NULL '
-            . "AND u.is_active = 1 AND u.email IS NOT NULL AND u.email != ''",
+            . "AND u.is_active = 1 AND u.email IS NOT NULL AND TRIM(u.email) != ''",
             [':request_id1' => $requestId, ':request_id2' => $requestId],
         )->queryAll();
     }

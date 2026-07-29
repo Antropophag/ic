@@ -177,6 +177,71 @@ final class RequestRepositoryTest extends IntegrationTestCase
         self::assertSame(1, (int) $notifiedCount);
     }
 
+    public function testInitiatorIsNotifiedOfOwnRequestRegistration(): void
+    {
+        // REQ-009: инициатор получает отдельное подтверждающее письмо о
+        // регистрации своей заявки, помимо уведомления руководителей.
+        $initiator = $this->createUser(
+            'dev.it.initiator8notify',
+            'Тестовый инициатор для уведомления',
+            'initiator-notify@example.invalid',
+        );
+
+        $request = $this->createRegisteredRequest($initiator, 'notify-initiator');
+
+        $notificationCount = $this->scalar(
+            "SELECT COUNT(*) FROM {{%notification_outbox}} "
+            . "WHERE request_id = :id AND event_type = 'request.created' "
+            . "AND recipient_email = 'initiator-notify@example.invalid'",
+            [':id' => $request['id']],
+        );
+        self::assertSame(1, (int) $notificationCount);
+
+        $notification = $this->db()->createCommand(
+            "SELECT subject, body FROM {{%notification_outbox}} "
+            . "WHERE request_id = :id AND event_type = 'request.created' "
+            . "AND recipient_email = 'initiator-notify@example.invalid' "
+            . 'ORDER BY id DESC LIMIT 1',
+            [':id' => $request['id']],
+        )->queryOne();
+
+        self::assertNotFalse($notification);
+        self::assertStringContainsString('принята в работу', $notification['subject']);
+        self::assertStringContainsString('зарегистрирована', $notification['body']);
+    }
+
+    public function testWhitespaceOnlyEmailIsTreatedAsMissingAndSurroundingSpacesAreTrimmed(): void
+    {
+        // LDAP-синхронизация не гарантирует, что email придёт без пробелов
+        // по краям — ни пробельная строка не должна считаться валидным
+        // адресом, ни сохранённый в notification_outbox адрес не должен
+        // нести пробелы, иначе Mailer упадёт при построении Address.
+        $whitespaceOnlyEmailManager = $this->createUser('dev.it.manager8', 'Руководитель без адреса', '   ');
+        $this->grantRole($whitespaceOnlyEmailManager, 'ic_manager');
+        $paddedEmailInitiator = $this->createUser(
+            'dev.it.initiator9notify',
+            'Инициатор с пробелами в адресе',
+            '  padded@example.invalid  ',
+        );
+
+        $request = $this->createRegisteredRequest($paddedEmailInitiator, 'notify-trim');
+
+        $managerNotified = $this->scalar(
+            "SELECT COUNT(*) FROM {{%notification_outbox}} "
+            . "WHERE request_id = :id AND recipient_email LIKE '%manager%'",
+            [':id' => $request['id']],
+        );
+        self::assertSame(0, (int) $managerNotified, 'Пробельный email не должен считаться валидным получателем');
+
+        $initiatorRecipient = $this->scalar(
+            "SELECT recipient_email FROM {{%notification_outbox}} "
+            . "WHERE request_id = :id AND event_type = 'request.created' "
+            . "AND recipient_email LIKE '%padded%'",
+            [':id' => $request['id']],
+        );
+        self::assertSame('padded@example.invalid', $initiatorRecipient);
+    }
+
     public function testAssignedExpertSeesTheReportInDocumentsList(): void
     {
         // Issue #73: без этой видимости эксперт не может открыть отчёт,
