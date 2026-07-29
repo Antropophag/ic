@@ -1,3 +1,9 @@
+/* Те же файлы, что @fontsource/fira-sans подключает в SPA (main.js) —
+   отдельные справочные страницы не выполняют JS SPA и без этого молча
+   откатывались бы на Arial. */
+@font-face{font-family:'Fira Sans';font-style:normal;font-display:swap;font-weight:400;src:url(./fonts/fira-sans-cyrillic-400-normal.woff2) format('woff2')}
+@font-face{font-family:'Fira Sans';font-style:normal;font-display:swap;font-weight:500;src:url(./fonts/fira-sans-cyrillic-500-normal.woff2) format('woff2')}
+@font-face{font-family:'Fira Sans';font-style:normal;font-display:swap;font-weight:600;src:url(./fonts/fira-sans-cyrillic-600-normal.woff2) format('woff2')}
 :root{
   --blue:#253d98;
   --ink:#142033;
