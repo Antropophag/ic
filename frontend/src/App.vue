@@ -723,9 +723,6 @@ onMounted(loadRequests)
               <h1>{{ selected ? `Заявка ${selected.id}` : 'Регистратор испытаний' }}</h1>
             </div>
           </div>
-          <nav class="topnav">
-            <button class="active">Заявки</button>
-          </nav>
           <div class="profile">
             <span class="avatar">{{ currentInitials }}</span>
             <span><b>{{ currentProfile.displayName }}</b><small>{{ currentProfile.position }}</small></span>
