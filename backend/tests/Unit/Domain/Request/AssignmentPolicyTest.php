@@ -58,6 +58,20 @@ final class AssignmentPolicyTest extends TestCase
         ));
     }
 
+    public function testAssigningCurrentExecutorIsRejected(): void
+    {
+        // WF-013: переназначение на уже назначенного исполнителя — no-op,
+        // который бесполезно плодит запись истории, увеличивает
+        // lock_version и отправляет письмо без реального изменения.
+        $this->expectDenied('WF-013', fn () => (new AssignmentPolicy())->assertCanAssign(
+            [Role::IcManager],
+            true,
+            [Role::IcExecutor],
+            true,
+            true,
+        ));
+    }
+
     /** @return iterable<string, array{bool, list<Role>}> */
     public static function invalidExecutors(): iterable
     {

@@ -890,6 +890,7 @@ final class RequestRepository
                 (bool) $executor['is_active'],
                 $this->rolesFor($executorId),
                 $this->isActiveUser($actorId),
+                $this->isCurrentExecutor($requestId, $executorId),
             );
 
             $now = gmdate('Y-m-d H:i:s.u');
@@ -930,14 +931,28 @@ final class RequestRepository
             ])->execute();
             $executorContact = $this->userContact($executorId);
             if ($executorContact !== null) {
+                // WF-012: помимо первичного назначения (registered) заявку
+                // можно переназначить и после того, как она уже в работе —
+                // получателю в этом случае не нужно «принимать в работу»
+                // то, что уже идёт, текст письма отражает реальный статус.
+                $body = match ((string) $request['status']) {
+                    RequestStatus::InProgress->value =>
+                        'Вам переназначена заявка на проведение испытаний, она уже в работе. '
+                        . 'Откройте карточку заявки в портале, чтобы продолжить выполнение.',
+                    RequestStatus::Suspended->value =>
+                        'Вам переназначена заявка на проведение испытаний, работы по ней приостановлены. '
+                        . 'Откройте карточку заявки в портале, чтобы ознакомиться с текущим статусом.',
+                    default =>
+                        'Вам назначена заявка на проведение испытаний. '
+                        . 'Откройте карточку заявки в портале, чтобы принять её в работу.',
+                };
                 (new NotificationOutbox($this->db))->enqueue(
                     $requestId,
                     'request.executor_assigned',
                     $executorContact['email'],
                     $executorContact['name'],
                     'Вам назначена заявка на проведение испытаний',
-                    'Вам назначена заявка на проведение испытаний. '
-                    . 'Откройте карточку заявки в портале, чтобы принять её в работу.',
+                    $body,
                 );
             }
             $transaction->commit();

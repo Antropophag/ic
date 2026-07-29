@@ -15,6 +15,7 @@ final class AssignmentPolicy
         bool $executorActive,
         array $executorRoles,
         bool $actorActive,
+        bool $isCurrentExecutor = false,
     ): void {
         if (!$actorActive) {
             throw new AssignmentDenied('AUTH-003');
@@ -25,6 +26,10 @@ final class AssignmentPolicy
 
         if (!$executorActive || !$this->hasAny($executorRoles, [Role::IcExecutor])) {
             throw new AssignmentDenied('WF-002');
+        }
+
+        if ($isCurrentExecutor) {
+            throw new AssignmentDenied('WF-013');
         }
     }
 
