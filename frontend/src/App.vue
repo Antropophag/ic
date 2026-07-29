@@ -727,6 +727,7 @@ onMounted(loadRequests)
             <div>
               <p class="eyebrow">АО «ЩЛЗ» · Испытательный центр</p>
               <h1>{{ selected ? `Заявка ${selected.id}` : 'Заявки на проведение испытаний' }}</h1>
+              <p v-if="!selected" class="tagline">Регистрация, испытания и согласование результатов</p>
             </div>
           </div>
           <div class="profile">
@@ -745,10 +746,6 @@ onMounted(loadRequests)
       </header>
 
       <section v-if="!selected" class="page">
-        <div class="page-actions">
-          <p>Регистрация, испытания и согласование результатов</p>
-          <button class="primary" @click="showCreate = true">＋ Новая заявка</button>
-        </div>
         <p v-if="registryError" class="detail-state error">{{ registryError }}</p>
 
         <div class="card registry">
@@ -756,6 +753,7 @@ onMounted(loadRequests)
             <button v-for="tab in tabs" :key="tab.id" :class="{active: activeTab === tab.id}" @click="activeTab = tab.id">
               {{ tab.label }} <span>{{ tab.count }}</span>
             </button>
+            <button class="primary tabs-cta" @click="showCreate = true">＋ Новая заявка</button>
           </div>
           <div class="toolbar">
             <label class="search">⌕ <input v-model="query" placeholder="Поиск по заявкам" /></label>
