@@ -67,7 +67,7 @@ const reassignRequestGuard = createLatestRequestGuard()
 const deleteReportRequestGuard = createLatestRequestGuard()
 const adminRequestGuard = createLatestRequestGuard()
 const draft = reactive({
-  productName: '', manufacturer: '', supplier: '', sampleQuantity: 1, testMethod: '',
+  productName: '', manufacturer: '', supplier: '', sampleQuantity: 1, testMethod: '', comment: '',
 })
 const devUserId = ref(getDevUserId())
 // Пессимистичный старт (dev-режим), пока /auth/me не ответит — не мигаем
@@ -595,7 +595,18 @@ async function createRequest() {
       failedFiles.push(`${file.name} (${reason})`)
     }
   }
-  Object.assign(draft, { productName: '', manufacturer: '', supplier: '', sampleQuantity: 1, testMethod: '' })
+
+  const comment = draft.comment.trim()
+  let commentFailed = false
+  if (comment) {
+    try {
+      await requestApi.addComment(created.id, comment)
+    } catch {
+      commentFailed = true
+    }
+  }
+
+  Object.assign(draft, { productName: '', manufacturer: '', supplier: '', sampleQuantity: 1, testMethod: '', comment: '' })
   draftFiles.value = []
   try {
     await loadRequests(true)
@@ -604,6 +615,9 @@ async function createRequest() {
       await openRequest(createdItem)
       if (failedFiles.length) {
         documentError.value = `Заявка создана, но не удалось загрузить: ${failedFiles.join(', ')}.`
+      }
+      if (commentFailed) {
+        commentError.value = 'Заявка создана, но комментарий не удалось сохранить.'
       }
     } else {
       registryError.value = 'Заявка создана, но пока не появилась в реестре. Не создавайте её повторно; обновите страницу.'
@@ -1296,7 +1310,7 @@ onMounted(bootstrapAuth)
             <label>Поставщик *<input v-model="draft.supplier" required placeholder="Наименование поставщика" /></label>
             <label class="wide">Метод испытаний *<textarea v-model="draft.testMethod" required placeholder="Опишите метод или программу испытаний"></textarea></label>
             <label class="wide">Сопроводительная документация<div class="dropzone"><input type="file" multiple accept=".pdf,.png,.jpg,.jpeg,.docx,.xlsx" :disabled="createLoading" @change="selectDraftFiles" /><span>Перетащите файлы сюда или <b>выберите на компьютере</b></span><small v-if="draftFiles.length">Выбрано: {{ draftFiles.map(file => file.name).join(', ') }}</small></div></label>
-            <label class="wide">Комментарий<textarea placeholder="Дополнительная информация"></textarea></label>
+            <label class="wide">Комментарий<textarea v-model="draft.comment" :disabled="createLoading" maxlength="10000" placeholder="Дополнительная информация"></textarea></label>
           </div>
           <p v-if="createError" class="form-error">{{ createError }}</p>
           <div class="modal-actions"><button type="button" class="secondary" :disabled="createLoading" @click="showCreate = false">Отмена</button><button class="primary" :disabled="createLoading">{{ createLoading ? 'Создание…' : 'Создать заявку' }}</button></div>
