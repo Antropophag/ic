@@ -748,10 +748,10 @@ final class DocumentRepository
         }
 
         return $this->db->createCommand(
-            'SELECT DISTINCT u.email, u.display_name AS name FROM {{%users}} u '
+            'SELECT DISTINCT TRIM(u.email) AS email, u.display_name AS name FROM {{%users}} u '
             . 'JOIN {{%user_roles}} ur ON ur.user_id = u.id '
             . 'JOIN {{%roles}} r ON r.id = ur.role_id '
-            . "WHERE u.is_active = 1 AND u.email IS NOT NULL AND u.email != '' "
+            . "WHERE u.is_active = 1 AND u.email IS NOT NULL AND TRIM(u.email) != '' "
             . 'AND r.code IN (' . implode(',', $placeholders) . ')',
             $params,
         )->queryAll();
