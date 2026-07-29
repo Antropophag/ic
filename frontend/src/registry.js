@@ -96,21 +96,44 @@ const HISTORY_LABELS = {
 export function historyFromApi(item) {
   const description = HISTORY_LABELS[item.action] || item.action
   return {
+    type: 'milestone',
     id: `${item.kind}-${item.id}`,
     actor: item.actorName,
     description: item.reason ? `${description}: ${item.reason}` : description,
     ruleId: item.ruleId,
     occurredAt: new Date(item.occurredAt).toLocaleString('ru-RU'),
+    sortAt: item.occurredAt,
   }
 }
 
 export function commentFromApi(item) {
   return {
+    type: 'comment',
     id: Number(item.id),
     author: item.authorName,
     body: item.body,
     createdAt: new Date(item.createdAt).toLocaleString('ru-RU'),
+    sortAt: item.createdAt,
   }
+}
+
+// Единая хронологическая лента заявки (переходы статуса вперемешку с
+// обсуждением, как в таймлайне GitHub PR) — заменяет разрозненные вкладку
+// «Обсуждение» и отдельную модалку «История»: одна история вместо двух.
+// Видимость документов (DOC-003/ACL-002) лента не затрагивает — она
+// показывает только сам факт события, а не содержимое документа.
+//
+// Backend отдаёт оба источника в порядке «новые сначала» (ORDER BY ... DESC —
+// удобно для постраничной подгрузки старых записей), а лента должна читаться
+// по возрастанию времени, как переписка. Array.prototype.sort стабилен, но
+// секундная точность occurredAt/createdAt означает, что несколько событий
+// подряд (например, быстрая смена статусов) могут получить одинаковый
+// sortAt — без предварительного разворота каждого источника стабильная
+// сортировка сохранила бы их неверный DESC-порядок внутри одной секунды.
+export function buildFeed(history, comments) {
+  const orderedHistory = [...history].reverse()
+  const orderedComments = [...comments].reverse()
+  return [...orderedHistory, ...orderedComments].sort((a, b) => new Date(a.sortAt) - new Date(b.sortAt))
 }
 
 export function canSubmitComment(item, detailLoading) {

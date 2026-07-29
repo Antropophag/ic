@@ -3,7 +3,7 @@ import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { adminApi, authApi, hasCsrfToken, requestApi, setCsrfToken } from './api'
 import { DEV_USERS, getDevUserId, setDevUserId } from './devUsers'
 import { createLatestRequestGuard } from './latestRequestGuard'
-import { ACTIVE_STATUSES, REGISTRY_PAGE_SIZE, REQUEST_COLORS, canSubmitComment, commentFromApi, documentFromApi, filterRequests, fromApi, historyFromApi, paginate, withoutStaleActions } from './registry'
+import { ACTIVE_STATUSES, REGISTRY_PAGE_SIZE, REQUEST_COLORS, buildFeed, canSubmitComment, commentFromApi, documentFromApi, filterRequests, fromApi, historyFromApi, paginate, withoutStaleActions } from './registry'
 
 const activeTab = ref('active')
 const query = ref('')
@@ -13,7 +13,6 @@ const currentPage = ref(1)
 const pageSize = REGISTRY_PAGE_SIZE
 const selected = ref(null)
 const showCreate = ref(false)
-const showHistory = ref(false)
 const createError = ref('')
 const registryError = ref('')
 const createLoading = ref(false)
@@ -93,6 +92,13 @@ const currentProfile = computed(() => {
 const currentInitials = computed(() => (currentProfile.value.displayName
   .split(' ').map(part => part[0]).join('').slice(0, 2).toUpperCase()) || '?')
 const isAdministrator = computed(() => (currentProfile.value.roles || []).includes('administrator'))
+const feed = computed(() => buildFeed(selected.value?.history || [], selected.value?.comments || []))
+const hasHeroAction = computed(() => Boolean(selected.value && (
+  selected.value.canAssignExecutor || selected.value.canStart || selected.value.canUploadReport
+  || selected.value.canClaimExpert || selected.value.canReassignExpert || selected.value.canPublishOpinion
+  || selected.value.canSecurityDecide || selected.value.canReject || selected.value.canWithdraw
+  || selected.value.canDeleteReport
+)))
 
 function switchDevUser(rawId) {
   const id = Number(rawId)
@@ -356,7 +362,6 @@ async function openRequest(item) {
   reassignError.value = ''
   deleteReportLoading.value = false
   deleteReportError.value = ''
-  showHistory.value = false
   actionError.value = ''
   await loadRequestDetails(item)
 }
@@ -1137,33 +1142,108 @@ onMounted(bootstrapAuth)
           <div class="request-actions">
             <button class="back" @click="closeRequest">‹</button>
             <span class="badge" :class="selected.tone">{{ selected.status }}</span>
-            <button class="secondary" @click="showHistory = true">◷ История</button>
           </div>
           <p v-if="detailLoading" class="detail-state">Загрузка актуальной карточки…</p>
           <p v-if="detailError" class="detail-state error">{{ detailError }}</p>
           <div class="request-grid">
             <div class="stack">
-              <article class="card details">
-                <h3>Общая информация</h3>
-                <dl>
-                  <div><dt>Инициатор</dt><dd>{{ selected.initiator }}</dd></div><div><dt>Подразделение</dt><dd>{{ selected.department }}</dd></div>
-                  <div><dt>Наименование и тип</dt><dd>{{ selected.product }}</dd></div><div><dt>Производитель</dt><dd>{{ selected.manufacturer || '—' }}</dd></div>
-                  <div><dt>Поставщик</dt><dd>{{ selected.supplier }}</dd></div><div><dt>Количество образцов</dt><dd>{{ selected.sampleQuantity || '—' }} шт.</dd></div>
-                  <div class="wide"><dt>Метод испытаний</dt><dd>{{ selected.testMethod || '—' }}</dd></div>
-                </dl>
+              <article v-if="hasHeroAction" class="card hero">
+                <p class="hero-eyebrow">Ваше действие</p>
+
+                <div v-if="selected.canAssignExecutor" class="hero-block">
+                  <h4>Назначить исполнителя</h4>
+                  <label>Исполнитель ИЦ<select v-model="executorChoice" :disabled="actionLoading"><option value="">Выберите сотрудника</option><option v-for="executor in executors" :key="executor.id" :value="executor.id">{{ executor.displayName }}</option></select></label>
+                  <div class="hero-actions"><button class="primary big" :disabled="actionLoading" @click="assignExecutor">{{ actionLoading ? 'Сохранение…' : 'Назначить' }}</button></div>
+                  <a class="help-link" href="/help/assignment.html" target="_blank">Инструкция по назначению и началу работы</a>
+                </div>
+
+                <div v-if="selected.canStart" class="hero-block">
+                  <h4>Начать работу</h4>
+                  <p class="hero-sub">Заявка перейдёт в статус «В работе»</p>
+                  <div class="hero-actions"><button class="primary big" :disabled="actionLoading" @click="startRequest">{{ actionLoading ? 'Запуск…' : 'Начать работу' }}</button></div>
+                  <a class="help-link" href="/help/assignment.html" target="_blank">Инструкция по назначению и началу работы</a>
+                </div>
+                <p v-if="actionError" class="action-error">{{ actionError }}</p>
+
+                <div v-if="selected.canUploadReport" class="hero-block">
+                  <h4>Загрузите отчёт испытаний</h4>
+                  <p class="hero-sub">Заявка перейдёт на подготовку экспертного заключения сразу после загрузки</p>
+                  <div class="hero-actions"><label class="primary upload-button big">{{ reportLoading ? 'Загрузка отчёта…' : 'Загрузить отчёт испытаний' }}<input type="file" :disabled="reportLoading" accept=".pdf,application/pdf" @change="uploadReport" /></label></div>
+                  <p v-if="reportError" class="action-error">{{ reportError }}</p>
+                  <a class="help-link" href="/help/report.html" target="_blank">Инструкция по загрузке отчёта испытаний</a>
+                </div>
+
+                <div v-if="selected.canClaimExpert" class="hero-block">
+                  <h4>Взять заявку в работу</h4>
+                  <p class="hero-sub">Вы станете экспертом, готовящим заключение по этой заявке</p>
+                  <div class="hero-actions"><button class="primary big" :disabled="claimLoading" @click="claimExpert">{{ claimLoading ? 'Сохранение…' : 'Взять в работу' }}</button></div>
+                  <p v-if="claimError" class="action-error">{{ claimError }}</p>
+                  <a class="help-link" href="/help/expert-opinion.html" target="_blank">Инструкция по формированию заключения</a>
+                </div>
+
+                <div v-if="selected.canReassignExpert" class="hero-block">
+                  <h4>Переназначить эксперту</h4>
+                  <label>Новый эксперт<select v-model="expertChoice" :disabled="reassignLoading"><option value="">Выберите сотрудника</option><option v-for="expert in experts.filter(candidate => candidate.id !== selected.expertId)" :key="expert.id" :value="expert.id">{{ expert.displayName }}</option></select></label>
+                  <div class="hero-actions"><button class="primary big" :disabled="reassignLoading" @click="reassignExpert">{{ reassignLoading ? 'Сохранение…' : 'Переназначить' }}</button></div>
+                  <p v-if="reassignError" class="action-error">{{ reassignError }}</p>
+                  <a class="help-link" href="/help/expert-opinion.html" target="_blank">Инструкция по формированию заключения</a>
+                </div>
+
+                <div v-if="selected.canPublishOpinion" class="hero-block">
+                  <h4>Экспертное заключение</h4>
+                  <p class="hero-sub">Заявка перейдёт на контроль СБ сразу после публикации</p>
+                  <textarea v-model="opinionDraft" :disabled="opinionLoading" minlength="10" maxlength="20000" placeholder="Введите итоговое заключение по результатам испытаний"></textarea>
+                  <div class="hero-actions"><button class="primary big" :disabled="opinionLoading" @click="publishOpinion">{{ opinionLoading ? 'Публикация…' : 'Опубликовать и передать в СБ' }}</button></div>
+                  <p v-if="opinionError" class="action-error">{{ opinionError }}</p>
+                  <a class="help-link" href="/help/expert-opinion.html" target="_blank">Инструкция по формированию заключения</a>
+                </div>
+
+                <div v-if="selected.canSecurityDecide" class="hero-block">
+                  <h4>Контроль СБ</h4>
+                  <label>Комментарий<textarea v-model="securityReason" :disabled="securityLoading" maxlength="5000" placeholder="Обязателен при возврате заявки"></textarea></label>
+                  <div class="hero-actions"><button class="primary big confirm" :disabled="securityLoading" @click="decideSecurity('approve')">{{ securityLoading ? 'Сохранение…' : 'Согласовать и завершить' }}</button><button class="secondary big" :disabled="securityLoading" @click="decideSecurity('return')">Вернуть в работу</button></div>
+                  <p v-if="securityError" class="action-error">{{ securityError }}</p>
+                  <a class="help-link" href="/help/security-review.html" target="_blank">Инструкция по контролю СБ</a>
+                </div>
+
+                <div v-if="selected.canReject || selected.canWithdraw || selected.canDeleteReport" class="hero-block hero-secondary">
+                  <button v-if="selected.canReject" class="secondary action-wide" :disabled="rejectLoading" @click="rejectRequest">{{ rejectLoading ? 'Сохранение…' : 'Отказать в проведении испытаний' }}</button>
+                  <p v-if="rejectError" class="action-error">{{ rejectError }}</p>
+                  <button v-if="selected.canWithdraw" class="secondary action-wide" :disabled="withdrawLoading" @click="withdrawRequest">{{ withdrawLoading ? 'Сохранение…' : 'Отозвать заявку' }}</button>
+                  <p v-if="withdrawError" class="action-error">{{ withdrawError }}</p>
+                  <button v-if="selected.canDeleteReport" class="secondary action-wide" :disabled="deleteReportLoading" @click="deleteReport">{{ deleteReportLoading ? 'Удаление…' : 'Удалить отчёт' }}</button>
+                  <p v-if="deleteReportError" class="action-error">{{ deleteReportError }}</p>
+                </div>
               </article>
-              <article class="card comments">
-                <div class="section-title"><h3>Обсуждение <span>{{ selected.comments?.length || 0 }}</span></h3></div>
+
+              <article class="card feed">
+                <div class="section-title"><h3>Лента заявки <span>{{ feed.length }}</span></h3></div>
                 <button v-if="selected.commentsPage?.hasMore" class="secondary" :disabled="olderCommentsLoading" @click="loadOlderComments">{{ olderCommentsLoading ? 'Загрузка…' : 'Показать предыдущие' }}</button>
-                <div v-for="comment in selected.comments || []" :key="comment.id" class="comment"><span class="avatar small">●</span><div><b>{{ comment.author }}</b><time>{{ comment.createdAt }}</time><p>{{ comment.body }}</p></div></div>
-                <p v-if="!selected.comments?.length" class="placeholder-copy">Комментариев пока нет.</p>
+                <div class="stream">
+                  <div v-for="entry in feed" :key="`${entry.type}-${entry.id}`" class="entry" :class="{ system: entry.type === 'milestone' }">
+                    <span class="avatar small" :class="{ 'blue-avatar': entry.type === 'comment' }">●</span>
+                    <div class="entry-body">
+                      <template v-if="entry.type === 'milestone'">
+                        <div class="entry-head"><b>{{ entry.actor }} — {{ entry.description }}</b><time>{{ entry.occurredAt }}</time></div>
+                      </template>
+                      <template v-else>
+                        <div class="entry-head"><b>{{ entry.author }}</b><time>{{ entry.createdAt }}</time></div>
+                        <p>{{ entry.body }}</p>
+                      </template>
+                    </div>
+                  </div>
+                </div>
+                <p v-if="!feed.length" class="placeholder-copy">Лента пока пуста.</p>
                 <form v-if="canSubmitComment(selected, detailLoading)" class="comment-input" @submit.prevent="addComment"><span class="avatar small">МУ</span><input v-model="commentDraft" :disabled="commentLoading" maxlength="10000" placeholder="Оставьте комментарий…" /><button :disabled="commentLoading">➤</button></form>
                 <p v-else class="placeholder-copy">На текущем этапе новые комментарии недоступны.</p>
                 <p v-if="commentError" class="action-error">{{ commentError }}</p>
               </article>
             </div>
             <aside class="stack side-column">
-              <article class="card summary"><h3>Исполнение</h3><p><span>Исполнитель</span><b>{{ selected.executor }}</b></p><p><span>Эксперт</span><b>{{ selected.expert }}</b></p><p><span>Отметка СБ</span><b>{{ selected.securityMark }}</b></p>
+              <article class="card summary"><h3>Статус</h3>
+                <p><span>Исполнитель</span><b>{{ selected.executor }}</b></p>
+                <p><span>Эксперт</span><b>{{ selected.expert }}</b></p>
+                <p><span>Отметка СБ</span><b>{{ selected.securityMark }}</b></p>
                 <div v-if="selected.canSetColor" class="color-picker">
                   <button
                     v-for="color in REQUEST_COLORS"
@@ -1177,50 +1257,22 @@ onMounted(bootstrapAuth)
                   ></button>
                 </div>
                 <p v-if="colorError" class="action-error">{{ colorError }}</p>
-                <div v-if="selected.canAssignExecutor" class="execution-action">
-                  <label>Назначить исполнителя<select v-model="executorChoice" :disabled="actionLoading"><option value="">Выберите сотрудника</option><option v-for="executor in executors" :key="executor.id" :value="executor.id">{{ executor.displayName }}</option></select></label>
-                  <button class="secondary" :disabled="actionLoading" @click="assignExecutor">{{ actionLoading ? 'Сохранение…' : 'Назначить' }}</button>
-                </div>
-                <button v-if="selected.canClaimExpert" class="secondary action-wide" :disabled="claimLoading" @click="claimExpert">{{ claimLoading ? 'Сохранение…' : 'Взять в работу' }}</button>
-                <p v-if="claimError" class="action-error">{{ claimError }}</p>
-                <div v-if="selected.canReassignExpert" class="execution-action">
-                  <label>Переназначить эксперту<select v-model="expertChoice" :disabled="reassignLoading"><option value="">Выберите сотрудника</option><option v-for="expert in experts.filter(candidate => candidate.id !== selected.expertId)" :key="expert.id" :value="expert.id">{{ expert.displayName }}</option></select></label>
-                  <button class="secondary" :disabled="reassignLoading" @click="reassignExpert">{{ reassignLoading ? 'Сохранение…' : 'Переназначить' }}</button>
-                </div>
-                <p v-if="reassignError" class="action-error">{{ reassignError }}</p>
-                <button v-if="selected.canStart" class="primary action-wide" :disabled="actionLoading" @click="startRequest">{{ actionLoading ? 'Запуск…' : 'Начать работу' }}</button>
-                <div v-if="selected.canPublishOpinion" class="execution-action">
-                  <label>Экспертное заключение<textarea v-model="opinionDraft" :disabled="opinionLoading" minlength="10" maxlength="20000" placeholder="Введите итоговое заключение по результатам испытаний"></textarea></label>
-                  <button class="primary action-wide" :disabled="opinionLoading" @click="publishOpinion">{{ opinionLoading ? 'Публикация…' : 'Опубликовать и передать в СБ' }}</button>
-                </div>
-                <p v-if="opinionError" class="action-error">{{ opinionError }}</p>
-                <div v-if="selected.canSecurityDecide" class="execution-action">
-                  <label>Комментарий СБ<textarea v-model="securityReason" :disabled="securityLoading" maxlength="5000" placeholder="Обязателен при возврате заявки"></textarea></label>
-                  <button class="primary action-wide" :disabled="securityLoading" @click="decideSecurity('approve')">{{ securityLoading ? 'Сохранение…' : 'Согласовать и завершить' }}</button>
-                  <button class="secondary action-wide" :disabled="securityLoading" @click="decideSecurity('return')">Вернуть в работу</button>
-                </div>
-                <p v-if="securityError" class="action-error">{{ securityError }}</p>
-                <button v-if="selected.canReject" class="secondary action-wide" :disabled="rejectLoading" @click="rejectRequest">{{ rejectLoading ? 'Сохранение…' : 'Отказать в проведении испытаний' }}</button>
-                <p v-if="rejectError" class="action-error">{{ rejectError }}</p>
-                <button v-if="selected.canWithdraw" class="secondary action-wide" :disabled="withdrawLoading" @click="withdrawRequest">{{ withdrawLoading ? 'Сохранение…' : 'Отозвать заявку' }}</button>
-                <p v-if="withdrawError" class="action-error">{{ withdrawError }}</p>
-                <p v-if="actionError" class="action-error">{{ actionError }}</p>
-                <a v-if="selected.canAssignExecutor || selected.canStart" class="help-link" href="/help/assignment.html" target="_blank">Инструкция по назначению и началу работы</a>
-                <a v-if="selected.canClaimExpert || selected.canReassignExpert || selected.canPublishOpinion" class="help-link" href="/help/expert-opinion.html" target="_blank">Инструкция по формированию заключения</a>
-                <a v-if="selected.canSecurityDecide" class="help-link" href="/help/security-review.html" target="_blank">Инструкция по контролю СБ</a>
+              </article>
+              <article class="card summary"><h3>Объект испытаний</h3>
+                <p><span>Инициатор</span><b>{{ selected.initiator }}</b></p>
+                <p><span>Подразделение</span><b>{{ selected.department }}</b></p>
+                <p><span>Наименование и тип</span><b>{{ selected.product }}</b></p>
+                <p><span>Производитель</span><b>{{ selected.manufacturer || '—' }}</b></p>
+                <p><span>Поставщик</span><b>{{ selected.supplier }}</b></p>
+                <p><span>Количество образцов</span><b>{{ selected.sampleQuantity || '—' }} шт.</b></p>
+                <p><span>Метод испытаний</span><b>{{ selected.testMethod || '—' }}</b></p>
               </article>
               <article class="card documents"><h3>Документы <span>{{ selected.documents?.length || 0 }}</span></h3>
-                <label v-if="selected.canUploadReport" class="primary upload-button">{{ reportLoading ? 'Загрузка отчёта…' : 'Загрузить отчёт испытаний' }}<input type="file" :disabled="reportLoading" accept=".pdf,application/pdf" @change="uploadReport" /></label>
-                <a v-if="selected.canUploadReport" class="help-link" href="/help/report.html" target="_blank">Инструкция по загрузке отчёта испытаний</a>
-                <p v-if="reportError" class="action-error">{{ reportError }}</p>
-                <button v-if="selected.canDeleteReport" class="secondary action-wide" :disabled="deleteReportLoading" @click="deleteReport">{{ deleteReportLoading ? 'Удаление…' : 'Удалить отчёт' }}</button>
-                <p v-if="deleteReportError" class="action-error">{{ deleteReportError }}</p>
                 <button v-for="document in selected.documents || []" :key="document.versionId" class="document-row" @click="downloadDocument(document)"><span>▣</span><span><b>{{ document.title }}</b><small>Версия {{ document.version }} · {{ document.size }} · {{ document.createdAt }}</small></span></button>
                 <p v-if="!selected.documents?.length" class="placeholder-copy">Документов пока нет.</p>
                 <label v-if="selected.canUploadDocument" class="secondary upload-button">{{ documentLoading ? 'Загрузка…' : 'Загрузить документ' }}<input type="file" :disabled="documentLoading" accept=".pdf,.png,.jpg,.jpeg,.docx,.xlsx" @change="uploadDocument" /></label>
                 <p v-if="documentError" class="action-error">{{ documentError }}</p>
               </article>
-              <article class="card timeline"><h3>Последние события</h3><p v-for="event in (selected.history || []).slice(0, 4)" :key="event.id" class="done">{{ event.description }}<small>{{ event.occurredAt }}</small></p><p v-if="!selected.history?.length">История пока пуста</p></article>
             </aside>
           </div>
         </section>
@@ -1241,12 +1293,6 @@ onMounted(bootstrapAuth)
           <p v-if="createError" class="form-error">{{ createError }}</p>
           <div class="modal-actions"><button type="button" class="secondary" :disabled="createLoading" @click="showCreate = false">Отмена</button><button class="primary" :disabled="createLoading">{{ createLoading ? 'Создание…' : 'Создать заявку' }}</button></div>
         </form>
-      </div>
-
-      <div v-if="showHistory" class="overlay drawer-overlay" @click.self="showHistory = false">
-        <aside class="drawer"><div class="modal-head"><h2>История изменений</h2><button @click="showHistory = false">×</button></div>
-          <div class="history"><div v-for="event in selected.history || []" :key="event.id"><b>{{ event.actor }}</b><p>{{ event.description }} · {{ event.ruleId }}</p><time>{{ event.occurredAt }}</time></div><p v-if="!selected.history?.length" class="placeholder-copy">История пока пуста.</p></div>
-        </aside>
       </div>
     </template>
   </div>
