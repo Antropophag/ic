@@ -1,5 +1,5 @@
 import { afterEach, expect, it, vi } from 'vitest'
-import { authApi, hasCsrfToken, requestApi, setCsrfToken } from './api'
+import { adminApi, authApi, hasCsrfToken, requestApi, setCsrfToken } from './api'
 import { setDevUserId } from './devUsers'
 
 afterEach(() => {
@@ -305,4 +305,43 @@ it('logs out with a plain POST', async () => {
   await authApi.logout()
 
   expect(fetchMock).toHaveBeenCalledWith('/api/v1/auth/logout', expect.objectContaining({ method: 'POST' }))
+})
+
+it('lists admin users and roles', async () => {
+  const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({ items: [] }), { status: 200 }))
+  vi.stubGlobal('fetch', fetchMock)
+
+  await adminApi.users()
+  await adminApi.roles()
+
+  expect(fetchMock).toHaveBeenCalledWith('/api/v1/admin/users', expect.any(Object))
+  expect(fetchMock).toHaveBeenCalledWith('/api/v1/admin/roles', expect.any(Object))
+})
+
+it('creates a pre-provisioned admin user as JSON', async () => {
+  const fetchMock = vi.fn().mockResolvedValue(new Response('{}', { status: 201 }))
+  vi.stubGlobal('fetch', fetchMock)
+
+  await adminApi.createUser('kashin', 'Сергей Кашин')
+
+  expect(fetchMock).toHaveBeenCalledWith('/api/v1/admin/users', expect.objectContaining({
+    method: 'POST',
+    body: JSON.stringify({ adLogin: 'kashin', displayName: 'Сергей Кашин' }),
+  }))
+})
+
+it('assigns and revokes a role for a user', async () => {
+  const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({ items: [] }), { status: 200 }))
+  vi.stubGlobal('fetch', fetchMock)
+
+  await adminApi.assignRole(7, 4)
+  await adminApi.revokeRole(7, 4)
+
+  expect(fetchMock).toHaveBeenCalledWith('/api/v1/admin/users/7/roles', expect.objectContaining({
+    method: 'POST',
+    body: JSON.stringify({ roleId: 4 }),
+  }))
+  expect(fetchMock).toHaveBeenCalledWith('/api/v1/admin/users/7/roles/4/revoke', expect.objectContaining({
+    method: 'POST',
+  }))
 })

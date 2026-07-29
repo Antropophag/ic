@@ -6,9 +6,9 @@ afterEach(() => {
   setDevUserId(DEV_USERS[0].id)
 })
 
-it('lists five seeded users with unique ids', () => {
-  expect(DEV_USERS).toHaveLength(5)
-  expect(new Set(DEV_USERS.map(user => user.id)).size).toBe(5)
+it('lists six seeded users with unique ids', () => {
+  expect(DEV_USERS).toHaveLength(6)
+  expect(new Set(DEV_USERS.map(user => user.id)).size).toBe(6)
 })
 
 it('defaults to the first seeded user without stored preference', () => {
