@@ -55,6 +55,7 @@ export function fromApi(item) {
     color: REQUEST_COLORS.includes(item.color) ? item.color : 'white',
     status: STATUS_LABELS[item.status] || item.status,
     tone: STATUS_TONES[item.status] || 'blue',
+    securityMark: item.security_mark === 'approve' ? '✓' : item.security_mark === 'return' ? '✕' : '—',
   }
 }
 

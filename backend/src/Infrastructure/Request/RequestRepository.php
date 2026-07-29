@@ -260,6 +260,8 @@ final class RequestRepository
             . 'u.display_name AS initiator_name, u.department, '
             . 'executor.id AS executor_id, executor.display_name AS executor_name, '
             . 'expert.id AS expert_id, expert.display_name AS expert_name, '
+            . '(SELECT sc.decision FROM {{%security_checks}} sc WHERE sc.request_id = r.id '
+            . 'ORDER BY sc.id DESC LIMIT 1) AS security_mark, '
             . "(EXISTS(SELECT 1 FROM {{%users}} clu WHERE clu.id = :color_actor AND clu.is_active = 1) "
             . 'AND EXISTS(SELECT 1 FROM {{%user_roles}} clr JOIN {{%roles}} clrole ON clrole.id = clr.role_id '
             . "WHERE clr.user_id = :color_actor_role AND clrole.code IN ('ic_manager', 'laboratory_manager'))) "
@@ -338,6 +340,8 @@ final class RequestRepository
             . 'r.created_at, r.updated_at, u.display_name AS initiator_name, u.department, '
             . 'executor.id AS executor_id, executor.display_name AS executor_name, '
             . 'expert.id AS expert_id, expert.display_name AS expert_name, '
+            . '(SELECT sc.decision FROM {{%security_checks}} sc WHERE sc.request_id = r.id '
+            . 'ORDER BY sc.id DESC LIMIT 1) AS security_mark, '
             . 'EXISTS(SELECT 1 FROM {{%user_roles}} clr JOIN {{%roles}} clrole ON clrole.id = clr.role_id '
             . "WHERE clr.user_id = :color_actor AND clrole.code IN ('ic_manager', 'laboratory_manager')) "
             . 'AS can_set_color, '

@@ -725,7 +725,6 @@ onMounted(loadRequests)
           </div>
           <nav class="topnav">
             <button class="active">Заявки</button>
-            <button>Справочники</button>
           </nav>
           <div class="profile">
             <span class="avatar">{{ currentInitials }}</span>
@@ -761,17 +760,17 @@ onMounted(loadRequests)
           <div class="toolbar">
             <label class="search">⌕ <input v-model="query" placeholder="Поиск по заявкам" /></label>
             <select v-model="statusFilter"><option value="">Все статусы</option><option v-for="status in statuses" :key="status">{{ status }}</option></select>
-            <button class="secondary">☷ Настроить таблицу</button>
           </div>
           <div class="table-wrap">
             <table>
-              <thead><tr><th class="sortable" @click="toggleSort">№ заявки {{ sortDirection === 'desc' ? '↓' : '↑' }}</th><th>Дата</th><th>Объект испытаний</th><th>Инициатор</th><th>Исполнитель</th><th>Статус</th><th></th></tr></thead>
+              <thead><tr><th class="sortable" @click="toggleSort">№ заявки {{ sortDirection === 'desc' ? '↓' : '↑' }}</th><th>Дата</th><th>Объект испытаний</th><th>Инициатор</th><th>Исполнитель</th><th>Статус</th><th>Отметка СБ</th><th></th></tr></thead>
               <tbody>
                 <tr v-for="item in paged.items" :key="item.id" :class="'row-color-' + item.color" @click="openRequest(item)">
                   <td class="number">{{ item.id }}</td><td>{{ item.date }}</td>
                   <td><b>{{ item.product }}</b><small>{{ item.supplier }}</small></td>
                   <td>{{ item.initiator }}<small>{{ item.department }}</small></td>
-                  <td>{{ item.executor }}</td><td><span class="badge" :class="item.tone">{{ item.status }}</span></td><td>›</td>
+                  <td>{{ item.executor }}</td><td><span class="badge" :class="item.tone">{{ item.status }}</span></td>
+                  <td>{{ item.securityMark }}</td><td>›</td>
                 </tr>
               </tbody>
             </table>
@@ -793,7 +792,6 @@ onMounted(loadRequests)
           <button class="back" @click="closeRequest">‹</button>
           <span class="badge" :class="selected.tone">{{ selected.status }}</span>
           <button class="secondary" @click="showHistory = true">◷ История</button>
-          <button class="primary">Действия ▾</button>
         </div>
         <p v-if="detailLoading" class="detail-state">Загрузка актуальной карточки…</p>
         <p v-if="detailError" class="detail-state error">{{ detailError }}</p>
@@ -819,7 +817,7 @@ onMounted(loadRequests)
             </article>
           </div>
           <aside class="stack side-column">
-            <article class="card summary"><h3>Исполнение</h3><p><span>Исполнитель</span><b>{{ selected.executor }}</b></p><p><span>Эксперт</span><b>{{ selected.expert }}</b></p><p><span>Отметка СБ</span><b>—</b></p>
+            <article class="card summary"><h3>Исполнение</h3><p><span>Исполнитель</span><b>{{ selected.executor }}</b></p><p><span>Эксперт</span><b>{{ selected.expert }}</b></p><p><span>Отметка СБ</span><b>{{ selected.securityMark }}</b></p>
               <div v-if="selected.canSetColor" class="color-picker">
                 <button
                   v-for="color in REQUEST_COLORS"

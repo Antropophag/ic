@@ -1,7 +1,7 @@
 const STORAGE_KEY = 'shlz-dev-user-id'
 
 export const DEV_USERS = [
-  { id: 1, displayName: 'Максим Умнов', position: 'Разработчик', department: 'Тестовое подразделение' },
+  { id: 1, displayName: 'Максим Умнов', position: 'Руководитель ИЦ', department: 'Испытательный центр' },
   { id: 2, displayName: 'Сергей Кашин', position: 'Исполнитель ИЦ', department: 'Испытательный центр' },
   { id: 3, displayName: 'Тестовый сотрудник', position: 'Сотрудник', department: 'Тестовое подразделение' },
   { id: 4, displayName: 'Анна Смирнова', position: 'Эксперт', department: 'Испытательный центр' },
