@@ -114,7 +114,7 @@ async function loadRequestDetails(item) {
   executorChoice.value = item.executorId || ''
   expertChoice.value = item.expertId || ''
   if (item.canAssignExecutor && !executors.value.length) loadExecutors()
-  if (item.canAssignExpert && !experts.value.length) loadExperts()
+  if (item.canReassignExpert && !experts.value.length) loadExperts()
   try {
     const result = await requestApi.get(item.backendId)
     if (!detailRequestGuard.isCurrent(requestToken, selected.value?.backendId)) return
@@ -128,7 +128,7 @@ async function loadRequestDetails(item) {
     executorChoice.value = selected.value.executorId || ''
     expertChoice.value = selected.value.expertId || ''
     if (selected.value.canAssignExecutor && !executors.value.length) loadExecutors()
-    if (selected.value.canAssignExpert && !experts.value.length) loadExperts()
+    if (selected.value.canReassignExpert && !experts.value.length) loadExperts()
   } catch (error) {
     if (!detailRequestGuard.isCurrent(requestToken, selected.value?.backendId)) return
     detailError.value = error.status === 404
@@ -569,30 +569,54 @@ async function assignExecutor() {
   }
 }
 
-async function assignExpert() {
-  if (!expertChoice.value) {
-    actionError.value = 'Выберите эксперта.'
-    return
-  }
-  if (!window.confirm('Назначить выбранного эксперта на заявку?')) return
-
+async function claimExpert() {
   actionLoading.value = true
   actionError.value = ''
   const requestId = selected.value.backendId
   try {
-    await requestApi.assignExpert(requestId, Number(expertChoice.value), selected.value.lockVersion)
+    await requestApi.claimExpert(requestId, selected.value.lockVersion)
     try {
       await refreshSelected(requestId)
     } catch {
-      actionError.value = 'Эксперт назначен, но обновить карточку не удалось. Устаревшие действия отключены.'
+      actionError.value = 'Заявка взята в работу, но обновить карточку не удалось. Устаревшие действия отключены.'
     }
   } catch (error) {
     if (error.status === 409) {
       await recoverConflict(requestId, 'Заявка уже изменена.')
     } else {
       actionError.value = error.status === 403
-        ? 'У вас нет права назначать эксперта.'
-        : 'Не удалось назначить эксперта. Обновите страницу и повторите попытку.'
+        ? 'У вас нет права брать эту заявку в работу.'
+        : 'Не удалось взять заявку в работу. Обновите страницу и повторите попытку.'
+    }
+  } finally {
+    actionLoading.value = false
+  }
+}
+
+async function reassignExpert() {
+  if (!expertChoice.value) {
+    actionError.value = 'Выберите эксперта.'
+    return
+  }
+  if (!window.confirm('Переназначить заявку выбранному эксперту?')) return
+
+  actionLoading.value = true
+  actionError.value = ''
+  const requestId = selected.value.backendId
+  try {
+    await requestApi.reassignExpert(requestId, Number(expertChoice.value), selected.value.lockVersion)
+    try {
+      await refreshSelected(requestId)
+    } catch {
+      actionError.value = 'Заявка переназначена, но обновить карточку не удалось. Устаревшие действия отключены.'
+    }
+  } catch (error) {
+    if (error.status === 409) {
+      await recoverConflict(requestId, 'Заявка уже изменена.')
+    } else {
+      actionError.value = error.status === 403
+        ? 'У вас нет права переназначать эту заявку.'
+        : 'Не удалось переназначить заявку. Обновите страницу и повторите попытку.'
     }
   } finally {
     actionLoading.value = false
@@ -832,9 +856,10 @@ onMounted(loadRequests)
                 <label>Назначить исполнителя<select v-model="executorChoice" :disabled="actionLoading"><option value="">Выберите сотрудника</option><option v-for="executor in executors" :key="executor.id" :value="executor.id">{{ executor.displayName }}</option></select></label>
                 <button class="secondary" :disabled="actionLoading" @click="assignExecutor">{{ actionLoading ? 'Сохранение…' : 'Назначить' }}</button>
               </div>
-              <div v-if="selected.canAssignExpert" class="execution-action">
-                <label>Назначить эксперта<select v-model="expertChoice" :disabled="actionLoading"><option value="">Выберите сотрудника</option><option v-for="expert in experts" :key="expert.id" :value="expert.id">{{ expert.displayName }}</option></select></label>
-                <button class="secondary" :disabled="actionLoading" @click="assignExpert">{{ actionLoading ? 'Сохранение…' : 'Назначить' }}</button>
+              <button v-if="selected.canClaimExpert" class="secondary action-wide" :disabled="actionLoading" @click="claimExpert">{{ actionLoading ? 'Сохранение…' : 'Взять в работу' }}</button>
+              <div v-if="selected.canReassignExpert" class="execution-action">
+                <label>Переназначить эксперту<select v-model="expertChoice" :disabled="actionLoading"><option value="">Выберите сотрудника</option><option v-for="expert in experts" :key="expert.id" :value="expert.id">{{ expert.displayName }}</option></select></label>
+                <button class="secondary" :disabled="actionLoading" @click="reassignExpert">{{ actionLoading ? 'Сохранение…' : 'Переназначить' }}</button>
               </div>
               <button v-if="selected.canStart" class="primary action-wide" :disabled="actionLoading" @click="startRequest">{{ actionLoading ? 'Запуск…' : 'Начать работу' }}</button>
               <div v-if="selected.canPublishOpinion" class="execution-action">
@@ -853,8 +878,8 @@ onMounted(loadRequests)
               <button v-if="selected.canWithdraw" class="secondary action-wide" :disabled="withdrawLoading" @click="withdrawRequest">{{ withdrawLoading ? 'Сохранение…' : 'Отозвать заявку' }}</button>
               <p v-if="withdrawError" class="action-error">{{ withdrawError }}</p>
               <p v-if="actionError" class="action-error">{{ actionError }}</p>
-              <a v-if="selected.canAssignExecutor || selected.canAssignExpert || selected.canStart" class="help-link" href="/help/assignment.html" target="_blank">Инструкция по назначению и началу работы</a>
-              <a v-if="selected.canPublishOpinion" class="help-link" href="/help/expert-opinion.html" target="_blank">Инструкция по формированию заключения</a>
+              <a v-if="selected.canAssignExecutor || selected.canStart" class="help-link" href="/help/assignment.html" target="_blank">Инструкция по назначению и началу работы</a>
+              <a v-if="selected.canClaimExpert || selected.canReassignExpert || selected.canPublishOpinion" class="help-link" href="/help/expert-opinion.html" target="_blank">Инструкция по формированию заключения</a>
               <a v-if="selected.canSecurityDecide" class="help-link" href="/help/security-review.html" target="_blank">Инструкция по контролю СБ</a>
             </article>
             <article class="card documents"><h3>Документы <span>{{ selected.documents?.length || 0 }}</span></h3>

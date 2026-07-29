@@ -192,6 +192,24 @@ final class DocumentRepository
                     'rule_id' => 'DOC-002',
                     'created_at' => $now,
                 ])->execute();
+                // ТЗ 4.6/4.7: отчёт поступил на подготовку заключения —
+                // уведомляются все активные эксперты (никто конкретно
+                // заявку не назначает, первый взявший её в работу и
+                // формирует заключение, см. WF-010).
+                $reportLink = "\nСсылка на отчёт: " . DocumentDownloadUrl::build($this->issueDocumentLink($versionId));
+                $outbox = new NotificationOutbox($this->db);
+                foreach ($this->activeUsersWithRoles(['expert']) as $expert) {
+                    $outbox->enqueue(
+                        $requestId,
+                        'request.report_uploaded',
+                        $expert['email'],
+                        $expert['name'],
+                        'Поступил отчёт испытаний для экспертного заключения',
+                        'Поступил новый отчётный документ, ожидающий экспертного заключения. '
+                        . 'Откройте заявку в портале и возьмите её в работу.'
+                        . $reportLink,
+                    );
+                }
             }
             $this->db->createCommand()->insert('{{%audit_events}}', [
                 'event_type' => 'request.report_uploaded',

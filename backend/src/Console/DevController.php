@@ -42,6 +42,11 @@ final class DevController extends Controller
             'email' => 'dev.security@example.invalid', 'position' => 'Сотрудник СБ',
             'department' => 'Служба безопасности', 'roles' => ['employee', 'security_officer'],
         ],
+        6 => [
+            'ad_login' => 'dev.expert2', 'display_name' => 'Виктор Дорохов',
+            'email' => 'dev.expert2@example.invalid', 'position' => 'Эксперт',
+            'department' => 'Испытательный центр', 'roles' => ['employee', 'expert'],
+        ],
     ];
 
     /**

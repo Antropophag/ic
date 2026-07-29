@@ -6,6 +6,7 @@ export const DEV_USERS = [
   { id: 3, displayName: 'Тестовый сотрудник', position: 'Сотрудник', department: 'Тестовое подразделение' },
   { id: 4, displayName: 'Анна Смирнова', position: 'Эксперт', department: 'Испытательный центр' },
   { id: 5, displayName: 'Олег Воронцов', position: 'Сотрудник СБ', department: 'Служба безопасности' },
+  { id: 6, displayName: 'Виктор Дорохов', position: 'Эксперт', department: 'Испытательный центр' },
 ]
 
 let overrideId = null

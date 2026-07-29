@@ -8,6 +8,7 @@ use App\Application\Request\CreateRequestInput;
 use App\Application\Request\AddCommentInput;
 use App\Application\Request\AssignExecutorInput;
 use App\Application\Request\AssignExpertInput;
+use App\Application\Request\ClaimExpertInput;
 use App\Application\Request\PublishOpinionInput;
 use App\Application\Request\RejectRequestInput;
 use App\Application\Request\SecurityDecisionInput;
@@ -337,7 +338,31 @@ final class RequestController extends Controller
     }
 
     /** @return array<string, mixed> */
-    public function actionAssignExpert(int $id): array
+    public function actionClaimExpert(int $id): array
+    {
+        $input = new ClaimExpertInput();
+        $input->load(Yii::$app->request->bodyParams, '');
+        if (!$input->validate()) {
+            Yii::$app->response->statusCode = 422;
+            return ['errors' => $input->getErrors()];
+        }
+
+        $actorId = (new CurrentUser())->id(Yii::$app->request);
+        try {
+            return $this->repository()->claimExpert($id, (int) $input->lockVersion, $actorId);
+        } catch (AssignmentTargetNotFound $error) {
+            throw new NotFoundHttpException($error->getMessage());
+        } catch (ExpertAssignmentDenied $error) {
+            $this->recordRejectedExpertAssignmentSafely($id, $actorId, $actorId, $error->ruleId);
+            throw new ForbiddenHttpException($error->getMessage());
+        } catch (ConcurrentRequestModification $error) {
+            $this->recordRejectedExpertAssignmentSafely($id, $actorId, $actorId, $error->ruleId);
+            throw new ConflictHttpException($error->getMessage());
+        }
+    }
+
+    /** @return array<string, mixed> */
+    public function actionReassignExpert(int $id): array
     {
         $input = new AssignExpertInput();
         $input->load(Yii::$app->request->bodyParams, '');
@@ -349,7 +374,7 @@ final class RequestController extends Controller
         $expertId = (int) $input->expertId;
         $actorId = (new CurrentUser())->id(Yii::$app->request);
         try {
-            return $this->repository()->assignExpert($id, $expertId, (int) $input->lockVersion, $actorId);
+            return $this->repository()->reassignExpert($id, $expertId, (int) $input->lockVersion, $actorId);
         } catch (AssignmentTargetNotFound $error) {
             throw new NotFoundHttpException($error->getMessage());
         } catch (ExpertAssignmentDenied $error) {

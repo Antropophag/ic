@@ -19,7 +19,8 @@ const registered = {
   expert_id: 4,
   expert_name: 'Анна Смирнова',
   can_assign_executor: 1,
-  can_assign_expert: 0,
+  can_claim_expert: 0,
+  can_reassign_expert: 0,
   can_start: 1,
   can_comment: 1,
   can_upload_document: 1,
@@ -39,7 +40,8 @@ it('maps the API contract to a registry row', () => {
     expert: 'Анна Смирнова',
     lockVersion: 3,
     canAssignExecutor: true,
-    canAssignExpert: false,
+    canClaimExpert: false,
+    canReassignExpert: false,
     canStart: true,
     canComment: true,
     canUploadDocument: true,
@@ -76,7 +78,8 @@ it('hides the start action after the request leaves registered status', () => {
 it('disables every version-sensitive action before conflict recovery', () => {
   expect(withoutStaleActions({
     canAssignExecutor: true,
-    canAssignExpert: true,
+    canClaimExpert: true,
+    canReassignExpert: true,
     canPublishOpinion: true,
     canSecurityDecide: true,
     canStart: true,
@@ -85,7 +88,8 @@ it('disables every version-sensitive action before conflict recovery', () => {
     canWithdraw: true,
   })).toMatchObject({
     canAssignExecutor: false,
-    canAssignExpert: false,
+    canClaimExpert: false,
+    canReassignExpert: false,
     canPublishOpinion: false,
     canSecurityDecide: false,
     canStart: false,
@@ -111,20 +115,27 @@ it('maps reject and withdraw permissions and history labels', () => {
 })
 
 it('maps the report stage, permission and history label', () => {
-  expect(fromApi({ ...registered, status: 'opinion_preparation', can_upload_report: 1, can_assign_expert: 1 })).toMatchObject({
+  expect(fromApi({ ...registered, status: 'opinion_preparation', can_upload_report: 1, can_claim_expert: 1 })).toMatchObject({
     status: 'Подготовка заключения',
     tone: 'violet',
     canUploadReport: true,
-    canAssignExpert: true,
+    canClaimExpert: true,
   })
   expect(historyFromApi({
     id: 10, kind: 'transition', action: 'upload_report', actorName: 'Исполнитель',
     ruleId: 'DOC-002', occurredAt: '2026-07-28T10:00:00Z',
   }).description).toBe('загрузил(а) отчёт испытаний')
   expect(historyFromApi({
-    id: 11, kind: 'assignment', action: 'assign_expert', actorName: 'Руководитель',
+    id: 11, kind: 'assignment', action: 'claim_expert', actorName: 'Эксперт',
     ruleId: 'WF-010', occurredAt: '2026-07-28T10:01:00Z',
-  }).description).toBe('назначил(а) эксперта')
+  }).description).toBe('взял(а) заявку в работу (эксперт)')
+})
+
+it('maps the reassign-expert history label', () => {
+  expect(historyFromApi({
+    id: 16, kind: 'assignment', action: 'reassign_expert', actorName: 'Эксперт',
+    ruleId: 'WF-011', occurredAt: '2026-07-28T10:06:00Z',
+  }).description).toBe('переназначил(а) эксперта')
 })
 
 it('maps permission and history for publishing an expert opinion', () => {
