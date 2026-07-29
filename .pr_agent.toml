@@ -13,3 +13,11 @@ expand_description = true
 expand_code = true
 expand_evidence = true
 expand_prompt = false
+
+# Автоматическая перепроверка при каждом push в открытый PR — иначе после
+# исправления замечаний нет свежего вердикта Qodo без ручного /agentic_review,
+# который запрещён отдельно (см. docs/ai-review.md и CLAUDE.md): ручной вызов
+# может перезапустить весь review, а не просто перепроверить diff.
+[github_app]
+handle_push_trigger = true
+push_commands = ["/review"]
