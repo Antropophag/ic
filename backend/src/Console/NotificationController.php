@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Console;
 
 use App\Infrastructure\Notification\Mailer;
+use App\Infrastructure\Notification\NotificationTestRedirect;
 use Yii;
 use yii\console\Controller;
 use yii\console\ExitCode;
@@ -64,12 +65,14 @@ final class NotificationController extends Controller
             }
 
             try {
-                $mailer->send(
+                [$recipientEmail, $subject, $body] = NotificationTestRedirect::apply(
                     (string) $row['recipient_email'],
                     (string) $row['recipient_name'],
                     (string) $row['subject'],
                     (string) $row['body'],
+                    getenv('NOTIFICATION_TEST_REDIRECT_EMAIL') ?: null,
                 );
+                $mailer->send($recipientEmail, (string) $row['recipient_name'], $subject, $body);
                 // ACL-005/AUD-003: тело письма могло содержать одноразовые
                 // download-токены (см. DocumentDownloadUrl) — после успешной
                 // отправки они больше не нужны и не должны бессрочно
