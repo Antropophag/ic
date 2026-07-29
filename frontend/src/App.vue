@@ -46,6 +46,10 @@ const rejectLoading = ref(false)
 const rejectError = ref('')
 const withdrawLoading = ref(false)
 const withdrawError = ref('')
+const claimLoading = ref(false)
+const claimError = ref('')
+const reassignLoading = ref(false)
+const reassignError = ref('')
 const detailRequestGuard = createLatestRequestGuard()
 const commentRequestGuard = createLatestRequestGuard()
 const commentsPageRequestGuard = createLatestRequestGuard()
@@ -57,6 +61,8 @@ const registryRequestGuard = createLatestRequestGuard()
 const colorRequestGuard = createLatestRequestGuard()
 const rejectRequestGuard = createLatestRequestGuard()
 const withdrawRequestGuard = createLatestRequestGuard()
+const claimRequestGuard = createLatestRequestGuard()
+const reassignRequestGuard = createLatestRequestGuard()
 const draft = reactive({
   productName: '', manufacturer: '', supplier: '', sampleQuantity: 1, testMethod: '',
 })
@@ -112,9 +118,9 @@ async function loadRequestDetails(item) {
   detailError.value = ''
   detailLoading.value = true
   executorChoice.value = item.executorId || ''
-  expertChoice.value = item.expertId || ''
+  expertChoice.value = ''
   if (item.canAssignExecutor && !executors.value.length) loadExecutors()
-  if (item.canAssignExpert && !experts.value.length) loadExperts()
+  if (item.canReassignExpert && !experts.value.length) loadExperts()
   try {
     const result = await requestApi.get(item.backendId)
     if (!detailRequestGuard.isCurrent(requestToken, selected.value?.backendId)) return
@@ -126,9 +132,9 @@ async function loadRequestDetails(item) {
       documents: result.documents.map(documentFromApi),
     }
     executorChoice.value = selected.value.executorId || ''
-    expertChoice.value = selected.value.expertId || ''
+    expertChoice.value = ''
     if (selected.value.canAssignExecutor && !executors.value.length) loadExecutors()
-    if (selected.value.canAssignExpert && !experts.value.length) loadExperts()
+    if (selected.value.canReassignExpert && !experts.value.length) loadExperts()
   } catch (error) {
     if (!detailRequestGuard.isCurrent(requestToken, selected.value?.backendId)) return
     detailError.value = error.status === 404
@@ -151,6 +157,8 @@ async function openRequest(item) {
   colorRequestGuard.invalidate()
   rejectRequestGuard.invalidate()
   withdrawRequestGuard.invalidate()
+  claimRequestGuard.invalidate()
+  reassignRequestGuard.invalidate()
   commentLoading.value = false
   commentError.value = ''
   commentDraft.value = ''
@@ -170,6 +178,10 @@ async function openRequest(item) {
   rejectError.value = ''
   withdrawLoading.value = false
   withdrawError.value = ''
+  claimLoading.value = false
+  claimError.value = ''
+  reassignLoading.value = false
+  reassignError.value = ''
   showHistory.value = false
   actionError.value = ''
   await loadRequestDetails(item)
@@ -186,6 +198,8 @@ function closeRequest() {
   colorRequestGuard.invalidate()
   rejectRequestGuard.invalidate()
   withdrawRequestGuard.invalidate()
+  claimRequestGuard.invalidate()
+  reassignRequestGuard.invalidate()
   selected.value = null
   detailLoading.value = false
   detailError.value = ''
@@ -206,6 +220,10 @@ function closeRequest() {
   rejectError.value = ''
   withdrawLoading.value = false
   withdrawError.value = ''
+  claimLoading.value = false
+  claimError.value = ''
+  reassignLoading.value = false
+  reassignError.value = ''
 }
 
 async function uploadReport(event) {
@@ -569,33 +587,71 @@ async function assignExecutor() {
   }
 }
 
-async function assignExpert() {
-  if (!expertChoice.value) {
-    actionError.value = 'Выберите эксперта.'
-    return
-  }
-  if (!window.confirm('Назначить выбранного эксперта на заявку?')) return
-
-  actionLoading.value = true
-  actionError.value = ''
+async function claimExpert() {
+  if (claimLoading.value) return
   const requestId = selected.value.backendId
+  const requestToken = claimRequestGuard.begin(requestId)
+  claimLoading.value = true
+  claimError.value = ''
   try {
-    await requestApi.assignExpert(requestId, Number(expertChoice.value), selected.value.lockVersion)
+    await requestApi.claimExpert(requestId, selected.value.lockVersion)
+    if (!claimRequestGuard.isCurrent(requestToken, selected.value?.backendId)) return
     try {
       await refreshSelected(requestId)
     } catch {
-      actionError.value = 'Эксперт назначен, но обновить карточку не удалось. Устаревшие действия отключены.'
+      if (!claimRequestGuard.isCurrent(requestToken, selected.value?.backendId)) return
+      claimError.value = 'Заявка взята в работу, но обновить карточку не удалось. Устаревшие действия отключены.'
     }
   } catch (error) {
+    if (!claimRequestGuard.isCurrent(requestToken, selected.value?.backendId)) return
     if (error.status === 409) {
       await recoverConflict(requestId, 'Заявка уже изменена.')
     } else {
-      actionError.value = error.status === 403
-        ? 'У вас нет права назначать эксперта.'
-        : 'Не удалось назначить эксперта. Обновите страницу и повторите попытку.'
+      claimError.value = error.status === 403
+        ? 'У вас нет права брать эту заявку в работу.'
+        : 'Не удалось взять заявку в работу. Обновите страницу и повторите попытку.'
     }
   } finally {
-    actionLoading.value = false
+    if (claimRequestGuard.isCurrent(requestToken, selected.value?.backendId)) {
+      claimLoading.value = false
+    }
+  }
+}
+
+async function reassignExpert() {
+  if (reassignLoading.value) return
+  if (!expertChoice.value) {
+    reassignError.value = 'Выберите эксперта.'
+    return
+  }
+  if (!window.confirm('Переназначить заявку выбранному эксперту?')) return
+
+  const requestId = selected.value.backendId
+  const requestToken = reassignRequestGuard.begin(requestId)
+  reassignLoading.value = true
+  reassignError.value = ''
+  try {
+    await requestApi.reassignExpert(requestId, Number(expertChoice.value), selected.value.lockVersion)
+    if (!reassignRequestGuard.isCurrent(requestToken, selected.value?.backendId)) return
+    try {
+      await refreshSelected(requestId)
+    } catch {
+      if (!reassignRequestGuard.isCurrent(requestToken, selected.value?.backendId)) return
+      reassignError.value = 'Заявка переназначена, но обновить карточку не удалось. Устаревшие действия отключены.'
+    }
+  } catch (error) {
+    if (!reassignRequestGuard.isCurrent(requestToken, selected.value?.backendId)) return
+    if (error.status === 409) {
+      await recoverConflict(requestId, 'Заявка уже изменена.')
+    } else {
+      reassignError.value = error.status === 403
+        ? 'У вас нет права переназначать эту заявку.'
+        : 'Не удалось переназначить заявку. Обновите страницу и повторите попытку.'
+    }
+  } finally {
+    if (reassignRequestGuard.isCurrent(requestToken, selected.value?.backendId)) {
+      reassignLoading.value = false
+    }
   }
 }
 
@@ -841,10 +897,13 @@ onMounted(loadRequests)
                 <label>Назначить исполнителя<select v-model="executorChoice" :disabled="actionLoading"><option value="">Выберите сотрудника</option><option v-for="executor in executors" :key="executor.id" :value="executor.id">{{ executor.displayName }}</option></select></label>
                 <button class="secondary" :disabled="actionLoading" @click="assignExecutor">{{ actionLoading ? 'Сохранение…' : 'Назначить' }}</button>
               </div>
-              <div v-if="selected.canAssignExpert" class="execution-action">
-                <label>Назначить эксперта<select v-model="expertChoice" :disabled="actionLoading"><option value="">Выберите сотрудника</option><option v-for="expert in experts" :key="expert.id" :value="expert.id">{{ expert.displayName }}</option></select></label>
-                <button class="secondary" :disabled="actionLoading" @click="assignExpert">{{ actionLoading ? 'Сохранение…' : 'Назначить' }}</button>
+              <button v-if="selected.canClaimExpert" class="secondary action-wide" :disabled="claimLoading" @click="claimExpert">{{ claimLoading ? 'Сохранение…' : 'Взять в работу' }}</button>
+              <p v-if="claimError" class="action-error">{{ claimError }}</p>
+              <div v-if="selected.canReassignExpert" class="execution-action">
+                <label>Переназначить эксперту<select v-model="expertChoice" :disabled="reassignLoading"><option value="">Выберите сотрудника</option><option v-for="expert in experts.filter(candidate => candidate.id !== selected.expertId)" :key="expert.id" :value="expert.id">{{ expert.displayName }}</option></select></label>
+                <button class="secondary" :disabled="reassignLoading" @click="reassignExpert">{{ reassignLoading ? 'Сохранение…' : 'Переназначить' }}</button>
               </div>
+              <p v-if="reassignError" class="action-error">{{ reassignError }}</p>
               <button v-if="selected.canStart" class="primary action-wide" :disabled="actionLoading" @click="startRequest">{{ actionLoading ? 'Запуск…' : 'Начать работу' }}</button>
               <div v-if="selected.canPublishOpinion" class="execution-action">
                 <label>Экспертное заключение<textarea v-model="opinionDraft" :disabled="opinionLoading" minlength="10" maxlength="20000" placeholder="Введите итоговое заключение по результатам испытаний"></textarea></label>
@@ -862,8 +921,8 @@ onMounted(loadRequests)
               <button v-if="selected.canWithdraw" class="secondary action-wide" :disabled="withdrawLoading" @click="withdrawRequest">{{ withdrawLoading ? 'Сохранение…' : 'Отозвать заявку' }}</button>
               <p v-if="withdrawError" class="action-error">{{ withdrawError }}</p>
               <p v-if="actionError" class="action-error">{{ actionError }}</p>
-              <a v-if="selected.canAssignExecutor || selected.canAssignExpert || selected.canStart" class="help-link" href="/help/assignment.html" target="_blank">Инструкция по назначению и началу работы</a>
-              <a v-if="selected.canPublishOpinion" class="help-link" href="/help/expert-opinion.html" target="_blank">Инструкция по формированию заключения</a>
+              <a v-if="selected.canAssignExecutor || selected.canStart" class="help-link" href="/help/assignment.html" target="_blank">Инструкция по назначению и началу работы</a>
+              <a v-if="selected.canClaimExpert || selected.canReassignExpert || selected.canPublishOpinion" class="help-link" href="/help/expert-opinion.html" target="_blank">Инструкция по формированию заключения</a>
               <a v-if="selected.canSecurityDecide" class="help-link" href="/help/security-review.html" target="_blank">Инструкция по контролю СБ</a>
             </article>
             <article class="card documents"><h3>Документы <span>{{ selected.documents?.length || 0 }}</span></h3>

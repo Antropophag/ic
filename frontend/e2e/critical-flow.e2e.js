@@ -36,8 +36,8 @@ test('заявка проходит критический путь до сог�
   await expectOk(await executor.post(`/api/v1/requests/${requestId}/report`, {
     multipart: { file: { name: 'e2e-report.pdf', mimeType: 'application/pdf', buffer: Buffer.from('%PDF-1.4\n%%EOF') } },
   }))
-  await expectOk(await manager.post(`/api/v1/requests/${requestId}/expert`, {
-    data: { expertId: 4, lockVersion: 4 },
+  await expectOk(await expert.post(`/api/v1/requests/${requestId}/expert/claim`, {
+    data: { lockVersion: 4 },
   }))
   await expectOk(await expert.post(`/api/v1/requests/${requestId}/opinion`, {
     data: { body: 'Образец соответствует требованиям критического E2E-сценария.', lockVersion: 5 },

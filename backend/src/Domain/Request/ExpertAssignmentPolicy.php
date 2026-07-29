@@ -6,30 +6,47 @@ namespace App\Domain\Request;
 
 final class ExpertAssignmentPolicy
 {
-    /**
-     * @param list<Role> $actorRoles
-     * @param list<Role> $expertRoles
-     */
-    public function assertCanAssign(
+    /** @param list<Role> $actorRoles */
+    public function assertCanClaim(
         RequestStatus $status,
-        array $actorRoles,
         bool $actorIsActive,
-        array $expertRoles,
-        bool $expertIsActive,
+        array $actorRoles,
+        bool $actorIsCurrentExpert,
     ): void {
         if (!$actorIsActive) {
             throw new ExpertAssignmentDenied('AUTH-003');
         }
-        if (
-            !in_array(Role::IcManager, $actorRoles, true)
-            && !in_array(Role::LaboratoryManager, $actorRoles, true)
-        ) {
+        if (!in_array(Role::Expert, $actorRoles, true) || $actorIsCurrentExpert) {
             throw new ExpertAssignmentDenied('WF-010');
         }
         if ($status !== RequestStatus::OpinionPreparation) {
             throw new ExpertAssignmentDenied('DOC-005');
         }
-        if (!$expertIsActive || !in_array(Role::Expert, $expertRoles, true)) {
+    }
+
+    /**
+     * @param list<Role> $actorRoles
+     * @param list<Role> $targetRoles
+     */
+    public function assertCanReassign(
+        RequestStatus $status,
+        bool $actorIsActive,
+        array $actorRoles,
+        bool $actorIsCurrentExpert,
+        bool $isSelfTarget,
+        bool $targetIsActive,
+        array $targetRoles,
+    ): void {
+        if (!$actorIsActive) {
+            throw new ExpertAssignmentDenied('AUTH-003');
+        }
+        if (!in_array(Role::Expert, $actorRoles, true) || !$actorIsCurrentExpert) {
+            throw new ExpertAssignmentDenied('WF-011');
+        }
+        if ($status !== RequestStatus::OpinionPreparation) {
+            throw new ExpertAssignmentDenied('DOC-005');
+        }
+        if ($isSelfTarget || !$targetIsActive || !in_array(Role::Expert, $targetRoles, true)) {
             throw new ExpertAssignmentDenied('WF-011');
         }
     }

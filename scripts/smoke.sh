@@ -176,21 +176,12 @@ experts=$(curl --fail --silent --show-error \
   --header "X-Dev-User-ID: $dev_user_id" \
   "$base_url/api/v1/experts")
 printf '%s' "$experts" | grep '"displayName":"Анна Смирнова"' >/dev/null
-expert_assignment=$(curl --fail --silent --show-error \
-  --request POST \
-  --header "X-Dev-User-ID: $dev_user_id" \
-  --header 'Content-Type: application/json' \
-  --data '{"expertId":4,"lockVersion":4}' \
-  "$base_url/api/v1/requests/$request_id/expert")
-printf '%s' "$expert_assignment" | grep '"expertId":4' >/dev/null
-printf '%s' "$expert_assignment" | grep '"lockVersion":5' >/dev/null
-
-# ТЗ 4.6/ACL-003..006: письмо эксперту содержит активную ссылку на
-# скачивание отчёта, работающую без входа в портал.
-expert_notified_body=$(sql_scalar "SELECT body FROM notification_outbox WHERE request_id = $request_id AND event_type = 'request.expert_assigned' ORDER BY id DESC LIMIT 1")
+# ТЗ 4.6/4.7/WF-010: отчёт никому не назначается — уведомление уходит всем
+# активным экспертам, и любой из них сам берёт заявку в работу (self-claim).
+expert_notified_body=$(sql_scalar "SELECT body FROM notification_outbox WHERE request_id = $request_id AND event_type = 'request.report_uploaded' AND recipient_email = 'dev.expert@example.invalid' ORDER BY id DESC LIMIT 1")
 expert_report_token=$(printf '%s' "$expert_notified_body" | sed -n 's#.*document-links/\([a-f0-9]\{64\}\)/download.*#\1#p')
 [ -n "$expert_report_token" ] || {
-  echo 'Expert assignment notification is missing a document link token' >&2
+  echo 'Report-uploaded notification to the expert is missing a document link token' >&2
   exit 1
 }
 curl --fail --silent --show-error \
@@ -198,14 +189,33 @@ curl --fail --silent --show-error \
   "$base_url/api/v1/document-links/$expert_report_token/download"
 cmp "$smoke_dir/report.pdf" "$smoke_dir/link-report.pdf"
 
+denied_claim_status=$(curl --silent --output /dev/null --write-out '%{http_code}' \
+  --request POST \
+  --header 'X-Dev-User-ID: 2' \
+  --header 'Content-Type: application/json' \
+  --data '{"lockVersion":4}' \
+  "$base_url/api/v1/requests/$request_id/expert/claim")
+[ "$denied_claim_status" = '403' ] || {
+  echo "Expected forbidden claim status 403 for a non-expert, got $denied_claim_status" >&2
+  exit 1
+}
+expert_assignment=$(curl --fail --silent --show-error \
+  --request POST \
+  --header 'X-Dev-User-ID: 4' \
+  --header 'Content-Type: application/json' \
+  --data '{"lockVersion":4}' \
+  "$base_url/api/v1/requests/$request_id/expert/claim")
+printf '%s' "$expert_assignment" | grep '"expertId":4' >/dev/null
+printf '%s' "$expert_assignment" | grep '"lockVersion":5' >/dev/null
+
 stale_expert_status=$(curl --silent --output /dev/null --write-out '%{http_code}' \
   --request POST \
-  --header "X-Dev-User-ID: $dev_user_id" \
+  --header 'X-Dev-User-ID: 4' \
   --header 'Content-Type: application/json' \
-  --data '{"expertId":4,"lockVersion":4}' \
-  "$base_url/api/v1/requests/$request_id/expert")
+  --data '{"lockVersion":4}' \
+  "$base_url/api/v1/requests/$request_id/expert/claim")
 [ "$stale_expert_status" = '409' ] || {
-  echo "Expected stale expert assignment status 409, got $stale_expert_status" >&2
+  echo "Expected stale expert claim status 409, got $stale_expert_status" >&2
   exit 1
 }
 
@@ -235,7 +245,7 @@ printf '%s' "$details" | grep '"can_upload_document":1' >/dev/null
 printf '%s' "$details" | grep '"version":2' >/dev/null
 printf '%s' "$details" | grep '"status":"opinion_preparation"' >/dev/null
 printf '%s' "$details" | grep '"expert_name":"Анна Смирнова"' >/dev/null
-printf '%s' "$details" | grep '"action":"assign_expert"' >/dev/null
+printf '%s' "$details" | grep '"action":"claim_expert"' >/dev/null
 printf '%s' "$details" | grep '"documentType":"report"' >/dev/null
 report_history_count=$(printf '%s' "$details" | grep -o '"documentType":"report"' | wc -l | tr -d ' ')
 [ "$report_history_count" = '2' ] || {
@@ -600,10 +610,10 @@ curl --fail --silent --show-error \
   "$base_url/api/v1/requests/$sb_request_id/report" >/dev/null
 curl --fail --silent --show-error \
   --request POST \
-  --header "X-Dev-User-ID: $dev_user_id" \
+  --header 'X-Dev-User-ID: 4' \
   --header 'Content-Type: application/json' \
-  --data '{"expertId":4,"lockVersion":4}' \
-  "$base_url/api/v1/requests/$sb_request_id/expert" >/dev/null
+  --data '{"lockVersion":4}' \
+  "$base_url/api/v1/requests/$sb_request_id/expert/claim" >/dev/null
 curl --fail --silent --show-error \
   --request POST \
   --header 'X-Dev-User-ID: 4' \
@@ -626,6 +636,162 @@ sb_withdraw_status=$(curl --silent --output /dev/null --write-out '%{http_code}'
   "$base_url/api/v1/requests/$sb_request_id/withdraw")
 [ "$sb_withdraw_status" = '409' ] || {
   echo "Expected a request already reviewed by security to reject withdrawal with 409, got $sb_withdraw_status" >&2
+  exit 1
+}
+
+# ТЗ 4.6/4.7/WF-010/WF-011: полный цикл self-assign — отчёт никому не
+# назначается (уведомление уходит всем активным экспертам), любой эксперт
+# берёт заявку сам, может перехватить заявку у коллеги (например, если тот
+# в отпуске) и может передать её конкретному коллеге явно.
+# id второго тестового эксперта не фиксирован (может быть занят на
+# персистентной демо-базе) — резолвится через список активных экспертов.
+experts_list=$(curl --fail --silent --show-error \
+  --header "X-Dev-User-ID: $dev_user_id" \
+  "$base_url/api/v1/experts")
+expert2_id=$(printf '%s' "$experts_list" | sed -n 's/.*{"id":\([0-9][0-9]*\),"displayName":"Виктор Дорохов"}.*/\1/p')
+[ -n "$expert2_id" ] || {
+  echo 'Second seeded expert (Виктор Дорохов) not found via GET /api/v1/experts' >&2
+  exit 1
+}
+
+expert_created=$(curl --fail --silent --show-error \
+  --request POST \
+  --header "X-Dev-User-ID: $initiator_user_id" \
+  --header 'Content-Type: application/json' \
+  --data "{\"productName\":\"Expert reassign $marker\",\"manufacturer\":\"Тестовый производитель\",\"supplier\":\"Тестовый поставщик\",\"sampleQuantity\":1,\"testMethod\":\"Тест\"}" \
+  "$base_url/api/v1/requests")
+expert_request_id=$(printf '%s' "$expert_created" | sed -n 's/.*"id":\([0-9][0-9]*\).*/\1/p')
+curl --fail --silent --show-error \
+  --request POST \
+  --header "X-Dev-User-ID: $dev_user_id" \
+  --header 'Content-Type: application/json' \
+  --data '{"executorId":2,"lockVersion":1}' \
+  "$base_url/api/v1/requests/$expert_request_id/executor" >/dev/null
+curl --fail --silent --show-error \
+  --request POST \
+  --header 'X-Dev-User-ID: 2' \
+  --header 'Content-Type: application/json' \
+  --data '{"lockVersion":2}' \
+  "$base_url/api/v1/requests/$expert_request_id/start" >/dev/null
+curl --fail --silent --show-error \
+  --request POST \
+  --header 'X-Dev-User-ID: 2' \
+  --form "file=@$smoke_dir/report.pdf;type=application/pdf" \
+  "$base_url/api/v1/requests/$expert_request_id/report" >/dev/null
+
+# Уведомление о поступлении отчёта уходит ОБОИМ активным экспертам, а не
+# кому-то одному — никто конкретно заявку не назначает.
+for expert_recipient in dev.expert@example.invalid dev.expert2@example.invalid; do
+  expert_broadcast_count=$(sql_scalar "SELECT COUNT(*) FROM notification_outbox WHERE request_id = $expert_request_id AND event_type = 'request.report_uploaded' AND recipient_email = '$expert_recipient'")
+  [ "$expert_broadcast_count" -ge 1 ] || {
+    echo "Expected $expert_recipient to be notified about the uploaded report" >&2
+    exit 1
+  }
+done
+
+denied_expert_claim_status=$(curl --silent --output /dev/null --write-out '%{http_code}' \
+  --request POST \
+  --header 'X-Dev-User-ID: 2' \
+  --header 'Content-Type: application/json' \
+  --data '{"lockVersion":4}' \
+  "$base_url/api/v1/requests/$expert_request_id/expert/claim")
+[ "$denied_expert_claim_status" = '403' ] || {
+  echo "Expected forbidden claim status 403 for a non-expert, got $denied_expert_claim_status" >&2
+  exit 1
+}
+
+# Второй эксперт берёт свободную заявку в работу (self-claim).
+claimed_by_second=$(curl --fail --silent --show-error \
+  --request POST \
+  --header "X-Dev-User-ID: $expert2_id" \
+  --header 'Content-Type: application/json' \
+  --data '{"lockVersion":4}' \
+  "$base_url/api/v1/requests/$expert_request_id/expert/claim")
+printf '%s' "$claimed_by_second" | grep "\"expertId\":$expert2_id" >/dev/null
+printf '%s' "$claimed_by_second" | grep '"lockVersion":5' >/dev/null
+
+# Эксперт 4 перехватывает заявку у второго эксперта (например, тот в
+# отпуске) — тем же self-claim, без чьего-либо разрешения.
+taken_over_by_four=$(curl --fail --silent --show-error \
+  --request POST \
+  --header 'X-Dev-User-ID: 4' \
+  --header 'Content-Type: application/json' \
+  --data '{"lockVersion":5}' \
+  "$base_url/api/v1/requests/$expert_request_id/expert/claim")
+printf '%s' "$taken_over_by_four" | grep '"expertId":4' >/dev/null
+printf '%s' "$taken_over_by_four" | grep '"lockVersion":6' >/dev/null
+
+# Эксперт 4 уже текущий — повторный self-claim собственной заявки запрещён
+# сервером независимо от того, что кнопка в UI для этого случая скрыта.
+denied_reclaim_status=$(curl --silent --output /dev/null --write-out '%{http_code}' \
+  --request POST \
+  --header 'X-Dev-User-ID: 4' \
+  --header 'Content-Type: application/json' \
+  --data '{"lockVersion":6}' \
+  "$base_url/api/v1/requests/$expert_request_id/expert/claim")
+[ "$denied_reclaim_status" = '403' ] || {
+  echo "Expected forbidden reclaim status 403 for the already-current expert, got $denied_reclaim_status" >&2
+  exit 1
+}
+
+# Второй эксперт (уже не текущий) не может переназначить заявку.
+denied_reassign_status=$(curl --silent --output /dev/null --write-out '%{http_code}' \
+  --request POST \
+  --header "X-Dev-User-ID: $expert2_id" \
+  --header 'Content-Type: application/json' \
+  --data "{\"expertId\":$expert2_id,\"lockVersion\":6}" \
+  "$base_url/api/v1/requests/$expert_request_id/expert/reassign")
+[ "$denied_reassign_status" = '403' ] || {
+  echo "Expected forbidden reassign status 403 for a non-current expert, got $denied_reassign_status" >&2
+  exit 1
+}
+
+# Эксперт 4 (текущий) не может «переназначить» заявку самому себе.
+denied_self_reassign_status=$(curl --silent --output /dev/null --write-out '%{http_code}' \
+  --request POST \
+  --header 'X-Dev-User-ID: 4' \
+  --header 'Content-Type: application/json' \
+  --data '{"expertId":4,"lockVersion":6}' \
+  "$base_url/api/v1/requests/$expert_request_id/expert/reassign")
+[ "$denied_self_reassign_status" = '403' ] || {
+  echo "Expected forbidden self-reassign status 403, got $denied_self_reassign_status" >&2
+  exit 1
+}
+
+# Эксперт 4 (текущий) явно передаёт заявку конкретному коллеге.
+reassigned_to_second=$(curl --fail --silent --show-error \
+  --request POST \
+  --header 'X-Dev-User-ID: 4' \
+  --header 'Content-Type: application/json' \
+  --data "{\"expertId\":$expert2_id,\"lockVersion\":6}" \
+  "$base_url/api/v1/requests/$expert_request_id/expert/reassign")
+printf '%s' "$reassigned_to_second" | grep "\"expertId\":$expert2_id" >/dev/null
+printf '%s' "$reassigned_to_second" | grep '"lockVersion":7' >/dev/null
+
+reassign_notified_body=$(sql_scalar "SELECT body FROM notification_outbox WHERE request_id = $expert_request_id AND event_type = 'request.expert_reassigned' AND recipient_email = 'dev.expert2@example.invalid' ORDER BY id DESC LIMIT 1")
+reassign_report_token=$(printf '%s' "$reassign_notified_body" | sed -n 's#.*document-links/\([a-f0-9]\{64\}\)/download.*#\1#p')
+[ -n "$reassign_report_token" ] || {
+  echo 'Reassign notification is missing a document link token' >&2
+  exit 1
+}
+
+# Возвращаем заявку эксперту 4, чтобы завершить проверку в предсказуемом
+# состоянии, и проверяем устаревшую версию блокировки.
+curl --fail --silent --show-error \
+  --request POST \
+  --header "X-Dev-User-ID: $expert2_id" \
+  --header 'Content-Type: application/json' \
+  --data '{"expertId":4,"lockVersion":7}' \
+  "$base_url/api/v1/requests/$expert_request_id/expert/reassign" >/dev/null
+
+stale_claim_status=$(curl --silent --output /dev/null --write-out '%{http_code}' \
+  --request POST \
+  --header 'X-Dev-User-ID: 4' \
+  --header 'Content-Type: application/json' \
+  --data '{"lockVersion":4}' \
+  "$base_url/api/v1/requests/$expert_request_id/expert/claim")
+[ "$stale_claim_status" = '409' ] || {
+  echo "Expected stale claim status 409, got $stale_claim_status" >&2
   exit 1
 }
 

@@ -61,7 +61,12 @@ export const requestApi = {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ executorId, lockVersion }),
   }),
-  assignExpert: (requestId, expertId, lockVersion) => request(`/api/v1/requests/${requestId}/expert`, {
+  claimExpert: (requestId, lockVersion) => request(`/api/v1/requests/${requestId}/expert/claim`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ lockVersion }),
+  }),
+  reassignExpert: (requestId, expertId, lockVersion) => request(`/api/v1/requests/${requestId}/expert/reassign`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ expertId, lockVersion }),
