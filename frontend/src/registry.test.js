@@ -138,6 +138,16 @@ it('maps the reassign-expert history label', () => {
   }).description).toBe('переназначил(а) эксперта')
 })
 
+it('maps the delete-report permission and history label', () => {
+  expect(fromApi({ ...registered, status: 'completed', can_delete_report: 1 }))
+    .toMatchObject({ canDeleteReport: true })
+  expect(fromApi(registered)).toMatchObject({ canDeleteReport: false })
+  expect(historyFromApi({
+    id: 17, kind: 'assignment', action: 'delete_report', actorName: 'Исполнитель',
+    ruleId: 'DOC-011', occurredAt: '2026-07-28T10:07:00Z',
+  }).description).toBe('удалил(а) отчёт испытаний')
+})
+
 it('maps permission and history for publishing an expert opinion', () => {
   expect(fromApi({ ...registered, status: 'opinion_preparation', can_publish_opinion: 1 }))
     .toMatchObject({ canPublishOpinion: true })

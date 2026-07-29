@@ -24,6 +24,7 @@ return yii\helpers\ArrayHelper::merge($common, [
                 'GET api/v1/requests/<id:\\d+>/comments' => 'request/comments',
                 'POST api/v1/requests/<id:\\d+>/documents' => 'request/upload-document',
                 'POST api/v1/requests/<id:\\d+>/report' => 'request/upload-report',
+                'POST api/v1/requests/<id:\\d+>/report/delete' => 'request/delete-report',
                 'GET api/v1/document-versions/<id:\\d+>/download' => 'request/download-document',
                 'GET api/v1/document-links/<token:[a-f0-9]{64}>/download' => 'request/download-document-link',
                 'GET api/v1/executors' => 'request/executors',

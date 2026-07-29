@@ -9,6 +9,7 @@ use App\Application\Request\AddCommentInput;
 use App\Application\Request\AssignExecutorInput;
 use App\Application\Request\AssignExpertInput;
 use App\Application\Request\ClaimExpertInput;
+use App\Application\Request\DeleteReportInput;
 use App\Application\Request\PublishOpinionInput;
 use App\Application\Request\RejectRequestInput;
 use App\Application\Request\SecurityDecisionInput;
@@ -26,6 +27,7 @@ use App\Domain\Request\RejectDenied;
 use App\Domain\Request\RequestCreationDenied;
 use App\Domain\Request\RequestNotFound;
 use App\Domain\Request\ReportDenied;
+use App\Domain\Request\ReportDeletionDenied;
 use App\Domain\Request\OpinionDenied;
 use App\Domain\Request\SecurityDecisionDenied;
 use App\Domain\Request\StartDenied;
@@ -204,6 +206,30 @@ final class RequestController extends Controller
                 return ['errors' => ['file' => ['Отчёт должен быть PDF-файлом размером не более 10 МБ.']]];
             }
             throw new ForbiddenHttpException($error->getMessage());
+        }
+    }
+
+    /** @return array<string, mixed> */
+    public function actionDeleteReport(int $id): array
+    {
+        $input = new DeleteReportInput();
+        $input->load(Yii::$app->request->bodyParams, '');
+        if (!$input->validate()) {
+            Yii::$app->response->statusCode = 422;
+            return ['errors' => $input->getErrors()];
+        }
+
+        $actorId = (new CurrentUser())->id(Yii::$app->request);
+        try {
+            return $this->documents()->deleteReport($id, (int) $input->lockVersion, $actorId);
+        } catch (RequestNotFound $error) {
+            throw new NotFoundHttpException($error->getMessage());
+        } catch (ReportDeletionDenied $error) {
+            $this->recordRejectedReportDeletionSafely($id, $actorId, $error->ruleId);
+            throw new ForbiddenHttpException($error->getMessage());
+        } catch (ConcurrentRequestModification $error) {
+            $this->recordRejectedReportDeletionSafely($id, $actorId, $error->ruleId);
+            throw new ConflictHttpException($error->getMessage());
         }
     }
 
@@ -654,6 +680,21 @@ final class RequestController extends Controller
         } catch (\Throwable $auditError) {
             Yii::error([
                 'message' => 'Не удалось записать аудит отклонённой загрузки отчёта.',
+                'requestId' => $requestId,
+                'actorId' => $actorId,
+                'ruleId' => $ruleId,
+                'exception' => $auditError,
+            ], __METHOD__);
+        }
+    }
+
+    private function recordRejectedReportDeletionSafely(int $requestId, int $actorId, string $ruleId): void
+    {
+        try {
+            $this->documents()->recordRejectedReportDeletion($requestId, $actorId, $ruleId);
+        } catch (\Throwable $auditError) {
+            Yii::error([
+                'message' => 'Не удалось записать аудит отклонённого удаления отчёта.',
                 'requestId' => $requestId,
                 'actorId' => $actorId,
                 'ruleId' => $ruleId,

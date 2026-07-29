@@ -220,6 +220,18 @@ it('withdraws a request with optimistic locking', async () => {
   }))
 })
 
+it('deletes a report with optimistic locking', async () => {
+  const fetchMock = vi.fn().mockResolvedValue(new Response('{}', { status: 200 }))
+  vi.stubGlobal('fetch', fetchMock)
+
+  await requestApi.deleteReport(7, 2)
+
+  expect(fetchMock).toHaveBeenCalledWith('/api/v1/requests/7/report/delete', expect.objectContaining({
+    method: 'POST',
+    body: JSON.stringify({ lockVersion: 2 }),
+  }))
+})
+
 it('sends the currently selected dev user as the actor header', async () => {
   const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({ items: [] }), { status: 200 }))
   vi.stubGlobal('fetch', fetchMock)

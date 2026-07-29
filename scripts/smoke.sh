@@ -428,6 +428,113 @@ public_report_count=$(printf '%s' "$public_details" | grep -o '"documentType":"r
   exit 1
 }
 
+# ТЗ 7.8/DOC-011/DOC-012: удаление отчёта у уже выполненной заявки и повторная
+# загрузка, которая должна перезапустить цикл эксперт -> СБ.
+denied_delete_report_status=$(curl --silent --output /dev/null --write-out '%{http_code}' \
+  --request POST \
+  --header 'X-Dev-User-ID: 4' \
+  --header 'Content-Type: application/json' \
+  --data '{"lockVersion":7}' \
+  "$base_url/api/v1/requests/$request_id/report/delete")
+[ "$denied_delete_report_status" = '403' ] || {
+  echo "Expected forbidden report deletion status 403 for a non-executor, got $denied_delete_report_status" >&2
+  exit 1
+}
+stale_delete_report_status=$(curl --silent --output /dev/null --write-out '%{http_code}' \
+  --request POST \
+  --header 'X-Dev-User-ID: 2' \
+  --header 'Content-Type: application/json' \
+  --data '{"lockVersion":99}' \
+  "$base_url/api/v1/requests/$request_id/report/delete")
+[ "$stale_delete_report_status" = '409' ] || {
+  echo "Expected stale report deletion status 409, got $stale_delete_report_status" >&2
+  exit 1
+}
+deleted_report=$(curl --fail --silent --show-error \
+  --request POST \
+  --header 'X-Dev-User-ID: 2' \
+  --header 'Content-Type: application/json' \
+  --data '{"lockVersion":7}' \
+  "$base_url/api/v1/requests/$request_id/report/delete")
+printf '%s' "$deleted_report" | grep '"status":"completed"' >/dev/null
+printf '%s' "$deleted_report" | grep '"lockVersion":8' >/dev/null
+
+repeated_delete_report_status=$(curl --silent --output /dev/null --write-out '%{http_code}' \
+  --request POST \
+  --header 'X-Dev-User-ID: 2' \
+  --header 'Content-Type: application/json' \
+  --data '{"lockVersion":8}' \
+  "$base_url/api/v1/requests/$request_id/report/delete")
+[ "$repeated_delete_report_status" = '403' ] || {
+  echo "Expected repeated report deletion status 403 (no active report), got $repeated_delete_report_status" >&2
+  exit 1
+}
+missing_report_status=$(curl --silent --output /dev/null --write-out '%{http_code}' \
+  --header 'X-Dev-User-ID: 3' \
+  "$base_url/api/v1/document-versions/$report_v2_version_id/download")
+[ "$missing_report_status" = '404' ] || {
+  echo "Expected deleted report download status 404, got $missing_report_status" >&2
+  exit 1
+}
+missing_link_report_status=$(curl --silent --output /dev/null --write-out '%{http_code}' \
+  "$base_url/api/v1/document-links/$initiator_report_token/download")
+[ "$missing_link_report_status" = '404' ] || {
+  echo "Expected deleted report email link status 404, got $missing_link_report_status" >&2
+  exit 1
+}
+after_delete_details=$(curl --fail --silent --show-error \
+  --header 'X-Dev-User-ID: 2' \
+  "$base_url/api/v1/requests/$request_id")
+after_delete_report_count=$(printf '%s' "$after_delete_details" | grep -o '"documentType":"report"' | wc -l | tr -d ' ')
+[ "$after_delete_report_count" = '0' ] || {
+  echo "Expected zero visible reports after deletion, got $after_delete_report_count" >&2
+  exit 1
+}
+printf '%s' "$after_delete_details" | grep '"can_delete_report":0' >/dev/null
+printf '%s' "$after_delete_details" | grep '"action":"delete_report"' >/dev/null
+
+printf '%%PDF-1.4\n%% smoke report revision 3\n' >"$smoke_dir/report-v3.pdf"
+reuploaded_report=$(curl --fail --silent --show-error \
+  --request POST \
+  --header 'X-Dev-User-ID: 2' \
+  --form "file=@$smoke_dir/report-v3.pdf;type=application/pdf" \
+  "$base_url/api/v1/requests/$request_id/report")
+printf '%s' "$reuploaded_report" | grep '"status":"opinion_preparation"' >/dev/null
+printf '%s' "$reuploaded_report" | grep '"lockVersion":9' >/dev/null
+reuploaded_report_version_id=$(printf '%s' "$reuploaded_report" | sed -n 's/.*"versionId":\([0-9][0-9]*\).*/\1/p')
+[ -n "$reuploaded_report_version_id" ] || {
+  echo 'Report re-uploaded after deletion has no version id' >&2
+  exit 1
+}
+curl --fail --silent --show-error \
+  --header 'X-Dev-User-ID: 2' \
+  --output "$smoke_dir/downloaded-report-v3.pdf" \
+  "$base_url/api/v1/document-versions/$reuploaded_report_version_id/download"
+cmp "$smoke_dir/report-v3.pdf" "$smoke_dir/downloaded-report-v3.pdf"
+reupload_details=$(curl --fail --silent --show-error \
+  --header 'X-Dev-User-ID: 2' \
+  "$base_url/api/v1/requests/$request_id")
+printf '%s' "$reupload_details" | grep '"can_delete_report":1' >/dev/null
+printf '%s' "$reupload_details" | grep '"action":"upload_report"' >/dev/null
+printf '%s' "$reupload_details" | grep '"ruleId":"DOC-012"' >/dev/null
+
+# Повторная загрузка после удаления вновь запускает рассылку экспертам
+# (ТЗ 4.6/4.7), даже для ранее завершённой заявки.
+reupload_notified_body=$(sql_scalar "SELECT body FROM notification_outbox WHERE request_id = $request_id AND event_type = 'request.report_uploaded' AND recipient_email = 'dev.expert@example.invalid' ORDER BY id DESC LIMIT 1")
+reupload_report_token=$(printf '%s' "$reupload_notified_body" | sed -n 's#.*document-links/\([a-f0-9]\{64\}\)/download.*#\1#p')
+[ -n "$reupload_report_token" ] || {
+  echo 'Report-uploaded notification after deletion is missing a document link token' >&2
+  exit 1
+}
+[ "$reupload_report_token" != "$expert_report_token" ] || {
+  echo 'Report-uploaded notification after deletion reused the original link token' >&2
+  exit 1
+}
+curl --fail --silent --show-error \
+  --output "$smoke_dir/link-report-v3.pdf" \
+  "$base_url/api/v1/document-links/$reupload_report_token/download"
+cmp "$smoke_dir/report-v3.pdf" "$smoke_dir/link-report-v3.pdf"
+
 imported=$(curl --fail --silent --show-error \
   --request POST \
   --header "X-Dev-User-ID: $initiator_user_id" \

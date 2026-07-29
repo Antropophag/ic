@@ -393,6 +393,12 @@ final class RequestRepository
             . '(current_executor.user_id = :report_actor OR EXISTS(SELECT 1 FROM {{%user_roles}} rur '
             . 'JOIN {{%roles}} rr ON rr.id = rur.role_id WHERE rur.user_id = :report_manager '
             . "AND rr.code IN ('ic_manager', 'laboratory_manager')))) AS can_upload_report "
+            . ", (EXISTS(SELECT 1 FROM {{%request_documents}} active_report "
+            . "WHERE active_report.request_id = r.id AND active_report.document_type = 'report' "
+            . 'AND active_report.deleted_at IS NULL) AND '
+            . '(current_executor.user_id = :delete_report_actor OR EXISTS(SELECT 1 FROM {{%user_roles}} drur '
+            . 'JOIN {{%roles}} drr ON drr.id = drur.role_id WHERE drur.user_id = :delete_report_manager '
+            . "AND drr.code IN ('ic_manager', 'laboratory_manager')))) AS can_delete_report "
             . ", (r.status = 'opinion_preparation' AND current_expert.user_id = :opinion_actor) "
             . 'AS can_publish_opinion '
             . ", (r.status = 'security_review' AND EXISTS(SELECT 1 FROM {{%user_roles}} security_ur "
@@ -431,6 +437,8 @@ final class RequestRepository
                 ':start_executor_role' => $actorId,
                 ':report_actor' => $actorId,
                 ':report_manager' => $actorId,
+                ':delete_report_actor' => $actorId,
+                ':delete_report_manager' => $actorId,
                 ':opinion_actor' => $actorId,
                 ':security_actor' => $actorId,
                 ':reject_actor' => $actorId,
@@ -450,11 +458,13 @@ final class RequestRepository
             . "SELECT a.id, 'assignment' AS kind, CASE a.event_type "
             . "WHEN 'request.executor_assigned' THEN 'assign_executor' "
             . "WHEN 'request.expert_claimed' THEN 'claim_expert' "
-            . "ELSE 'reassign_expert' END AS action, NULL, NULL, "
+            . "WHEN 'request.expert_reassigned' THEN 'reassign_expert' "
+            . "ELSE 'delete_report' END AS action, NULL, NULL, "
             . "a.rule_id, NULL, DATE_FORMAT(a.created_at, '%Y-%m-%dT%H:%i:%s.%fZ'), u.display_name FROM {{%audit_events}} a "
             . 'JOIN {{%users}} u ON u.id = a.actor_id '
             . "WHERE a.entity_type = 'request' AND a.entity_id = :audit_request_id "
-            . "AND a.event_type IN ('request.executor_assigned', 'request.expert_claimed', 'request.expert_reassigned') "
+            . "AND a.event_type IN ('request.executor_assigned', 'request.expert_claimed', "
+            . "'request.expert_reassigned', 'request.report_deleted') "
             . 'ORDER BY occurredAt DESC, kind DESC, id DESC',
             [':transition_request_id' => $requestId, ':audit_request_id' => $requestId],
         )->queryAll();
@@ -476,7 +486,8 @@ final class RequestRepository
             . 'LEFT JOIN {{%request_assignments}} current_expert '
             . 'ON current_expert.request_id = item_request.id '
             . "AND current_expert.assignment_type = 'expert' AND current_expert.valid_to IS NULL "
-            . "WHERE d.request_id = :document_request_id AND ((d.document_type NOT IN ('report', 'opinion') "
+            . "WHERE d.request_id = :document_request_id AND d.deleted_at IS NULL "
+            . "AND ((d.document_type NOT IN ('report', 'opinion') "
             . 'AND v.version = (SELECT MAX(attachment_version.version) FROM {{%request_document_versions}} attachment_version '
             . "WHERE attachment_version.document_id = d.id)) OR (d.document_type = 'report' AND ("
             . 'current_report_executor.user_id = :report_viewer '
