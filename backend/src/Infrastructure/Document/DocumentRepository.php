@@ -339,8 +339,14 @@ final class DocumentRepository
                 'payload_json' => json_encode(['revision' => $revision, 'document_version_id' => $versionId], JSON_THROW_ON_ERROR),
                 'created_at' => $now,
             ])->execute();
-            // Аналог ТЗ 4.9: сотрудники СБ уведомляются о поступлении
-            // заключения на контроль.
+            // ТЗ 4.9: сотрудники СБ уведомляются о поступлении отчёта и
+            // заключения на контроль, письмо содержит активные ссылки на
+            // скачивание обоих документов без входа в портал.
+            $links = "\nСсылка на заключение: " . DocumentDownloadUrl::build($this->issueDocumentLink($versionId));
+            $reportVersionId = $this->latestDocumentVersionId($requestId, 'report');
+            if ($reportVersionId !== null) {
+                $links .= "\nСсылка на отчёт: " . DocumentDownloadUrl::build($this->issueDocumentLink($reportVersionId));
+            }
             $outbox = new NotificationOutbox($this->db);
             foreach ($this->activeUsersWithRoles(['security_officer']) as $officer) {
                 $outbox->enqueue(
@@ -350,7 +356,8 @@ final class DocumentRepository
                     $officer['name'],
                     'Заключение поступило на контроль СБ',
                     'Экспертное заключение опубликовано и ожидает контроля службы безопасности. '
-                    . 'Откройте карточку заявки в портале.',
+                    . 'Откройте карточку заявки в портале.'
+                    . $links,
                 );
             }
             $transaction->commit();
@@ -416,6 +423,18 @@ final class DocumentRepository
             throw new RequestNotFound('Document version not found');
         }
         return $version;
+    }
+
+    /** @return array<string, mixed>|false */
+    public function findVersionByToken(string $token): array|false
+    {
+        return $this->db->createCommand(
+            'SELECT v.storage_key AS storageKey, v.original_name AS originalName, v.mime_type AS mimeType '
+            . 'FROM {{%document_download_links}} l '
+            . 'JOIN {{%request_document_versions}} v ON v.id = l.document_version_id '
+            . 'WHERE l.token_hash = :hash',
+            [':hash' => hash('sha256', $token)],
+        )->queryOne();
     }
 
     public function recordDownload(int $versionId, int $requestId, int $actorId): void
@@ -581,5 +600,33 @@ final class DocumentRepository
             . 'AND r.code IN (' . implode(',', $placeholders) . ')',
             $params,
         )->queryAll();
+    }
+
+    private function latestDocumentVersionId(int $requestId, string $documentType): ?int
+    {
+        $id = $this->db->createCommand(
+            'SELECT v.id FROM {{%request_document_versions}} v '
+            . 'JOIN {{%request_documents}} d ON d.id = v.document_id '
+            . 'WHERE d.request_id = :request_id AND d.document_type = :document_type '
+            . 'ORDER BY v.version DESC LIMIT 1',
+            [':request_id' => $requestId, ':document_type' => $documentType],
+        )->queryScalar();
+
+        return $id === false ? null : (int) $id;
+    }
+
+    // ACL-003..006: письмо-уведомление содержит активную ссылку на скачивание
+    // документа без входа в портал (ТЗ 4.9), в т.ч. пока обычный доступ через
+    // портал ещё не открыт.
+    private function issueDocumentLink(int $documentVersionId): string
+    {
+        $token = bin2hex(random_bytes(32));
+        $this->db->createCommand()->insert('{{%document_download_links}}', [
+            'document_version_id' => $documentVersionId,
+            'token_hash' => hash('sha256', $token),
+            'created_at' => gmdate('Y-m-d H:i:s.u'),
+        ])->execute();
+
+        return $token;
     }
 }
