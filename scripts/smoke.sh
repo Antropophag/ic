@@ -25,7 +25,20 @@ until curl --fail --silent --show-error "$base_url/health/ready" >/dev/null; do
   sleep 2
 done
 
-if [ -z "$admin_user_id" ]; then
+if [ -n "$admin_user_id" ]; then
+  case "$admin_user_id" in
+  0 | *[!0-9]*)
+    echo 'ADMIN_USER_ID must be a positive integer' >&2
+    exit 1
+    ;;
+  esac
+  admin_override_valid=$(sql_scalar \
+    "SELECT COUNT(*) FROM users u JOIN user_roles ur ON ur.user_id = u.id JOIN roles r ON r.id = ur.role_id WHERE u.id = $admin_user_id AND u.is_active = 1 AND r.code = 'administrator'")
+  [ "$admin_override_valid" = '1' ] || {
+    echo "ADMIN_USER_ID=$admin_user_id is not an active administrator" >&2
+    exit 1
+  }
+else
   admin_user_id=$(sql_scalar \
     "SELECT u.id FROM users u JOIN user_roles ur ON ur.user_id = u.id JOIN roles r ON r.id = ur.role_id WHERE u.ad_login = 'dev.admin' AND u.is_active = 1 AND r.code = 'administrator' LIMIT 1")
 fi
