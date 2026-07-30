@@ -3,7 +3,7 @@ set -eu
 
 base_url=${BASE_URL:-http://localhost:8080}
 dev_user_id=${DEV_USER_ID:-1}
-admin_user_id=${ADMIN_USER_ID:-6}
+admin_user_id=${ADMIN_USER_ID:-}
 initiator_user_id=${INITIATOR_USER_ID:-3}
 
 sql_scalar() {
@@ -24,6 +24,15 @@ until curl --fail --silent --show-error "$base_url/health/ready" >/dev/null; do
   fi
   sleep 2
 done
+
+if [ -z "$admin_user_id" ]; then
+  admin_user_id=$(sql_scalar \
+    "SELECT u.id FROM users u JOIN user_roles ur ON ur.user_id = u.id JOIN roles r ON r.id = ur.role_id WHERE u.ad_login = 'dev.admin' AND u.is_active = 1 AND r.code = 'administrator' LIMIT 1")
+fi
+[ -n "$admin_user_id" ] || {
+  echo 'Active dev.admin with administrator role was not found' >&2
+  exit 1
+}
 
 curl --fail --silent --show-error "$base_url/health/live" | grep '"status":"ok"' >/dev/null
 
