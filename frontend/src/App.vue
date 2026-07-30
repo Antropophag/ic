@@ -5,7 +5,7 @@ import { getDevUserId, reconcileDevUserId, setDevUserId } from './devUsers'
 import { createConfirmDialog } from './confirmDialog'
 import { createLatestRequestGuard } from './latestRequestGuard'
 import { requestIdFromLocation, resolveRequestDeepLink, setRequestInUrl } from './requestDeepLink'
-import { ACTIVE_STATUSES, REGISTRY_PAGE_SIZE, REQUEST_COLORS, buildFeed, canSubmitComment, commentFromApi, documentFromApi, documentKind, filterRequests, fromApi, historyFromApi, paginate, withoutStaleActions } from './registry'
+import { ACTIVE_STATUSES, REGISTRY_PAGE_SIZE, REQUEST_COLORS, buildFeed, canStartNow, canSubmitComment, commentFromApi, documentFromApi, documentKind, filterRequests, fromApi, historyFromApi, paginate, withoutStaleActions } from './registry'
 
 const activeTab = ref('active')
 const query = ref('')
@@ -103,8 +103,9 @@ const currentInitials = computed(() => (currentProfile.value.displayName
   .split(' ').map(part => part[0]).join('').slice(0, 2).toUpperCase()) || '?')
 const isAdministrator = computed(() => (currentProfile.value.roles || []).includes('administrator'))
 const feed = computed(() => buildFeed(selected.value?.history || [], selected.value?.comments || []))
+const canStartAction = computed(() => canStartNow(selected.value))
 const hasHeroAction = computed(() => Boolean(selected.value && (
-  selected.value.canAssignExecutor || selected.value.canStart || selected.value.canUploadReport
+  selected.value.canAssignExecutor || canStartAction.value || selected.value.canUploadReport
   || selected.value.canClaimExpert || selected.value.canReassignExpert || selected.value.canPublishOpinion
   || selected.value.canSecurityDecide || selected.value.canReject || selected.value.canWithdraw
   || selected.value.canDeleteReport
@@ -1338,7 +1339,7 @@ onMounted(bootstrapAuth)
                   <a class="help-icon" href="/help/assignment.html" target="_blank" title="Инструкция по назначению и началу работы" aria-label="Инструкция по назначению и началу работы">?</a>
                 </div>
 
-                <div v-if="selected.canStart" class="hero-block">
+                <div v-if="canStartAction" class="hero-block">
                   <h4>Начать работу</h4>
                   <p class="hero-sub">Заявка перейдёт в статус «В работе»</p>
                   <div class="hero-actions"><button class="primary big" :disabled="actionLoading" @click="startRequest">{{ actionLoading ? 'Запуск…' : 'Начать работу' }}</button></div>
