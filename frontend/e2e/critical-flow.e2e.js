@@ -71,7 +71,7 @@ test('комментарий, оставленный при создании з�
   await page.getByPlaceholder('Дополнительная информация').fill(comment)
   await page.getByRole('button', { name: 'Создать заявку' }).click()
 
-  await expect(page.getByRole('heading', { name: /^Заявка \d+$/ })).toBeVisible()
+  await expect(page.getByRole('heading', { name: /^Заявка №\d+ от \d{1,2}\.\d{1,2}\.\d{4}$/ })).toBeVisible()
   await expect(page.getByText(comment)).toBeVisible()
 })
 

@@ -1220,7 +1220,7 @@ final class RequestRepository
     }
 
     /** @return array{requestId: int, status: string, lockVersion: int} */
-    public function rejectRequest(int $requestId, int $expectedLockVersion, int $actorId): array
+    public function rejectRequest(int $requestId, int $expectedLockVersion, int $actorId, ?string $reason = null): array
     {
         $transaction = $this->db->beginTransaction();
         try {
@@ -1262,6 +1262,7 @@ final class RequestRepository
                 'to_status' => RequestStatus::Rejected->value,
                 'action' => 'reject',
                 'rule_id' => 'WF-006',
+                'reason' => $reason,
                 'created_at' => $now,
             ])->execute();
             $this->db->createCommand()->insert('{{%audit_events}}', [
@@ -1274,6 +1275,7 @@ final class RequestRepository
                     'from_status' => $currentStatus->value,
                     'to_status' => RequestStatus::Rejected->value,
                     'lock_version' => $nextLockVersion,
+                    'reason' => $reason,
                 ],
                 'created_at' => $now,
             ])->execute();
