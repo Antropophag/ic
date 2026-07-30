@@ -5,7 +5,7 @@ import { getDevUserId, reconcileDevUserId, setDevUserId } from './devUsers'
 import { createConfirmDialog } from './confirmDialog'
 import { createLatestRequestGuard } from './latestRequestGuard'
 import { requestIdFromLocation, resolveRequestDeepLink, setRequestInUrl } from './requestDeepLink'
-import { ACTIVE_STATUSES, REGISTRY_PAGE_SIZE, REQUEST_COLORS, buildFeed, canStartNow, canSubmitComment, commentFromApi, documentFromApi, documentKind, filterRequests, fromApi, historyFromApi, paginate, withoutStaleActions } from './registry'
+import { ACTIVE_STATUSES, REGISTRY_PAGE_SIZE, REQUEST_COLORS, canStartNow, canSubmitComment, commentFromApi, documentFromApi, documentKind, filterRequests, fromApi, historyFromApi, newestFirstFeed, paginate, withoutStaleActions } from './registry'
 
 const activeTab = ref('active')
 const query = ref('')
@@ -102,7 +102,10 @@ const currentProfile = computed(() => {
 const currentInitials = computed(() => (currentProfile.value.displayName
   .split(' ').map(part => part[0]).join('').slice(0, 2).toUpperCase()) || '?')
 const isAdministrator = computed(() => (currentProfile.value.roles || []).includes('administrator'))
-const feed = computed(() => buildFeed(selected.value?.history || [], selected.value?.comments || []))
+const feed = computed(() => newestFirstFeed(
+  selected.value?.history || [],
+  selected.value?.comments || [],
+))
 const canStartAction = computed(() => canStartNow(selected.value))
 const hasHeroAction = computed(() => Boolean(selected.value && (
   selected.value.canAssignExecutor || canStartAction.value || selected.value.canUploadReport
@@ -1395,13 +1398,16 @@ onMounted(bootstrapAuth)
 
               <article class="card feed">
                 <div class="section-title"><h3>Лента заявки <span>{{ feed.length }}</span></h3></div>
-                <button v-if="selected.commentsPage?.hasMore" class="secondary" :disabled="olderCommentsLoading" @click="loadOlderComments">{{ olderCommentsLoading ? 'Загрузка…' : 'Показать предыдущие' }}</button>
+                <form v-if="canSubmitComment(selected, detailLoading)" class="comment-input" @submit.prevent="addComment"><span class="avatar small">МУ</span><input v-model="commentDraft" :disabled="commentLoading" maxlength="10000" placeholder="Оставьте комментарий…" /><button :disabled="commentLoading">➤</button></form>
+                <p v-else class="placeholder-copy">На текущем этапе новые комментарии недоступны.</p>
+                <p v-if="commentError" class="action-error">{{ commentError }}</p>
                 <div class="stream">
                   <div v-for="entry in feed" :key="`${entry.type}-${entry.id}`" class="entry" :class="{ system: entry.type === 'milestone' }">
                     <span class="avatar small" :class="{ 'blue-avatar': entry.type === 'comment' }">●</span>
                     <div class="entry-body">
                       <template v-if="entry.type === 'milestone'">
                         <div class="entry-head"><b>{{ entry.actor }} — {{ entry.description }}</b><time>{{ entry.occurredAt }} · {{ entry.ruleId }}</time></div>
+                        <button v-if="entry.versionId && entry.originalName" type="button" class="feed-document-link" @click="downloadDocument(entry)">{{ entry.originalName }}</button>
                       </template>
                       <template v-else>
                         <div class="entry-head"><b>{{ entry.author }}</b><time>{{ entry.createdAt }}</time></div>
@@ -1411,9 +1417,7 @@ onMounted(bootstrapAuth)
                   </div>
                 </div>
                 <p v-if="!feed.length" class="placeholder-copy">Лента пока пуста.</p>
-                <form v-if="canSubmitComment(selected, detailLoading)" class="comment-input" @submit.prevent="addComment"><span class="avatar small">МУ</span><input v-model="commentDraft" :disabled="commentLoading" maxlength="10000" placeholder="Оставьте комментарий…" /><button :disabled="commentLoading">➤</button></form>
-                <p v-else class="placeholder-copy">На текущем этапе новые комментарии недоступны.</p>
-                <p v-if="commentError" class="action-error">{{ commentError }}</p>
+                <button v-if="selected.commentsPage?.hasMore" class="secondary" :disabled="olderCommentsLoading" @click="loadOlderComments">{{ olderCommentsLoading ? 'Загрузка…' : 'Показать предыдущие' }}</button>
               </article>
             </div>
             <aside class="stack side-column">

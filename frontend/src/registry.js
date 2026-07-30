@@ -113,6 +113,8 @@ export function historyFromApi(item) {
     ruleId: item.ruleId,
     occurredAt: new Date(item.occurredAt).toLocaleString('ru-RU'),
     sortAt: item.occurredAt,
+    versionId: item.versionId == null ? null : Number(item.versionId),
+    originalName: item.originalName || null,
   }
 }
 
@@ -150,6 +152,10 @@ export function commentFromApi(item) {
 export function buildFeed(history, comments) {
   const orderedHistory = [...history].reverse()
   return [...orderedHistory, ...comments].sort((a, b) => new Date(a.sortAt) - new Date(b.sortAt))
+}
+
+export function newestFirstFeed(history, comments) {
+  return buildFeed(history, comments).reverse()
 }
 
 export function canSubmitComment(item, detailLoading) {
