@@ -233,17 +233,24 @@ async function createAdminUser() {
       // Пользователь уже создан (получил базовую роль «Сотрудник») —
       // ошибку назначения выбранной роли не прячем молча, но и не
       // откатываем создание: роль можно назначить отдельно ниже в списке.
-      createUserError.value = 'Пользователь создан, но не удалось сразу назначить роль — назначьте её в списке ниже.'
+      // Экран администрирования мог закрыться, пока оба запроса летели —
+      // сообщение не показываем в уже неактуальном/закрытом экране.
+      if (showAdmin.value) {
+        createUserError.value = 'Пользователь создан, но не удалось сразу назначить роль — назначьте её в списке ниже.'
+      }
     }
+    if (!showAdmin.value) return
     adminUsers.value = [...adminUsers.value, createdUser].sort((a, b) => a.displayName.localeCompare(b.displayName, 'ru'))
     newUserAdLogin.value = ''
     newUserRoleId.value = ''
   } catch (error) {
-    createUserError.value = error.status === 409
-      ? 'Пользователь с таким логином AD уже существует.'
-      : error.status === 422
-        ? 'Логин AD может содержать только латинские буквы, цифры, точку, дефис и подчёркивание.'
-        : 'Не удалось создать пользователя.'
+    if (showAdmin.value) {
+      createUserError.value = error.status === 409
+        ? 'Пользователь с таким логином AD уже существует.'
+        : error.status === 422
+          ? 'Логин AD может содержать только латинские буквы, цифры, точку, дефис и подчёркивание.'
+          : 'Не удалось создать пользователя.'
+    }
   } finally {
     createUserLoading.value = false
   }
@@ -255,10 +262,13 @@ async function assignAdminRole(userId) {
   roleActionError.value = ''
   try {
     const result = await adminApi.assignRole(userId, roleId)
+    if (!showAdmin.value) return
     updateAdminUserRoles(userId, result.items)
     roleChoiceByUser[userId] = ''
   } catch {
-    roleActionError.value = 'Не удалось назначить роль.'
+    if (showAdmin.value) {
+      roleActionError.value = 'Не удалось назначить роль.'
+    }
   }
 }
 
@@ -266,9 +276,12 @@ async function revokeAdminRole(userId, roleId) {
   roleActionError.value = ''
   try {
     const result = await adminApi.revokeRole(userId, roleId)
+    if (!showAdmin.value) return
     updateAdminUserRoles(userId, result.items)
   } catch {
-    roleActionError.value = 'Не удалось отозвать роль.'
+    if (showAdmin.value) {
+      roleActionError.value = 'Не удалось отозвать роль.'
+    }
   }
 }
 
