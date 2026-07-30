@@ -493,8 +493,14 @@ final class RequestRepository
             // адресата действия через саму запись назначения, а не парсим
             // executor_id/expert_id по отдельности (разные ключи на разные
             // события): проще и работает для report_deleted (NULL) тоже.
+            // JSON_TYPE(...) = 'STRING' отличает записи, сделанные до
+            // миграции m260730_000001 (двойное JSON-кодирование, issue про
+            // payload_json) — JSON_UNQUOTE разворачивает их на один
+            // уровень, чтобы имя резолвилось и без выполненного backfill.
             . 'LEFT JOIN {{%request_assignments}} target_assignment '
-            . "ON target_assignment.id = CAST(JSON_EXTRACT(a.payload_json, '$.assignment_id') AS UNSIGNED) "
+            . 'ON target_assignment.id = CAST(JSON_EXTRACT('
+            . "CASE WHEN JSON_TYPE(a.payload_json) = 'STRING' THEN JSON_UNQUOTE(a.payload_json) ELSE a.payload_json END, "
+            . "'$.assignment_id') AS UNSIGNED) "
             . 'LEFT JOIN {{%users}} target_user ON target_user.id = target_assignment.user_id '
             . "WHERE a.entity_type = 'request' AND a.entity_id = :audit_request_id "
             . "AND a.event_type IN ('request.executor_assigned', 'request.expert_claimed', "

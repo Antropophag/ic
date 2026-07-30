@@ -479,6 +479,48 @@ final class RequestRepositoryTest extends IntegrationTestCase
         self::assertSame('Второй Эксперт', $byAction['reassign_expert']['targetName']);
     }
 
+    public function testHistoryResolvesTheTargetNameForLegacyDoubleEncodedPayload(): void
+    {
+        // Issue про двойное кодирование payload_json (PR #121): записи,
+        // сделанные до фикса и до backfill-миграции m260730_000001,
+        // хранят JSON-строку внутри JSON-строки (JSON_TYPE = 'STRING').
+        // findDetails() обязан резолвить targetName и для них тоже —
+        // имитируем такую запись через JSON_QUOTE поверх уже
+        // корректно сохранённого payload_json.
+        $manager = $this->createUser('dev.it.manager7', 'Тестовый руководитель 7');
+        $this->grantRole($manager, 'ic_manager');
+        $initiator = $this->createUser('dev.it.initiator12', 'Тестовый инициатор 12');
+        $executor = $this->createUser('dev.it.executor6', 'Легаси Исполнитель');
+        $this->grantRole($executor, 'ic_executor');
+        $request = $this->createRegisteredRequest($initiator, 'legacy-payload-json');
+        $requestId = (int) $request['id'];
+
+        $repository = new RequestRepository($this->db());
+        $repository->assignExecutor($requestId, $executor, (int) $request['lock_version'], $manager);
+
+        $this->db()->createCommand(
+            "UPDATE {{%audit_events}} SET payload_json = JSON_QUOTE(payload_json) "
+            . "WHERE entity_id = :id AND event_type = 'request.executor_assigned'",
+            [':id' => $requestId],
+        )->execute();
+        self::assertSame(
+            'STRING',
+            $this->scalar(
+                "SELECT JSON_TYPE(payload_json) FROM {{%audit_events}} "
+                . "WHERE entity_id = :id AND event_type = 'request.executor_assigned'",
+                [':id' => $requestId],
+            ),
+        );
+
+        $history = $repository->findDetails($requestId, $manager)['history'];
+        $byAction = [];
+        foreach ($history as $row) {
+            $byAction[$row['action']] = $row;
+        }
+
+        self::assertSame('Легаси Исполнитель', $byAction['assign_executor']['targetName']);
+    }
+
     /**
      * @param list<array<string, mixed>> $rows
      * @return array<string, mixed>
