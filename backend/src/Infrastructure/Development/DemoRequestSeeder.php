@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Infrastructure\Development;
 
 use App\Infrastructure\Document\DocumentStorage;
+use Yii;
 use yii\db\Connection;
 
 /** Resets request data and creates a deterministic, entirely synthetic demo registry. */
@@ -239,8 +240,13 @@ final class DemoRequestSeeder
     {
         try {
             $this->storage->delete($key);
-        } catch (\Throwable) {
-            // Cleanup must never mask the database/storage error that triggered it.
+        } catch (\Throwable $error) {
+            Yii::warning([
+                'message' => 'Failed to delete a demo document during compensating cleanup.',
+                'storage_key' => $key,
+                'exception' => $error::class,
+                'error' => $error->getMessage(),
+            ], __METHOD__);
         }
     }
 
