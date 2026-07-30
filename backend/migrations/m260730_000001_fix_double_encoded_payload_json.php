@@ -33,7 +33,7 @@ final class m260730_000001_fix_double_encoded_payload_json extends Migration
         // Падаем явно, а не молча "успешно" ничего не делаем — иначе
         // откат выглядел бы завершённым, оставив данные уже исправленными.
         throw new \RuntimeException(
-            'm260730_000001 is irreversible: restoring the original double-encoded payload_json would be undoing a bug fix, not a data format.',
+            static::class . ' is irreversible: restoring the original double-encoded payload_json would be undoing a bug fix, not a data format.',
         );
     }
 }
