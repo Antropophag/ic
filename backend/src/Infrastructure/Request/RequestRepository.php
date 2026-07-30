@@ -28,6 +28,8 @@ use yii\db\Connection;
 
 final class RequestRepository
 {
+    private const LAST_COMMENT_PREVIEW_LENGTH = 500;
+
     public function __construct(private readonly Connection $db)
     {
     }
@@ -375,8 +377,16 @@ final class RequestRepository
             . 'AND NOT EXISTS(SELECT 1 FROM {{%security_checks}} wsc WHERE wsc.request_id = r.id)) '
             . 'AS can_withdraw, '
             . 'last_comment_author.display_name AS last_comment_author, '
-            . 'last_comment.body AS last_comment_body, last_comment.created_at AS last_comment_created_at, '
-            . '(report_doc.id IS NOT NULL) AS has_report, '
+            // Предпросмотр, а не полный текст: комментарий допускает до
+            // 10000 символов (COM-001), полный текст на каждую строку
+            // реестра раздувал бы список без пользы (Qodo). Многоточие —
+            // иначе обрыв длинного комментария в модалке неотличим от
+            // короткого, у которого текст закончился сам по себе.
+            . '(CASE WHEN CHAR_LENGTH(last_comment.body) > ' . self::LAST_COMMENT_PREVIEW_LENGTH
+            . ' THEN CONCAT(LEFT(last_comment.body, ' . self::LAST_COMMENT_PREVIEW_LENGTH . "), '…') "
+            . 'ELSE last_comment.body END) AS last_comment_body, '
+            . "DATE_FORMAT(last_comment.created_at, '%Y-%m-%dT%H:%i:%s.%fZ') AS last_comment_created_at, "
+            . '(report_version.id IS NOT NULL) AS has_report, '
             . 'report_version.id AS report_version_id, report_version.original_name AS report_original_name '
             . $joins
             . 'LEFT JOIN {{%request_assignments}} current_expert ON current_expert.id = '
@@ -403,8 +413,9 @@ final class RequestRepository
             . "WHERE rfur.user_id = :report_flag_manager_actor AND rfr.code IN ('ic_manager', 'laboratory_manager')) "
             . "OR r.status = 'completed') "
             . 'LEFT JOIN {{%request_document_versions}} report_version ON report_version.document_id = report_doc.id '
+            . 'AND report_version.deleted_at IS NULL '
             . 'AND report_version.version = (SELECT MAX(rv2.version) FROM {{%request_document_versions}} rv2 '
-            . 'WHERE rv2.document_id = report_doc.id) '
+            . 'WHERE rv2.document_id = report_doc.id AND rv2.deleted_at IS NULL) '
             . $whereSql
             . ' ORDER BY r.number ' . ($sort === 'asc' ? 'ASC' : 'DESC') . ' LIMIT :limit OFFSET :offset',
             array_merge([

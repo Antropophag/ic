@@ -71,6 +71,7 @@ const withdrawRequestGuard = createLatestRequestGuard()
 const claimRequestGuard = createLatestRequestGuard()
 const reassignRequestGuard = createLatestRequestGuard()
 const deleteReportRequestGuard = createLatestRequestGuard()
+const downloadReportRequestGuard = createLatestRequestGuard()
 const adminRequestGuard = createLatestRequestGuard()
 const confirmDialog = createConfirmDialog()
 const draft = reactive({
@@ -652,7 +653,10 @@ function triggerBlobDownload(blob, filename) {
   link.href = url
   link.download = filename
   link.click()
-  URL.revokeObjectURL(url)
+  // Отложенный revoke: некоторые браузеры ещё не успели начать чтение
+  // blob-URL синхронно после click(), немедленный revokeObjectURL иногда
+  // обрывает скачивание.
+  window.setTimeout(() => URL.revokeObjectURL(url), 0)
 }
 
 async function downloadDocument(document) {
@@ -670,11 +674,15 @@ async function downloadDocument(document) {
 // documentError, который рендерится только внутри открытой карточки
 // заявки и был бы невидим при клике по значку отчёта прямо в реестре.
 async function downloadReport(item) {
+  if (!item.reportVersionId || !item.reportOriginalName) return
+  const requestToken = downloadReportRequestGuard.begin(item.backendId)
   registryError.value = ''
   try {
     const blob = await requestApi.downloadDocument(item.reportVersionId)
+    if (!downloadReportRequestGuard.isCurrent(requestToken, item.backendId)) return
     triggerBlobDownload(blob, item.reportOriginalName)
   } catch {
+    if (!downloadReportRequestGuard.isCurrent(requestToken, item.backendId)) return
     registryError.value = 'Не удалось скачать отчёт испытаний.'
   }
 }
@@ -1393,9 +1401,9 @@ onBeforeUnmount(() => window.removeEventListener('popstate', handlePopstate))
                     <td><b>{{ item.product }}</b><small :title="item.supplier">{{ item.supplier }}</small></td>
                     <td>{{ item.initiator }}<small :title="item.department">{{ item.department }}</small></td>
                     <td>{{ item.executor }}</td><td><span class="badge" :class="item.tone">{{ item.status }}</span></td>
-                    <td>{{ item.securityMark }}</td>
+                    <td class="registry-indicator-cell">{{ item.securityMark }}</td>
                     <td class="registry-indicator-cell"><button v-if="item.lastCommentAuthor" type="button" class="avatar small registry-comment-avatar" :title="'Последний комментарий: ' + item.lastCommentAuthor" :aria-label="'Последний комментарий: ' + item.lastCommentAuthor" @click.stop="openLastComment(item)">{{ initialsFor(item.lastCommentAuthor) }}</button><span v-else class="muted-dash">—</span></td>
-                    <td class="registry-indicator-cell"><button v-if="item.hasReport" type="button" class="doc-icon pdf registry-report-icon" title="Скачать отчёт испытаний" aria-label="Скачать отчёт испытаний" @click.stop="downloadReport(item)">PDF</button><span v-else class="muted-dash">—</span></td>
+                    <td class="registry-indicator-cell"><button v-if="item.hasReport && item.reportVersionId && item.reportOriginalName" type="button" class="doc-icon pdf registry-report-icon" title="Скачать отчёт испытаний" aria-label="Скачать отчёт испытаний" @click.stop="downloadReport(item)">PDF</button><span v-else class="muted-dash">—</span></td>
                   </tr>
                 </tbody>
               </table>

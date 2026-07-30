@@ -231,6 +231,25 @@ final class RequestRepositoryTest extends IntegrationTestCase
         $row = self::findRow($this->findAll($repository, $manager), $requestId);
         self::assertSame('Руководитель просмотра комментария', $row['last_comment_author']);
         self::assertSame('Второй, самый свежий комментарий', $row['last_comment_body']);
+        self::assertMatchesRegularExpression(
+            '/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{6}Z$/',
+            (string) $row['last_comment_created_at'],
+        );
+    }
+
+    public function testRegistryTruncatesAnOverlongLastCommentWithEllipsis(): void
+    {
+        // Реестр отдаёт предпросмотр, а не весь комментарий (до 10000
+        // символов, COM-001) — иначе список раздувается без пользы (Qodo).
+        $initiator = $this->createUser('dev.it.initiator-longcomment', 'Инициатор длинного комментария');
+        $request = $this->createRegisteredRequest($initiator, 'long-comment');
+        $requestId = (int) $request['id'];
+
+        $repository = new RequestRepository($this->db());
+        $repository->addComment($requestId, $initiator, str_repeat('а', 600));
+
+        $row = self::findRow($this->findAll($repository, $initiator), $requestId);
+        self::assertSame(str_repeat('а', 500) . '…', $row['last_comment_body']);
     }
 
     public function testHasReportFlagFollowsDoc003Visibility(): void
@@ -243,6 +262,9 @@ final class RequestRepositoryTest extends IntegrationTestCase
         $executor = $this->createUser('dev.it.executor-hasreport', 'Исполнитель отчёта');
         $manager = $this->createUser('dev.it.manager-hasreport', 'Руководитель отчёта');
         $this->grantRole($manager, 'ic_manager');
+        $labManager = $this->createUser('dev.it.labmanager-hasreport', 'Руководитель лаборатории отчёта');
+        $this->grantRole($labManager, 'laboratory_manager');
+        $expert = $this->createUser('dev.it.expert-hasreport', 'Эксперт отчёта');
         $outsider = $this->createUser('dev.it.outsider-hasreport', 'Посторонний сотрудник отчёта');
         $request = $this->createRegisteredRequest($initiator, 'has-report-flag');
         $requestId = (int) $request['id'];
@@ -253,6 +275,13 @@ final class RequestRepositoryTest extends IntegrationTestCase
             'assignment_type' => 'executor',
             'user_id' => $executor,
             'assigned_by' => $initiator,
+            'valid_from' => $now,
+        ])->execute();
+        $this->db()->createCommand()->insert('{{%request_assignments}}', [
+            'request_id' => $requestId,
+            'assignment_type' => 'expert',
+            'user_id' => $expert,
+            'assigned_by' => $expert,
             'valid_from' => $now,
         ])->execute();
         $this->db()->createCommand()->insert('{{%request_documents}}', [
@@ -285,6 +314,14 @@ final class RequestRepositoryTest extends IntegrationTestCase
         self::assertSame(1, (int) $managerRow['has_report']);
         self::assertSame('report.pdf', $managerRow['report_original_name']);
 
+        $labManagerRow = self::findRow($this->findAll($repository, $labManager), $requestId);
+        self::assertSame(1, (int) $labManagerRow['has_report']);
+        self::assertSame('report.pdf', $labManagerRow['report_original_name']);
+
+        $expertRow = self::findRow($this->findAll($repository, $expert), $requestId);
+        self::assertSame(1, (int) $expertRow['has_report']);
+        self::assertSame('report.pdf', $expertRow['report_original_name']);
+
         $outsiderRow = self::findRow($this->findAll($repository, $outsider), $requestId);
         self::assertSame(0, (int) $outsiderRow['has_report']);
         self::assertNull($outsiderRow['report_version_id']);
@@ -298,6 +335,55 @@ final class RequestRepositoryTest extends IntegrationTestCase
         $outsiderAfterCompletion = self::findRow($this->findAll($repository, $outsider), $requestId);
         self::assertSame(1, (int) $outsiderAfterCompletion['has_report']);
         self::assertSame('report.pdf', $outsiderAfterCompletion['report_original_name']);
+    }
+
+    public function testHasReportFlagIgnoresASoftDeletedVersion(): void
+    {
+        // Карточка (findDetails) считает отчёт действующим только при
+        // наличии неудалённой версии (v.deleted_at IS NULL) — индикатор в
+        // реестре обязан следовать той же семантике, а не одному факту
+        // существования строки request_documents (Qodo).
+        $initiator = $this->createUser('dev.it.initiator-deletedversion', 'Инициатор удалённой версии');
+        $executor = $this->createUser('dev.it.executor-deletedversion', 'Исполнитель удалённой версии');
+        $request = $this->createRegisteredRequest($initiator, 'deleted-report-version');
+        $requestId = (int) $request['id'];
+        $now = Clock::now();
+
+        $this->db()->createCommand()->insert('{{%request_assignments}}', [
+            'request_id' => $requestId,
+            'assignment_type' => 'executor',
+            'user_id' => $executor,
+            'assigned_by' => $initiator,
+            'valid_from' => $now,
+        ])->execute();
+        $this->db()->createCommand()->insert('{{%request_documents}}', [
+            'request_id' => $requestId,
+            'document_type' => 'report',
+            'title' => 'Отчёт испытаний',
+            'created_by' => $executor,
+            'created_at' => $now,
+        ])->execute();
+        $documentId = (int) $this->db()->getLastInsertID();
+        $this->db()->createCommand()->insert('{{%request_document_versions}}', [
+            'document_id' => $documentId,
+            'version' => 1,
+            'storage_key' => str_repeat('a', 64),
+            'original_name' => 'report.pdf',
+            'mime_type' => 'application/pdf',
+            'size_bytes' => 1,
+            'sha256' => str_repeat('0', 64),
+            'uploaded_by' => $executor,
+            'created_at' => $now,
+            'deleted_at' => $now,
+        ])->execute();
+
+        $row = self::findRow(
+            $this->findAll(new RequestRepository($this->db()), $executor),
+            $requestId,
+        );
+        self::assertSame(0, (int) $row['has_report']);
+        self::assertNull($row['report_version_id']);
+        self::assertNull($row['report_original_name']);
     }
 
     public function testManagerWithTwoRolesIsNotifiedOnlyOnceOnCreate(): void
