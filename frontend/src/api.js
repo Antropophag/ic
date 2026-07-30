@@ -128,6 +128,7 @@ export const requestApi = {
 
 export const authApi = {
   me: () => request('/api/v1/auth/me'),
+  devUsers: () => request('/api/v1/auth/dev-users'),
   login: (login, password) => request('/api/v1/auth/login', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },

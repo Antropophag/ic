@@ -1,16 +1,5 @@
 const STORAGE_KEY = 'shlz-dev-user-id'
-
-export const DEV_USERS = [
-  { id: 1, displayName: 'Максим Умнов', position: 'Руководитель ИЦ', department: 'Испытательный центр', roles: ['employee', 'ic_manager'] },
-  { id: 2, displayName: 'Сергей Кашин', position: 'Исполнитель ИЦ', department: 'Испытательный центр', roles: ['employee', 'ic_executor'] },
-  { id: 3, displayName: 'Тестовый сотрудник', position: 'Сотрудник', department: 'Тестовое подразделение', roles: ['employee'] },
-  { id: 4, displayName: 'Анна Смирнова', position: 'Эксперт', department: 'Испытательный центр', roles: ['employee', 'expert'] },
-  { id: 5, displayName: 'Олег Воронцов', position: 'Сотрудник СБ', department: 'Служба безопасности', roles: ['employee', 'security_officer'] },
-  { id: 6, displayName: 'Дарья Королёва', position: 'Администратор портала', department: 'ИТ', roles: ['employee', 'administrator'] },
-  // Второй тестовый эксперт (Виктор Дорохов, dev.expert2) сознательно не
-  // включён сюда: его id не фиксирован (см. DevController::ADDITIONAL_EXPERTS)
-  // и определяется на конкретной базе через GET /api/v1/experts.
-]
+const DEFAULT_ID = 1
 
 let overrideId = null
 
@@ -36,16 +25,24 @@ function persistId(id) {
 export function getDevUserId() {
   if (overrideId !== null) return overrideId
   const stored = readStoredId()
-  return DEV_USERS.some(user => user.id === stored) ? stored : DEV_USERS[0].id
-}
-
-export function getDevUser() {
-  const id = getDevUserId()
-  return DEV_USERS.find(user => user.id === id) ?? DEV_USERS[0]
+  return Number.isInteger(stored) && stored > 0 ? stored : DEFAULT_ID
 }
 
 export function setDevUserId(id) {
-  if (!DEV_USERS.some(user => user.id === id)) return
   overrideId = id
   persistId(id)
+}
+
+// Список dev-аккаунтов резолвится динамически через GET /api/v1/auth/dev-users
+// (не хардкодится во фронтенде) — фиксированные id 1-6 не гарантированы на
+// давно живущей demo-базе: dev/seed мог отступить на seed-по-ad_login при
+// конфликте id (issue про конфликт id в dev/seed, PR #113). Сохранённый или
+// дефолтный id мог оказаться недействительным на этой конкретной базе —
+// в этом случае переключаемся на первого пользователя из актуального списка.
+export function reconcileDevUserId(users) {
+  const current = getDevUserId()
+  if (users.some(user => user.id === current)) return current
+  const fallbackId = users[0]?.id ?? DEFAULT_ID
+  setDevUserId(fallbackId)
+  return fallbackId
 }

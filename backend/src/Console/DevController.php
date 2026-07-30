@@ -11,12 +11,16 @@ use yii\console\ExitCode;
 final class DevController extends Controller
 {
     /**
-     * Основные пять профилей закреплены за фиксированными id: на них ссылаются
-     * smoke-тесты, E2E и dev-переключатель пользователя во фронтенде.
+     * Основные шесть профилей закреплены за фиксированными id: на них ссылаются
+     * smoke-тесты и E2E. Фиксированный id не гарантирован на давно живущей
+     * демо-базе (см. actionSeed() ниже) — dev-переключатель пользователя во
+     * фронтенде поэтому резолвит актуальные id через
+     * AuthController::actionDevUsers(), которая читает ad_login отсюда же
+     * (public ради единого источника истины, без дублирования списка).
      *
      * @var array<int, array{ad_login: string, display_name: string, email: string, position: string, department: string, roles: list<string>}>
      */
-    private const CORE_USERS = [
+    public const CORE_USERS = [
         1 => [
             'ad_login' => 'dev.user', 'display_name' => 'Максим Умнов',
             'email' => 'dev.user@example.invalid', 'position' => 'Руководитель ИЦ',

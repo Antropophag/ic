@@ -1,7 +1,7 @@
 <script setup>
 import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { adminApi, authApi, hasCsrfToken, requestApi, setCsrfToken } from './api'
-import { DEV_USERS, getDevUserId, setDevUserId } from './devUsers'
+import { getDevUserId, reconcileDevUserId, setDevUserId } from './devUsers'
 import { createConfirmDialog } from './confirmDialog'
 import { createLatestRequestGuard } from './latestRequestGuard'
 import { ACTIVE_STATUSES, REGISTRY_PAGE_SIZE, REQUEST_COLORS, buildFeed, canSubmitComment, commentFromApi, documentFromApi, filterRequests, fromApi, historyFromApi, paginate, withoutStaleActions } from './registry'
@@ -72,6 +72,7 @@ const draft = reactive({
   productName: '', manufacturer: '', supplier: '', sampleQuantity: 1, testMethod: '', comment: '',
 })
 const devUserId = ref(getDevUserId())
+const devUsers = ref([])
 // Пессимистичный старт (dev-режим), пока /auth/me не ответит — не мигаем
 // формой логина в единственном реально dev-развёртывании (локальная разработка/CI).
 const authDevMode = ref(true)
@@ -83,7 +84,8 @@ const loginError = ref('')
 
 const currentProfile = computed(() => {
   if (authDevMode.value) {
-    return DEV_USERS.find(user => user.id === devUserId.value) ?? DEV_USERS[0]
+    return devUsers.value.find(user => user.id === devUserId.value) ?? devUsers.value[0]
+      ?? { displayName: '', position: '', department: '', roles: [] }
   }
   return {
     displayName: authUser.value?.displayName || '',
@@ -118,6 +120,17 @@ async function bootstrapAuth() {
     setCsrfToken(result.csrfToken)
     authDevMode.value = Boolean(result.devMode)
     authUser.value = result.user
+    if (authDevMode.value) {
+      try {
+        const devUsersResult = await authApi.devUsers()
+        devUsers.value = devUsersResult.items
+        devUserId.value = reconcileDevUserId(devUsers.value)
+      } catch {
+        // Список dev-переключателя не критичен для входа в dev-режим —
+        // оставляем как есть (селектор окажется пустым/со старым id),
+        // повторная попытка доступна при перезагрузке страницы.
+      }
+    }
     if (authDevMode.value || authUser.value) {
       await loadRequests()
     }
@@ -1071,7 +1084,7 @@ onMounted(bootstrapAuth)
                 :value="devUserId"
                 @change="switchDevUser($event.target.value)"
               >
-                <option v-for="user in DEV_USERS" :key="user.id" :value="user.id">{{ user.displayName }} — {{ user.position }}</option>
+                <option v-for="user in devUsers" :key="user.id" :value="user.id">{{ user.displayName }} — {{ user.position }}</option>
               </select>
               <span class="avatar">{{ currentInitials }}</span>
               <span><b>{{ currentProfile.displayName }}</b><small>{{ currentProfile.position }}</small></span>

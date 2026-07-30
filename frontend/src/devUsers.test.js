@@ -1,34 +1,25 @@
 import { afterEach, expect, it, vi } from 'vitest'
-import { DEV_USERS, getDevUser, getDevUserId, setDevUserId } from './devUsers'
+import { getDevUserId, reconcileDevUserId, setDevUserId } from './devUsers'
+
+const SEEDED_USERS = [
+  { id: 1, displayName: 'Максим Умнов', position: 'Руководитель ИЦ' },
+  { id: 2, displayName: 'Сергей Кашин', position: 'Исполнитель ИЦ' },
+  { id: 4, displayName: 'Анна Смирнова', position: 'Эксперт' },
+]
 
 afterEach(() => {
   vi.unstubAllGlobals()
-  setDevUserId(DEV_USERS[0].id)
+  setDevUserId(1)
 })
 
-it('lists six seeded users with unique ids', () => {
-  expect(DEV_USERS).toHaveLength(6)
-  expect(new Set(DEV_USERS.map(user => user.id)).size).toBe(6)
+it('defaults to id 1 without a stored preference', () => {
+  expect(getDevUserId()).toBe(1)
 })
 
-it('defaults to the first seeded user without stored preference', () => {
-  expect(getDevUserId()).toBe(DEV_USERS[0].id)
-  expect(getDevUser()).toEqual(DEV_USERS[0])
-})
-
-it('switches the active user and exposes their profile', () => {
+it('switches the active user id', () => {
   setDevUserId(4)
 
   expect(getDevUserId()).toBe(4)
-  expect(getDevUser()).toEqual(DEV_USERS.find(user => user.id === 4))
-})
-
-it('ignores an id outside the seeded list', () => {
-  setDevUserId(2)
-
-  setDevUserId(999)
-
-  expect(getDevUserId()).toBe(2)
 })
 
 it('persists the selection through localStorage when available', () => {
@@ -55,7 +46,7 @@ it('keeps the switch in memory when localStorage.setItem throws', () => {
   expect(getDevUserId()).toBe(3)
 })
 
-it('falls back to the default user when localStorage.getItem throws', () => {
+it('falls back to the default id when localStorage.getItem throws', () => {
   vi.stubGlobal('localStorage', {
     getItem: () => {
       throw new Error('storage blocked')
@@ -63,5 +54,20 @@ it('falls back to the default user when localStorage.getItem throws', () => {
     setItem: () => {},
   })
 
-  expect(getDevUserId()).toBe(DEV_USERS[0].id)
+  expect(getDevUserId()).toBe(1)
+})
+
+it('reconciles to the current id when it is present in the fetched list', () => {
+  setDevUserId(2)
+
+  expect(reconcileDevUserId(SEEDED_USERS)).toBe(2)
+  expect(getDevUserId()).toBe(2)
+})
+
+it('reconciles to the first fetched user when the current id is unknown on this database', () => {
+  setDevUserId(999)
+  const usersOnConflictedDatabase = [{ id: 7, displayName: 'Дарья Королёва', position: 'Администратор портала' }]
+
+  expect(reconcileDevUserId(usersOnConflictedDatabase)).toBe(7)
+  expect(getDevUserId()).toBe(7)
 })

@@ -11,8 +11,10 @@ use App\Infrastructure\Identity\CurrentUser;
 use App\Infrastructure\Identity\LdapAuthenticator;
 use App\Infrastructure\Ldap\LdapConnectionException;
 use App\Infrastructure\Ldap\NativeLdapClient;
+use App\Console\DevController;
 use Yii;
 use yii\rest\Controller;
+use yii\web\NotFoundHttpException;
 use yii\web\ServerErrorHttpException;
 
 final class AuthController extends Controller
@@ -57,6 +59,45 @@ final class AuthController extends Controller
         }
 
         return ['csrfToken' => $csrfToken, 'devMode' => $devMode, 'user' => $this->profile($userId)];
+    }
+
+    /**
+     * Список dev-переключателя фронтенда. Фиксированные id ядра dev-аккаунтов
+     * (DevController::CORE_USERS) не гарантированы на давно живущей демо-базе —
+     * dev/seed мог отступить на seed-по-ad_login при конфликте id (issue про
+     * dev/seed конфликт, PR #113), поэтому актуальные id резолвятся здесь из
+     * БД по ad_login, а не берутся из фронтенда захардкоженными.
+     *
+     * @return array{items: list<array<string, mixed>>}
+     */
+    public function actionDevUsers(): array
+    {
+        if (YII_ENV !== 'dev') {
+            throw new NotFoundHttpException();
+        }
+
+        $adLogins = array_column(DevController::CORE_USERS, 'ad_login');
+        $params = [];
+        $placeholders = [];
+        foreach ($adLogins as $i => $adLogin) {
+            $placeholders[] = ":login{$i}";
+            $params[":login{$i}"] = $adLogin;
+        }
+        $rows = Yii::$app->db->createCommand(
+            'SELECT id, ad_login AS adLogin FROM {{%users}} WHERE ad_login IN (' . implode(',', $placeholders) . ')',
+            $params,
+        )->queryAll();
+        $idByLogin = array_column($rows, 'id', 'adLogin');
+
+        $items = [];
+        foreach ($adLogins as $adLogin) {
+            if (!isset($idByLogin[$adLogin])) {
+                continue;
+            }
+            $items[] = $this->profile((int) $idByLogin[$adLogin]);
+        }
+
+        return ['items' => $items];
     }
 
     /** @return array<string, mixed> */
