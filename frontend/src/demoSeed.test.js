@@ -54,3 +54,15 @@ it('invalidates stale registry rows after a successful destructive seed', () => 
     counts: { active: 0, all: 0, mine: 0 },
   })
 })
+
+it('does not update disposed UI after a late seed response', async () => {
+  const onSeeded = vi.fn()
+
+  await expect(runDemoSeed(
+    vi.fn().mockResolvedValue({ requests: 7 }),
+    onSeeded,
+    vi.fn(),
+    () => false,
+  )).resolves.toBeNull()
+  expect(onSeeded).not.toHaveBeenCalled()
+})

@@ -131,6 +131,7 @@ const devUsersLoading = ref(false)
 const devUsersRequestGuard = createLatestRequestGuard()
 const demoSeedLoading = ref(false)
 const demoSeedMessage = ref('')
+const demoSeedRequestGuard = createLatestRequestGuard()
 
 async function seedDemoRequests() {
   if (demoSeedLoading.value) return
@@ -142,11 +143,13 @@ async function seedDemoRequests() {
 
   demoSeedLoading.value = true
   demoSeedMessage.value = ''
+  const requestToken = demoSeedRequestGuard.begin(true)
   try {
-    demoSeedMessage.value = await runDemoSeed(
+    const message = await runDemoSeed(
       () => devApi.seedRequests(),
       () => {
         closeRequest({ push: false })
+        registryError.value = ''
         showCreate.value = false
         activeTab.value = 'all'
         statusFilter.value = ''
@@ -158,9 +161,13 @@ async function seedDemoRequests() {
         await nextTick()
         await loadRequests(true)
       },
+      () => demoSeedRequestGuard.isCurrent(requestToken, true),
     )
+    if (message !== null) demoSeedMessage.value = message
   } finally {
-    demoSeedLoading.value = false
+    if (demoSeedRequestGuard.isCurrent(requestToken, true)) {
+      demoSeedLoading.value = false
+    }
   }
 }
 
@@ -444,6 +451,7 @@ watch(query, () => {
 onBeforeUnmount(() => {
   window.clearTimeout(registrySearchTimer)
   registryRequestGuard.invalidate()
+  demoSeedRequestGuard.invalidate()
 })
 
 function toggleSort() {

@@ -1,18 +1,21 @@
-export async function runDemoSeed(seed, onSeeded, refresh) {
+export async function runDemoSeed(seed, onSeeded, refresh, isCurrent = () => true) {
   let result
   try {
     result = await seed()
   } catch {
-    return 'Не удалось заполнить демо-данные.'
+    return isCurrent() ? 'Не удалось заполнить демо-данные.' : null
   }
+  if (!isCurrent()) return null
 
   onSeeded()
   const successMessage = `Создано демо-заявок: ${result.requests}.`
   try {
     await refresh()
-    return successMessage
+    return isCurrent() ? successMessage : null
   } catch {
-    return `${successMessage} Не удалось обновить список — обновите страницу.`
+    return isCurrent()
+      ? `${successMessage} Не удалось обновить список — обновите страницу.`
+      : null
   }
 }
 
