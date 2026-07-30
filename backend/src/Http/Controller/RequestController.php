@@ -511,7 +511,7 @@ final class RequestController extends Controller
                 $id,
                 (int) $input->lockVersion,
                 $actorId,
-                $input->reason === '' ? null : (string) $input->reason,
+                ($input->reason === null || $input->reason === '') ? null : (string) $input->reason,
             );
         } catch (RequestNotFound $error) {
             throw new NotFoundHttpException($error->getMessage());
