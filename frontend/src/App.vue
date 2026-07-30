@@ -114,18 +114,35 @@ function switchDevUser(rawId) {
 }
 
 const devUsersError = ref('')
+const devUsersLoading = ref(false)
+const devUsersRequestGuard = createLatestRequestGuard()
 
 // Отдельная функция (не инлайн в bootstrapAuth), чтобы кнопка «Повторить»
 // на экране devUsersError могла переиспользовать ту же логику, а не только
-// перезагрузку страницы.
+// перезагрузку страницы. Гвардирована latestRequestGuard — повторные клики
+// «Повторить» не должны позволить более старому (в т.ч. позднему неуспешному)
+// ответу перезаписать результат более нового запроса.
 async function loadDevUsers() {
+  if (devUsersLoading.value) return false
+  devUsersLoading.value = true
   devUsersError.value = ''
+  const requestToken = devUsersRequestGuard.begin(true)
   try {
     const devUsersResult = await authApi.devUsers()
-    devUsers.value = devUsersResult.items
-    devUserId.value = reconcileDevUserId(devUsers.value)
+    if (!devUsersRequestGuard.isCurrent(requestToken, true)) return false
+    const items = Array.isArray(devUsersResult.items) ? devUsersResult.items : []
+    if (items.length === 0) {
+      // Пустой список — база не сидирована (или сидирована частично) —
+      // не менее опасно, чем сбой запроса: продолжать с devUserId по
+      // умолчанию значило бы работать под несуществующим актёром.
+      devUsersError.value = 'Список dev-пользователей пуст. Выполните ./yii dev/seed на backend.'
+      return false
+    }
+    devUsers.value = items
+    devUserId.value = reconcileDevUserId(items)
     return true
   } catch {
+    if (!devUsersRequestGuard.isCurrent(requestToken, true)) return false
     // Список dev-актёров не резолвлен — X-Dev-User-ID из localStorage мог
     // не совпасть ни с одним реальным пользователем на этой БД (именно
     // конфликт id, который чинит этот PR). Блокируем весь интерфейс явным
@@ -133,6 +150,10 @@ async function loadDevUsers() {
     // актёром — иначе получили бы неверные капабилити/403 без объяснения.
     devUsersError.value = 'Не удалось загрузить список dev-пользователей.'
     return false
+  } finally {
+    if (devUsersRequestGuard.isCurrent(requestToken, true)) {
+      devUsersLoading.value = false
+    }
   }
 }
 
@@ -1057,7 +1078,9 @@ onMounted(bootstrapAuth)
     <div v-else-if="devUsersError" class="auth-screen">
       <div class="auth-card">
         <p class="form-error">{{ devUsersError }}</p>
-        <button type="button" class="primary" @click="retryDevUsers">Повторить</button>
+        <button type="button" class="primary" :disabled="devUsersLoading" @click="retryDevUsers">
+          {{ devUsersLoading ? 'Повтор…' : 'Повторить' }}
+        </button>
       </div>
     </div>
     <div v-else-if="!authDevMode && !authUser" class="auth-screen">
