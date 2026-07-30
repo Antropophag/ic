@@ -50,6 +50,7 @@ const claimLoading = ref(false)
 const claimError = ref('')
 const reassignLoading = ref(false)
 const reassignError = ref('')
+const reassignOpen = ref(false)
 const deleteReportLoading = ref(false)
 const deleteReportError = ref('')
 const detailRequestGuard = createLatestRequestGuard()
@@ -452,6 +453,7 @@ async function openRequest(item) {
   claimError.value = ''
   reassignLoading.value = false
   reassignError.value = ''
+  reassignOpen.value = false
   deleteReportLoading.value = false
   deleteReportError.value = ''
   actionError.value = ''
@@ -497,6 +499,7 @@ function closeRequest() {
   claimError.value = ''
   reassignLoading.value = false
   reassignError.value = ''
+  reassignOpen.value = false
   deleteReportLoading.value = false
   deleteReportError.value = ''
 }
@@ -932,6 +935,7 @@ async function reassignExpert() {
   try {
     await requestApi.reassignExpert(requestId, Number(expertChoice.value), selected.value.lockVersion)
     if (!reassignRequestGuard.isCurrent(requestToken, selected.value?.backendId)) return
+    reassignOpen.value = false
     try {
       await refreshSelected(requestId)
     } catch {
@@ -1150,7 +1154,6 @@ onMounted(bootstrapAuth)
               <div>
                 <p class="eyebrow">АО «ЩЛЗ» · Испытательный центр</p>
                 <h1>{{ selected ? `Заявка №${selected.id} от ${selected.date}` : 'Заявки на проведение испытаний' }}</h1>
-                <p class="tagline" :class="{ 'tagline-hidden': selected }">Регистрация, испытания и согласование результатов</p>
               </div>
             </div>
             <div class="profile">
@@ -1264,7 +1267,20 @@ onMounted(bootstrapAuth)
           <div class="request-actions">
             <button class="back" @click="closeRequest">‹</button>
             <span class="badge" :class="selected.tone">{{ selected.status }}</span>
+            <div v-if="selected.canSetColor" class="color-picker inline">
+              <button
+                v-for="color in REQUEST_COLORS"
+                :key="color"
+                type="button"
+                class="color-swatch"
+                :class="[color, { active: selected.color === color }]"
+                :disabled="colorLoading"
+                :title="color"
+                @click="setColorMark(color)"
+              ></button>
+            </div>
           </div>
+          <p v-if="colorError" class="action-error">{{ colorError }}</p>
           <p v-if="detailLoading" class="detail-state">Загрузка актуальной карточки…</p>
           <p v-if="detailError" class="detail-state error">{{ detailError }}</p>
           <article class="card object-band">
@@ -1330,15 +1346,6 @@ onMounted(bootstrapAuth)
                   <a class="help-link" href="/help/security-review.html" target="_blank">Инструкция по контролю СБ</a>
                 </div>
 
-                <div v-if="selected.canReassignExpert" class="hero-block hero-block-compact">
-                  <h4>Переназначить эксперту</h4>
-                  <div class="reassign-row">
-                    <select v-model="expertChoice" :disabled="reassignLoading" aria-label="Новый эксперт"><option value="">Выберите эксперта</option><option v-for="expert in experts.filter(candidate => candidate.id !== selected.expertId)" :key="expert.id" :value="expert.id">{{ expert.displayName }}</option></select>
-                    <button class="secondary" :disabled="reassignLoading" @click="reassignExpert">{{ reassignLoading ? 'Сохранение…' : 'Переназначить' }}</button>
-                  </div>
-                  <p v-if="reassignError" class="action-error">{{ reassignError }}</p>
-                </div>
-
                 <div v-if="selected.canReject || selected.canWithdraw || selected.canDeleteReport" class="hero-block hero-secondary">
                   <button v-if="selected.canReject" class="secondary action-wide" :disabled="rejectLoading" @click="rejectRequest">{{ rejectLoading ? 'Сохранение…' : 'Отказать в проведении испытаний' }}</button>
                   <p v-if="rejectError" class="action-error">{{ rejectError }}</p>
@@ -1376,21 +1383,20 @@ onMounted(bootstrapAuth)
               <article class="card summary"><h3>Статус</h3>
                 <p><span>Инициатор</span><b>{{ selected.initiator }}</b></p>
                 <p><span>Исполнитель</span><b>{{ selected.executor }}</b></p>
-                <p><span>Эксперт</span><b>{{ selected.expert }}</b></p>
-                <p><span>Отметка СБ</span><b>{{ selected.securityMark }}</b></p>
-                <div v-if="selected.canSetColor" class="color-picker">
-                  <button
-                    v-for="color in REQUEST_COLORS"
-                    :key="color"
-                    type="button"
-                    class="color-swatch"
-                    :class="[color, { active: selected.color === color }]"
-                    :disabled="colorLoading"
-                    :title="color"
-                    @click="setColorMark(color)"
-                  ></button>
+                <p v-if="!selected.canReassignExpert"><span>Эксперт</span><b>{{ selected.expert }}</b></p>
+                <div v-else class="reassign-fact">
+                  <span>Эксперт</span>
+                  <div class="name-row">
+                    <b>{{ selected.expert }}</b>
+                    <button type="button" class="reassign-toggle" @click="reassignOpen = !reassignOpen">{{ reassignOpen ? 'Отмена' : 'Переназначить' }}</button>
+                  </div>
+                  <div v-if="reassignOpen" class="reassign-controls">
+                    <select v-model="expertChoice" :disabled="reassignLoading" aria-label="Новый эксперт"><option value="">Выберите эксперта</option><option v-for="expert in experts.filter(candidate => candidate.id !== selected.expertId)" :key="expert.id" :value="expert.id">{{ expert.displayName }}</option></select>
+                    <button class="secondary" :disabled="reassignLoading" @click="reassignExpert">{{ reassignLoading ? 'Сохранение…' : 'Готово' }}</button>
+                  </div>
+                  <p v-if="reassignError" class="action-error">{{ reassignError }}</p>
                 </div>
-                <p v-if="colorError" class="action-error">{{ colorError }}</p>
+                <p><span>Отметка СБ</span><b>{{ selected.securityMark }}</b></p>
               </article>
               <article class="card documents"><h3>Документы <span>{{ selected.documents?.length || 0 }}</span></h3>
                 <button v-for="document in selected.documents || []" :key="document.versionId" class="document-row" @click="downloadDocument(document)"><span class="doc-icon" :class="documentKind(document.mimeType).className">{{ documentKind(document.mimeType).label }}</span><span><b>{{ document.title }}</b><small>Версия {{ document.version }} · {{ document.size }} · {{ document.createdAt }}</small></span></button>
