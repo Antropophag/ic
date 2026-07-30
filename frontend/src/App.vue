@@ -126,9 +126,13 @@ async function bootstrapAuth() {
         devUsers.value = devUsersResult.items
         devUserId.value = reconcileDevUserId(devUsers.value)
       } catch {
-        // Список dev-переключателя не критичен для входа в dev-режим —
-        // оставляем как есть (селектор окажется пустым/со старым id),
-        // повторная попытка доступна при перезагрузке страницы.
+        // Список dev-актёров не резолвлен — X-Dev-User-ID из localStorage
+        // мог не совпасть ни с одним реальным пользователем на этой БД
+        // (именно конфликт id, который чинит этот PR). Не продолжаем
+        // loadRequests() под неверифицированным актёром: это дало бы
+        // неверные капабилити или 403 вместо явной ошибки.
+        registryError.value = 'Не удалось загрузить список dev-пользователей. Обновите страницу.'
+        return
       }
     }
     if (authDevMode.value || authUser.value) {
