@@ -1335,14 +1335,14 @@ onMounted(bootstrapAuth)
                   <h4>Назначить исполнителя</h4>
                   <label class="inline-field">Исполнитель ИЦ<select v-model="executorChoice" :disabled="actionLoading"><option value="">Выберите сотрудника</option><option v-for="executor in executors" :key="executor.id" :value="executor.id">{{ executor.displayName }}</option></select></label>
                   <div class="hero-actions"><button class="primary big" :disabled="actionLoading" @click="assignExecutor">{{ actionLoading ? 'Сохранение…' : 'Назначить' }}</button></div>
-                  <a class="help-link" href="/help/assignment.html" target="_blank">Инструкция по назначению и началу работы</a>
+                  <a class="help-icon" href="/help/assignment.html" target="_blank" title="Инструкция по назначению и началу работы" aria-label="Инструкция по назначению и началу работы">?</a>
                 </div>
 
                 <div v-if="selected.canStart" class="hero-block">
                   <h4>Начать работу</h4>
                   <p class="hero-sub">Заявка перейдёт в статус «В работе»</p>
                   <div class="hero-actions"><button class="primary big" :disabled="actionLoading" @click="startRequest">{{ actionLoading ? 'Запуск…' : 'Начать работу' }}</button></div>
-                  <a class="help-link" href="/help/assignment.html" target="_blank">Инструкция по назначению и началу работы</a>
+                  <a class="help-icon" href="/help/assignment.html" target="_blank" title="Инструкция по назначению и началу работы" aria-label="Инструкция по назначению и началу работы">?</a>
                 </div>
                 <p v-if="actionError" class="action-error">{{ actionError }}</p>
 
@@ -1355,7 +1355,7 @@ onMounted(bootstrapAuth)
                   </div>
                   <p v-if="reportError" class="action-error">{{ reportError }}</p>
                   <p v-if="deleteReportError" class="action-error">{{ deleteReportError }}</p>
-                  <a v-if="selected.canUploadReport" class="help-link" href="/help/report.html" target="_blank">Инструкция по загрузке отчёта испытаний</a>
+                  <a v-if="selected.canUploadReport" class="help-icon" href="/help/report.html" target="_blank" title="Инструкция по загрузке отчёта испытаний" aria-label="Инструкция по загрузке отчёта испытаний">?</a>
                 </div>
 
                 <div v-if="selected.canClaimExpert" class="hero-block">
@@ -1363,7 +1363,7 @@ onMounted(bootstrapAuth)
                   <p class="hero-sub">Вы станете экспертом, готовящим заключение по этой заявке</p>
                   <div class="hero-actions"><button class="primary big" :disabled="claimLoading" @click="claimExpert">{{ claimLoading ? 'Сохранение…' : 'Взять в работу' }}</button></div>
                   <p v-if="claimError" class="action-error">{{ claimError }}</p>
-                  <a class="help-link" href="/help/expert-opinion.html" target="_blank">Инструкция по формированию заключения</a>
+                  <a class="help-icon" href="/help/expert-opinion.html" target="_blank" title="Инструкция по формированию заключения" aria-label="Инструкция по формированию заключения">?</a>
                 </div>
 
                 <div v-if="selected.canPublishOpinion" class="hero-block">
@@ -1372,7 +1372,7 @@ onMounted(bootstrapAuth)
                   <textarea v-model="opinionDraft" :disabled="opinionLoading" minlength="10" maxlength="20000" placeholder="Введите итоговое заключение по результатам испытаний"></textarea>
                   <div class="hero-actions"><button class="primary big" :disabled="opinionLoading" @click="publishOpinion">{{ opinionLoading ? 'Публикация…' : 'Опубликовать и передать в СБ' }}</button></div>
                   <p v-if="opinionError" class="action-error">{{ opinionError }}</p>
-                  <a class="help-link" href="/help/expert-opinion.html" target="_blank">Инструкция по формированию заключения</a>
+                  <a class="help-icon" href="/help/expert-opinion.html" target="_blank" title="Инструкция по формированию заключения" aria-label="Инструкция по формированию заключения">?</a>
                 </div>
 
                 <div v-if="selected.canSecurityDecide" class="hero-block">
@@ -1380,7 +1380,7 @@ onMounted(bootstrapAuth)
                   <div class="hero-actions"><button class="primary big confirm" :disabled="securityLoading" @click="decideSecurity('approve')">{{ securityLoading ? 'Сохранение…' : 'Согласовать и завершить' }}</button><button class="secondary big" :disabled="securityLoading" @click="decideSecurity('return')">Вернуть в работу</button></div>
                   <label>Комментарий<textarea v-model="securityReason" :disabled="securityLoading" maxlength="5000" placeholder="Обязателен при возврате заявки"></textarea></label>
                   <p v-if="securityError" class="action-error">{{ securityError }}</p>
-                  <a class="help-link" href="/help/security-review.html" target="_blank">Инструкция по контролю СБ</a>
+                  <a class="help-icon" href="/help/security-review.html" target="_blank" title="Инструкция по контролю СБ" aria-label="Инструкция по контролю СБ">?</a>
                 </div>
 
                 <div v-if="selected.canReject || selected.canWithdraw" class="hero-block hero-secondary">
