@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace App\Infrastructure\Logging;
 
-use yii\log\LogRuntimeException;
 use yii\log\Target;
 
 /**
@@ -20,10 +19,9 @@ class StderrTarget extends Target
     {
         foreach ($this->messages as $message) {
             $text = $this->formatMessage($message) . PHP_EOL;
-            $written = $this->write($text);
-            if ($written === false || $written !== strlen($text)) {
-                throw new LogRuntimeException('Unable to export complete log message to stderr.');
-            }
+            // Logging must remain best-effort: a closed or full stderr stream
+            // must not turn an otherwise successful request into HTTP 500.
+            $this->write($text);
         }
     }
 

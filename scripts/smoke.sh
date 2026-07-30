@@ -3,6 +3,7 @@ set -eu
 
 base_url=${BASE_URL:-http://localhost:8080}
 dev_user_id=${DEV_USER_ID:-1}
+admin_user_id=${ADMIN_USER_ID:-6}
 initiator_user_id=${INITIATOR_USER_ID:-3}
 
 sql_scalar() {
@@ -27,9 +28,12 @@ done
 curl --fail --silent --show-error "$base_url/health/live" | grep '"status":"ok"' >/dev/null
 
 # Verify the configured Yii target all the way through FPM into the container
-# log stream. Use the probe start time so an older successful probe cannot pass.
+# log stream. The endpoint accepts administrators only. Use the probe start time
+# so an older successful probe cannot pass.
 logging_probe_started=$(date -u +%Y-%m-%dT%H:%M:%SZ)
-curl --fail --silent --show-error "$base_url/health/logging" | grep '"status":"ok"' >/dev/null
+curl --fail --silent --show-error \
+  --header "X-Dev-User-ID: $admin_user_id" \
+  "$base_url/health/logging" | grep '"status":"ok"' >/dev/null
 logging_attempts=0
 until docker compose logs --no-color --since "$logging_probe_started" backend | grep -F '[error][health.logging] Logging smoke probe' >/dev/null; do
   logging_attempts=$((logging_attempts + 1))

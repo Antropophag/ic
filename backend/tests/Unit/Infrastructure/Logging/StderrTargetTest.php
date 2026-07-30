@@ -6,7 +6,6 @@ namespace Tests\Unit\Infrastructure\Logging;
 
 use PHPUnit\Framework\TestCase;
 use yii\log\Logger;
-use yii\log\LogRuntimeException;
 
 final class StderrTargetTest extends TestCase
 {
@@ -26,21 +25,29 @@ final class StderrTargetTest extends TestCase
         self::assertStringContainsString("[warning][worker] [\n    'reason' => 'Second failure',\n]", $target->written[1]);
     }
 
-    public function testThrowsWhenStderrRejectsMessage(): void
+    public function testContinuesWhenStderrRejectsMessage(): void
     {
         $target = new RecordingStderrTarget(false);
-        $target->messages = [['Failure', Logger::LEVEL_ERROR, 'application', 0.0]];
+        $target->messages = [
+            ['First failure', Logger::LEVEL_ERROR, 'application', 0.0],
+            ['Second failure', Logger::LEVEL_ERROR, 'application', 1.0],
+        ];
 
-        $this->expectException(LogRuntimeException::class);
         $target->export();
+
+        self::assertCount(2, $target->written);
     }
 
-    public function testThrowsWhenStderrOnlyWritesPartOfMessage(): void
+    public function testContinuesWhenStderrOnlyWritesPartOfMessage(): void
     {
         $target = new RecordingStderrTarget(1);
-        $target->messages = [['Failure', Logger::LEVEL_ERROR, 'application', 0.0]];
+        $target->messages = [
+            ['First failure', Logger::LEVEL_ERROR, 'application', 0.0],
+            ['Second failure', Logger::LEVEL_ERROR, 'application', 1.0],
+        ];
 
-        $this->expectException(LogRuntimeException::class);
         $target->export();
+
+        self::assertCount(2, $target->written);
     }
 }
