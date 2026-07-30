@@ -241,7 +241,7 @@ const adminRoles = ref([])
 const adminLoading = ref(false)
 const adminError = ref('')
 const newUserAdLogin = ref('')
-const newUserDisplayName = ref('')
+const newUserRoleId = ref('')
 const createUserLoading = ref(false)
 const createUserError = ref('')
 const roleChoiceByUser = reactive({})
@@ -276,23 +276,40 @@ function closeAdmin() {
 
 async function createAdminUser() {
   if (createUserLoading.value) return
-  if (!newUserAdLogin.value || !newUserDisplayName.value) {
-    createUserError.value = 'Заполните логин AD и отображаемое имя.'
+  if (!newUserAdLogin.value || !newUserRoleId.value) {
+    createUserError.value = 'Укажите логин AD и роль.'
     return
   }
   createUserLoading.value = true
   createUserError.value = ''
   try {
-    const user = await adminApi.createUser(newUserAdLogin.value, newUserDisplayName.value)
-    adminUsers.value = [...adminUsers.value, user].sort((a, b) => a.displayName.localeCompare(b.displayName, 'ru'))
+    const user = await adminApi.createUser(newUserAdLogin.value)
+    let createdUser = user
+    try {
+      const result = await adminApi.assignRole(user.id, Number(newUserRoleId.value))
+      createdUser = { ...user, roles: result.items }
+    } catch {
+      // Пользователь уже создан (получил базовую роль «Сотрудник») —
+      // ошибку назначения выбранной роли не прячем молча, но и не
+      // откатываем создание: роль можно назначить отдельно ниже в списке.
+      // Экран администрирования мог закрыться, пока оба запроса летели —
+      // сообщение не показываем в уже неактуальном/закрытом экране.
+      if (showAdmin.value) {
+        createUserError.value = 'Пользователь создан, но не удалось сразу назначить роль — назначьте её в списке ниже.'
+      }
+    }
+    if (!showAdmin.value) return
+    adminUsers.value = [...adminUsers.value, createdUser].sort((a, b) => a.displayName.localeCompare(b.displayName, 'ru'))
     newUserAdLogin.value = ''
-    newUserDisplayName.value = ''
+    newUserRoleId.value = ''
   } catch (error) {
-    createUserError.value = error.status === 409
-      ? 'Пользователь с таким логином AD уже существует.'
-      : error.status === 422
-        ? 'Логин AD может содержать только латинские буквы, цифры, точку, дефис и подчёркивание.'
-        : 'Не удалось создать пользователя.'
+    if (showAdmin.value) {
+      createUserError.value = error.status === 409
+        ? 'Пользователь с таким логином AD уже существует.'
+        : error.status === 422
+          ? 'Логин AD может содержать только латинские буквы, цифры, точку, дефис и подчёркивание.'
+          : 'Не удалось создать пользователя.'
+    }
   } finally {
     createUserLoading.value = false
   }
@@ -304,10 +321,13 @@ async function assignAdminRole(userId) {
   roleActionError.value = ''
   try {
     const result = await adminApi.assignRole(userId, roleId)
+    if (!showAdmin.value) return
     updateAdminUserRoles(userId, result.items)
     roleChoiceByUser[userId] = ''
   } catch {
-    roleActionError.value = 'Не удалось назначить роль.'
+    if (showAdmin.value) {
+      roleActionError.value = 'Не удалось назначить роль.'
+    }
   }
 }
 
@@ -315,9 +335,12 @@ async function revokeAdminRole(userId, roleId) {
   roleActionError.value = ''
   try {
     const result = await adminApi.revokeRole(userId, roleId)
+    if (!showAdmin.value) return
     updateAdminUserRoles(userId, result.items)
   } catch {
-    roleActionError.value = 'Не удалось отозвать роль.'
+    if (showAdmin.value) {
+      roleActionError.value = 'Не удалось отозвать роль.'
+    }
   }
 }
 
@@ -1155,12 +1178,18 @@ onMounted(bootstrapAuth)
             <p v-if="adminLoading" class="detail-state">Загрузка…</p>
             <form v-else class="admin-create-user" @submit.prevent="createAdminUser">
               <label>Логин AD<input v-model="newUserAdLogin" placeholder="ivanov" :disabled="createUserLoading" /></label>
-              <label>Отображаемое имя<input v-model="newUserDisplayName" placeholder="Иван Иванов" :disabled="createUserLoading" /></label>
+              <label>Роль
+                <select v-model="newUserRoleId" :disabled="createUserLoading">
+                  <option value="">Выберите роль…</option>
+                  <option v-for="role in adminRoles" :key="role.id" :value="role.id">{{ role.name }}</option>
+                </select>
+              </label>
               <button class="primary" :disabled="createUserLoading">{{ createUserLoading ? 'Добавление…' : 'Добавить заранее' }}</button>
             </form>
             <p v-if="createUserError" class="action-error">{{ createUserError }}</p>
-            <p class="hint">Заведённый заранее профиль автоматически получит роль «Сотрудник» и найдётся по
-              этому же логину при первом реальном входе через LDAP — назначенные ниже роли сохранятся.</p>
+            <p class="hint">Заведённый заранее профиль сразу получит выбранную роль (и базовую роль
+              «Сотрудник») и найдётся по этому же логину при первом реальном входе через LDAP — отображаемое
+              имя будет обновлено данными из AD.</p>
             <p v-if="roleActionError" class="action-error">{{ roleActionError }}</p>
             <div v-if="!adminLoading" class="table-wrap">
               <table>

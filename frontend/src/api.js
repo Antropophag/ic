@@ -140,10 +140,10 @@ export const authApi = {
 export const adminApi = {
   users: () => request('/api/v1/admin/users'),
   roles: () => request('/api/v1/admin/roles'),
-  createUser: (adLogin, displayName) => request('/api/v1/admin/users', {
+  createUser: adLogin => request('/api/v1/admin/users', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ adLogin, displayName }),
+    body: JSON.stringify({ adLogin }),
   }),
   assignRole: (userId, roleId) => request(`/api/v1/admin/users/${userId}/roles`, {
     method: 'POST',

@@ -322,11 +322,11 @@ it('creates a pre-provisioned admin user as JSON', async () => {
   const fetchMock = vi.fn().mockResolvedValue(new Response('{}', { status: 201 }))
   vi.stubGlobal('fetch', fetchMock)
 
-  await adminApi.createUser('kashin', 'Сергей Кашин')
+  await adminApi.createUser('kashin')
 
   expect(fetchMock).toHaveBeenCalledWith('/api/v1/admin/users', expect.objectContaining({
     method: 'POST',
-    body: JSON.stringify({ adLogin: 'kashin', displayName: 'Сергей Кашин' }),
+    body: JSON.stringify({ adLogin: 'kashin' }),
   }))
 })
 
