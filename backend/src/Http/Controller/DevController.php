@@ -21,17 +21,18 @@ final class DevController extends Controller
 
     public function beforeAction($action): bool
     {
-        $this->enableCsrfValidation = YII_ENV !== 'dev';
+        // Проверяем окружение до parent::beforeAction(): иначе вне dev
+        // CSRF-фильтр перехватит POST и раскроет маршрут ответом 400 вместо 404.
+        if (YII_ENV !== 'dev') {
+            throw new NotFoundHttpException();
+        }
+        $this->enableCsrfValidation = false;
         return parent::beforeAction($action);
     }
 
     /** @return array{requests: int, comments: int, documents: int} */
     public function actionSeedRequests(): array
     {
-        if (YII_ENV !== 'dev') {
-            throw new NotFoundHttpException();
-        }
-
         return (new DemoRequestSeeder(
             Yii::$app->db,
             new DocumentStorage(getenv('DOCUMENT_STORAGE_PATH') ?: '/app/storage/documents'),

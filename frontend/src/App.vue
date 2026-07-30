@@ -1,6 +1,6 @@
 <script setup>
-import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
-import { adminApi, authApi, hasCsrfToken, requestApi, setCsrfToken } from './api'
+import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
+import { adminApi, authApi, devApi, hasCsrfToken, requestApi, setCsrfToken } from './api'
 import { getDevUserId, reconcileDevUserId, setDevUserId } from './devUsers'
 import { createConfirmDialog } from './confirmDialog'
 import { createLatestRequestGuard } from './latestRequestGuard'
@@ -127,6 +127,36 @@ function switchDevUser(rawId) {
 const devUsersError = ref('')
 const devUsersLoading = ref(false)
 const devUsersRequestGuard = createLatestRequestGuard()
+const demoSeedLoading = ref(false)
+const demoSeedMessage = ref('')
+
+async function seedDemoRequests() {
+  if (demoSeedLoading.value) return
+  const confirmed = await confirmDialog.ask(
+    'Все существующие заявки, комментарии и файлы будут безвозвратно удалены и заменены синтетическими демо-данными. Пользователи не изменятся.',
+    { confirmLabel: 'Заполнить демо', danger: true },
+  )
+  if (!confirmed) return
+
+  demoSeedLoading.value = true
+  demoSeedMessage.value = ''
+  try {
+    const result = await devApi.seedRequests()
+    closeRequest({ push: false })
+    showCreate.value = false
+    activeTab.value = 'all'
+    statusFilter.value = ''
+    query.value = ''
+    currentPage.value = 1
+    await nextTick()
+    await loadRequests(true)
+    demoSeedMessage.value = `Создано демо-заявок: ${result.requests}.`
+  } catch {
+    demoSeedMessage.value = 'Не удалось заполнить демо-данные.'
+  } finally {
+    demoSeedLoading.value = false
+  }
+}
 
 // Отдельная функция (не инлайн в bootstrapAuth), чтобы кнопка «Повторить»
 // на экране devUsersError могла переиспользовать ту же логику, а не только
@@ -1313,6 +1343,14 @@ onBeforeUnmount(() => window.removeEventListener('popstate', handlePopstate))
               >
                 <option v-for="user in devUsers" :key="user.id" :value="user.id">{{ user.displayName }} — {{ user.position }}</option>
               </select>
+              <button
+                v-if="authDevMode"
+                type="button"
+                class="secondary demo-seed-button"
+                :disabled="demoSeedLoading"
+                @click="seedDemoRequests"
+              >{{ demoSeedLoading ? 'Заполнение…' : 'Заполнить демо' }}</button>
+              <span v-if="authDevMode && demoSeedMessage" class="demo-seed-message" role="status">{{ demoSeedMessage }}</span>
               <span class="avatar">{{ currentInitials }}</span>
               <span><b>{{ currentProfile.displayName }}</b><small>{{ currentProfile.position }}</small></span>
               <button v-if="isAdministrator" type="button" class="secondary" @click="openAdmin">Администрирование</button>
