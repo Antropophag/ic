@@ -2,6 +2,7 @@ import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
 
 const styles = readFileSync(new URL('./styles.css', import.meta.url), 'utf8')
+const compactStyles = styles.replace(/\s+/g, '')
 
 describe('registry row highlights', () => {
   const hoverGradients = {
@@ -13,8 +14,8 @@ describe('registry row highlights', () => {
   }
 
   it.each(Object.entries(hoverGradients))('keeps the %s row gradient on hover', (color, shade) => {
-    expect(styles).toContain(
-      `.row-color-${color}:hover{background:linear-gradient(to right,${shade},#fff 65%)}`,
+    expect(compactStyles).toContain(
+      `.row-color-${color}:hover{background:linear-gradient(toright,${shade},#fff65%)}`,
     )
   })
 })
