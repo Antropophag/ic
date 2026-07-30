@@ -5,7 +5,7 @@ import { getDevUserId, reconcileDevUserId, setDevUserId } from './devUsers'
 import { createConfirmDialog } from './confirmDialog'
 import { createLatestRequestGuard } from './latestRequestGuard'
 import { requestIdFromLocation, resolveRequestDeepLink, setRequestInUrl } from './requestDeepLink'
-import { ACTIVE_STATUSES, REGISTRY_PAGE_SIZE, REQUEST_COLORS, canStartNow, canSubmitComment, commentFromApi, documentFromApi, documentKind, filterRequests, fromApi, historyFromApi, newestFirstFeed, paginate, withoutStaleActions } from './registry'
+import { REGISTRY_PAGE_SIZE, REQUEST_COLORS, REQUEST_STATUS_OPTIONS, canStartNow, canSubmitComment, commentFromApi, documentFromApi, documentKind, fromApi, historyFromApi, newestFirstFeed, withoutStaleActions } from './registry'
 
 const activeTab = ref('active')
 const query = ref('')
@@ -87,6 +87,7 @@ const loginLoading = ref(false)
 const loginError = ref('')
 const initialRequestId = requestIdFromLocation()
 let initialRequestHandled = false
+let registrySearchTimer = null
 
 const currentProfile = computed(() => {
   if (authDevMode.value) {
@@ -120,7 +121,7 @@ function switchDevUser(rawId) {
   setDevUserId(id)
   devUserId.value = id
   selected.value = null
-  loadRequests()
+  reloadRegistryFromFirstPage()
 }
 
 const devUsersError = ref('')
@@ -367,28 +368,56 @@ const requests = ref([
   { id: '000141', date: '18.07.2026', initiator: 'Ирина Белова', department: 'Служба закупок', product: 'Датчик положения кабины', supplier: 'ООО «Сенсорика»', executor: 'В. В. Козлов', status: 'Заявка выполнена', tone: 'green', color: 'white', securityMark: '✓' },
 ])
 
-const tabs = computed(() => [
-  { id: 'active', label: 'Активные заявки', count: requests.value.filter(item => ACTIVE_STATUSES.includes(item.status)).length },
-  { id: 'all', label: 'Все заявки', count: requests.value.length },
-  { id: 'mine', label: 'Мои заявки', count: requests.value.filter(item => item.initiator === currentProfile.value.displayName).length },
-])
-const statuses = computed(() => [...new Set(requests.value.map(item => item.status))])
-const filtered = computed(() => filterRequests(requests.value, {
-  tab: activeTab.value,
-  query: query.value,
-  status: statusFilter.value,
-  currentUser: currentProfile.value.displayName,
-  sortDirection: sortDirection.value,
-}))
-const paged = computed(() => paginate(filtered.value, currentPage.value))
-const pageNumbers = computed(() => Array.from({ length: paged.value.pageCount }, (_, i) => i + 1))
+const registryPage = reactive({
+  total: requests.value.length,
+  page: 1,
+  pageSize,
+  pageCount: 1,
+  counts: { active: 5, all: requests.value.length, mine: 0 },
+})
 
-watch([activeTab, query, statusFilter, sortDirection], () => {
-  currentPage.value = 1
+const tabs = computed(() => [
+  { id: 'active', label: 'Активные заявки', count: registryPage.counts.active },
+  { id: 'all', label: 'Все заявки', count: registryPage.counts.all },
+  { id: 'mine', label: 'Мои заявки', count: registryPage.counts.mine },
+])
+const paged = computed(() => ({ items: requests.value, ...registryPage }))
+const pageNumbers = computed(() => {
+  const visiblePages = Math.min(7, paged.value.pageCount)
+  const firstPage = Math.max(1, Math.min(
+    paged.value.page - Math.floor(visiblePages / 2),
+    paged.value.pageCount - visiblePages + 1,
+  ))
+  return Array.from({ length: visiblePages }, (_, i) => firstPage + i)
+})
+
+function reloadRegistryFromFirstPage() {
+  if (currentPage.value === 1) loadRequests()
+  else {
+    currentPage.value = 1
+    loadRequests()
+  }
+}
+
+watch([activeTab, statusFilter, sortDirection], reloadRegistryFromFirstPage)
+watch(query, () => {
+  window.clearTimeout(registrySearchTimer)
+  registrySearchTimer = window.setTimeout(reloadRegistryFromFirstPage, 300)
+})
+
+onBeforeUnmount(() => {
+  window.clearTimeout(registrySearchTimer)
+  registryRequestGuard.invalidate()
 })
 
 function toggleSort() {
   sortDirection.value = sortDirection.value === 'desc' ? 'asc' : 'desc'
+}
+
+function goToPage(page) {
+  if (page === currentPage.value) return
+  currentPage.value = page
+  loadRequests()
 }
 
 async function loadRequestDetails(item, preloadedDetail = null) {
@@ -693,9 +722,24 @@ async function loadOlderComments() {
 async function loadRequests(rethrow = false) {
   const requestToken = registryRequestGuard.begin(devUserId.value)
   try {
-    const result = await requestApi.list()
+    const result = await requestApi.list({
+      page: currentPage.value,
+      pageSize,
+      tab: activeTab.value,
+      status: statusFilter.value,
+      query: query.value.trim(),
+      sort: sortDirection.value,
+    })
     if (!registryRequestGuard.isCurrent(requestToken, devUserId.value)) return
     requests.value = result.items.map(fromApi)
+    registryPage.total = result.total ?? result.items.length
+    registryPage.page = result.page ?? 1
+    registryPage.pageSize = result.pageSize ?? pageSize
+    registryPage.pageCount = result.pageCount ?? 1
+    registryPage.counts = result.counts ?? { active: result.items.length, all: result.items.length, mine: 0 }
+    if (currentPage.value !== registryPage.page) {
+      currentPage.value = registryPage.page
+    }
     if (!initialRequestHandled && initialRequestId !== null) {
       try {
         const linkedRequest = await resolveRequestDeepLink(initialRequestId, requests.value, requestApi.get)
@@ -819,11 +863,7 @@ async function refreshSelected(requestId) {
   }
   await loadRequests(true)
   if (selected.value?.backendId !== requestId) return
-  const refreshed = requests.value.find(item => item.backendId === requestId) || null
-  if (!refreshed) {
-    closeRequest({ push: false })
-    return
-  }
+  const refreshed = requests.value.find(item => item.backendId === requestId) || selected.value
   await loadRequestDetails(refreshed)
 }
 
@@ -1320,7 +1360,7 @@ onBeforeUnmount(() => window.removeEventListener('popstate', handlePopstate))
             </div>
             <div class="toolbar">
               <label class="search">⌕ <input v-model="query" placeholder="Поиск по заявкам" /></label>
-              <select v-model="statusFilter"><option value="">Все статусы</option><option v-for="status in statuses" :key="status">{{ status }}</option></select>
+              <select v-model="statusFilter"><option value="">Все статусы</option><option v-for="status in REQUEST_STATUS_OPTIONS" :key="status.value" :value="status.value">{{ status.label }}</option></select>
             </div>
             <div class="table-wrap">
               <table>
@@ -1335,14 +1375,14 @@ onBeforeUnmount(() => window.removeEventListener('popstate', handlePopstate))
                   </tr>
                 </tbody>
               </table>
-              <div v-if="!filtered.length" class="empty"><div>⌕</div><h3>Ничего не найдено</h3><p>Измените запрос или очистите фильтры</p></div>
+              <div v-if="!paged.total" class="empty"><div>⌕</div><h3>Ничего не найдено</h3><p>Измените запрос или очистите фильтры</p></div>
             </div>
-            <footer v-if="filtered.length" class="pagination">
+            <footer v-if="paged.total" class="pagination">
               <span>{{ (paged.page - 1) * pageSize + 1 }}–{{ Math.min(paged.page * pageSize, paged.total) }} из {{ paged.total }}</span>
               <span>
-                <button :disabled="paged.page <= 1" @click="currentPage = paged.page - 1">‹</button>
-                <button v-for="pageNumber in pageNumbers" :key="pageNumber" :class="{ current: pageNumber === paged.page }" @click="currentPage = pageNumber">{{ pageNumber }}</button>
-                <button :disabled="paged.page >= paged.pageCount" @click="currentPage = paged.page + 1">›</button>
+                <button :disabled="paged.page <= 1" @click="goToPage(paged.page - 1)">‹</button>
+                <button v-for="pageNumber in pageNumbers" :key="pageNumber" :class="{ current: pageNumber === paged.page }" @click="goToPage(pageNumber)">{{ pageNumber }}</button>
+                <button :disabled="paged.page >= paged.pageCount" @click="goToPage(paged.page + 1)">›</button>
               </span>
             </footer>
           </div>

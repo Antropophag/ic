@@ -21,6 +21,18 @@ it('loads the registry as JSON', async () => {
   }))
 })
 
+it('sends registry pagination, filters, search, and sorting', async () => {
+  const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({ items: [] }), { status: 200 }))
+  vi.stubGlobal('fetch', fetchMock)
+
+  await requestApi.list({ page: 3, pageSize: 10, tab: 'mine', status: 'completed', query: 'насос', sort: 'asc' })
+
+  expect(fetchMock).toHaveBeenCalledWith(
+    '/api/v1/requests?page=3&pageSize=10&tab=mine&status=completed&query=%D0%BD%D0%B0%D1%81%D0%BE%D1%81&sort=asc',
+    expect.any(Object),
+  )
+})
+
 it('loads one request card with its history', async () => {
   const payload = { item: { id: 7 }, history: [] }
   const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify(payload), { status: 200 }))
