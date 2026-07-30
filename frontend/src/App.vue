@@ -5,7 +5,7 @@ import { getDevUserId, reconcileDevUserId, setDevUserId } from './devUsers'
 import { createConfirmDialog } from './confirmDialog'
 import { createLatestRequestGuard } from './latestRequestGuard'
 import { requestIdFromLocation, resolveRequestDeepLink, setRequestInUrl } from './requestDeepLink'
-import { REGISTRY_PAGE_SIZE, REQUEST_COLORS, REQUEST_STATUS_OPTIONS, canStartNow, canSubmitComment, commentFromApi, documentFromApi, documentKind, fromApi, historyFromApi, initialsFor, newestFirstFeed, securityMarkIcon, withoutStaleActions } from './registry'
+import { REGISTRY_PAGE_SIZE, REQUEST_COLORS, REQUEST_STATUS_OPTIONS, canStartNow, canSubmitComment, commentFromApi, documentFromApi, documentKind, fromApi, historyFromApi, initialsFor, newestFirstFeed, withoutStaleActions } from './registry'
 
 const activeTab = ref('active')
 const query = ref('')
@@ -1401,7 +1401,7 @@ onBeforeUnmount(() => window.removeEventListener('popstate', handlePopstate))
                     <td><b>{{ item.product }}</b><small :title="item.supplier">{{ item.supplier }}</small></td>
                     <td>{{ item.initiator }}<small :title="item.department">{{ item.department }}</small></td>
                     <td>{{ item.executor }}</td><td><span class="badge" :class="item.tone">{{ item.status }}</span></td>
-                    <td class="registry-indicator-cell"><span class="security-mark-icon" :class="securityMarkIcon(item.securityMark).className" :title="securityMarkIcon(item.securityMark).label" :aria-label="securityMarkIcon(item.securityMark).label"><svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path :d="securityMarkIcon(item.securityMark).path" /></svg></span></td>
+                    <td class="registry-indicator-cell"><span class="security-mark-icon" :class="item.securityMarkDisplay?.className" :title="item.securityMarkDisplay?.label" :aria-label="item.securityMarkDisplay?.label"><svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path :d="item.securityMarkDisplay?.path" /></svg></span></td>
                     <td class="registry-indicator-cell"><button v-if="item.lastCommentAuthor" type="button" class="avatar small registry-comment-avatar" :title="'Последний комментарий: ' + item.lastCommentAuthor" :aria-label="'Последний комментарий: ' + item.lastCommentAuthor" @click.stop="openLastComment(item)">{{ initialsFor(item.lastCommentAuthor) }}</button><span v-else class="muted-dash">—</span></td>
                     <td class="registry-indicator-cell"><button v-if="item.hasReport && item.reportVersionId && item.reportOriginalName" type="button" class="doc-icon pdf registry-report-icon" title="Скачать отчёт испытаний" aria-label="Скачать отчёт испытаний" @click.stop="downloadReport(item)">PDF</button><span v-else class="muted-dash">—</span></td>
                   </tr>
@@ -1555,7 +1555,7 @@ onBeforeUnmount(() => window.removeEventListener('popstate', handlePopstate))
                     </div>
                     <p v-if="reassignError" class="action-error">{{ reassignError }}</p>
                   </div>
-                  <div class="fact"><span>Отметка СБ</span><b><span class="security-mark-icon" :class="securityMarkIcon(selected.securityMark).className" :title="securityMarkIcon(selected.securityMark).label" :aria-label="securityMarkIcon(selected.securityMark).label"><svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path :d="securityMarkIcon(selected.securityMark).path" /></svg></span></b></div>
+                  <div class="fact"><span>Отметка СБ</span><b><span class="security-mark-icon" :class="selected.securityMarkDisplay?.className" :title="selected.securityMarkDisplay?.label" :aria-label="selected.securityMarkDisplay?.label"><svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path :d="selected.securityMarkDisplay?.path" /></svg></span></b></div>
                 </div>
               </article>
               <article class="card documents"><h3>Документы <span>{{ selected.documents?.length || 0 }}</span></h3>

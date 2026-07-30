@@ -402,9 +402,16 @@ it('maps the raw security_mark code, not a display glyph (issue #148)', () => {
   expect(fromApi({ ...registered, security_mark: null }).securityMark).toBeNull()
 })
 
+it('precomputes securityMarkDisplay once at mapping time, not per template read', () => {
+  expect(fromApi({ ...registered, security_mark: 'approve' }).securityMarkDisplay).toMatchObject({
+    className: 'security-mark--approve',
+    label: 'Согласовано',
+  })
+})
+
 it('resolves a security mark icon for each SEC-002/SEC-003 state', () => {
-  expect(securityMarkIcon('approve')).toMatchObject({ className: 'approve', label: 'Согласовано' })
-  expect(securityMarkIcon('return')).toMatchObject({ className: 'return', label: 'Возвращено на доработку' })
-  expect(securityMarkIcon(null)).toMatchObject({ className: 'pending', label: 'Контроль ещё не проводился' })
-  expect(securityMarkIcon('unexpected')).toMatchObject({ className: 'pending' })
+  expect(securityMarkIcon('approve')).toMatchObject({ className: 'security-mark--approve', label: 'Согласовано' })
+  expect(securityMarkIcon('return')).toMatchObject({ className: 'security-mark--return', label: 'Возвращено на доработку' })
+  expect(securityMarkIcon(null)).toMatchObject({ className: 'security-mark--pending', label: 'Контроль ещё не проводился' })
+  expect(securityMarkIcon('unexpected')).toMatchObject({ className: 'security-mark--pending' })
 })
