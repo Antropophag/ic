@@ -24,11 +24,12 @@ final class OpinionPdfRendererTest extends TestCase
     {
         $html = (new OpinionPdfRenderer())->renderHtml($this->documentData());
 
-        self::assertStringContainsString('class="document-header"', $html);
+        self::assertStringContainsString('class="accent-rail"', $html);
+        self::assertStringContainsString('class="document"', $html);
         self::assertStringContainsString('class="facts"', $html);
         self::assertStringContainsString('class="opinion"', $html);
         self::assertStringContainsString('class="signoff"', $html);
-        self::assertStringContainsString('fill="#253d98"', $html);
+        self::assertStringContainsString('background:#253d98', $html);
         self::assertStringContainsString('Заявка № 42', $html);
         self::assertStringContainsString('&lt;b&gt;Лифт&lt;/b&gt;', $html);
         self::assertStringContainsString('&lt;script&gt;alert(1)&lt;/script&gt;', $html);
