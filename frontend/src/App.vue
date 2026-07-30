@@ -103,8 +103,12 @@ const currentInitials = computed(() => (currentProfile.value.displayName
   .split(' ').map(part => part[0]).join('').slice(0, 2).toUpperCase()) || '?')
 const isAdministrator = computed(() => (currentProfile.value.roles || []).includes('administrator'))
 const feed = computed(() => buildFeed(selected.value?.history || [], selected.value?.comments || []))
+// У руководителя ИЦ/лаборатории canStart истинно уже при отсутствии
+// исполнителя (право по ТЗ, см. WF-004) — кнопку показываем только после
+// назначения, иначе заявка уходит «В работе» с executor = null (issue #135).
+const canStartNow = computed(() => Boolean(selected.value?.canStart && selected.value?.executorId))
 const hasHeroAction = computed(() => Boolean(selected.value && (
-  selected.value.canAssignExecutor || selected.value.canStart || selected.value.canUploadReport
+  selected.value.canAssignExecutor || canStartNow.value || selected.value.canUploadReport
   || selected.value.canClaimExpert || selected.value.canReassignExpert || selected.value.canPublishOpinion
   || selected.value.canSecurityDecide || selected.value.canReject || selected.value.canWithdraw
   || selected.value.canDeleteReport
@@ -1338,7 +1342,7 @@ onMounted(bootstrapAuth)
                   <a class="help-link" href="/help/assignment.html" target="_blank">Инструкция по назначению и началу работы</a>
                 </div>
 
-                <div v-if="selected.canStart" class="hero-block">
+                <div v-if="canStartNow" class="hero-block">
                   <h4>Начать работу</h4>
                   <p class="hero-sub">Заявка перейдёт в статус «В работе»</p>
                   <div class="hero-actions"><button class="primary big" :disabled="actionLoading" @click="startRequest">{{ actionLoading ? 'Запуск…' : 'Начать работу' }}</button></div>
