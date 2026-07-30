@@ -61,10 +61,15 @@ final class AdminController extends Controller
             return ['errors' => $input->getErrors()];
         }
 
+        $displayName = trim((string) $input->displayName);
+        if ($displayName === '') {
+            $displayName = (string) $input->adLogin;
+        }
+
         try {
             $user = $this->repository()->createPlaceholder(
                 (string) $input->adLogin,
-                (string) $input->displayName,
+                $displayName,
                 $actorId,
             );
         } catch (DuplicateAdLogin $error) {
