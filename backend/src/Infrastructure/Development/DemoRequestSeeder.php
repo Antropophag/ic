@@ -77,7 +77,7 @@ final class DemoRequestSeeder
                 $transaction->rollBack();
             }
             foreach ($newKeys as $item) {
-                $this->storage->delete(is_array($item) ? $item['key'] : $item);
+                $this->deleteBestEffort(is_array($item) ? $item['key'] : $item);
             }
             throw $error;
         }
@@ -229,10 +229,19 @@ final class DemoRequestSeeder
                 'created_at' => $this->time(max(0, $age)),
             ])->execute();
         } catch (\Throwable $error) {
-            $this->storage->delete($key);
+            $this->deleteBestEffort($key);
             throw $error;
         }
         return ['id' => (int) $this->db->getLastInsertID(), 'key' => $key];
+    }
+
+    private function deleteBestEffort(string $key): void
+    {
+        try {
+            $this->storage->delete($key);
+        } catch (\Throwable) {
+            // Cleanup must never mask the database/storage error that triggered it.
+        }
     }
 
     private function insertOpinion(int $requestId, int $versionId, int $expertId, int $age): int
