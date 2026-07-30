@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { buildFeed, canSubmitComment, commentFromApi, documentFromApi, filterRequests, fromApi, historyFromApi, paginate, withoutStaleActions } from './registry'
+import { buildFeed, canSubmitComment, commentFromApi, documentFromApi, documentKind, filterRequests, fromApi, historyFromApi, paginate, withoutStaleActions } from './registry'
 
 const registered = {
   id: 4,
@@ -140,6 +140,24 @@ it('maps the reassign-expert history label', () => {
   }).description).toBe('переназначил(а) эксперта')
 })
 
+it('appends the target name for assign_executor and reassign_expert', () => {
+  expect(historyFromApi({
+    id: 17, kind: 'assignment', action: 'assign_executor', actorName: 'Руководитель',
+    targetName: 'Сергей Кашин', ruleId: 'WF-001', occurredAt: '2026-07-28T10:07:00Z',
+  }).description).toBe('назначил(а) исполнителя: Сергей Кашин')
+  expect(historyFromApi({
+    id: 18, kind: 'assignment', action: 'reassign_expert', actorName: 'Эксперт',
+    targetName: 'Виктор Дорохов', ruleId: 'WF-011', occurredAt: '2026-07-28T10:08:00Z',
+  }).description).toBe('переназначил(а) эксперта: Виктор Дорохов')
+})
+
+it('ignores the target name for claim_expert (self-assignment)', () => {
+  expect(historyFromApi({
+    id: 19, kind: 'assignment', action: 'claim_expert', actorName: 'Эксперт',
+    targetName: 'Эксперт', ruleId: 'WF-010', occurredAt: '2026-07-28T10:09:00Z',
+  }).description).toBe('взял(а) заявку в работу (эксперт)')
+})
+
 it('maps the delete-report permission and history label', () => {
   expect(fromApi({ ...registered, status: 'completed', can_delete_report: 1 }))
     .toMatchObject({ canDeleteReport: true })
@@ -202,6 +220,17 @@ it('maps the latest document version without exposing its storage key', () => {
     mimeType: 'application/pdf', sizeBytes: 1500, sha256: 'a'.repeat(64),
     uploadedBy: 'Иван Иванов', createdAt: '2026-07-28T10:00:00Z',
   })).toMatchObject({ id: 4, documentType: 'attachment', versionId: 12, version: 2, size: '2 КБ' })
+})
+
+it('maps mime types to a document kind for the file icon', () => {
+  expect(documentKind('application/pdf')).toEqual({ label: 'PDF', className: 'pdf' })
+  expect(documentKind('application/vnd.openxmlformats-officedocument.wordprocessingml.document'))
+    .toEqual({ label: 'DOC', className: 'docx' })
+  expect(documentKind('application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'))
+    .toEqual({ label: 'XLS', className: 'xlsx' })
+  expect(documentKind('image/png')).toEqual({ label: 'PNG', className: 'image' })
+  expect(documentKind('image/jpeg')).toEqual({ label: 'JPG', className: 'image' })
+  expect(documentKind('application/octet-stream')).toEqual({ label: '?', className: 'unknown' })
 })
 
 describe('registry filters', () => {

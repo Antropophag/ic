@@ -11,12 +11,16 @@ use yii\console\ExitCode;
 final class DevController extends Controller
 {
     /**
-     * Основные пять профилей закреплены за фиксированными id: на них ссылаются
-     * smoke-тесты, E2E и dev-переключатель пользователя во фронтенде.
+     * Основные шесть профилей закреплены за фиксированными id: на них ссылаются
+     * smoke-тесты и E2E. Фиксированный id не гарантирован на давно живущей
+     * демо-базе (см. actionSeed() ниже) — dev-переключатель пользователя во
+     * фронтенде поэтому резолвит актуальные id через
+     * AuthController::actionDevUsers(), которая читает ad_login отсюда же
+     * (public ради единого источника истины, без дублирования списка).
      *
      * @var array<int, array{ad_login: string, display_name: string, email: string, position: string, department: string, roles: list<string>}>
      */
-    private const CORE_USERS = [
+    public const CORE_USERS = [
         1 => [
             'ad_login' => 'dev.user', 'display_name' => 'Максим Умнов',
             'email' => 'dev.user@example.invalid', 'position' => 'Руководитель ИЦ',
@@ -132,21 +136,26 @@ final class DevController extends Controller
         $now = gmdate('Y-m-d H:i:s');
         foreach (self::CORE_USERS as $userId => $user) {
             // Фиксированный id безопасен только пока под ним либо ещё нет
-            // строки, либо уже сидированный тем же ad_login профиль — иначе
-            // upsert по id молча перепишет чужого реального пользователя на
-            // персистентной demo-базе тем же способом, которого намеренно
-            // избегают ADDITIONAL_EXECUTORS/ADDITIONAL_EXPERTS ниже.
+            // строки, либо уже сидированный тем же ad_login профиль. Список
+            // CORE_USERS со временем растёт (см. #84, где добавился
+            // dev.admin=6) — на давно живущей демо-базе этот id мог уже
+            // раньше органически достаться ADDITIONAL_EXECUTORS/EXPERTS
+            // через автоинкремент, когда CORE_USERS был короче. Отказ от
+            // всего сида в этом случае оставлял бы dev.admin несозданным
+            // навсегда — вместо этого сидируем именно этот профиль по
+            // ad_login, как ADDITIONAL_EXECUTORS/EXPERTS ниже, не трогая
+            // чужую строку на конфликтующем id.
             $existingAdLogin = Yii::$app->db->createCommand(
                 'SELECT ad_login FROM {{%users}} WHERE id = :id',
                 [':id' => $userId],
             )->queryScalar();
             if ($existingAdLogin !== false && $existingAdLogin !== $user['ad_login']) {
-                $this->stderr(
-                    "Refusing to seed core user id={$userId}: existing ad_login "
-                    . "'{$existingAdLogin}' does not match seed ad_login '{$user['ad_login']}' — "
-                    . "this id is already taken by a different real profile.\n",
+                $this->stdout(
+                    "Core user id={$userId} is taken by '{$existingAdLogin}' on this "
+                    . "database — seeding '{$user['ad_login']}' by ad_login instead of id.\n",
                 );
-                return ExitCode::UNSPECIFIED_ERROR;
+                $this->seedByAdLogin([$user['ad_login'] => $user], $roleIds, $now);
+                continue;
             }
             Yii::$app->db->createCommand()->upsert('{{%users}}', [
                 'id' => $userId,
