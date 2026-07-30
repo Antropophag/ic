@@ -90,7 +90,7 @@ bind (AUTH-001..005, `docs/business-rules.md`, `docs/architecture.md#ldap`).
 сортировкой. Параметры query string:
 
 - `page` — номер страницы, начиная с 1 (по умолчанию 1);
-- `pageSize` — размер страницы от 1 до 100 (по умолчанию 20);
+- `pageSize` — размер страницы от 1 до 100 (по умолчанию 10);
 - `tab` — выборка `active`, `all` или `mine` (по умолчанию `active`);
 - `status` — точный код статуса заявки;
 - `query` — поиск по номеру, изделию, инициатору, подразделению, поставщику и
@@ -114,8 +114,8 @@ bind (AUTH-001..005, `docs/business-rules.md`, `docs/architecture.md#ldap`).
   ],
   "total": 37,
   "page": 1,
-  "pageSize": 20,
-  "pageCount": 2,
+  "pageSize": 10,
+  "pageCount": 4,
   "counts": {
     "active": 12,
     "all": 44,

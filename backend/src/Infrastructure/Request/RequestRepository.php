@@ -312,9 +312,10 @@ final class RequestRepository
             . "WHERE executor_assignment.request_id = r.id AND executor_assignment.assignment_type = 'executor' "
             . 'AND executor_assignment.valid_to IS NULL) '
             . 'LEFT JOIN {{%users}} executor ON executor.id = current_executor.user_id ';
+        $countJoins = $query === '' ? ' FROM {{%requests}} r' : $joins;
 
         $total = (int) $this->db->createCommand(
-            'SELECT COUNT(DISTINCT r.id)' . $joins . $whereSql,
+            'SELECT COUNT(DISTINCT r.id)' . $countJoins . $whereSql,
             $filterParams,
         )->queryScalar();
         $pageCount = max(1, (int) ceil($total / $pageSize));
