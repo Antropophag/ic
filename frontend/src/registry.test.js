@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { buildFeed, canSubmitComment, commentFromApi, documentFromApi, filterRequests, fromApi, historyFromApi, paginate, withoutStaleActions } from './registry'
+import { buildFeed, canSubmitComment, commentFromApi, documentFromApi, documentKind, filterRequests, fromApi, historyFromApi, paginate, withoutStaleActions } from './registry'
 
 const registered = {
   id: 4,
@@ -202,6 +202,17 @@ it('maps the latest document version without exposing its storage key', () => {
     mimeType: 'application/pdf', sizeBytes: 1500, sha256: 'a'.repeat(64),
     uploadedBy: 'Иван Иванов', createdAt: '2026-07-28T10:00:00Z',
   })).toMatchObject({ id: 4, documentType: 'attachment', versionId: 12, version: 2, size: '2 КБ' })
+})
+
+it('maps mime types to a document kind for the file icon', () => {
+  expect(documentKind('application/pdf')).toEqual({ label: 'PDF', className: 'pdf' })
+  expect(documentKind('application/vnd.openxmlformats-officedocument.wordprocessingml.document'))
+    .toEqual({ label: 'DOC', className: 'docx' })
+  expect(documentKind('application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'))
+    .toEqual({ label: 'XLS', className: 'xlsx' })
+  expect(documentKind('image/png')).toEqual({ label: 'PNG', className: 'image' })
+  expect(documentKind('image/jpeg')).toEqual({ label: 'JPG', className: 'image' })
+  expect(documentKind('application/octet-stream')).toEqual({ label: '?', className: 'unknown' })
 })
 
 describe('registry filters', () => {

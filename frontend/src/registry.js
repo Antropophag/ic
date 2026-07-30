@@ -146,6 +146,19 @@ export function canSubmitComment(item, detailLoading) {
   return Boolean(item?.canComment) && !detailLoading
 }
 
+const DOCUMENT_KINDS = {
+  'application/pdf': { label: 'PDF', className: 'pdf' },
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document': { label: 'DOC', className: 'docx' },
+  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': { label: 'XLS', className: 'xlsx' },
+  'image/png': { label: 'PNG', className: 'image' },
+  'image/jpeg': { label: 'JPG', className: 'image' },
+}
+const DEFAULT_DOCUMENT_KIND = { label: '?', className: 'unknown' }
+
+export function documentKind(mimeType) {
+  return DOCUMENT_KINDS[mimeType] || DEFAULT_DOCUMENT_KIND
+}
+
 export function documentFromApi(item) {
   return {
     id: Number(item.id),

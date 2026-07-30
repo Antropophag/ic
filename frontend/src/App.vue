@@ -4,7 +4,7 @@ import { adminApi, authApi, hasCsrfToken, requestApi, setCsrfToken } from './api
 import { getDevUserId, reconcileDevUserId, setDevUserId } from './devUsers'
 import { createConfirmDialog } from './confirmDialog'
 import { createLatestRequestGuard } from './latestRequestGuard'
-import { ACTIVE_STATUSES, REGISTRY_PAGE_SIZE, REQUEST_COLORS, buildFeed, canSubmitComment, commentFromApi, documentFromApi, filterRequests, fromApi, historyFromApi, paginate, withoutStaleActions } from './registry'
+import { ACTIVE_STATUSES, REGISTRY_PAGE_SIZE, REQUEST_COLORS, buildFeed, canSubmitComment, commentFromApi, documentFromApi, documentKind, filterRequests, fromApi, historyFromApi, paginate, withoutStaleActions } from './registry'
 
 const activeTab = ref('active')
 const query = ref('')
@@ -1362,7 +1362,7 @@ onMounted(bootstrapAuth)
                 <p class="wide"><span>Метод испытаний</span><b>{{ selected.testMethod || '—' }}</b></p>
               </article>
               <article class="card documents"><h3>Документы <span>{{ selected.documents?.length || 0 }}</span></h3>
-                <button v-for="document in selected.documents || []" :key="document.versionId" class="document-row" @click="downloadDocument(document)"><span>▣</span><span><b>{{ document.title }}</b><small>Версия {{ document.version }} · {{ document.size }} · {{ document.createdAt }}</small></span></button>
+                <button v-for="document in selected.documents || []" :key="document.versionId" class="document-row" @click="downloadDocument(document)"><span class="doc-icon" :class="documentKind(document.mimeType).className">{{ documentKind(document.mimeType).label }}</span><span><b>{{ document.title }}</b><small>Версия {{ document.version }} · {{ document.size }} · {{ document.createdAt }}</small></span></button>
                 <p v-if="!selected.documents?.length" class="placeholder-copy">Документов пока нет.</p>
                 <label v-if="selected.canUploadDocument" class="secondary upload-button">{{ documentLoading ? 'Загрузка…' : 'Загрузить документ' }}<input type="file" :disabled="documentLoading" accept=".pdf,.png,.jpg,.jpeg,.docx,.xlsx" @change="uploadDocument" /></label>
                 <p v-if="documentError" class="action-error">{{ documentError }}</p>
