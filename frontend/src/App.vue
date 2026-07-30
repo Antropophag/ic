@@ -649,14 +649,16 @@ async function loadRequests(rethrow = false) {
     if (!initialRequestHandled && initialRequestId !== null) {
       try {
         const linkedRequest = await resolveRequestDeepLink(initialRequestId, requests.value, requestApi.get)
+        if (!registryRequestGuard.isCurrent(requestToken, devUserId.value)) return
         initialRequestHandled = true
         await openRequest(
           linkedRequest.detail ? fromApi(linkedRequest.item) : linkedRequest.item,
           linkedRequest.detail,
         )
       } catch (error) {
+        if (!registryRequestGuard.isCurrent(requestToken, devUserId.value)) return
+        initialRequestHandled = true
         if (error.status === 403 || error.status === 404) {
-          initialRequestHandled = true
           registryError.value = 'Заявка из ссылки не найдена или недоступна.'
         } else {
           registryError.value = 'Не удалось открыть заявку из ссылки.'
