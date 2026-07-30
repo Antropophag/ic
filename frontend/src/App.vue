@@ -4,6 +4,7 @@ import { adminApi, authApi, hasCsrfToken, requestApi, setCsrfToken } from './api
 import { getDevUserId, reconcileDevUserId, setDevUserId } from './devUsers'
 import { createConfirmDialog } from './confirmDialog'
 import { createLatestRequestGuard } from './latestRequestGuard'
+import { requestIdFromLocation, setRequestInUrl } from './requestDeepLink'
 import { ACTIVE_STATUSES, REGISTRY_PAGE_SIZE, REQUEST_COLORS, buildFeed, canSubmitComment, commentFromApi, documentFromApi, documentKind, filterRequests, fromApi, historyFromApi, paginate, withoutStaleActions } from './registry'
 
 const activeTab = ref('active')
@@ -81,6 +82,8 @@ const authUser = ref(null)
 const loginForm = reactive({ login: '', password: '' })
 const loginLoading = ref(false)
 const loginError = ref('')
+const initialRequestId = requestIdFromLocation()
+let initialRequestHandled = false
 
 const currentProfile = computed(() => {
   if (authDevMode.value) {
@@ -455,6 +458,7 @@ async function openRequest(item) {
   deleteReportLoading.value = false
   deleteReportError.value = ''
   actionError.value = ''
+  setRequestInUrl(item.backendId)
   await loadRequestDetails(item)
 }
 
@@ -473,6 +477,7 @@ function closeRequest() {
   reassignRequestGuard.invalidate()
   deleteReportRequestGuard.invalidate()
   selected.value = null
+  setRequestInUrl(null)
   showAdmin.value = false
   detailLoading.value = false
   detailError.value = ''
@@ -641,6 +646,12 @@ async function loadRequests(rethrow = false) {
     const result = await requestApi.list()
     if (!registryRequestGuard.isCurrent(requestToken, devUserId.value)) return
     requests.value = result.items.map(fromApi)
+    if (!initialRequestHandled && initialRequestId !== null) {
+      initialRequestHandled = true
+      const linkedRequest = requests.value.find(item => item.backendId === initialRequestId)
+      if (linkedRequest) await openRequest(linkedRequest)
+      else registryError.value = 'Заявка из ссылки не найдена или недоступна.'
+    }
   } catch (error) {
     if (!registryRequestGuard.isCurrent(requestToken, devUserId.value)) return
     // Макет остаётся доступным отдельно от backend; ошибка будет видна в Network.

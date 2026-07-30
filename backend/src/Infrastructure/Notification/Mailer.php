@@ -12,7 +12,7 @@ use Symfony\Component\Mime\Email;
 
 final class Mailer
 {
-    public function send(string $toEmail, string $toName, string $subject, string $body): void
+    public function send(int $requestId, string $toEmail, string $toName, string $subject, string $body): void
     {
         $transport = Transport::fromDsn($this->dsn());
         $mailer = new SymfonyMailer($transport);
@@ -21,7 +21,8 @@ final class Mailer
             ->from(new Address(self::env('MAIL_FROM_ADDRESS'), self::env('MAIL_FROM_NAME', '')))
             ->to(new Address($toEmail, $toName))
             ->subject($subject)
-            ->text($body);
+            ->text($body . "\n\nОткрыть заявку: " . RequestUrl::build($requestId))
+            ->html(EmailTemplate::render($subject, $body, RequestUrl::build($requestId)));
 
         $mailer->send($email);
     }

@@ -57,7 +57,7 @@ final class NotificationController extends Controller
             }
 
             $row = Yii::$app->db->createCommand(
-                'SELECT recipient_email, recipient_name, subject, body, attempts '
+                'SELECT request_id, recipient_email, recipient_name, subject, body, attempts '
                 . 'FROM {{%notification_outbox}} WHERE id = :id',
                 [':id' => $id],
             )->queryOne();
@@ -73,7 +73,7 @@ final class NotificationController extends Controller
                     (string) $row['body'],
                     getenv('NOTIFICATION_TEST_REDIRECT_EMAIL') ?: null,
                 );
-                $mailer->send($recipientEmail, (string) $row['recipient_name'], $subject, $body);
+                $mailer->send((int) $row['request_id'], $recipientEmail, (string) $row['recipient_name'], $subject, $body);
                 // ACL-005/AUD-003: тело письма могло содержать одноразовые
                 // download-токены (см. DocumentDownloadUrl) — после успешной
                 // отправки они больше не нужны и не должны бессрочно
