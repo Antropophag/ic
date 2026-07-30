@@ -127,11 +127,7 @@ final class AuthController extends Controller
             Yii::$app->response->statusCode = 403;
             return ['errors' => ['login' => ['Учётная запись отключена в портале.']], 'ruleId' => $error->ruleId];
         } catch (LdapConnectionException $error) {
-            // Yii::error() надёжно не долетает до docker logs через связку
-            // FileTarget + php://stderr в этом окружении (issue #80) —
-            // до починки для диагностируемости LDAP-сбоев используем
-            // стандартный error_log(), который проверенно доходит.
-            error_log('LDAP connection failed during login: ' . $error->getMessage());
+            Yii::error('LDAP connection failed during login: ' . $error->getMessage());
             throw new ServerErrorHttpException('LDAP сервер недоступен. Обратитесь к администратору.');
         }
 

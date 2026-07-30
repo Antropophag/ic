@@ -3,6 +3,7 @@ set -eu
 
 base_url=${BASE_URL:-http://localhost:8080}
 dev_user_id=${DEV_USER_ID:-1}
+admin_user_id=${ADMIN_USER_ID:-}
 initiator_user_id=${INITIATOR_USER_ID:-3}
 
 sql_scalar() {
@@ -24,7 +25,46 @@ until curl --fail --silent --show-error "$base_url/health/ready" >/dev/null; do
   sleep 2
 done
 
+if [ -n "$admin_user_id" ]; then
+  case "$admin_user_id" in
+  0 | *[!0-9]*)
+    echo 'ADMIN_USER_ID must be a positive integer' >&2
+    exit 1
+    ;;
+  esac
+  admin_override_valid=$(sql_scalar \
+    "SELECT COUNT(*) FROM users u JOIN user_roles ur ON ur.user_id = u.id JOIN roles r ON r.id = ur.role_id WHERE u.id = $admin_user_id AND u.is_active = 1 AND r.code = 'administrator'")
+  [ "$admin_override_valid" = '1' ] || {
+    echo "ADMIN_USER_ID=$admin_user_id is not an active administrator" >&2
+    exit 1
+  }
+else
+  admin_user_id=$(sql_scalar \
+    "SELECT u.id FROM users u JOIN user_roles ur ON ur.user_id = u.id JOIN roles r ON r.id = ur.role_id WHERE u.ad_login = 'dev.admin' AND u.is_active = 1 AND r.code = 'administrator' LIMIT 1")
+fi
+[ -n "$admin_user_id" ] || {
+  echo 'Active dev.admin with administrator role was not found' >&2
+  exit 1
+}
+
 curl --fail --silent --show-error "$base_url/health/live" | grep '"status":"ok"' >/dev/null
+
+# Verify the configured Yii target all the way through FPM into the container
+# log stream. The endpoint accepts administrators only. Use the probe start time
+# so an older successful probe cannot pass.
+logging_probe_started=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+curl --fail --silent --show-error \
+  --header "X-Dev-User-ID: $admin_user_id" \
+  "$base_url/health/logging" | grep '"status":"ok"' >/dev/null
+logging_attempts=0
+until docker compose logs --no-color --since "$logging_probe_started" backend | grep -F '[error][health.logging] Logging smoke probe' >/dev/null; do
+  logging_attempts=$((logging_attempts + 1))
+  if [ "$logging_attempts" -ge 5 ]; then
+    echo 'Yii error did not reach docker compose logs backend' >&2
+    exit 1
+  fi
+  sleep 1
+done
 
 invalid_status=$(curl --silent --output /dev/null --write-out '%{http_code}' \
   --request POST \

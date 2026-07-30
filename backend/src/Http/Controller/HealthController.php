@@ -4,9 +4,15 @@ declare(strict_types=1);
 
 namespace App\Http\Controller;
 
+use App\Domain\Identity\RoleManagementDenied;
+use App\Domain\Identity\RoleManagementPolicy;
 use App\Infrastructure\Document\DocumentStorage;
+use App\Infrastructure\Identity\CurrentUser;
+use App\Infrastructure\Identity\UserAdministrationRepository;
 use Yii;
 use yii\rest\Controller;
+use yii\web\ForbiddenHttpException;
+use yii\web\NotFoundHttpException;
 use yii\web\ServerErrorHttpException;
 
 final class HealthController extends Controller
@@ -25,6 +31,29 @@ final class HealthController extends Controller
         return ['status' => 'ok'];
     }
 
+    /** @return array{status: 'ok'} */
+    public function actionLogging(): array
+    {
+        if (YII_ENV !== 'dev') {
+            throw new NotFoundHttpException();
+        }
+        $actorId = (new CurrentUser(Yii::$app->db))->id(Yii::$app->request);
+        $repository = new UserAdministrationRepository(Yii::$app->db);
+        try {
+            (new RoleManagementPolicy())->assertCanManage(
+                $this->isActiveUser($actorId),
+                $repository->rolesFor($actorId),
+            );
+        } catch (RoleManagementDenied $error) {
+            throw new ForbiddenHttpException($error->getMessage());
+        }
+
+        Yii::error('Logging smoke probe', 'health.logging');
+        Yii::getLogger()->flush(true);
+
+        return ['status' => 'ok'];
+    }
+
     /** @return array{status: 'ready', database: 'ok', documentStorage: 'ok'} */
     public function actionReady(): array
     {
@@ -37,5 +66,13 @@ final class HealthController extends Controller
         }
 
         return ['status' => 'ready', 'database' => 'ok', 'documentStorage' => 'ok'];
+    }
+
+    private function isActiveUser(int $userId): bool
+    {
+        return Yii::$app->db->createCommand(
+            'SELECT 1 FROM {{%users}} WHERE id = :id AND is_active = 1',
+            [':id' => $userId],
+        )->queryScalar() !== false;
     }
 }
