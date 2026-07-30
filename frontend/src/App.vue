@@ -113,6 +113,29 @@ function switchDevUser(rawId) {
   loadRequests()
 }
 
+const devUsersError = ref('')
+
+// Отдельная функция (не инлайн в bootstrapAuth), чтобы кнопка «Повторить»
+// на экране devUsersError могла переиспользовать ту же логику, а не только
+// перезагрузку страницы.
+async function loadDevUsers() {
+  devUsersError.value = ''
+  try {
+    const devUsersResult = await authApi.devUsers()
+    devUsers.value = devUsersResult.items
+    devUserId.value = reconcileDevUserId(devUsers.value)
+    return true
+  } catch {
+    // Список dev-актёров не резолвлен — X-Dev-User-ID из localStorage мог
+    // не совпасть ни с одним реальным пользователем на этой БД (именно
+    // конфликт id, который чинит этот PR). Блокируем весь интерфейс явным
+    // экраном ошибки с повтором вместо loadRequests() под неверифицированным
+    // актёром — иначе получили бы неверные капабилити/403 без объяснения.
+    devUsersError.value = 'Не удалось загрузить список dev-пользователей.'
+    return false
+  }
+}
+
 async function bootstrapAuth() {
   authLoading.value = true
   try {
@@ -120,20 +143,8 @@ async function bootstrapAuth() {
     setCsrfToken(result.csrfToken)
     authDevMode.value = Boolean(result.devMode)
     authUser.value = result.user
-    if (authDevMode.value) {
-      try {
-        const devUsersResult = await authApi.devUsers()
-        devUsers.value = devUsersResult.items
-        devUserId.value = reconcileDevUserId(devUsers.value)
-      } catch {
-        // Список dev-актёров не резолвлен — X-Dev-User-ID из localStorage
-        // мог не совпасть ни с одним реальным пользователем на этой БД
-        // (именно конфликт id, который чинит этот PR). Не продолжаем
-        // loadRequests() под неверифицированным актёром: это дало бы
-        // неверные капабилити или 403 вместо явной ошибки.
-        registryError.value = 'Не удалось загрузить список dev-пользователей. Обновите страницу.'
-        return
-      }
+    if (authDevMode.value && !(await loadDevUsers())) {
+      return
     }
     if (authDevMode.value || authUser.value) {
       await loadRequests()
@@ -145,6 +156,12 @@ async function bootstrapAuth() {
     authUser.value = null
   } finally {
     authLoading.value = false
+  }
+}
+
+async function retryDevUsers() {
+  if (await loadDevUsers()) {
+    await loadRequests()
   }
 }
 
@@ -1037,6 +1054,12 @@ onMounted(bootstrapAuth)
 <template>
   <div class="shell">
     <div v-if="authLoading" class="auth-loading">Загрузка…</div>
+    <div v-else-if="devUsersError" class="auth-screen">
+      <div class="auth-card">
+        <p class="form-error">{{ devUsersError }}</p>
+        <button type="button" class="primary" @click="retryDevUsers">Повторить</button>
+      </div>
+    </div>
     <div v-else-if="!authDevMode && !authUser" class="auth-screen">
       <form class="auth-card" @submit.prevent="login">
         <svg class="brand-mark" width="48" height="48" viewBox="0 0 40 40" fill="none" aria-hidden="true">
