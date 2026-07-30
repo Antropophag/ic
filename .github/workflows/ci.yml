@@ -16,7 +16,7 @@ concurrency:
 
 jobs:
   frontend:
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
     steps:
       - uses: actions/checkout@v7
         with:
@@ -38,7 +38,7 @@ jobs:
         working-directory: frontend
 
   backend:
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
     steps:
       - uses: actions/checkout@v7
         with:
@@ -47,7 +47,7 @@ jobs:
       - run: make coverage
 
   repository-quality:
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
     steps:
       - uses: actions/checkout@v7
         with:
@@ -70,30 +70,39 @@ jobs:
           HADOLINT_SHA256: "56de6d5e5ec427e17b74fa48d51271c7fc0d61244bf5c90e828aab8362d55010"
           SHFMT_VERSION: "3.10.0"
           SHFMT_SHA256: "1f57a384d59542f8fac5f503da1f3ea44242f46dff969569e80b524d64b71dbc"
+          SHELLCHECK_VERSION: "0.10.0"
+          SHELLCHECK_SHA256: "6c881ab0698e4e6ea235245f22832860544f17ba386442fe7e9d629f8cbedf87"
         run: |
           set -euo pipefail
-          sudo apt-get update
-          sudo apt-get install -y shellcheck
-          pip install "yamllint==1.37.1"
+          install_dir="${HOME}/.local/bin"
+          mkdir -p "${install_dir}"
+          echo "${install_dir}" >> "${GITHUB_PATH}"
+          pip install --user "yamllint==1.37.1"
+
+          shellcheck_archive="shellcheck-v${SHELLCHECK_VERSION}.linux.x86_64.tar.xz"
+          curl -sSfL "https://github.com/koalaman/shellcheck/releases/download/v${SHELLCHECK_VERSION}/${shellcheck_archive}" -o "${shellcheck_archive}"
+          echo "${SHELLCHECK_SHA256}  ${shellcheck_archive}" | sha256sum -c -
+          tar -xJf "${shellcheck_archive}" "shellcheck-v${SHELLCHECK_VERSION}/shellcheck"
+          install -m 0755 "shellcheck-v${SHELLCHECK_VERSION}/shellcheck" "${install_dir}/shellcheck"
 
           shfmt_bin="shfmt_v${SHFMT_VERSION}_linux_amd64"
           curl -sSfL "https://github.com/mvdan/sh/releases/download/v${SHFMT_VERSION}/${shfmt_bin}" -o "${shfmt_bin}"
           echo "${SHFMT_SHA256}  ${shfmt_bin}" | sha256sum -c -
-          sudo install -m 0755 "${shfmt_bin}" /usr/local/bin/shfmt
+          install -m 0755 "${shfmt_bin}" "${install_dir}/shfmt"
 
           curl -sSfL "https://github.com/hadolint/hadolint/releases/download/v${HADOLINT_VERSION}/hadolint-Linux-x86_64" -o hadolint
           echo "${HADOLINT_SHA256}  hadolint" | sha256sum -c -
-          sudo install -m 0755 hadolint /usr/local/bin/hadolint
+          install -m 0755 hadolint "${install_dir}/hadolint"
 
           actionlint_archive="actionlint_${ACTIONLINT_VERSION}_linux_amd64.tar.gz"
           curl -sSfL "https://github.com/rhysd/actionlint/releases/download/v${ACTIONLINT_VERSION}/${actionlint_archive}" -o "${actionlint_archive}"
           echo "${ACTIONLINT_SHA256}  ${actionlint_archive}" | sha256sum -c -
           tar -xzf "${actionlint_archive}" actionlint
-          sudo install -m 0755 actionlint /usr/local/bin/actionlint
+          install -m 0755 actionlint "${install_dir}/actionlint"
       - run: make repo-quality
 
   backend-integration:
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
     steps:
       - uses: actions/checkout@v7
         with:
@@ -104,7 +113,7 @@ jobs:
         run: docker compose down --volumes
 
   api-smoke:
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
     steps:
       - uses: actions/checkout@v7
         with:
@@ -118,7 +127,7 @@ jobs:
         run: docker compose down --volumes
 
   browser-e2e:
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
     steps:
       - uses: actions/checkout@v7
         with:
@@ -134,7 +143,7 @@ jobs:
       - run: docker compose run --rm backend ./yii dev/seed
       - run: npm ci --no-audit --no-fund
         working-directory: frontend
-      - run: npx playwright install --with-deps chromium
+      - run: npx playwright install chromium
         working-directory: frontend
       - run: npm run e2e
         working-directory: frontend
@@ -147,7 +156,7 @@ jobs:
         run: docker compose down --volumes
 
   analyze:
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
     steps:
       - uses: actions/checkout@v7
         with:
@@ -159,7 +168,7 @@ jobs:
       - run: semgrep scan --config auto --error backend/src frontend/src
 
   secrets:
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
     permissions:
       contents: read
       pull-requests: read
