@@ -29,11 +29,12 @@ final class m260730_000002_link_report_transition_to_document_version extends Mi
         $this->createIndex(
             'idx_document_version_created_at',
             '{{%request_document_versions}}',
-            ['document_id', 'created_at'],
+            ['document_id', 'created_at', 'id'],
         );
         // Existing upload events predate the explicit relation. Associate
-        // each one with the closest report version of the same request;
-        // future events are linked directly at insert time.
+        // each one with the latest report version at or before the event,
+        // falling back to the earliest version after it. Future events are
+        // linked directly at insert time.
         $this->execute(
             "UPDATE {{%request_transitions}} transition_event SET document_version_id = COALESCE(("
             . 'SELECT version.id FROM {{%request_document_versions}} version '
