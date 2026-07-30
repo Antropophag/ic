@@ -276,17 +276,49 @@ final class RequestRepository
         ])->execute();
     }
 
-    // Реестр целиком грузится на клиент, где выполняются поиск, сортировка и
-    // пагинация (App.vue). Лимит — верхняя граница для ожидаемого объёма
-    // внутреннего корпоративного реестра, а не постраничная выдача; при
-    // устойчивом росте свыше нескольких сотен активных записей потребуется
-    // перейти на серверную пагинацию, поиск и фильтрацию (см. issue #59).
-    private const DEFAULT_LIST_LIMIT = 500;
+    /** @return array{items: list<array<string, mixed>>, total: int, page: int, pageSize: int, pageCount: int, counts: array{active: int, all: int, mine: int}} */
+    public function findPage(
+        int $actorId,
+        int $page,
+        int $pageSize,
+        string $tab,
+        ?string $status,
+        string $query,
+        string $sort,
+    ): array {
+        $where = [];
+        $filterParams = [];
+        if ($tab === 'active') {
+            $where[] = "r.status IN ('registered', 'in_progress', 'suspended', 'opinion_preparation', 'security_review')";
+        } elseif ($tab === 'mine') {
+            $where[] = 'r.initiator_id = :filter_actor';
+            $filterParams[':filter_actor'] = $actorId;
+        }
+        if ($status !== null) {
+            $where[] = 'r.status = :filter_status';
+            $filterParams[':filter_status'] = $status;
+        }
+        if ($query !== '') {
+            $where[] = "(LOCATE(:filter_query, LPAD(CAST(r.number AS CHAR), 6, '0')) > 0 "
+                . 'OR LOCATE(:filter_query, r.product_name) > 0 OR LOCATE(:filter_query, u.display_name) > 0 '
+                . 'OR LOCATE(:filter_query, u.department) > 0 OR LOCATE(:filter_query, r.supplier) > 0 '
+                . 'OR LOCATE(:filter_query, executor.display_name) > 0)';
+            $filterParams[':filter_query'] = $query;
+        }
+        $whereSql = $where === [] ? '' : ' WHERE ' . implode(' AND ', $where);
+        $joins = ' FROM {{%requests}} r JOIN {{%users}} u ON u.id = r.initiator_id '
+            . 'LEFT JOIN {{%request_assignments}} current_executor ON current_executor.request_id = r.id '
+            . "AND current_executor.assignment_type = 'executor' AND current_executor.valid_to IS NULL "
+            . 'LEFT JOIN {{%users}} executor ON executor.id = current_executor.user_id ';
 
-    /** @return list<array<string, mixed>> */
-    public function findLatest(int $actorId, int $limit = self::DEFAULT_LIST_LIMIT): array
-    {
-        return $this->db->createCommand(
+        $total = (int) $this->db->createCommand(
+            'SELECT COUNT(DISTINCT r.id)' . $joins . $whereSql,
+            $filterParams,
+        )->queryScalar();
+        $pageCount = max(1, (int) ceil($total / $pageSize));
+        $safePage = min($page, $pageCount);
+
+        $items = $this->db->createCommand(
             'SELECT r.id, r.number, r.status, r.color, r.product_name, r.manufacturer, '
             . 'r.supplier, r.sample_quantity, r.test_method, r.lock_version AS lockVersion, r.created_at, '
             . 'u.display_name AS initiator_name, u.department, '
@@ -339,15 +371,13 @@ final class RequestRepository
             . "WHERE wu.id = :withdraw_actor_active AND wu.is_active = 1) "
             . 'AND NOT EXISTS(SELECT 1 FROM {{%security_checks}} wsc WHERE wsc.request_id = r.id)) '
             . 'AS can_withdraw '
-            . 'FROM {{%requests}} r JOIN {{%users}} u ON u.id = r.initiator_id '
-            . 'LEFT JOIN {{%request_assignments}} current_executor ON current_executor.request_id = r.id '
-            . "AND current_executor.assignment_type = 'executor' AND current_executor.valid_to IS NULL "
-            . 'LEFT JOIN {{%users}} executor ON executor.id = current_executor.user_id '
+            . $joins
             . 'LEFT JOIN {{%request_assignments}} current_expert ON current_expert.request_id = r.id '
             . "AND current_expert.assignment_type = 'expert' AND current_expert.valid_to IS NULL "
             . 'LEFT JOIN {{%users}} expert ON expert.id = current_expert.user_id '
-            . 'ORDER BY r.number DESC LIMIT :limit',
-            [
+            . $whereSql
+            . ' ORDER BY r.number ' . ($sort === 'asc' ? 'ASC' : 'DESC') . ' LIMIT :limit OFFSET :offset',
+            array_merge([
                 ':color_actor' => $actorId,
                 ':color_actor_role' => $actorId,
                 ':assign_actor' => $actorId,
@@ -368,9 +398,29 @@ final class RequestRepository
                 ':reject_actor_role' => $actorId,
                 ':withdraw_actor' => $actorId,
                 ':withdraw_actor_active' => $actorId,
-                ':limit' => $limit,
-            ],
+                ':limit' => $pageSize,
+                ':offset' => ($safePage - 1) * $pageSize,
+            ], $filterParams),
         )->queryAll();
+
+        $counts = $this->db->createCommand(
+            "SELECT SUM(r.status IN ('registered', 'in_progress', 'suspended', 'opinion_preparation', 'security_review')) AS active, "
+            . 'COUNT(*) AS `all`, SUM(r.initiator_id = :counts_actor) AS mine FROM {{%requests}} r',
+            [':counts_actor' => $actorId],
+        )->queryOne();
+
+        return [
+            'items' => $items,
+            'total' => $total,
+            'page' => $safePage,
+            'pageSize' => $pageSize,
+            'pageCount' => $pageCount,
+            'counts' => [
+                'active' => (int) ($counts['active'] ?? 0),
+                'all' => (int) ($counts['all'] ?? 0),
+                'mine' => (int) ($counts['mine'] ?? 0),
+            ],
+        ];
     }
 
     /** @return array{item: array<string, mixed>, history: list<array<string, mixed>>, comments: list<array<string, mixed>>, commentsPage: array{hasMore: bool, nextBeforeId: int|null}, documents: list<array<string, mixed>>} */

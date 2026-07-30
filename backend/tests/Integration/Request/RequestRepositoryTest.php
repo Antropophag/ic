@@ -143,13 +143,35 @@ final class RequestRepositoryTest extends IntegrationTestCase
 
         $repository = new RequestRepository($this->db());
 
-        $managerRow = self::findRow($repository->findLatest($manager, 500), (int) $request['id']);
+        $managerPage = $repository->findPage($manager, 1, 100, 'all', null, '', 'desc');
+        $managerRow = self::findRow($managerPage['items'], (int) $request['id']);
         self::assertSame(1, (int) $managerRow['can_reject']);
         self::assertSame(0, (int) $managerRow['can_withdraw']);
 
-        $initiatorRow = self::findRow($repository->findLatest($initiator, 500), (int) $request['id']);
+        $initiatorPage = $repository->findPage($initiator, 1, 100, 'all', null, '', 'desc');
+        $initiatorRow = self::findRow($initiatorPage['items'], (int) $request['id']);
         self::assertSame(0, (int) $initiatorRow['can_reject']);
         self::assertSame(1, (int) $initiatorRow['can_withdraw']);
+    }
+
+    public function testRegistryIsFilteredAndPaginatedOnServer(): void
+    {
+        $initiator = $this->createUser('dev.it.registry-page', 'Инициатор пагинации');
+        $other = $this->createUser('dev.it.registry-other', 'Другой инициатор');
+        $first = $this->createRegisteredRequest($initiator, 'уникальный насос');
+        $this->createRegisteredRequest($initiator, 'уникальный насос второй');
+        $this->createRegisteredRequest($other, 'постороннее изделие');
+
+        $repository = new RequestRepository($this->db());
+        $page = $repository->findPage($initiator, 1, 1, 'mine', 'registered', 'уникальный насос', 'asc');
+
+        self::assertSame(2, $page['total']);
+        self::assertSame(1, $page['page']);
+        self::assertSame(1, $page['pageSize']);
+        self::assertSame(2, $page['pageCount']);
+        self::assertSame((int) $first['id'], (int) $page['items'][0]['id']);
+        self::assertGreaterThanOrEqual(2, $page['counts']['mine']);
+        self::assertGreaterThanOrEqual(3, $page['counts']['all']);
     }
 
     public function testManagerWithTwoRolesIsNotifiedOnlyOnceOnCreate(): void

@@ -38,7 +38,14 @@ async function request(path, options = {}) {
 }
 
 export const requestApi = {
-  list: () => request('/api/v1/requests'),
+  list: (params = {}) => {
+    const query = new URLSearchParams()
+    Object.entries(params).forEach(([key, value]) => {
+      if (value !== '' && value !== null && value !== undefined) query.set(key, String(value))
+    })
+    const suffix = query.size ? `?${query}` : ''
+    return request(`/api/v1/requests${suffix}`)
+  },
   get: requestId => request(`/api/v1/requests/${requestId}`),
   comments: (requestId, beforeId) => request(`/api/v1/requests/${requestId}/comments?beforeId=${beforeId}`),
   addComment: (requestId, body) => request(`/api/v1/requests/${requestId}/comments`, {

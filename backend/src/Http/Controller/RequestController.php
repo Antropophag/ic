@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Http\Controller;
 
 use App\Application\Request\CreateRequestInput;
+use App\Application\Request\ListRequestsInput;
 use App\Application\Request\AddCommentInput;
 use App\Application\Request\AssignExecutorInput;
 use App\Application\Request\AssignExpertInput;
@@ -68,11 +69,25 @@ final class RequestController extends Controller
         return parent::beforeAction($action);
     }
 
-    /** @return array{items: list<array<string, mixed>>} */
+    /** @return array<string, mixed> */
     public function actionIndex(): array
     {
-        $actorId = $this->currentUserId();
-        return ['items' => $this->repository()->findLatest($actorId)];
+        $input = new ListRequestsInput();
+        $input->load(Yii::$app->request->queryParams, '');
+        if (!$input->validate()) {
+            Yii::$app->response->statusCode = 422;
+            return ['errors' => $input->getErrors()];
+        }
+
+        return $this->repository()->findPage(
+            $this->currentUserId(),
+            (int) $input->page,
+            (int) $input->pageSize,
+            (string) $input->tab,
+            $input->status === null || $input->status === '' ? null : (string) $input->status,
+            trim((string) $input->query),
+            (string) $input->sort,
+        );
     }
 
     /** @return array{item: array<string, mixed>, history: list<array<string, mixed>>, comments: list<array<string, mixed>>, commentsPage: array{hasMore: bool, nextBeforeId: int|null}, documents: list<array<string, mixed>>} */

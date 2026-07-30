@@ -17,6 +17,8 @@ const STATUS_LABELS = {
   withdrawn: 'Заявка отозвана',
 }
 
+export const REQUEST_STATUS_OPTIONS = Object.entries(STATUS_LABELS).map(([value, label]) => ({ value, label }))
+
 const STATUS_TONES = {
   registered: 'blue', in_progress: 'cyan', suspended: 'orange',
   opinion_preparation: 'violet', security_review: 'yellow', completed: 'green',
