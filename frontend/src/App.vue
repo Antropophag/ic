@@ -809,11 +809,7 @@ async function refreshSelected(requestId) {
   }
   await loadRequests(true)
   if (selected.value?.backendId !== requestId) return
-  const refreshed = requests.value.find(item => item.backendId === requestId) || null
-  if (!refreshed) {
-    closeRequest()
-    return
-  }
+  const refreshed = requests.value.find(item => item.backendId === requestId) || selected.value
   await loadRequestDetails(refreshed)
 }
 
