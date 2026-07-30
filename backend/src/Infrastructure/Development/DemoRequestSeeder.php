@@ -216,17 +216,22 @@ final class DemoRequestSeeder
                 unlink($temporary);
             }
         }
-        $this->db->createCommand()->insert('{{%request_documents}}', [
-            'request_id' => $requestId, 'document_type' => $type, 'title' => $name,
-            'created_by' => $userId, 'created_at' => $this->time(max(0, $age)),
-        ])->execute();
-        $documentId = (int) $this->db->getLastInsertID();
-        $this->db->createCommand()->insert('{{%request_document_versions}}', [
-            'document_id' => $documentId, 'version' => 1, 'storage_key' => $key,
-            'original_name' => $name, 'mime_type' => 'text/plain', 'size_bytes' => strlen($content),
-            'sha256' => hash('sha256', $content), 'uploaded_by' => $userId,
-            'created_at' => $this->time(max(0, $age)),
-        ])->execute();
+        try {
+            $this->db->createCommand()->insert('{{%request_documents}}', [
+                'request_id' => $requestId, 'document_type' => $type, 'title' => $name,
+                'created_by' => $userId, 'created_at' => $this->time(max(0, $age)),
+            ])->execute();
+            $documentId = (int) $this->db->getLastInsertID();
+            $this->db->createCommand()->insert('{{%request_document_versions}}', [
+                'document_id' => $documentId, 'version' => 1, 'storage_key' => $key,
+                'original_name' => $name, 'mime_type' => 'text/plain', 'size_bytes' => strlen($content),
+                'sha256' => hash('sha256', $content), 'uploaded_by' => $userId,
+                'created_at' => $this->time(max(0, $age)),
+            ])->execute();
+        } catch (\Throwable $error) {
+            $this->storage->delete($key);
+            throw $error;
+        }
         return ['id' => (int) $this->db->getLastInsertID(), 'key' => $key];
     }
 

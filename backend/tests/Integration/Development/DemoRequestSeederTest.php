@@ -7,6 +7,7 @@ namespace Tests\Integration\Development;
 use App\Infrastructure\Development\DemoRequestSeeder;
 use App\Infrastructure\Document\DocumentStorage;
 use Tests\Integration\IntegrationTestCase;
+use yii\db\IntegrityException;
 
 final class DemoRequestSeederTest extends IntegrationTestCase
 {
@@ -26,20 +27,31 @@ final class DemoRequestSeederTest extends IntegrationTestCase
 
     protected function tearDown(): void
     {
-        $files = glob($this->storageRoot . '/*/*/*') ?: [];
-        foreach ($files as $file) {
-            unlink($file);
+        try {
+            $files = glob($this->storageRoot . '/*/*/*') ?: [];
+            foreach ($files as $file) {
+                if (is_file($file)) {
+                    unlink($file);
+                }
+            }
+            $directories = glob($this->storageRoot . '/*/*', GLOB_ONLYDIR) ?: [];
+            foreach ($directories as $directory) {
+                if (is_dir($directory)) {
+                    rmdir($directory);
+                }
+            }
+            $directories = glob($this->storageRoot . '/*', GLOB_ONLYDIR) ?: [];
+            foreach ($directories as $directory) {
+                if (is_dir($directory)) {
+                    rmdir($directory);
+                }
+            }
+            if (is_dir($this->storageRoot)) {
+                rmdir($this->storageRoot);
+            }
+        } finally {
+            parent::tearDown();
         }
-        $directories = glob($this->storageRoot . '/*/*', GLOB_ONLYDIR) ?: [];
-        foreach ($directories as $directory) {
-            rmdir($directory);
-        }
-        $directories = glob($this->storageRoot . '/*', GLOB_ONLYDIR) ?: [];
-        foreach ($directories as $directory) {
-            rmdir($directory);
-        }
-        rmdir($this->storageRoot);
-        parent::tearDown();
     }
 
     public function testSeedCreatesFullSyntheticRegistryAndCanResetIt(): void
@@ -79,5 +91,22 @@ final class DemoRequestSeederTest extends IntegrationTestCase
         $this->expectException(\RuntimeException::class);
         $this->expectExceptionMessage("Run dev/seed first");
         (new DemoRequestSeeder($this->db(), new DocumentStorage($this->storageRoot)))->seed();
+    }
+
+    public function testAttachmentIsRemovedWhenDatabaseInsertFails(): void
+    {
+        $seeder = new DemoRequestSeeder($this->db(), new DocumentStorage($this->storageRoot));
+        $seeder->seed();
+        $requestId = (int) $this->scalar('SELECT id FROM {{%requests}} WHERE number = 1002');
+        $userId = (int) $this->scalar("SELECT id FROM {{%users}} WHERE ad_login = 'dev.employee'");
+        $filesBefore = glob($this->storageRoot . '/*/*/*') ?: [];
+        $method = new \ReflectionMethod($seeder, 'insertAttachment');
+
+        try {
+            $method->invoke($seeder, $requestId, 'attachment', 'Программа испытаний.txt', $userId, 1);
+            self::fail('The duplicate document title must violate the unique constraint.');
+        } catch (IntegrityException) {
+            self::assertCount(count($filesBefore), glob($this->storageRoot . '/*/*/*') ?: []);
+        }
     }
 }
