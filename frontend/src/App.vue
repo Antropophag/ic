@@ -1,5 +1,5 @@
 <script setup>
-import { computed, onMounted, reactive, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import { adminApi, authApi, hasCsrfToken, requestApi, setCsrfToken } from './api'
 import { getDevUserId, reconcileDevUserId, setDevUserId } from './devUsers'
 import { createConfirmDialog } from './confirmDialog'
@@ -63,6 +63,7 @@ const reportRequestGuard = createLatestRequestGuard()
 const opinionRequestGuard = createLatestRequestGuard()
 const securityRequestGuard = createLatestRequestGuard()
 const registryRequestGuard = createLatestRequestGuard()
+const popstateRequestGuard = createLatestRequestGuard()
 const colorRequestGuard = createLatestRequestGuard()
 const rejectRequestGuard = createLatestRequestGuard()
 const withdrawRequestGuard = createLatestRequestGuard()
@@ -422,7 +423,8 @@ async function loadRequestDetails(item, preloadedDetail = null) {
   }
 }
 
-async function openRequest(item, preloadedDetail = null) {
+async function openRequest(item, preloadedDetail = null, { push = true } = {}) {
+  popstateRequestGuard.invalidate()
   commentRequestGuard.invalidate()
   commentsPageRequestGuard.invalidate()
   documentRequestGuard.invalidate()
@@ -463,11 +465,12 @@ async function openRequest(item, preloadedDetail = null) {
   deleteReportLoading.value = false
   deleteReportError.value = ''
   actionError.value = ''
-  setRequestInUrl(item.backendId)
+  setRequestInUrl(item.backendId, { push })
   await loadRequestDetails(item, preloadedDetail)
 }
 
-function closeRequest() {
+function closeRequest({ push = true } = {}) {
+  popstateRequestGuard.invalidate()
   detailRequestGuard.invalidate()
   commentRequestGuard.invalidate()
   commentsPageRequestGuard.invalidate()
@@ -482,7 +485,7 @@ function closeRequest() {
   reassignRequestGuard.invalidate()
   deleteReportRequestGuard.invalidate()
   selected.value = null
-  setRequestInUrl(null)
+  setRequestInUrl(null, { push })
   showAdmin.value = false
   detailLoading.value = false
   detailError.value = ''
@@ -511,6 +514,39 @@ function closeRequest() {
   reassignOpen.value = false
   deleteReportLoading.value = false
   deleteReportError.value = ''
+}
+
+// Открывает заявку по id из URL при переходе браузерными «назад»/«вперёд»:
+// сперва ищет её в уже загруженном реестре, иначе, как и для диплинка из
+// письма, догружает карточку напрямую (заявка может быть старше видимой
+// части реестра). push всегда false — запись в истории уже создал браузер.
+async function openRequestById(requestId) {
+  const requestToken = popstateRequestGuard.begin(requestId)
+  try {
+    const linkedRequest = await resolveRequestDeepLink(requestId, requests.value, requestApi.get)
+    if (!popstateRequestGuard.isCurrent(requestToken, requestId)) return
+    await openRequest(
+      linkedRequest.detail ? fromApi(linkedRequest.item) : linkedRequest.item,
+      linkedRequest.detail,
+      { push: false },
+    )
+  } catch (error) {
+    if (!popstateRequestGuard.isCurrent(requestToken, requestId)) return
+    registryError.value = error.status === 403 || error.status === 404
+      ? 'Заявка не найдена или недоступна.'
+      : 'Не удалось открыть заявку.'
+    setRequestInUrl(null)
+  }
+}
+
+function handlePopstate() {
+  const requestId = requestIdFromLocation()
+  if ((selected.value?.backendId ?? null) === requestId) return
+  if (requestId === null) {
+    closeRequest({ push: false })
+  } else {
+    openRequestById(requestId)
+  }
 }
 
 async function uploadReport(event) {
@@ -661,6 +697,7 @@ async function loadRequests(rethrow = false) {
         await openRequest(
           linkedRequest.detail ? fromApi(linkedRequest.item) : linkedRequest.item,
           linkedRequest.detail,
+          { push: false },
         )
       } catch (error) {
         if (!registryRequestGuard.isCurrent(requestToken, devUserId.value)) return
@@ -777,7 +814,7 @@ async function refreshSelected(requestId) {
   if (selected.value?.backendId !== requestId) return
   const refreshed = requests.value.find(item => item.backendId === requestId) || null
   if (!refreshed) {
-    closeRequest()
+    closeRequest({ push: false })
     return
   }
   await loadRequestDetails(refreshed)
@@ -1137,7 +1174,11 @@ async function startRequest() {
   }
 }
 
-onMounted(bootstrapAuth)
+onMounted(() => {
+  bootstrapAuth()
+  window.addEventListener('popstate', handlePopstate)
+})
+onBeforeUnmount(() => window.removeEventListener('popstate', handlePopstate))
 </script>
 
 <template>
