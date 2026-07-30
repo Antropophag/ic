@@ -1060,7 +1060,7 @@ onMounted(bootstrapAuth)
               <div>
                 <p class="eyebrow">АО «ЩЛЗ» · Испытательный центр</p>
                 <h1>{{ selected ? `Заявка ${selected.id}` : 'Заявки на проведение испытаний' }}</h1>
-                <p v-if="!selected" class="tagline">Регистрация, испытания и согласование результатов</p>
+                <p class="tagline" :class="{ 'tagline-hidden': selected }">Регистрация, испытания и согласование результатов</p>
               </div>
             </div>
             <div class="profile">
