@@ -9,3 +9,11 @@ export function setRequestInUrl(requestId, history = window.history, location = 
   else url.searchParams.delete('request')
   history.replaceState({}, '', `${url.pathname}${url.search}${url.hash}`)
 }
+
+export async function resolveRequestDeepLink(requestId, requests, getRequest) {
+  const item = requests.find(request => request.backendId === requestId)
+  if (item) return { item, detail: null }
+
+  const detail = await getRequest(requestId)
+  return { item: detail.item, detail }
+}

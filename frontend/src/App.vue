@@ -4,7 +4,7 @@ import { adminApi, authApi, hasCsrfToken, requestApi, setCsrfToken } from './api
 import { getDevUserId, reconcileDevUserId, setDevUserId } from './devUsers'
 import { createConfirmDialog } from './confirmDialog'
 import { createLatestRequestGuard } from './latestRequestGuard'
-import { requestIdFromLocation, setRequestInUrl } from './requestDeepLink'
+import { requestIdFromLocation, resolveRequestDeepLink, setRequestInUrl } from './requestDeepLink'
 import { ACTIVE_STATUSES, REGISTRY_PAGE_SIZE, REQUEST_COLORS, buildFeed, canSubmitComment, commentFromApi, documentFromApi, documentKind, filterRequests, fromApi, historyFromApi, paginate, withoutStaleActions } from './registry'
 
 const activeTab = ref('active')
@@ -384,7 +384,7 @@ function toggleSort() {
   sortDirection.value = sortDirection.value === 'desc' ? 'asc' : 'desc'
 }
 
-async function loadRequestDetails(item) {
+async function loadRequestDetails(item, preloadedDetail = null) {
   const requestToken = detailRequestGuard.begin(item.backendId)
   selected.value = item
   detailError.value = ''
@@ -394,7 +394,7 @@ async function loadRequestDetails(item) {
   if (item.canAssignExecutor && !executors.value.length) loadExecutors()
   if (item.canReassignExpert && !experts.value.length) loadExperts()
   try {
-    const result = await requestApi.get(item.backendId)
+    const result = preloadedDetail ?? await requestApi.get(item.backendId)
     if (!detailRequestGuard.isCurrent(requestToken, selected.value?.backendId)) return
     selected.value = {
       ...fromApi(result.item),
@@ -419,7 +419,7 @@ async function loadRequestDetails(item) {
   }
 }
 
-async function openRequest(item) {
+async function openRequest(item, preloadedDetail = null) {
   commentRequestGuard.invalidate()
   commentsPageRequestGuard.invalidate()
   documentRequestGuard.invalidate()
@@ -459,7 +459,7 @@ async function openRequest(item) {
   deleteReportError.value = ''
   actionError.value = ''
   setRequestInUrl(item.backendId)
-  await loadRequestDetails(item)
+  await loadRequestDetails(item, preloadedDetail)
 }
 
 function closeRequest() {
@@ -647,10 +647,21 @@ async function loadRequests(rethrow = false) {
     if (!registryRequestGuard.isCurrent(requestToken, devUserId.value)) return
     requests.value = result.items.map(fromApi)
     if (!initialRequestHandled && initialRequestId !== null) {
-      initialRequestHandled = true
-      const linkedRequest = requests.value.find(item => item.backendId === initialRequestId)
-      if (linkedRequest) await openRequest(linkedRequest)
-      else registryError.value = 'Заявка из ссылки не найдена или недоступна.'
+      try {
+        const linkedRequest = await resolveRequestDeepLink(initialRequestId, requests.value, requestApi.get)
+        initialRequestHandled = true
+        await openRequest(
+          linkedRequest.detail ? fromApi(linkedRequest.item) : linkedRequest.item,
+          linkedRequest.detail,
+        )
+      } catch (error) {
+        if (error.status === 403 || error.status === 404) {
+          initialRequestHandled = true
+          registryError.value = 'Заявка из ссылки не найдена или недоступна.'
+        } else {
+          registryError.value = 'Не удалось открыть заявку из ссылки.'
+        }
+      }
     }
   } catch (error) {
     if (!registryRequestGuard.isCurrent(requestToken, devUserId.value)) return

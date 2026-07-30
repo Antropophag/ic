@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import { requestIdFromLocation, setRequestInUrl } from './requestDeepLink'
+import { requestIdFromLocation, resolveRequestDeepLink, setRequestInUrl } from './requestDeepLink'
 
 describe('request deep links', () => {
   it('reads only positive numeric request ids', () => {
@@ -15,5 +15,23 @@ describe('request deep links', () => {
     expect(replaceState).toHaveBeenLastCalledWith({}, '', '/?source=email&request=7#top')
     setRequestInUrl(null, { replaceState }, { href: 'https://portal.test/?source=email&request=7#top' })
     expect(replaceState).toHaveBeenLastCalledWith({}, '', '/?source=email#top')
+  })
+
+  it('loads a linked request directly when it is outside the registry result', async () => {
+    const getRequest = vi.fn().mockResolvedValue({ item: { id: 501 }, history: [], comments: [], documents: [] })
+
+    await expect(resolveRequestDeepLink(501, [{ backendId: 1 }], getRequest)).resolves.toEqual({
+      item: { id: 501 },
+      detail: { item: { id: 501 }, history: [], comments: [], documents: [] },
+    })
+    expect(getRequest).toHaveBeenCalledWith(501)
+  })
+
+  it('reuses a request already present in the registry result', async () => {
+    const item = { backendId: 42 }
+    const getRequest = vi.fn()
+
+    await expect(resolveRequestDeepLink(42, [item], getRequest)).resolves.toEqual({ item, detail: null })
+    expect(getRequest).not.toHaveBeenCalled()
   })
 })
