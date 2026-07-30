@@ -5,7 +5,7 @@ import { getDevUserId, reconcileDevUserId, setDevUserId } from './devUsers'
 import { createConfirmDialog } from './confirmDialog'
 import { createLatestRequestGuard } from './latestRequestGuard'
 import { requestIdFromLocation, resolveRequestDeepLink, setRequestInUrl } from './requestDeepLink'
-import { REGISTRY_PAGE_SIZE, REQUEST_COLORS, REQUEST_STATUS_OPTIONS, canStartNow, canSubmitComment, commentFromApi, documentFromApi, documentKind, fromApi, historyFromApi, newestFirstFeed, withoutStaleActions } from './registry'
+import { REGISTRY_PAGE_SIZE, REQUEST_COLORS, REQUEST_STATUS_OPTIONS, canStartNow, canSubmitComment, commentFromApi, documentFromApi, documentKind, fromApi, historyFromApi, initialsFor, newestFirstFeed, withoutStaleActions } from './registry'
 
 const activeTab = ref('active')
 const query = ref('')
@@ -17,6 +17,7 @@ const selected = ref(null)
 const showCreate = ref(false)
 const createError = ref('')
 const registryError = ref('')
+const lastCommentModal = ref(null)
 const createLoading = ref(false)
 const draftFiles = ref([])
 const actionError = ref('')
@@ -101,8 +102,7 @@ const currentProfile = computed(() => {
     roles: authUser.value?.roles || [],
   }
 })
-const currentInitials = computed(() => (currentProfile.value.displayName
-  .split(' ').map(part => part[0]).join('').slice(0, 2).toUpperCase()) || '?')
+const currentInitials = computed(() => initialsFor(currentProfile.value.displayName))
 const isAdministrator = computed(() => (currentProfile.value.roles || []).includes('administrator'))
 const feed = computed(() => newestFirstFeed(
   selected.value?.history || [],
@@ -418,6 +418,10 @@ function goToPage(page) {
   if (page === currentPage.value) return
   currentPage.value = page
   loadRequests()
+}
+
+function openLastComment(item) {
+  lastCommentModal.value = item
 }
 
 async function loadRequestDetails(item, preloadedDetail = null) {
@@ -1364,7 +1368,7 @@ onBeforeUnmount(() => window.removeEventListener('popstate', handlePopstate))
             </div>
             <div class="table-wrap">
               <table>
-                <thead><tr><th class="sortable" @click="toggleSort">№ заявки {{ sortDirection === 'desc' ? '↓' : '↑' }}</th><th>Дата</th><th>Объект испытаний</th><th>Инициатор</th><th>Исполнитель</th><th>Статус</th><th>Отметка СБ</th></tr></thead>
+                <thead><tr><th class="sortable" @click="toggleSort">№ заявки {{ sortDirection === 'desc' ? '↓' : '↑' }}</th><th>Дата</th><th>Объект испытаний</th><th>Инициатор</th><th>Исполнитель</th><th>Статус</th><th>Отметка СБ</th><th>Комментарий</th><th>Отчёт</th></tr></thead>
                 <tbody>
                   <tr v-for="item in paged.items" :key="item.id" :class="'row-color-' + item.color" @click="openRequest(item)">
                     <td class="number">{{ item.id }}</td><td>{{ item.date }}</td>
@@ -1372,6 +1376,8 @@ onBeforeUnmount(() => window.removeEventListener('popstate', handlePopstate))
                     <td>{{ item.initiator }}<small>{{ item.department }}</small></td>
                     <td>{{ item.executor }}</td><td><span class="badge" :class="item.tone">{{ item.status }}</span></td>
                     <td>{{ item.securityMark }}</td>
+                    <td class="registry-indicator-cell"><button v-if="item.lastCommentAuthor" type="button" class="avatar small registry-comment-avatar" :title="'Последний комментарий: ' + item.lastCommentAuthor" :aria-label="'Последний комментарий: ' + item.lastCommentAuthor" @click.stop="openLastComment(item)">{{ initialsFor(item.lastCommentAuthor) }}</button><span v-else class="muted-dash">—</span></td>
+                    <td class="registry-indicator-cell"><span v-if="item.hasReport" class="doc-icon pdf" title="Отчёт испытаний загружен">PDF</span><span v-else class="muted-dash">—</span></td>
                   </tr>
                 </tbody>
               </table>
@@ -1483,7 +1489,7 @@ onBeforeUnmount(() => window.removeEventListener('popstate', handlePopstate))
 
               <article class="card feed">
                 <div class="section-title"><h3>Лента заявки <span>{{ feed.length }}</span></h3></div>
-                <form v-if="canSubmitComment(selected, detailLoading)" class="comment-input" @submit.prevent="addComment"><span class="avatar small">МУ</span><input v-model="commentDraft" :disabled="commentLoading" maxlength="10000" placeholder="Оставьте комментарий…" /><button :disabled="commentLoading">➤</button></form>
+                <form v-if="canSubmitComment(selected, detailLoading)" class="comment-input" @submit.prevent="addComment"><span class="avatar small">{{ currentInitials }}</span><input v-model="commentDraft" :disabled="commentLoading" maxlength="10000" placeholder="Оставьте комментарий…" /><button :disabled="commentLoading">➤</button></form>
                 <p v-else class="placeholder-copy">На текущем этапе новые комментарии недоступны.</p>
                 <p v-if="commentError" class="action-error">{{ commentError }}</p>
                 <div class="stream">
@@ -1561,6 +1567,15 @@ onBeforeUnmount(() => window.removeEventListener('popstate', handlePopstate))
             <button type="button" class="secondary" @click="confirmDialog.cancel">Отмена</button>
             <button type="button" class="primary" :class="{ danger: confirmDialog.state.danger }" @click="confirmDialog.accept">{{ confirmDialog.state.confirmLabel }}</button>
           </div>
+        </div>
+      </div>
+
+      <div v-if="lastCommentModal" class="overlay" @click.self="lastCommentModal = null">
+        <div class="modal confirm-modal">
+          <div class="modal-head"><h2>Последний комментарий</h2><button type="button" @click="lastCommentModal = null">×</button></div>
+          <p class="comment-modal-meta"><b>{{ lastCommentModal.lastCommentAuthor }}</b> · {{ lastCommentModal.lastCommentAt }}</p>
+          <p>{{ lastCommentModal.lastCommentBody }}</p>
+          <div class="modal-actions"><button type="button" class="secondary" @click="lastCommentModal = null">Закрыть</button></div>
         </div>
       </div>
     </template>

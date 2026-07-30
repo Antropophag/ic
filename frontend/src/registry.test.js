@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { buildFeed, canStartNow, canSubmitComment, commentFromApi, documentFromApi, documentKind, filterRequests, fromApi, historyFromApi, newestFirstFeed, paginate, withoutStaleActions } from './registry'
+import { buildFeed, canStartNow, canSubmitComment, commentFromApi, documentFromApi, documentKind, filterRequests, fromApi, historyFromApi, initialsFor, newestFirstFeed, paginate, withoutStaleActions } from './registry'
 
 const registered = {
   id: 4,
@@ -357,4 +357,35 @@ it('does not re-reverse comments that the backend already returns in ascending o
   const feed = buildFeed([], comments)
 
   expect(feed.map(entry => entry.id)).toEqual([10, 11])
+})
+
+it('maps the last comment and report indicator for the registry row', () => {
+  expect(fromApi({
+    ...registered,
+    last_comment_author: 'Сергей Кашин',
+    last_comment_body: 'Образец передан на испытания',
+    last_comment_created_at: '2026-07-29T10:00:00Z',
+    has_report: 1,
+  })).toMatchObject({
+    lastCommentAuthor: 'Сергей Кашин',
+    lastCommentBody: 'Образец передан на испытания',
+    hasReport: true,
+  })
+})
+
+it('treats an absent last comment and report as null/false, not the DB default', () => {
+  expect(fromApi(registered)).toMatchObject({
+    lastCommentAuthor: null,
+    lastCommentBody: null,
+    lastCommentAt: null,
+    hasReport: false,
+  })
+})
+
+it('builds initials for an arbitrary display name, not just the logged-in user', () => {
+  expect(initialsFor('Максим Умнов')).toBe('МУ')
+  expect(initialsFor('Сергей  Кашин')).toBe('СК')
+  expect(initialsFor('Плюшкин')).toBe('П')
+  expect(initialsFor('')).toBe('?')
+  expect(initialsFor(null)).toBe('?')
 })
