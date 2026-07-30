@@ -500,14 +500,14 @@ final class RequestRepositoryTest extends IntegrationTestCase
 
         $this->db()->createCommand(
             "UPDATE {{%audit_events}} SET payload_json = JSON_QUOTE(payload_json) "
-            . "WHERE entity_id = :id AND event_type = 'request.executor_assigned'",
+            . "WHERE entity_type = 'request' AND entity_id = :id AND event_type = 'request.executor_assigned'",
             [':id' => $requestId],
         )->execute();
         self::assertSame(
             'STRING',
             $this->scalar(
                 "SELECT JSON_TYPE(payload_json) FROM {{%audit_events}} "
-                . "WHERE entity_id = :id AND event_type = 'request.executor_assigned'",
+                . "WHERE entity_type = 'request' AND entity_id = :id AND event_type = 'request.executor_assigned'",
                 [':id' => $requestId],
             ),
         );

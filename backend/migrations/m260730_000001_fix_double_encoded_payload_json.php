@@ -30,5 +30,10 @@ final class m260730_000001_fix_double_encoded_payload_json extends Migration
     {
         // Необратимо: восстанавливать исходное двойное кодирование
         // бессмысленно (это был баг, а не осознанный формат данных).
+        // Падаем явно, а не молча "успешно" ничего не делаем — иначе
+        // откат выглядел бы завершённым, оставив данные уже исправленными.
+        throw new \RuntimeException(
+            'm260730_000001 is irreversible: restoring the original double-encoded payload_json would be undoing a bug fix, not a data format.',
+        );
     }
 }
