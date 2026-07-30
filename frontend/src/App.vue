@@ -920,6 +920,15 @@ async function claimExpert() {
   }
 }
 
+function toggleReassign() {
+  if (reassignLoading.value) return
+  reassignOpen.value = !reassignOpen.value
+  if (!reassignOpen.value) {
+    reassignError.value = ''
+    expertChoice.value = ''
+  }
+}
+
 async function reassignExpert() {
   if (reassignLoading.value) return
   if (!expertChoice.value) {
@@ -1388,7 +1397,7 @@ onMounted(bootstrapAuth)
                   <span>Эксперт</span>
                   <div class="name-row">
                     <b>{{ selected.expert }}</b>
-                    <button type="button" class="reassign-toggle" @click="reassignOpen = !reassignOpen">{{ reassignOpen ? 'Отмена' : 'Переназначить' }}</button>
+                    <button type="button" class="reassign-toggle" :disabled="reassignLoading" @click="toggleReassign">{{ reassignOpen ? 'Отмена' : 'Переназначить' }}</button>
                   </div>
                   <div v-if="reassignOpen" class="reassign-controls">
                     <select v-model="expertChoice" :disabled="reassignLoading" aria-label="Новый эксперт"><option value="">Выберите эксперта</option><option v-for="expert in experts.filter(candidate => candidate.id !== selected.expertId)" :key="expert.id" :value="expert.id">{{ expert.displayName }}</option></select>
