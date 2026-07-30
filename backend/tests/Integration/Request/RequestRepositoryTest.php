@@ -441,6 +441,44 @@ final class RequestRepositoryTest extends IntegrationTestCase
         $repository->assignExecutor($requestId, $executor, (int) $request['lock_version'], $manager);
     }
 
+    public function testHistoryIncludesTheTargetNameForAssignmentEvents(): void
+    {
+        // Issue #117: лента должна называть, КОГО назначили, а не только
+        // кто выполнил действие (actorName) — targetName резолвится через
+        // request_assignments по assignment_id из payload_json аудита.
+        $manager = $this->createUser('dev.it.manager6', 'Тестовый руководитель 6');
+        $this->grantRole($manager, 'ic_manager');
+        $initiator = $this->createUser('dev.it.initiator11', 'Тестовый инициатор 11');
+        $executor = $this->createUser('dev.it.executor5', 'Целевой Исполнитель');
+        $this->grantRole($executor, 'ic_executor');
+        $firstExpert = $this->createUser('dev.it.expert3', 'Первый Эксперт');
+        $this->grantRole($firstExpert, 'expert');
+        $secondExpert = $this->createUser('dev.it.expert4', 'Второй Эксперт');
+        $this->grantRole($secondExpert, 'expert');
+        $request = $this->createRegisteredRequest($initiator, 'history-target-name');
+        $requestId = (int) $request['id'];
+
+        $repository = new RequestRepository($this->db());
+        $assigned = $repository->assignExecutor($requestId, $executor, (int) $request['lock_version'], $manager);
+
+        $this->db()->createCommand()->update(
+            '{{%requests}}',
+            ['status' => 'opinion_preparation'],
+            ['id' => $requestId],
+        )->execute();
+        $claimed = $repository->claimExpert($requestId, (int) $assigned['lockVersion'], $firstExpert);
+        $repository->reassignExpert($requestId, $secondExpert, (int) $claimed['lockVersion'], $firstExpert);
+
+        $history = $repository->findDetails($requestId, $manager)['history'];
+        $byAction = [];
+        foreach ($history as $row) {
+            $byAction[$row['action']] = $row;
+        }
+
+        self::assertSame('Целевой Исполнитель', $byAction['assign_executor']['targetName']);
+        self::assertSame('Второй Эксперт', $byAction['reassign_expert']['targetName']);
+    }
+
     /**
      * @param list<array<string, mixed>> $rows
      * @return array<string, mixed>
