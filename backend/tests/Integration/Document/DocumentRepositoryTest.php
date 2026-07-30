@@ -89,6 +89,7 @@ final class DocumentRepositoryTest extends IntegrationTestCase
     {
         $initiator = $this->createUser('dev.it.doc.initiator1', 'Инициатор');
         $executor = $this->createUser('dev.it.doc.executor1', 'Исполнитель');
+        $outsider = $this->createUser('dev.it.doc.outsider0', 'Посторонний сотрудник');
         $activeExpert = $this->createUser('dev.it.doc.expert1', 'Активный эксперт', 'active.expert@example.invalid');
         $this->grantRole($activeExpert, 'expert');
         $inactiveExpert = $this->createUser(
@@ -132,6 +133,23 @@ final class DocumentRepositoryTest extends IntegrationTestCase
             [':id' => $requestId],
         );
         self::assertSame('DOC-002', $auditRuleId);
+
+        $history = (new RequestRepository($this->db()))->findDetails($requestId, $executor)['history'];
+        $uploadEvent = array_values(array_filter(
+            $history,
+            static fn (array $event): bool => $event['action'] === 'upload_report',
+        ));
+        self::assertCount(1, $uploadEvent);
+        self::assertSame((int) $result['versionId'], (int) $uploadEvent[0]['versionId']);
+        self::assertSame('report.pdf', $uploadEvent[0]['originalName']);
+
+        $outsiderHistory = (new RequestRepository($this->db()))->findDetails($requestId, $outsider)['history'];
+        $outsiderUploadEvent = array_values(array_filter(
+            $outsiderHistory,
+            static fn (array $event): bool => $event['action'] === 'upload_report',
+        ));
+        self::assertNull($outsiderUploadEvent[0]['versionId']);
+        self::assertNull($outsiderUploadEvent[0]['originalName']);
     }
 
     public function testUnrelatedEmployeeCannotUploadReport(): void

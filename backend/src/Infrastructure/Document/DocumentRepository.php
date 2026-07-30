@@ -207,6 +207,7 @@ final class DocumentRepository
                     'to_status' => RequestStatus::OpinionPreparation->value,
                     'action' => 'upload_report',
                     'rule_id' => $report['wasDeleted'] ? 'DOC-012' : 'DOC-002',
+                    'document_version_id' => $versionId,
                     'created_at' => $now,
                 ])->execute();
             }
