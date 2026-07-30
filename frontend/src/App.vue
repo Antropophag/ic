@@ -1192,8 +1192,8 @@ onMounted(bootstrapAuth)
                 <p v-if="actionError" class="action-error">{{ actionError }}</p>
 
                 <div v-if="selected.canUploadReport" class="hero-block">
-                  <h4>Загрузите отчёт испытаний</h4>
-                  <p class="hero-sub">Заявка перейдёт на подготовку экспертного заключения сразу после загрузки</p>
+                  <h4>{{ selected.canDeleteReport ? 'Загрузить новую версию отчёта' : 'Загрузите отчёт испытаний' }}</h4>
+                  <p class="hero-sub">{{ selected.canDeleteReport ? 'Текущий отчёт не удаляется — новая версия добавляется поверх' : 'Заявка перейдёт на подготовку экспертного заключения сразу после загрузки' }}</p>
                   <div class="hero-actions"><label class="primary upload-button big">{{ reportLoading ? 'Загрузка отчёта…' : 'Загрузить отчёт испытаний' }}<input type="file" :disabled="reportLoading" accept=".pdf,application/pdf" @change="uploadReport" /></label></div>
                   <p v-if="reportError" class="action-error">{{ reportError }}</p>
                   <a class="help-link" href="/help/report.html" target="_blank">Инструкция по загрузке отчёта испытаний</a>
