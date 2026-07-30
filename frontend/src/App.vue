@@ -1149,7 +1149,7 @@ onMounted(bootstrapAuth)
               </button>
               <div>
                 <p class="eyebrow">АО «ЩЛЗ» · Испытательный центр</p>
-                <h1>{{ selected ? `Заявка ${selected.id}` : 'Заявки на проведение испытаний' }}</h1>
+                <h1>{{ selected ? `Заявка №${selected.id} от ${selected.date}` : 'Заявки на проведение испытаний' }}</h1>
                 <p class="tagline" :class="{ 'tagline-hidden': selected }">Регистрация, испытания и согласование результатов</p>
               </div>
             </div>
@@ -1267,6 +1267,16 @@ onMounted(bootstrapAuth)
           </div>
           <p v-if="detailLoading" class="detail-state">Загрузка актуальной карточки…</p>
           <p v-if="detailError" class="detail-state error">{{ detailError }}</p>
+          <article class="card object-band">
+            <h4 class="object-title">{{ selected.product }}</h4>
+            <div class="facts-row">
+              <div class="fact"><span>Подразделение</span><b>{{ selected.department }}</b></div>
+              <div class="fact"><span>Производитель</span><b>{{ selected.manufacturer || '—' }}</b></div>
+              <div class="fact"><span>Поставщик</span><b>{{ selected.supplier }}</b></div>
+              <div class="fact"><span>Количество образцов</span><b>{{ selected.sampleQuantity || '—' }} шт.</b></div>
+            </div>
+            <div class="method-row"><span>Метод испытаний</span><p>{{ selected.testMethod || '—' }}</p></div>
+          </article>
           <div class="request-grid">
             <div class="stack">
               <article v-if="hasHeroAction" class="card hero">
@@ -1364,6 +1374,7 @@ onMounted(bootstrapAuth)
             </div>
             <aside class="stack side-column">
               <article class="card summary"><h3>Статус</h3>
+                <p><span>Инициатор</span><b>{{ selected.initiator }}</b></p>
                 <p><span>Исполнитель</span><b>{{ selected.executor }}</b></p>
                 <p><span>Эксперт</span><b>{{ selected.expert }}</b></p>
                 <p><span>Отметка СБ</span><b>{{ selected.securityMark }}</b></p>
@@ -1380,15 +1391,6 @@ onMounted(bootstrapAuth)
                   ></button>
                 </div>
                 <p v-if="colorError" class="action-error">{{ colorError }}</p>
-              </article>
-              <article class="card summary"><h3>Объект испытаний</h3>
-                <p><span>Инициатор</span><b>{{ selected.initiator }}</b></p>
-                <p><span>Подразделение</span><b>{{ selected.department }}</b></p>
-                <p><span>Производитель</span><b>{{ selected.manufacturer || '—' }}</b></p>
-                <p><span>Поставщик</span><b>{{ selected.supplier }}</b></p>
-                <p><span>Количество образцов</span><b>{{ selected.sampleQuantity || '—' }} шт.</b></p>
-                <p class="wide"><span>Наименование и тип</span><b>{{ selected.product }}</b></p>
-                <p class="wide"><span>Метод испытаний</span><b>{{ selected.testMethod || '—' }}</b></p>
               </article>
               <article class="card documents"><h3>Документы <span>{{ selected.documents?.length || 0 }}</span></h3>
                 <button v-for="document in selected.documents || []" :key="document.versionId" class="document-row" @click="downloadDocument(document)"><span class="doc-icon" :class="documentKind(document.mimeType).className">{{ documentKind(document.mimeType).label }}</span><span><b>{{ document.title }}</b><small>Версия {{ document.version }} · {{ document.size }} · {{ document.createdAt }}</small></span></button>
