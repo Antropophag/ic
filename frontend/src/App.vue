@@ -4,6 +4,7 @@ import { adminApi, authApi, hasCsrfToken, requestApi, setCsrfToken } from './api
 import { getDevUserId, reconcileDevUserId, setDevUserId } from './devUsers'
 import { createConfirmDialog } from './confirmDialog'
 import { createLatestRequestGuard } from './latestRequestGuard'
+import { requestIdFromLocation, resolveRequestDeepLink, setRequestInUrl } from './requestDeepLink'
 import { ACTIVE_STATUSES, REGISTRY_PAGE_SIZE, REQUEST_COLORS, buildFeed, canSubmitComment, commentFromApi, documentFromApi, documentKind, filterRequests, fromApi, historyFromApi, paginate, withoutStaleActions } from './registry'
 
 const activeTab = ref('active')
@@ -81,6 +82,8 @@ const authUser = ref(null)
 const loginForm = reactive({ login: '', password: '' })
 const loginLoading = ref(false)
 const loginError = ref('')
+const initialRequestId = requestIdFromLocation()
+let initialRequestHandled = false
 
 const currentProfile = computed(() => {
   if (authDevMode.value) {
@@ -381,7 +384,7 @@ function toggleSort() {
   sortDirection.value = sortDirection.value === 'desc' ? 'asc' : 'desc'
 }
 
-async function loadRequestDetails(item) {
+async function loadRequestDetails(item, preloadedDetail = null) {
   const requestToken = detailRequestGuard.begin(item.backendId)
   selected.value = item
   detailError.value = ''
@@ -391,7 +394,7 @@ async function loadRequestDetails(item) {
   if (item.canAssignExecutor && !executors.value.length) loadExecutors()
   if (item.canReassignExpert && !experts.value.length) loadExperts()
   try {
-    const result = await requestApi.get(item.backendId)
+    const result = preloadedDetail ?? await requestApi.get(item.backendId)
     if (!detailRequestGuard.isCurrent(requestToken, selected.value?.backendId)) return
     selected.value = {
       ...fromApi(result.item),
@@ -416,7 +419,7 @@ async function loadRequestDetails(item) {
   }
 }
 
-async function openRequest(item) {
+async function openRequest(item, preloadedDetail = null) {
   commentRequestGuard.invalidate()
   commentsPageRequestGuard.invalidate()
   documentRequestGuard.invalidate()
@@ -455,7 +458,8 @@ async function openRequest(item) {
   deleteReportLoading.value = false
   deleteReportError.value = ''
   actionError.value = ''
-  await loadRequestDetails(item)
+  setRequestInUrl(item.backendId)
+  await loadRequestDetails(item, preloadedDetail)
 }
 
 function closeRequest() {
@@ -473,6 +477,7 @@ function closeRequest() {
   reassignRequestGuard.invalidate()
   deleteReportRequestGuard.invalidate()
   selected.value = null
+  setRequestInUrl(null)
   showAdmin.value = false
   detailLoading.value = false
   detailError.value = ''
@@ -641,6 +646,25 @@ async function loadRequests(rethrow = false) {
     const result = await requestApi.list()
     if (!registryRequestGuard.isCurrent(requestToken, devUserId.value)) return
     requests.value = result.items.map(fromApi)
+    if (!initialRequestHandled && initialRequestId !== null) {
+      try {
+        const linkedRequest = await resolveRequestDeepLink(initialRequestId, requests.value, requestApi.get)
+        if (!registryRequestGuard.isCurrent(requestToken, devUserId.value)) return
+        initialRequestHandled = true
+        await openRequest(
+          linkedRequest.detail ? fromApi(linkedRequest.item) : linkedRequest.item,
+          linkedRequest.detail,
+        )
+      } catch (error) {
+        if (!registryRequestGuard.isCurrent(requestToken, devUserId.value)) return
+        initialRequestHandled = true
+        if (error.status === 403 || error.status === 404) {
+          registryError.value = 'Заявка из ссылки не найдена или недоступна.'
+        } else {
+          registryError.value = 'Не удалось открыть заявку из ссылки.'
+        }
+      }
+    }
   } catch (error) {
     if (!registryRequestGuard.isCurrent(requestToken, devUserId.value)) return
     // Макет остаётся доступным отдельно от backend; ошибка будет видна в Network.
