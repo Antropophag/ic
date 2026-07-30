@@ -5,7 +5,7 @@ import { getDevUserId, reconcileDevUserId, setDevUserId } from './devUsers'
 import { createConfirmDialog } from './confirmDialog'
 import { createLatestRequestGuard } from './latestRequestGuard'
 import { requestIdFromLocation, resolveRequestDeepLink, setRequestInUrl } from './requestDeepLink'
-import { REGISTRY_PAGE_SIZE, REQUEST_COLORS, REQUEST_STATUS_OPTIONS, canStartNow, canSubmitComment, commentFromApi, documentFromApi, documentKind, fromApi, historyFromApi, initialsFor, newestFirstFeed, withoutStaleActions } from './registry'
+import { REGISTRY_PAGE_SIZE, REQUEST_COLORS, REQUEST_STATUS_OPTIONS, canStartNow, canSubmitComment, commentFromApi, documentFromApi, documentKind, fromApi, historyFromApi, initialsFor, newestFirstFeed, securityMarkIcon, withoutStaleActions } from './registry'
 
 const activeTab = ref('active')
 const query = ref('')
@@ -361,12 +361,12 @@ function updateAdminUserRoles(userId, roles) {
 }
 
 const requests = ref([
-  { id: '000146', date: '27.07.2026', initiator: 'Максим Умнов', department: 'Бюро приводной техники', product: 'Лебёдка Furder VT40K', supplier: 'ООО «Вектор Технологий»', executor: 'С. И. Кашин', status: 'Заявка зарегистрирована', tone: 'blue', color: 'white', securityMark: null },
-  { id: '000145', date: '27.07.2026', initiator: 'Виктор Медведев', department: 'Отдел производственных закупок', product: 'IP-видеокамера DS-2CD2543G2-IS', supplier: 'ООО «Видеотехнология»', executor: 'С. В. Наумов', status: 'Заявка в работе', tone: 'cyan', color: 'white', securityMark: null },
-  { id: '000144', date: '24.07.2026', initiator: 'Андрей Соколов', department: 'Отдел главного конструктора', product: 'Ограничитель скорости ОС-2', supplier: 'АО «Лифткомплект»', executor: 'С. В. Прикуль', status: 'Работы приостановлены', tone: 'orange', color: 'white', securityMark: null },
-  { id: '000143', date: '22.07.2026', initiator: 'Елена Орлова', department: 'Служба закупок', product: 'Частотный преобразователь 15 кВт', supplier: 'ООО «Электропривод»', executor: 'С. Д. Шапошников', status: 'Подготовка заключения', tone: 'violet', color: 'white', securityMark: null },
-  { id: '000142', date: '21.07.2026', initiator: 'Павел Зимин', department: 'Управление качества', product: 'Буфер полиуретановый БП-100', supplier: 'ООО «Полимер»', executor: 'В. Я. Галкин', status: 'Контроль СБ', tone: 'yellow', color: 'white', securityMark: 'return' },
-  { id: '000141', date: '18.07.2026', initiator: 'Ирина Белова', department: 'Служба закупок', product: 'Датчик положения кабины', supplier: 'ООО «Сенсорика»', executor: 'В. В. Козлов', status: 'Заявка выполнена', tone: 'green', color: 'white', securityMark: 'approve' },
+  { id: '000146', date: '27.07.2026', initiator: 'Максим Умнов', department: 'Бюро приводной техники', product: 'Лебёдка Furder VT40K', supplier: 'ООО «Вектор Технологий»', executor: 'С. И. Кашин', status: 'Заявка зарегистрирована', tone: 'blue', color: 'white', securityMark: null, securityMarkDisplay: securityMarkIcon(null) },
+  { id: '000145', date: '27.07.2026', initiator: 'Виктор Медведев', department: 'Отдел производственных закупок', product: 'IP-видеокамера DS-2CD2543G2-IS', supplier: 'ООО «Видеотехнология»', executor: 'С. В. Наумов', status: 'Заявка в работе', tone: 'cyan', color: 'white', securityMark: null, securityMarkDisplay: securityMarkIcon(null) },
+  { id: '000144', date: '24.07.2026', initiator: 'Андрей Соколов', department: 'Отдел главного конструктора', product: 'Ограничитель скорости ОС-2', supplier: 'АО «Лифткомплект»', executor: 'С. В. Прикуль', status: 'Работы приостановлены', tone: 'orange', color: 'white', securityMark: null, securityMarkDisplay: securityMarkIcon(null) },
+  { id: '000143', date: '22.07.2026', initiator: 'Елена Орлова', department: 'Служба закупок', product: 'Частотный преобразователь 15 кВт', supplier: 'ООО «Электропривод»', executor: 'С. Д. Шапошников', status: 'Подготовка заключения', tone: 'violet', color: 'white', securityMark: null, securityMarkDisplay: securityMarkIcon(null) },
+  { id: '000142', date: '21.07.2026', initiator: 'Павел Зимин', department: 'Управление качества', product: 'Буфер полиуретановый БП-100', supplier: 'ООО «Полимер»', executor: 'В. Я. Галкин', status: 'Контроль СБ', tone: 'yellow', color: 'white', securityMark: 'return', securityMarkDisplay: securityMarkIcon('return') },
+  { id: '000141', date: '18.07.2026', initiator: 'Ирина Белова', department: 'Служба закупок', product: 'Датчик положения кабины', supplier: 'ООО «Сенсорика»', executor: 'В. В. Козлов', status: 'Заявка выполнена', tone: 'green', color: 'white', securityMark: 'approve', securityMarkDisplay: securityMarkIcon('approve') },
 ])
 
 const registryPage = reactive({
