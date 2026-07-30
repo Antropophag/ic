@@ -50,6 +50,7 @@ docker compose up -d --build
 - request/correlation ID проходит через HTTP, очередь и аудит;
 - `/health/live` не проверяет внешние зависимости;
 - `/health/ready` проверяет БД и доступность файлового хранилища;
+- dev-only `/health/logging` проверяет доставку Yii-лога в stderr контейнера;
 - метрики очереди: pending, retry, failed;
 - SMTP/LDAP credentials никогда не выводятся в health response.
 

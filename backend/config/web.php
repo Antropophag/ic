@@ -18,6 +18,7 @@ return yii\helpers\ArrayHelper::merge($common, [
             'rules' => [
                 'GET health/live' => 'health/live',
                 'GET health/ready' => 'health/ready',
+                'GET health/logging' => 'health/logging',
                 'GET api/v1/auth/me' => 'auth/me',
                 'GET api/v1/auth/dev-users' => 'auth/dev-users',
                 'POST api/v1/auth/login' => 'auth/login',

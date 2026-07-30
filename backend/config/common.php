@@ -10,6 +10,7 @@ return [
     'id' => 'shlz-test-registry',
     'basePath' => dirname(__DIR__),
     'vendorPath' => dirname(__DIR__) . '/vendor',
+    'bootstrap' => ['log'],
     'components' => [
         'db' => [
             'class' => yii\db\Connection::class,
@@ -27,8 +28,7 @@ return [
         'log' => [
             'traceLevel' => YII_DEBUG ? 3 : 0,
             'targets' => [[
-                'class' => yii\log\FileTarget::class,
-                'logFile' => 'php://stderr',
+                'class' => App\Infrastructure\Logging\StderrTarget::class,
                 'logVars' => [],
             ]],
         ],

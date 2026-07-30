@@ -26,6 +26,20 @@ done
 
 curl --fail --silent --show-error "$base_url/health/live" | grep '"status":"ok"' >/dev/null
 
+# Verify the configured Yii target all the way through FPM into the container
+# log stream. Use the probe start time so an older successful probe cannot pass.
+logging_probe_started=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+curl --fail --silent --show-error "$base_url/health/logging" | grep '"status":"ok"' >/dev/null
+logging_attempts=0
+until docker compose logs --no-color --since "$logging_probe_started" backend | grep -F '[error][health.logging] Logging smoke probe' >/dev/null; do
+  logging_attempts=$((logging_attempts + 1))
+  if [ "$logging_attempts" -ge 5 ]; then
+    echo 'Yii error did not reach docker compose logs backend' >&2
+    exit 1
+  fi
+  sleep 1
+done
+
 invalid_status=$(curl --silent --output /dev/null --write-out '%{http_code}' \
   --request POST \
   --header "X-Dev-User-ID: $dev_user_id" \

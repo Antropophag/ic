@@ -7,6 +7,7 @@ namespace App\Http\Controller;
 use App\Infrastructure\Document\DocumentStorage;
 use Yii;
 use yii\rest\Controller;
+use yii\web\NotFoundHttpException;
 use yii\web\ServerErrorHttpException;
 
 final class HealthController extends Controller
@@ -22,6 +23,19 @@ final class HealthController extends Controller
     /** @return array{status: 'ok'} */
     public function actionLive(): array
     {
+        return ['status' => 'ok'];
+    }
+
+    /** @return array{status: 'ok'} */
+    public function actionLogging(): array
+    {
+        if (YII_ENV !== 'dev') {
+            throw new NotFoundHttpException();
+        }
+
+        Yii::error('Logging smoke probe', 'health.logging');
+        Yii::getLogger()->flush(true);
+
         return ['status' => 'ok'];
     }
 
