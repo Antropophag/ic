@@ -69,6 +69,8 @@ export function fromApi(item) {
     lastCommentBody: item.last_comment_body || null,
     lastCommentAt: item.last_comment_created_at ? new Date(item.last_comment_created_at).toLocaleString('ru-RU') : null,
     hasReport: Boolean(Number(item.has_report)),
+    reportVersionId: item.report_version_id ? Number(item.report_version_id) : null,
+    reportOriginalName: item.report_original_name || null,
   }
 }
 

@@ -366,10 +366,14 @@ it('maps the last comment and report indicator for the registry row', () => {
     last_comment_body: 'Образец передан на испытания',
     last_comment_created_at: '2026-07-29T10:00:00Z',
     has_report: 1,
+    report_version_id: 55,
+    report_original_name: 'report.pdf',
   })).toMatchObject({
     lastCommentAuthor: 'Сергей Кашин',
     lastCommentBody: 'Образец передан на испытания',
     hasReport: true,
+    reportVersionId: 55,
+    reportOriginalName: 'report.pdf',
   })
 })
 
@@ -379,6 +383,8 @@ it('treats an absent last comment and report as null/false, not the DB default',
     lastCommentBody: null,
     lastCommentAt: null,
     hasReport: false,
+    reportVersionId: null,
+    reportOriginalName: null,
   })
 })
 

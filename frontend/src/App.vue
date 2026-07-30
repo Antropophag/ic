@@ -646,18 +646,36 @@ async function uploadDocument(event) {
   }
 }
 
+function triggerBlobDownload(blob, filename) {
+  const url = URL.createObjectURL(blob)
+  const link = window.document.createElement('a')
+  link.href = url
+  link.download = filename
+  link.click()
+  URL.revokeObjectURL(url)
+}
+
 async function downloadDocument(document) {
   documentError.value = ''
   try {
     const blob = await requestApi.downloadDocument(document.versionId)
-    const url = URL.createObjectURL(blob)
-    const link = window.document.createElement('a')
-    link.href = url
-    link.download = document.originalName
-    link.click()
-    URL.revokeObjectURL(url)
+    triggerBlobDownload(blob, document.originalName)
   } catch {
     documentError.value = 'Не удалось скачать документ.'
+  }
+}
+
+// Отдельная функция (не переиспользует downloadDocument целиком): ошибка
+// должна попасть в registryError, видимый на экране реестра, а не в
+// documentError, который рендерится только внутри открытой карточки
+// заявки и был бы невидим при клике по значку отчёта прямо в реестре.
+async function downloadReport(item) {
+  registryError.value = ''
+  try {
+    const blob = await requestApi.downloadDocument(item.reportVersionId)
+    triggerBlobDownload(blob, item.reportOriginalName)
+  } catch {
+    registryError.value = 'Не удалось скачать отчёт испытаний.'
   }
 }
 
@@ -1368,16 +1386,16 @@ onBeforeUnmount(() => window.removeEventListener('popstate', handlePopstate))
             </div>
             <div class="table-wrap">
               <table>
-                <thead><tr><th class="sortable" @click="toggleSort">№ заявки {{ sortDirection === 'desc' ? '↓' : '↑' }}</th><th>Дата</th><th>Объект испытаний</th><th>Инициатор</th><th>Исполнитель</th><th>Статус</th><th>Отметка СБ</th><th>Комментарий</th><th>Отчёт</th></tr></thead>
+                <thead><tr><th class="sortable" @click="toggleSort">№ заявки {{ sortDirection === 'desc' ? '↓' : '↑' }}</th><th>Дата</th><th>Объект испытаний</th><th>Инициатор</th><th>Исполнитель</th><th>Статус</th><th>СБ</th><th class="registry-indicator-cell">Комментарий</th><th class="registry-indicator-cell">Отчёт</th></tr></thead>
                 <tbody>
                   <tr v-for="item in paged.items" :key="item.id" :class="'row-color-' + item.color" @click="openRequest(item)">
                     <td class="number">{{ item.id }}</td><td>{{ item.date }}</td>
-                    <td><b>{{ item.product }}</b><small>{{ item.supplier }}</small></td>
-                    <td>{{ item.initiator }}<small>{{ item.department }}</small></td>
+                    <td><b>{{ item.product }}</b><small :title="item.supplier">{{ item.supplier }}</small></td>
+                    <td>{{ item.initiator }}<small :title="item.department">{{ item.department }}</small></td>
                     <td>{{ item.executor }}</td><td><span class="badge" :class="item.tone">{{ item.status }}</span></td>
                     <td>{{ item.securityMark }}</td>
                     <td class="registry-indicator-cell"><button v-if="item.lastCommentAuthor" type="button" class="avatar small registry-comment-avatar" :title="'Последний комментарий: ' + item.lastCommentAuthor" :aria-label="'Последний комментарий: ' + item.lastCommentAuthor" @click.stop="openLastComment(item)">{{ initialsFor(item.lastCommentAuthor) }}</button><span v-else class="muted-dash">—</span></td>
-                    <td class="registry-indicator-cell"><span v-if="item.hasReport" class="doc-icon pdf" title="Отчёт испытаний загружен">PDF</span><span v-else class="muted-dash">—</span></td>
+                    <td class="registry-indicator-cell"><button v-if="item.hasReport" type="button" class="doc-icon pdf registry-report-icon" title="Скачать отчёт испытаний" aria-label="Скачать отчёт испытаний" @click.stop="downloadReport(item)">PDF</button><span v-else class="muted-dash">—</span></td>
                   </tr>
                 </tbody>
               </table>

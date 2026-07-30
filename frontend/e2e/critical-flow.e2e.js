@@ -108,7 +108,14 @@ test('реестр показывает индикаторы последнег�
   })
   await page.goto('/')
   const row = page.getByRole('row').filter({ hasText: marker })
-  await expect(row.getByText('PDF', { exact: true })).toBeVisible()
+
+  // Клик по значку отчёта скачивает файл, а не открывает карточку заявки.
+  const [download] = await Promise.all([
+    page.waitForEvent('download'),
+    row.getByRole('button', { name: 'Скачать отчёт испытаний' }).click(),
+  ])
+  expect(download.suggestedFilename()).toBe('e2e-report.pdf')
+  await expect(page.getByRole('heading', { name: /^Заявка №\d+ от / })).toHaveCount(0)
 
   await row.getByRole('button', { name: /Последний комментарий/ }).click()
   await expect(page.getByText(commentText)).toBeVisible()
