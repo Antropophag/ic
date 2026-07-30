@@ -53,14 +53,17 @@ final class DemoRequestSeeder
                 $requestId = $this->insertRequest($index, $fixture, $users);
                 ++$counts['requests'];
                 $counts['comments'] += $this->insertComments($requestId, $index, $fixture['age'], $users);
-                $this->insertWorkflow($requestId, $index, $fixture['status'], $fixture['age'], $users);
+                $reportVersionId = null;
 
                 if ($index >= 1) {
                     $documentType = $index >= 3 ? 'report' : 'attachment';
                     $documentName = $index >= 3 ? 'Отчёт об испытаниях.txt' : 'Программа испытаний.txt';
-                    $newKeys[] = $this->insertAttachment($requestId, $documentType, $documentName, $users['employee'], $fixture['age'] - 1);
+                    $version = $this->insertAttachment($requestId, $documentType, $documentName, $users['employee'], $fixture['age'] - 1);
+                    $newKeys[] = $version['key'];
+                    $reportVersionId = $documentType === 'report' ? $version['id'] : null;
                     ++$counts['documents'];
                 }
+                $this->insertWorkflow($requestId, $index, $fixture['status'], $fixture['age'], $users, $reportVersionId);
                 if ($index >= 3 && $index <= 5) {
                     $version = $this->insertAttachment($requestId, 'opinion', 'Экспертное заключение.txt', $users[$index === 4 ? 'expert2' : 'expert'], $fixture['age'] - 4);
                     $newKeys[] = $version['key'];
@@ -77,8 +80,8 @@ final class DemoRequestSeeder
             if ($transaction->isActive) {
                 $transaction->rollBack();
             }
-            foreach ($newKeys as $item) {
-                $this->deleteBestEffort(is_array($item) ? $item['key'] : $item);
+            foreach ($newKeys as $key) {
+                $this->deleteBestEffort($key);
             }
             throw $error;
         }
@@ -157,7 +160,7 @@ final class DemoRequestSeeder
     }
 
     /** @param array<string, int> $users */
-    private function insertWorkflow(int $requestId, int $index, string $status, int $age, array $users): void
+    private function insertWorkflow(int $requestId, int $index, string $status, int $age, array $users, ?int $reportVersionId): void
     {
         $executor = $index % 2 === 0 ? $users['executor2'] : $users['executor'];
         if ($status !== 'registered') {
@@ -189,6 +192,7 @@ final class DemoRequestSeeder
             $this->db->createCommand()->insert('{{%request_transitions}}', [
                 'request_id' => $requestId, 'actor_id' => $actor, 'from_status' => $from,
                 'to_status' => $to, 'action' => $action, 'reason' => $reason,
+                'document_version_id' => $action === 'upload_report' ? $reportVersionId : null,
                 'rule_id' => 'DEV-001', 'created_at' => $this->time(max(0, $age - $offset - 1)),
             ])->execute();
         }

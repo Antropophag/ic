@@ -3,6 +3,7 @@ import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } 
 import { adminApi, authApi, devApi, hasCsrfToken, requestApi, setCsrfToken } from './api'
 import { getDevUserId, reconcileDevUserId, setDevUserId } from './devUsers'
 import { createConfirmDialog } from './confirmDialog'
+import { runDemoSeed } from './demoSeed'
 import { createLatestRequestGuard } from './latestRequestGuard'
 import { requestIdFromLocation, resolveRequestDeepLink, setRequestInUrl } from './requestDeepLink'
 import { REGISTRY_PAGE_SIZE, REQUEST_COLORS, REQUEST_STATUS_OPTIONS, canStartNow, canSubmitComment, commentFromApi, documentFromApi, documentKind, fromApi, historyFromApi, initialsFor, newestFirstFeed, withoutStaleActions } from './registry'
@@ -142,18 +143,21 @@ async function seedDemoRequests() {
   demoSeedLoading.value = true
   demoSeedMessage.value = ''
   try {
-    const result = await devApi.seedRequests()
-    closeRequest({ push: false })
-    showCreate.value = false
-    activeTab.value = 'all'
-    statusFilter.value = ''
-    query.value = ''
-    currentPage.value = 1
-    await nextTick()
-    await loadRequests(true)
-    demoSeedMessage.value = `Создано демо-заявок: ${result.requests}.`
-  } catch {
-    demoSeedMessage.value = 'Не удалось заполнить демо-данные.'
+    demoSeedMessage.value = await runDemoSeed(
+      () => devApi.seedRequests(),
+      () => {
+        closeRequest({ push: false })
+        showCreate.value = false
+        activeTab.value = 'all'
+        statusFilter.value = ''
+        query.value = ''
+        currentPage.value = 1
+      },
+      async () => {
+        await nextTick()
+        await loadRequests(true)
+      },
+    )
   } finally {
     demoSeedLoading.value = false
   }

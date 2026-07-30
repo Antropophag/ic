@@ -69,6 +69,16 @@ final class DemoRequestSeederTest extends IntegrationTestCase
         self::assertSame(['approve', 'return'], $this->db()->createCommand('SELECT decision FROM {{%security_checks}} ORDER BY decision')->queryColumn());
         self::assertSame(1, (int) $this->scalar("SELECT COUNT(*) FROM {{%request_transitions}} WHERE action = 'security_return'"));
         self::assertSame(
+            0,
+            (int) $this->scalar(
+                "SELECT COUNT(*) FROM {{%request_transitions}} transition_event "
+                . 'LEFT JOIN {{%request_document_versions}} version ON version.id = transition_event.document_version_id '
+                . 'LEFT JOIN {{%request_documents}} document ON document.id = version.document_id '
+                . "WHERE transition_event.action = 'upload_report' "
+                . "AND (transition_event.document_version_id IS NULL OR document.document_type <> 'report')",
+            ),
+        );
+        self::assertSame(
             'dev.expert2',
             $this->scalar(
                 "SELECT u.ad_login FROM {{%request_transitions}} t JOIN {{%requests}} r ON r.id = t.request_id JOIN {{%users}} u ON u.id = t.actor_id WHERE r.status = 'security_review' AND t.action = 'publish_opinion'",
