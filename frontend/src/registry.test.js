@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { buildFeed, canStartNow, canSubmitComment, commentFromApi, documentFromApi, documentKind, filterRequests, fromApi, historyFromApi, paginate, withoutStaleActions } from './registry'
+import { buildFeed, canStartNow, canSubmitComment, commentFromApi, documentFromApi, documentKind, filterRequests, fromApi, historyFromApi, newestFirstFeed, paginate, withoutStaleActions } from './registry'
 
 const registered = {
   id: 4,
@@ -138,6 +138,18 @@ it('maps the reassign-expert history label', () => {
     id: 16, kind: 'assignment', action: 'reassign_expert', actorName: 'Эксперт',
     ruleId: 'WF-011', occurredAt: '2026-07-28T10:06:00Z',
   }).description).toBe('переназначил(а) эксперта')
+})
+
+it('maps a downloadable report reference only when backend grants access', () => {
+  expect(historyFromApi({
+    id: 20, kind: 'transition', action: 'upload_report', actorName: 'Исполнитель',
+    ruleId: 'DOC-002', occurredAt: '2026-07-28T10:00:00Z', versionId: '42', originalName: 'Отчёт.pdf',
+  })).toMatchObject({ versionId: 42, originalName: 'Отчёт.pdf' })
+
+  expect(historyFromApi({
+    id: 21, kind: 'transition', action: 'upload_report', actorName: 'Исполнитель',
+    ruleId: 'DOC-002', occurredAt: '2026-07-28T10:00:00Z', versionId: null, originalName: null,
+  })).toMatchObject({ versionId: null, originalName: null })
 })
 
 it('appends the target name for assign_executor and reassign_expert', () => {
@@ -301,6 +313,18 @@ it('merges history and comments into one chronological feed', () => {
 
   expect(feed.map(entry => entry.id)).toEqual([5, 'transition-1', 6])
   expect(feed.map(entry => entry.type)).toEqual(['comment', 'milestone', 'comment'])
+})
+
+it('presents the merged feed with the newest entry first', () => {
+  const history = [
+    historyFromApi({ id: 1, kind: 'transition', action: 'start', actorName: 'А', ruleId: 'WF-004', occurredAt: '2026-07-28T10:02:00Z' }),
+  ]
+  const comments = [
+    commentFromApi({ id: 5, authorName: 'Б', body: 'раньше всех', createdAt: '2026-07-28T10:00:00Z' }),
+    commentFromApi({ id: 6, authorName: 'В', body: 'позже всех', createdAt: '2026-07-28T10:05:00Z' }),
+  ]
+
+  expect(newestFirstFeed(history, comments).map(entry => entry.id)).toEqual([6, 'transition-1', 5])
 })
 
 it('keeps chronological order within a feed when entries share the same second', () => {

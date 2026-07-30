@@ -476,15 +476,34 @@ final class RequestRepository
         $history = $this->db->createCommand(
             'SELECT t.id, \'transition\' AS kind, t.action, t.from_status AS fromStatus, '
             . "t.to_status AS toStatus, t.rule_id AS ruleId, t.reason, DATE_FORMAT(t.created_at, '%Y-%m-%dT%H:%i:%s.%fZ') AS occurredAt, "
-            . 'u.display_name AS actorName, NULL AS targetName FROM {{%request_transitions}} t '
-            . 'JOIN {{%users}} u ON u.id = t.actor_id WHERE t.request_id = :transition_request_id '
+            . 'u.display_name AS actorName, NULL AS targetName, '
+            . 'CASE WHEN report_document.id IS NOT NULL THEN report_version.id ELSE NULL END AS versionId, '
+            . 'CASE WHEN report_document.id IS NOT NULL THEN report_version.original_name ELSE NULL END AS originalName '
+            . 'FROM {{%request_transitions}} t '
+            . 'JOIN {{%users}} u ON u.id = t.actor_id '
+            . 'JOIN {{%requests}} history_request ON history_request.id = t.request_id '
+            . 'LEFT JOIN {{%request_document_versions}} report_version ON report_version.id = t.document_version_id '
+            . 'AND report_version.deleted_at IS NULL AND ('
+            . 'EXISTS(SELECT 1 FROM {{%request_assignments}} report_assignment '
+            . 'WHERE report_assignment.request_id = t.request_id AND report_assignment.user_id = :history_report_viewer '
+            . "AND report_assignment.assignment_type IN ('executor', 'expert') AND report_assignment.valid_to IS NULL) "
+            . 'OR EXISTS(SELECT 1 FROM {{%user_roles}} history_ur JOIN {{%roles}} history_role ON history_role.id = history_ur.role_id '
+            . "WHERE history_ur.user_id = :history_report_privileged_viewer AND history_role.code IN ('ic_manager', 'laboratory_manager')) "
+            . "OR (history_request.status = 'completed' AND report_version.version = ("
+            . 'SELECT MAX(history_public_version.version) FROM {{%request_document_versions}} history_public_version '
+            . 'WHERE history_public_version.document_id = report_version.document_id '
+            . 'AND history_public_version.deleted_at IS NULL))) '
+            . 'LEFT JOIN {{%request_documents}} report_document ON report_document.id = report_version.document_id '
+            . 'AND report_document.request_id = t.request_id '
+            . "AND report_document.document_type = 'report' AND report_document.deleted_at IS NULL "
+            . 'WHERE t.request_id = :transition_request_id '
             . 'UNION ALL '
             . "SELECT a.id, 'assignment' AS kind, CASE a.event_type "
             . "WHEN 'request.executor_assigned' THEN 'assign_executor' "
             . "WHEN 'request.expert_claimed' THEN 'claim_expert' "
             . "WHEN 'request.expert_reassigned' THEN 'reassign_expert' "
             . "ELSE 'delete_report' END AS action, NULL, NULL, "
-            . "a.rule_id, NULL, DATE_FORMAT(a.created_at, '%Y-%m-%dT%H:%i:%s.%fZ'), u.display_name, target_user.display_name "
+            . "a.rule_id, NULL, DATE_FORMAT(a.created_at, '%Y-%m-%dT%H:%i:%s.%fZ'), u.display_name, target_user.display_name, NULL, NULL "
             . 'FROM {{%audit_events}} a '
             . 'JOIN {{%users}} u ON u.id = a.actor_id '
             // assign_executor/claim_expert/reassign_expert пишут одинаковое
@@ -506,7 +525,12 @@ final class RequestRepository
             . "AND a.event_type IN ('request.executor_assigned', 'request.expert_claimed', "
             . "'request.expert_reassigned', 'request.report_deleted') "
             . 'ORDER BY occurredAt DESC, kind DESC, id DESC',
-            [':transition_request_id' => $requestId, ':audit_request_id' => $requestId],
+            [
+                ':transition_request_id' => $requestId,
+                ':audit_request_id' => $requestId,
+                ':history_report_viewer' => $actorId,
+                ':history_report_privileged_viewer' => $actorId,
+            ],
         )->queryAll();
 
         $commentsPage = $this->queryCommentsPage($requestId, null);
