@@ -55,6 +55,13 @@ final class DemoRequestSeederTest extends IntegrationTestCase
         );
         self::assertSame(0, (int) $this->scalar('SELECT COUNT(*) FROM {{%requests}} WHERE legacy_id IS NOT NULL'));
         self::assertSame(['approve', 'return'], $this->db()->createCommand('SELECT decision FROM {{%security_checks}} ORDER BY decision')->queryColumn());
+        self::assertSame(1, (int) $this->scalar("SELECT COUNT(*) FROM {{%request_transitions}} WHERE action = 'security_return'"));
+        self::assertSame(
+            'dev.expert2',
+            $this->scalar(
+                "SELECT u.ad_login FROM {{%request_transitions}} t JOIN {{%requests}} r ON r.id = t.request_id JOIN {{%users}} u ON u.id = t.actor_id WHERE r.status = 'security_review' AND t.action = 'publish_opinion'",
+            ),
+        );
         self::assertSame($userCount, (int) $this->scalar('SELECT COUNT(*) FROM {{%users}}'));
 
         $requestIds = $this->db()->createCommand('SELECT id FROM {{%requests}} ORDER BY id')->queryColumn();

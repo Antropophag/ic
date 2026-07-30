@@ -169,7 +169,12 @@ final class DemoRequestSeeder
             'registered' => [],
             'in_progress' => [['registered', 'in_progress', 'start', null]],
             'suspended' => [['registered', 'in_progress', 'start', null], ['in_progress', 'suspended', 'suspend', 'Ожидается дополнительный образец.']],
-            'opinion_preparation' => [['registered', 'in_progress', 'start', null], ['in_progress', 'opinion_preparation', 'upload_report', null]],
+            'opinion_preparation' => [
+                ['registered', 'in_progress', 'start', null],
+                ['in_progress', 'opinion_preparation', 'upload_report', null],
+                ['opinion_preparation', 'security_review', 'publish_opinion', null],
+                ['security_review', 'opinion_preparation', 'security_return', 'Демонстрационный возврат на уточнение.'],
+            ],
             'security_review' => [['registered', 'in_progress', 'start', null], ['in_progress', 'opinion_preparation', 'upload_report', null], ['opinion_preparation', 'security_review', 'publish_opinion', null]],
             'completed' => [['registered', 'in_progress', 'start', null], ['in_progress', 'opinion_preparation', 'upload_report', null], ['opinion_preparation', 'security_review', 'publish_opinion', null], ['security_review', 'completed', 'security_approve', null]],
             default => [['registered', 'rejected', 'reject', 'Комплект образцов не соответствует условиям приёмки.']],
@@ -177,7 +182,9 @@ final class DemoRequestSeeder
         foreach ($steps as $offset => [$from, $to, $action, $reason]) {
             $actor = $action === 'reject'
                 ? $users['manager']
-                : (str_starts_with($action, 'security_') ? $users['security'] : ($action === 'publish_opinion' ? $users['expert'] : $executor));
+                : (str_starts_with($action, 'security_')
+                    ? $users['security']
+                    : ($action === 'publish_opinion' ? $users[$index === 4 ? 'expert2' : 'expert'] : $executor));
             $this->db->createCommand()->insert('{{%request_transitions}}', [
                 'request_id' => $requestId, 'actor_id' => $actor, 'from_status' => $from,
                 'to_status' => $to, 'action' => $action, 'reason' => $reason,
