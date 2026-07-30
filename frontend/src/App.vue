@@ -3,7 +3,7 @@ import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } 
 import { adminApi, authApi, devApi, hasCsrfToken, requestApi, setCsrfToken } from './api'
 import { getDevUserId, reconcileDevUserId, setDevUserId } from './devUsers'
 import { createConfirmDialog } from './confirmDialog'
-import { runDemoSeed } from './demoSeed'
+import { clearDemoRegistry, runDemoSeed } from './demoSeed'
 import { createLatestRequestGuard } from './latestRequestGuard'
 import { requestIdFromLocation, resolveRequestDeepLink, setRequestInUrl } from './requestDeepLink'
 import { REGISTRY_PAGE_SIZE, REQUEST_COLORS, REQUEST_STATUS_OPTIONS, canStartNow, canSubmitComment, commentFromApi, documentFromApi, documentKind, fromApi, historyFromApi, initialsFor, newestFirstFeed, withoutStaleActions } from './registry'
@@ -152,6 +152,7 @@ async function seedDemoRequests() {
         statusFilter.value = ''
         query.value = ''
         currentPage.value = 1
+        clearDemoRegistry(requests, registryPage)
       },
       async () => {
         await nextTick()

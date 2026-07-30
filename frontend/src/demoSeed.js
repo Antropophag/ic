@@ -15,3 +15,11 @@ export async function runDemoSeed(seed, onSeeded, refresh) {
     return `${successMessage} Не удалось обновить список — обновите страницу.`
   }
 }
+
+export function clearDemoRegistry(requests, registryPage) {
+  requests.value = []
+  registryPage.total = 0
+  registryPage.page = 1
+  registryPage.pageCount = 1
+  registryPage.counts = { active: 0, all: 0, mine: 0 }
+}
