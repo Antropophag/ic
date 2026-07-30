@@ -95,10 +95,7 @@ final class UserAdministrationRepository
                 'entity_id' => $userId,
                 'actor_id' => $actorId,
                 'rule_id' => 'AUTH-007',
-                'payload_json' => json_encode(
-                    ['ad_login' => $adLogin, 'display_name' => $displayName],
-                    JSON_THROW_ON_ERROR | JSON_UNESCAPED_UNICODE,
-                ),
+                'payload_json' => ['ad_login' => $adLogin, 'display_name' => $displayName],
                 'created_at' => $now,
             ])->execute();
 
@@ -176,7 +173,7 @@ final class UserAdministrationRepository
                 'entity_id' => $userId,
                 'actor_id' => $actorId,
                 'rule_id' => 'AUTH-007',
-                'payload_json' => json_encode(['role_id' => $roleId], JSON_THROW_ON_ERROR),
+                'payload_json' => ['role_id' => $roleId],
                 'created_at' => $now,
             ])->execute();
         }
@@ -200,7 +197,7 @@ final class UserAdministrationRepository
                 'entity_id' => $userId,
                 'actor_id' => $actorId,
                 'rule_id' => 'AUTH-007',
-                'payload_json' => json_encode(['role_id' => $roleId], JSON_THROW_ON_ERROR),
+                'payload_json' => ['role_id' => $roleId],
                 'created_at' => Clock::now(),
             ])->execute();
         }

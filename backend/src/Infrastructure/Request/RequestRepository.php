@@ -206,7 +206,7 @@ final class RequestRepository
                 'entity_id' => $requestId,
                 'actor_id' => $actorId,
                 'rule_id' => $ruleId,
-                'payload_json' => json_encode(['decision' => $decision, 'reason' => $reason], JSON_THROW_ON_ERROR),
+                'payload_json' => ['decision' => $decision, 'reason' => $reason],
                 'created_at' => $now,
             ])->execute();
             $outbox = new NotificationOutbox($this->db);
@@ -271,7 +271,7 @@ final class RequestRepository
             'entity_id' => $requestId,
             'actor_id' => $actorId,
             'rule_id' => $ruleId,
-            'payload_json' => json_encode(['outcome' => 'rejected'], JSON_THROW_ON_ERROR),
+            'payload_json' => ['outcome' => 'rejected'],
             'created_at' => Clock::now(),
         ])->execute();
     }
@@ -476,7 +476,7 @@ final class RequestRepository
         $history = $this->db->createCommand(
             'SELECT t.id, \'transition\' AS kind, t.action, t.from_status AS fromStatus, '
             . "t.to_status AS toStatus, t.rule_id AS ruleId, t.reason, DATE_FORMAT(t.created_at, '%Y-%m-%dT%H:%i:%s.%fZ') AS occurredAt, "
-            . 'u.display_name AS actorName FROM {{%request_transitions}} t '
+            . 'u.display_name AS actorName, NULL AS targetName FROM {{%request_transitions}} t '
             . 'JOIN {{%users}} u ON u.id = t.actor_id WHERE t.request_id = :transition_request_id '
             . 'UNION ALL '
             . "SELECT a.id, 'assignment' AS kind, CASE a.event_type "
@@ -484,8 +484,24 @@ final class RequestRepository
             . "WHEN 'request.expert_claimed' THEN 'claim_expert' "
             . "WHEN 'request.expert_reassigned' THEN 'reassign_expert' "
             . "ELSE 'delete_report' END AS action, NULL, NULL, "
-            . "a.rule_id, NULL, DATE_FORMAT(a.created_at, '%Y-%m-%dT%H:%i:%s.%fZ'), u.display_name FROM {{%audit_events}} a "
+            . "a.rule_id, NULL, DATE_FORMAT(a.created_at, '%Y-%m-%dT%H:%i:%s.%fZ'), u.display_name, target_user.display_name "
+            . 'FROM {{%audit_events}} a '
             . 'JOIN {{%users}} u ON u.id = a.actor_id '
+            // assign_executor/claim_expert/reassign_expert пишут одинаковое
+            // поле assignment_id в payload_json (см. RequestRepository::
+            // assignExecutor()/performExpertAssignment()) — резолвим имя
+            // адресата действия через саму запись назначения, а не парсим
+            // executor_id/expert_id по отдельности (разные ключи на разные
+            // события): проще и работает для report_deleted (NULL) тоже.
+            // JSON_TYPE(...) = 'STRING' отличает записи, сделанные до
+            // миграции m260730_000001 (двойное JSON-кодирование, issue про
+            // payload_json) — JSON_UNQUOTE разворачивает их на один
+            // уровень, чтобы имя резолвилось и без выполненного backfill.
+            . 'LEFT JOIN {{%request_assignments}} target_assignment '
+            . 'ON target_assignment.id = CAST(JSON_EXTRACT('
+            . "CASE WHEN JSON_TYPE(a.payload_json) = 'STRING' THEN JSON_UNQUOTE(a.payload_json) ELSE a.payload_json END, "
+            . "'$.assignment_id') AS UNSIGNED) "
+            . 'LEFT JOIN {{%users}} target_user ON target_user.id = target_assignment.user_id '
             . "WHERE a.entity_type = 'request' AND a.entity_id = :audit_request_id "
             . "AND a.event_type IN ('request.executor_assigned', 'request.expert_claimed', "
             . "'request.expert_reassigned', 'request.report_deleted') "
@@ -619,7 +635,7 @@ final class RequestRepository
                 'entity_id' => $requestId,
                 'actor_id' => $actorId,
                 'rule_id' => 'COM-003',
-                'payload_json' => json_encode(['comment_id' => $commentId], JSON_THROW_ON_ERROR),
+                'payload_json' => ['comment_id' => $commentId],
                 'created_at' => $now,
             ])->execute();
             // COM-006: участники процесса уведомляются о новом комментарии,
@@ -819,10 +835,7 @@ final class RequestRepository
             'entity_id' => $requestId,
             'actor_id' => $actorId,
             'rule_id' => $ruleId,
-            'payload_json' => json_encode(
-                ['expert_id' => $targetExpertId, 'assignment_id' => $assignmentId, 'lock_version' => $nextLockVersion],
-                JSON_THROW_ON_ERROR,
-            ),
+            'payload_json' => ['expert_id' => $targetExpertId, 'assignment_id' => $assignmentId, 'lock_version' => $nextLockVersion],
             'created_at' => $now,
         ])->execute();
         if ($notifyTarget) {
@@ -865,7 +878,7 @@ final class RequestRepository
             'entity_id' => $requestId,
             'actor_id' => $actorId,
             'rule_id' => $ruleId,
-            'payload_json' => json_encode(['expert_id' => $expertId], JSON_THROW_ON_ERROR),
+            'payload_json' => ['expert_id' => $expertId],
             'created_at' => Clock::now(),
         ])->execute();
     }
@@ -940,14 +953,11 @@ final class RequestRepository
                 'entity_id' => $requestId,
                 'actor_id' => $actorId,
                 'rule_id' => 'WF-001',
-                'payload_json' => json_encode(
-                    [
-                        'executor_id' => $executorId,
-                        'assignment_id' => $assignmentId,
-                        'lock_version' => $nextLockVersion,
-                    ],
-                    JSON_THROW_ON_ERROR,
-                ),
+                'payload_json' => [
+                    'executor_id' => $executorId,
+                    'assignment_id' => $assignmentId,
+                    'lock_version' => $nextLockVersion,
+                ],
                 'created_at' => $now,
             ])->execute();
             $executorContact = $this->userContact($executorId);
@@ -1012,7 +1022,7 @@ final class RequestRepository
             'entity_id' => $requestId,
             'actor_id' => $actorId,
             'rule_id' => $ruleId,
-            'payload_json' => json_encode(['executor_id' => $executorId], JSON_THROW_ON_ERROR),
+            'payload_json' => ['executor_id' => $executorId],
             'created_at' => Clock::now(),
         ])->execute();
     }
@@ -1051,7 +1061,7 @@ final class RequestRepository
                 'entity_id' => $requestId,
                 'actor_id' => $actorId,
                 'rule_id' => 'WF-009',
-                'payload_json' => json_encode(['color' => $color], JSON_THROW_ON_ERROR),
+                'payload_json' => ['color' => $color],
                 'created_at' => $now,
             ])->execute();
             $transaction->commit();
@@ -1079,7 +1089,7 @@ final class RequestRepository
             'entity_id' => $requestId,
             'actor_id' => $actorId,
             'rule_id' => $ruleId,
-            'payload_json' => json_encode([], JSON_THROW_ON_ERROR),
+            'payload_json' => [],
             'created_at' => Clock::now(),
         ])->execute();
     }
@@ -1149,11 +1159,11 @@ final class RequestRepository
                 'entity_id' => $requestId,
                 'actor_id' => $actorId,
                 'rule_id' => 'WF-004',
-                'payload_json' => json_encode([
+                'payload_json' => [
                     'from_status' => $currentStatus->value,
                     'to_status' => $targetStatus->value,
                     'lock_version' => $nextLockVersion,
-                ], JSON_THROW_ON_ERROR),
+                ],
                 'created_at' => $now,
             ])->execute();
             $transaction->commit();
@@ -1187,7 +1197,7 @@ final class RequestRepository
             'entity_id' => $requestId,
             'actor_id' => $actorId,
             'rule_id' => $ruleId,
-            'payload_json' => json_encode([], JSON_THROW_ON_ERROR),
+            'payload_json' => [],
             'created_at' => Clock::now(),
         ])->execute();
     }
@@ -1204,7 +1214,7 @@ final class RequestRepository
             'entity_id' => $actorId,
             'actor_id' => $actorId,
             'rule_id' => $ruleId,
-            'payload_json' => json_encode([], JSON_THROW_ON_ERROR),
+            'payload_json' => [],
             'created_at' => Clock::now(),
         ])->execute();
     }
@@ -1260,11 +1270,11 @@ final class RequestRepository
                 'entity_id' => $requestId,
                 'actor_id' => $actorId,
                 'rule_id' => 'WF-006',
-                'payload_json' => json_encode([
+                'payload_json' => [
                     'from_status' => $currentStatus->value,
                     'to_status' => RequestStatus::Rejected->value,
                     'lock_version' => $nextLockVersion,
-                ], JSON_THROW_ON_ERROR),
+                ],
                 'created_at' => $now,
             ])->execute();
             $initiator = $this->initiatorContact($requestId);
@@ -1304,7 +1314,7 @@ final class RequestRepository
             'entity_id' => $requestId,
             'actor_id' => $actorId,
             'rule_id' => $ruleId,
-            'payload_json' => json_encode([], JSON_THROW_ON_ERROR),
+            'payload_json' => [],
             'created_at' => Clock::now(),
         ])->execute();
     }
@@ -1375,11 +1385,11 @@ final class RequestRepository
                 'entity_id' => $requestId,
                 'actor_id' => $actorId,
                 'rule_id' => 'WF-007',
-                'payload_json' => json_encode([
+                'payload_json' => [
                     'from_status' => $currentStatus->value,
                     'to_status' => RequestStatus::Withdrawn->value,
                     'lock_version' => $nextLockVersion,
-                ], JSON_THROW_ON_ERROR),
+                ],
                 'created_at' => $now,
             ])->execute();
 
@@ -1432,7 +1442,7 @@ final class RequestRepository
             'entity_id' => $requestId,
             'actor_id' => $actorId,
             'rule_id' => $ruleId,
-            'payload_json' => json_encode([], JSON_THROW_ON_ERROR),
+            'payload_json' => [],
             'created_at' => Clock::now(),
         ])->execute();
     }

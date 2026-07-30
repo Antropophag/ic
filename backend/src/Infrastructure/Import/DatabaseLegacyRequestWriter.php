@@ -67,10 +67,7 @@ final class DatabaseLegacyRequestWriter implements LegacyRequestWriter
                 'entity_id' => $requestId,
                 'actor_id' => $initiatorId,
                 'rule_id' => 'IMP-001',
-                'payload_json' => json_encode(
-                    ['legacyId' => $request->legacyId],
-                    JSON_THROW_ON_ERROR | JSON_UNESCAPED_UNICODE,
-                ),
+                'payload_json' => ['legacyId' => $request->legacyId],
                 'created_at' => Clock::now(),
             ])->execute();
             $transaction->commit();

@@ -79,7 +79,7 @@ final class DocumentRepository
                 'entity_id' => $requestId,
                 'actor_id' => $actorId,
                 'rule_id' => 'COM-004',
-                'payload_json' => json_encode(['document_id' => $documentId, 'version_id' => $versionId], JSON_THROW_ON_ERROR),
+                'payload_json' => ['document_id' => $documentId, 'version_id' => $versionId],
                 'created_at' => $now,
             ])->execute();
             $transaction->commit();
@@ -237,10 +237,7 @@ final class DocumentRepository
                 'entity_id' => $requestId,
                 'actor_id' => $actorId,
                 'rule_id' => $isFirstOrRevived ? ($report['wasDeleted'] ? 'DOC-012' : 'DOC-002') : 'DOC-008',
-                'payload_json' => json_encode(
-                    ['document_id' => $documentId, 'version_id' => $versionId, 'version' => $version],
-                    JSON_THROW_ON_ERROR,
-                ),
+                'payload_json' => ['document_id' => $documentId, 'version_id' => $versionId, 'version' => $version],
                 'created_at' => $now,
             ])->execute();
             $transaction->commit();
@@ -337,7 +334,7 @@ final class DocumentRepository
                 'entity_id' => $requestId,
                 'actor_id' => $actorId,
                 'rule_id' => 'DOC-011',
-                'payload_json' => json_encode(['document_id' => (int) $document['id']], JSON_THROW_ON_ERROR),
+                'payload_json' => ['document_id' => (int) $document['id']],
                 'created_at' => $now,
             ])->execute();
             $transaction->commit();
@@ -454,7 +451,7 @@ final class DocumentRepository
                 'entity_id' => $requestId,
                 'actor_id' => $actorId,
                 'rule_id' => 'DOC-007',
-                'payload_json' => json_encode(['revision' => $revision, 'document_version_id' => $versionId], JSON_THROW_ON_ERROR),
+                'payload_json' => ['revision' => $revision, 'document_version_id' => $versionId],
                 'created_at' => $now,
             ])->execute();
             // ТЗ 4.9: сотрудники СБ уведомляются о поступлении отчёта и
@@ -568,7 +565,7 @@ final class DocumentRepository
             'entity_id' => $requestId,
             'actor_id' => $actorId,
             'rule_id' => 'ACL-007',
-            'payload_json' => json_encode(['version_id' => $versionId], JSON_THROW_ON_ERROR),
+            'payload_json' => ['version_id' => $versionId],
             'created_at' => Clock::now(),
         ])->execute();
     }
@@ -593,10 +590,7 @@ final class DocumentRepository
             'entity_id' => $requestId === false ? $versionId : (int) $requestId,
             'actor_id' => $actorId,
             'rule_id' => 'ACL-007',
-            'payload_json' => json_encode(
-                ['version_id' => $versionId, 'outcome' => 'rejected', 'reason' => $reason],
-                JSON_THROW_ON_ERROR,
-            ),
+            'payload_json' => ['version_id' => $versionId, 'outcome' => 'rejected', 'reason' => $reason],
             'created_at' => Clock::now(),
         ])->execute();
     }
@@ -617,7 +611,7 @@ final class DocumentRepository
             'entity_id' => $requestId,
             'actor_id' => $actorId,
             'rule_id' => $ruleId,
-            'payload_json' => json_encode(['outcome' => 'rejected'], JSON_THROW_ON_ERROR),
+            'payload_json' => ['outcome' => 'rejected'],
             'created_at' => Clock::now(),
         ])->execute();
     }
@@ -638,7 +632,7 @@ final class DocumentRepository
             'entity_id' => $requestId,
             'actor_id' => $actorId,
             'rule_id' => $ruleId,
-            'payload_json' => json_encode(['outcome' => 'rejected'], JSON_THROW_ON_ERROR),
+            'payload_json' => ['outcome' => 'rejected'],
             'created_at' => Clock::now(),
         ])->execute();
     }
@@ -659,7 +653,7 @@ final class DocumentRepository
             'entity_id' => $requestId,
             'actor_id' => $actorId,
             'rule_id' => $ruleId,
-            'payload_json' => json_encode(['outcome' => 'rejected'], JSON_THROW_ON_ERROR),
+            'payload_json' => ['outcome' => 'rejected'],
             'created_at' => Clock::now(),
         ])->execute();
     }

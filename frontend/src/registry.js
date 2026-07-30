@@ -93,13 +93,22 @@ const HISTORY_LABELS = {
   withdraw: 'отозвал(а) заявку',
 }
 
+// Действия с явным адресатом (кого назначили) — для остальных targetName
+// либо отсутствует (backend отдаёт null), либо совпадает с автором действия
+// (claim_expert — эксперт берёт заявку себе, уточнение излишне).
+const ACTIONS_WITH_TARGET = new Set(['assign_executor', 'reassign_expert'])
+
 export function historyFromApi(item) {
   const description = HISTORY_LABELS[item.action] || item.action
+  // display_name хранится в именительном падеже и не склоняется программно
+  // без риска грамматической ошибки — имя добавляется через двоеточие, тем
+  // же приёмом, что и причина возврата СБ, а не согласованием окончаний.
+  const qualifier = item.reason || (ACTIONS_WITH_TARGET.has(item.action) ? item.targetName : '')
   return {
     type: 'milestone',
     id: `${item.kind}-${item.id}`,
     actor: item.actorName,
-    description: item.reason ? `${description}: ${item.reason}` : description,
+    description: qualifier ? `${description}: ${qualifier}` : description,
     ruleId: item.ruleId,
     occurredAt: new Date(item.occurredAt).toLocaleString('ru-RU'),
     sortAt: item.occurredAt,
