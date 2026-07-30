@@ -28,6 +28,8 @@ use yii\db\Connection;
 
 final class RequestRepository
 {
+    private const LAST_COMMENT_PREVIEW_LENGTH = 500;
+
     public function __construct(private readonly Connection $db)
     {
     }
@@ -373,13 +375,47 @@ final class RequestRepository
             . 'AND r.initiator_id = :withdraw_actor AND EXISTS(SELECT 1 FROM {{%users}} wu '
             . "WHERE wu.id = :withdraw_actor_active AND wu.is_active = 1) "
             . 'AND NOT EXISTS(SELECT 1 FROM {{%security_checks}} wsc WHERE wsc.request_id = r.id)) '
-            . 'AS can_withdraw '
+            . 'AS can_withdraw, '
+            . 'last_comment_author.display_name AS last_comment_author, '
+            // Предпросмотр, а не полный текст: комментарий допускает до
+            // 10000 символов (COM-001), полный текст на каждую строку
+            // реестра раздувал бы список без пользы (Qodo). Многоточие —
+            // иначе обрыв длинного комментария в модалке неотличим от
+            // короткого, у которого текст закончился сам по себе.
+            . '(CASE WHEN CHAR_LENGTH(last_comment.body) > ' . self::LAST_COMMENT_PREVIEW_LENGTH
+            . ' THEN CONCAT(LEFT(last_comment.body, ' . self::LAST_COMMENT_PREVIEW_LENGTH . "), '…') "
+            . 'ELSE last_comment.body END) AS last_comment_body, '
+            . "DATE_FORMAT(last_comment.created_at, '%Y-%m-%dT%H:%i:%s.%fZ') AS last_comment_created_at, "
+            . '(report_version.id IS NOT NULL) AS has_report, '
+            . 'report_version.id AS report_version_id, report_version.original_name AS report_original_name '
             . $joins
             . 'LEFT JOIN {{%request_assignments}} current_expert ON current_expert.id = '
             . '(SELECT MAX(expert_assignment.id) FROM {{%request_assignments}} expert_assignment '
             . "WHERE expert_assignment.request_id = r.id AND expert_assignment.assignment_type = 'expert' "
             . 'AND expert_assignment.valid_to IS NULL) '
             . 'LEFT JOIN {{%users}} expert ON expert.id = current_expert.user_id '
+            . 'LEFT JOIN {{%request_comments}} last_comment ON last_comment.id = ('
+            . 'SELECT c.id FROM {{%request_comments}} c WHERE c.request_id = r.id '
+            . 'ORDER BY c.created_at DESC, c.id DESC LIMIT 1'
+            . ') '
+            . 'LEFT JOIN {{%users}} last_comment_author ON last_comment_author.id = last_comment.author_id '
+            // DOC-003: до завершения заявки отчёт виден только назначенному
+            // исполнителю/эксперту и руководителю ИЦ/лаборатории; после
+            // завершения — всем. Условие видимости стоит прямо в ON, а не
+            // отдельным EXISTS — тогда has_report/version_id/original_name
+            // синхронно становятся NULL для тех, кому отчёт не виден, без
+            // риска повторить проверку с ошибкой в одном из трёх мест.
+            . 'LEFT JOIN {{%request_documents}} report_doc ON report_doc.request_id = r.id '
+            . "AND report_doc.document_type = 'report' AND report_doc.deleted_at IS NULL AND ("
+            . 'current_executor.user_id = :report_flag_executor_actor '
+            . 'OR current_expert.user_id = :report_flag_expert_actor '
+            . "OR EXISTS(SELECT 1 FROM {{%user_roles}} rfur JOIN {{%roles}} rfr ON rfr.id = rfur.role_id "
+            . "WHERE rfur.user_id = :report_flag_manager_actor AND rfr.code IN ('ic_manager', 'laboratory_manager')) "
+            . "OR r.status = 'completed') "
+            . 'LEFT JOIN {{%request_document_versions}} report_version ON report_version.document_id = report_doc.id '
+            . 'AND report_version.deleted_at IS NULL '
+            . 'AND report_version.version = (SELECT MAX(rv2.version) FROM {{%request_document_versions}} rv2 '
+            . 'WHERE rv2.document_id = report_doc.id AND rv2.deleted_at IS NULL) '
             . $whereSql
             . ' ORDER BY r.number ' . ($sort === 'asc' ? 'ASC' : 'DESC') . ' LIMIT :limit OFFSET :offset',
             array_merge([
@@ -403,6 +439,9 @@ final class RequestRepository
                 ':reject_actor_role' => $actorId,
                 ':withdraw_actor' => $actorId,
                 ':withdraw_actor_active' => $actorId,
+                ':report_flag_executor_actor' => $actorId,
+                ':report_flag_expert_actor' => $actorId,
+                ':report_flag_manager_actor' => $actorId,
                 ':limit' => $pageSize,
                 ':offset' => ($safePage - 1) * $pageSize,
             ], $filterParams),

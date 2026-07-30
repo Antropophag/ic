@@ -21,6 +21,12 @@ erDiagram
         longtext payload_json
         datetime(6) created_at
     }
+    document_download_links {
+        bigint(20)_unsigned id PK
+        bigint(20)_unsigned document_version_id FK "-> request_document_versions.id"
+        char(64) token_hash
+        datetime(6) created_at
+    }
     expert_opinions {
         bigint(20)_unsigned id PK
         bigint(20)_unsigned request_id FK "-> requests.id"
@@ -33,6 +39,21 @@ erDiagram
     migration {
         varchar(180) version PK
         int(11) apply_time
+    }
+    notification_outbox {
+        bigint(20)_unsigned id PK
+        bigint(20)_unsigned request_id FK "-> requests.id"
+        varchar(64) event_type
+        varchar(255) recipient_email
+        varchar(255) recipient_name
+        varchar(255) subject
+        text body
+        varchar(16) status
+        int(11)_unsigned attempts
+        datetime(6) next_attempt_at
+        text last_error
+        datetime(6) created_at
+        datetime(6) sent_at
     }
     requests {
         bigint(20)_unsigned id PK
@@ -47,6 +68,7 @@ erDiagram
         text test_method
         int(11)_unsigned revision
         int(11)_unsigned lock_version
+        varchar(16) color
         datetime(6) created_at
         datetime(6) updated_at
     }
@@ -72,6 +94,8 @@ erDiagram
         varchar(32) document_type
         varchar(255) title
         bigint(20)_unsigned created_by FK "-> users.id"
+        datetime(6) deleted_at
+        bigint(20)_unsigned deleted_by FK "-> users.id"
         datetime(6) created_at
     }
     request_document_versions {
@@ -85,6 +109,7 @@ erDiagram
         char(64) sha256
         bigint(20)_unsigned uploaded_by FK "-> users.id"
         datetime(6) created_at
+        datetime(6) deleted_at
     }
     request_number_sequence {
         tinyint(3)_unsigned id PK
@@ -98,6 +123,7 @@ erDiagram
         varchar(32) to_status
         varchar(32) action
         text reason
+        bigint(20)_unsigned document_version_id FK "-> request_document_versions.id"
         varchar(16) rule_id
         datetime(6) created_at
     }
@@ -133,9 +159,11 @@ erDiagram
         datetime(6) created_at
     }
     users ||--o{ audit_events : "actor_id"
+    request_document_versions ||--o{ document_download_links : "document_version_id"
     requests ||--o{ expert_opinions : "request_id"
     users ||--o{ expert_opinions : "expert_id"
     request_document_versions ||--o{ expert_opinions : "document_version_id"
+    requests ||--o{ notification_outbox : "request_id"
     users ||--o{ requests : "initiator_id"
     requests ||--o{ request_assignments : "request_id"
     users ||--o{ request_assignments : "user_id"
@@ -144,10 +172,12 @@ erDiagram
     users ||--o{ request_comments : "author_id"
     requests ||--o{ request_documents : "request_id"
     users ||--o{ request_documents : "created_by"
+    users |o--o{ request_documents : "deleted_by"
     request_documents ||--o{ request_document_versions : "document_id"
     users ||--o{ request_document_versions : "uploaded_by"
     requests ||--o{ request_transitions : "request_id"
     users ||--o{ request_transitions : "actor_id"
+    request_document_versions |o--o{ request_transitions : "document_version_id"
     requests ||--o{ security_checks : "request_id"
     expert_opinions ||--o{ security_checks : "expert_opinion_id"
     users ||--o{ security_checks : "officer_id"

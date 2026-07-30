@@ -27,6 +27,10 @@ const STATUS_TONES = {
 
 export const REQUEST_COLORS = ['white', 'red', 'orange', 'blue', 'violet', 'green']
 
+export function initialsFor(displayName) {
+  return (displayName || '').split(' ').filter(Boolean).map(part => part[0]).join('').slice(0, 2).toUpperCase() || '?'
+}
+
 export function fromApi(item) {
   return {
     backendId: Number(item.id),
@@ -61,6 +65,12 @@ export function fromApi(item) {
     status: STATUS_LABELS[item.status] || item.status,
     tone: STATUS_TONES[item.status] || 'blue',
     securityMark: item.security_mark === 'approve' ? '✓' : item.security_mark === 'return' ? '✕' : '—',
+    lastCommentAuthor: item.last_comment_author || null,
+    lastCommentBody: item.last_comment_body || null,
+    lastCommentAt: item.last_comment_created_at ? new Date(item.last_comment_created_at).toLocaleString('ru-RU') : null,
+    hasReport: Boolean(Number(item.has_report)),
+    reportVersionId: item.report_version_id ? Number(item.report_version_id) : null,
+    reportOriginalName: item.report_original_name || null,
   }
 }
 

@@ -75,6 +75,56 @@ test('комментарий, оставленный при создании з�
   await expect(page.getByText(comment)).toBeVisible()
 })
 
+test('реестр показывает индикаторы последнего комментария и отчёта', async ({ page, baseURL }) => {
+  const marker = `E2E-indicators-${Date.now()}`
+  const initiator = await apiFor(baseURL, 3)
+  const manager = await apiFor(baseURL, 1)
+  const executor = await apiFor(baseURL, 2)
+
+  const created = await expectOk(await initiator.post('/api/v1/requests', { data: {
+    productName: marker,
+    manufacturer: 'Тестовый производитель',
+    supplier: 'Тестовый поставщик',
+    sampleQuantity: 1,
+    testMethod: 'Индикаторы реестра — E2E',
+  } }))
+  const requestId = created.id
+  await expectOk(await manager.post(`/api/v1/requests/${requestId}/executor`, {
+    data: { executorId: 2, lockVersion: 1 },
+  }))
+  await expectOk(await manager.post(`/api/v1/requests/${requestId}/start`, {
+    data: { lockVersion: 2 },
+  }))
+  await expectOk(await executor.post(`/api/v1/requests/${requestId}/report`, {
+    multipart: { file: { name: 'e2e-report.pdf', mimeType: 'application/pdf', buffer: Buffer.from('%PDF-1.4\n%%EOF') } },
+  }))
+  const commentText = 'Отчёт направлен на согласование'
+  await expectOk(await executor.post(`/api/v1/requests/${requestId}/comments`, {
+    data: { body: commentText },
+  }))
+
+  await page.route('**/api/**', async route => {
+    await route.continue({ headers: { ...route.request().headers(), 'X-Dev-User-ID': '2' } })
+  })
+  await page.goto('/')
+  const row = page.getByRole('row').filter({ hasText: marker })
+
+  // Клик по значку отчёта скачивает файл, а не открывает карточку заявки.
+  const [download] = await Promise.all([
+    page.waitForEvent('download'),
+    row.getByRole('button', { name: 'Скачать отчёт испытаний' }).click(),
+  ])
+  expect(download.suggestedFilename()).toBe('e2e-report.pdf')
+  await expect(page.getByRole('heading', { name: /^Заявка №\d+ от / })).toHaveCount(0)
+
+  await row.getByRole('button', { name: /Последний комментарий/ }).click()
+  await expect(page.getByText(commentText)).toBeVisible()
+  await page.getByRole('button', { name: 'Закрыть' }).click()
+  await expect(page.getByText(commentText)).toHaveCount(0)
+
+  await Promise.all([initiator.dispose(), manager.dispose(), executor.dispose()])
+})
+
 test('кнопка «назад» браузера возвращает из карточки заявки в реестр', async ({ page }) => {
   const marker = `E2E-back-${Date.now()}`
   const errors = []
