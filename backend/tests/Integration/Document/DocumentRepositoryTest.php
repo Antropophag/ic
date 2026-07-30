@@ -150,6 +150,15 @@ final class DocumentRepositoryTest extends IntegrationTestCase
         ));
         self::assertNull($outsiderUploadEvent[0]['versionId']);
         self::assertNull($outsiderUploadEvent[0]['originalName']);
+
+        $repository->deleteReport($requestId, (int) $result['lockVersion'], $executor);
+        $historyAfterDeletion = (new RequestRepository($this->db()))->findDetails($requestId, $executor)['history'];
+        $deletedUploadEvent = array_values(array_filter(
+            $historyAfterDeletion,
+            static fn (array $event): bool => $event['action'] === 'upload_report',
+        ));
+        self::assertNull($deletedUploadEvent[0]['versionId']);
+        self::assertNull($deletedUploadEvent[0]['originalName']);
     }
 
     public function testUnrelatedEmployeeCannotUploadReport(): void
