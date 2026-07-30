@@ -214,6 +214,7 @@ final class DemoRequestSeeder
             $key = $this->storage->store($temporary);
         } finally {
             if (is_file($temporary)) {
+                // nosemgrep: php.lang.security.unlink-use.unlink-use -- tempnam created this path
                 unlink($temporary);
             }
         }
