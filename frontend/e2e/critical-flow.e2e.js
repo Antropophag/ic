@@ -75,6 +75,34 @@ test('комментарий, оставленный при создании з�
   await expect(page.getByText(comment)).toBeVisible()
 })
 
+test('кнопка «назад» браузера возвращает из карточки заявки в реестр', async ({ page }) => {
+  const marker = `E2E-back-${Date.now()}`
+  const errors = []
+  page.on('pageerror', error => errors.push(error.message))
+
+  await page.goto('/')
+  await page.selectOption('.dev-user-switch', '3')
+  await page.getByRole('button', { name: '＋ Новая заявка' }).click()
+  await page.getByPlaceholder('Введите наименование продукции').fill(marker)
+  await page.getByPlaceholder('Наименование производителя').fill('Тестовый производитель')
+  await page.getByPlaceholder('Наименование поставщика').fill('Тестовый поставщик')
+  await page.getByPlaceholder('Опишите метод или программу испытаний').fill('Кнопка назад браузера — E2E')
+  await page.getByRole('button', { name: 'Создать заявку' }).click()
+
+  const heading = page.getByRole('heading', { name: /^Заявка №\d+ от \d{1,2}\.\d{1,2}\.\d{4}$/ })
+  await expect(heading).toBeVisible()
+  expect(page.url()).toContain('request=')
+
+  await page.goBack()
+  await expect(page.getByPlaceholder('Поиск по заявкам')).toBeVisible()
+  expect(page.url()).not.toContain('request=')
+
+  await page.goForward()
+  await expect(heading).toBeVisible()
+
+  expect(errors).toEqual([])
+})
+
 test('администратор управляет ролями и возвращается в реестр без ошибок рендера', async ({ page }) => {
   // Регрессия: v-else детального экрана заявки был привязан не к тому
   // v-if и срабатывал, когда открыт экран администрирования (selected
