@@ -212,7 +212,7 @@ it('maps mime types to a document kind for the file icon', () => {
     .toEqual({ label: 'XLS', className: 'xlsx' })
   expect(documentKind('image/png')).toEqual({ label: 'PNG', className: 'image' })
   expect(documentKind('image/jpeg')).toEqual({ label: 'JPG', className: 'image' })
-  expect(documentKind('application/octet-stream')).toEqual({ label: '?', className: 'file' })
+  expect(documentKind('application/octet-stream')).toEqual({ label: '?', className: 'unknown' })
 })
 
 describe('registry filters', () => {

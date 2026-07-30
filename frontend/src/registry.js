@@ -153,7 +153,7 @@ const DOCUMENT_KINDS = {
   'image/png': { label: 'PNG', className: 'image' },
   'image/jpeg': { label: 'JPG', className: 'image' },
 }
-const DEFAULT_DOCUMENT_KIND = { label: '?', className: 'file' }
+const DEFAULT_DOCUMENT_KIND = { label: '?', className: 'unknown' }
 
 export function documentKind(mimeType) {
   return DOCUMENT_KINDS[mimeType] || DEFAULT_DOCUMENT_KIND
