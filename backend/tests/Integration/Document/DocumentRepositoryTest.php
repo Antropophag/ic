@@ -157,6 +157,7 @@ final class DocumentRepositoryTest extends IntegrationTestCase
             $historyAfterDeletion,
             static fn (array $event): bool => $event['action'] === 'upload_report',
         ));
+        self::assertCount(1, $deletedUploadEvent);
         self::assertNull($deletedUploadEvent[0]['versionId']);
         self::assertNull($deletedUploadEvent[0]['originalName']);
     }

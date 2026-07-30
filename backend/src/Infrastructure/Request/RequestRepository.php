@@ -494,6 +494,7 @@ final class RequestRepository
             . 'WHERE history_public_version.document_id = report_version.document_id '
             . 'AND history_public_version.deleted_at IS NULL))) '
             . 'LEFT JOIN {{%request_documents}} report_document ON report_document.id = report_version.document_id '
+            . 'AND report_document.request_id = t.request_id '
             . "AND report_document.document_type = 'report' AND report_document.deleted_at IS NULL "
             . 'WHERE t.request_id = :transition_request_id '
             . 'UNION ALL '
