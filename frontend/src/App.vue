@@ -1,8 +1,9 @@
 <script setup>
-import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
-import { adminApi, authApi, hasCsrfToken, requestApi, setCsrfToken } from './api'
+import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
+import { adminApi, authApi, devApi, hasCsrfToken, requestApi, setCsrfToken } from './api'
 import { getDevUserId, reconcileDevUserId, setDevUserId } from './devUsers'
 import { createConfirmDialog } from './confirmDialog'
+import { clearDemoRegistry, runDemoSeed } from './demoSeed'
 import { createLatestRequestGuard } from './latestRequestGuard'
 import { requestIdFromLocation, resolveRequestDeepLink, setRequestInUrl } from './requestDeepLink'
 import { REGISTRY_PAGE_SIZE, REQUEST_COLORS, REQUEST_STATUS_OPTIONS, canStartNow, canSubmitComment, commentFromApi, documentFromApi, documentKind, fromApi, historyFromApi, initialsFor, newestFirstFeed, securityMarkIcon, withoutStaleActions } from './registry'
@@ -128,6 +129,47 @@ function switchDevUser(rawId) {
 const devUsersError = ref('')
 const devUsersLoading = ref(false)
 const devUsersRequestGuard = createLatestRequestGuard()
+const demoSeedLoading = ref(false)
+const demoSeedMessage = ref('')
+const demoSeedRequestGuard = createLatestRequestGuard()
+
+async function seedDemoRequests() {
+  if (demoSeedLoading.value) return
+  const confirmed = await confirmDialog.ask(
+    'Все существующие заявки, комментарии и файлы будут безвозвратно удалены и заменены синтетическими демо-данными. Пользователи не изменятся.',
+    { confirmLabel: 'Заполнить демо', danger: true },
+  )
+  if (!confirmed) return
+
+  demoSeedLoading.value = true
+  demoSeedMessage.value = ''
+  const requestToken = demoSeedRequestGuard.begin(true)
+  try {
+    const message = await runDemoSeed(
+      () => devApi.seedRequests(),
+      () => {
+        closeRequest({ push: false })
+        registryError.value = ''
+        showCreate.value = false
+        activeTab.value = 'all'
+        statusFilter.value = ''
+        query.value = ''
+        currentPage.value = 1
+        clearDemoRegistry(requests, registryPage)
+      },
+      async () => {
+        await nextTick()
+        await loadRequests(true)
+      },
+      () => demoSeedRequestGuard.isCurrent(requestToken, true),
+    )
+    if (message !== null) demoSeedMessage.value = message
+  } finally {
+    if (demoSeedRequestGuard.isCurrent(requestToken, true)) {
+      demoSeedLoading.value = false
+    }
+  }
+}
 
 // Отдельная функция (не инлайн в bootstrapAuth), чтобы кнопка «Повторить»
 // на экране devUsersError могла переиспользовать ту же логику, а не только
@@ -409,6 +451,7 @@ watch(query, () => {
 onBeforeUnmount(() => {
   window.clearTimeout(registrySearchTimer)
   registryRequestGuard.invalidate()
+  demoSeedRequestGuard.invalidate()
 })
 
 function toggleSort() {
@@ -1321,6 +1364,14 @@ onBeforeUnmount(() => window.removeEventListener('popstate', handlePopstate))
               >
                 <option v-for="user in devUsers" :key="user.id" :value="user.id">{{ user.displayName }} — {{ user.position }}</option>
               </select>
+              <button
+                v-if="authDevMode"
+                type="button"
+                class="secondary demo-seed-button"
+                :disabled="demoSeedLoading"
+                @click="seedDemoRequests"
+              >{{ demoSeedLoading ? 'Заполнение…' : 'Заполнить демо' }}</button>
+              <span v-if="authDevMode && demoSeedMessage" class="demo-seed-message" role="status">{{ demoSeedMessage }}</span>
               <span class="avatar">{{ currentInitials }}</span>
               <span><b>{{ currentProfile.displayName }}</b><small>{{ currentProfile.position }}</small></span>
               <button v-if="isAdministrator" type="button" class="secondary" @click="openAdmin">Администрирование</button>

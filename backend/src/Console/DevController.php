@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace App\Console;
 
+use App\Infrastructure\Development\DemoRequestSeeder;
+use App\Infrastructure\Document\DocumentStorage;
 use Yii;
 use yii\console\Controller;
 use yii\console\ExitCode;
@@ -175,6 +177,30 @@ final class DevController extends Controller
         $this->seedByAdLogin(self::ADDITIONAL_EXPERTS, $roleIds, $now);
 
         $this->stdout("Development users and roles are ready.\n");
+        return ExitCode::OK;
+    }
+
+    public function actionSeedRequests(): int
+    {
+        if (YII_ENV !== 'dev') {
+            $this->stderr("Development request seed is disabled outside APP_ENV=dev.\n");
+            return ExitCode::UNSPECIFIED_ERROR;
+        }
+
+        try {
+            $result = (new DemoRequestSeeder(
+                Yii::$app->db,
+                new DocumentStorage(getenv('DOCUMENT_STORAGE_PATH') ?: '/app/storage/documents'),
+            ))->seed();
+        } catch (\Throwable $error) {
+            $this->stderr($error->getMessage() . "\n");
+            return ExitCode::UNSPECIFIED_ERROR;
+        }
+
+        $this->stdout(
+            "Demo registry reset: {$result['requests']} requests, "
+            . "{$result['comments']} comments, {$result['documents']} documents.\n",
+        );
         return ExitCode::OK;
     }
 
