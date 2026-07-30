@@ -532,15 +532,19 @@ async function openRequestById(requestId) {
     )
   } catch (error) {
     if (!popstateRequestGuard.isCurrent(requestToken, requestId)) return
+    closeRequest({ push: false })
     registryError.value = error.status === 403 || error.status === 404
       ? 'Заявка не найдена или недоступна.'
       : 'Не удалось открыть заявку.'
-    setRequestInUrl(null)
   }
 }
 
 function handlePopstate() {
   const requestId = requestIdFromLocation()
+  // У экрана администрирования нет собственного URL — любой popstate
+  // означает переход на реестр или заявку, поэтому админку закрываем
+  // всегда, не только на ветке с открытием заявки (issue #129, Qodo).
+  showAdmin.value = false
   if ((selected.value?.backendId ?? null) === requestId) return
   if (requestId === null) {
     closeRequest({ push: false })
