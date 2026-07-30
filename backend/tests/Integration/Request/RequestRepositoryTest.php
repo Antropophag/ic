@@ -174,6 +174,40 @@ final class RequestRepositoryTest extends IntegrationTestCase
         self::assertGreaterThanOrEqual(3, $page['counts']['all']);
     }
 
+    public function testRegistryPaginationDeduplicatesMultipleCurrentAssignments(): void
+    {
+        $initiator = $this->createUser('dev.it.registry-duplicate', 'Инициатор дубля назначения');
+        $firstExecutor = $this->createUser('dev.it.registry-executor1', 'Первый исполнитель');
+        $latestExecutor = $this->createUser('dev.it.registry-executor2', 'Последний исполнитель');
+        $request = $this->createRegisteredRequest($initiator, 'маркер дубля назначения');
+        $requestId = (int) $request['id'];
+
+        foreach ([$firstExecutor, $latestExecutor] as $executorId) {
+            $this->db()->createCommand()->insert('{{%request_assignments}}', [
+                'request_id' => $requestId,
+                'assignment_type' => 'executor',
+                'user_id' => $executorId,
+                'assigned_by' => $initiator,
+                'valid_from' => Clock::now(),
+            ])->execute();
+        }
+
+        $page = (new RequestRepository($this->db()))->findPage(
+            $initiator,
+            1,
+            1,
+            'all',
+            null,
+            'маркер дубля назначения',
+            'desc',
+        );
+
+        self::assertSame(1, $page['total']);
+        self::assertCount(1, $page['items']);
+        self::assertSame($requestId, (int) $page['items'][0]['id']);
+        self::assertSame($latestExecutor, (int) $page['items'][0]['executor_id']);
+    }
+
     public function testManagerWithTwoRolesIsNotifiedOnlyOnceOnCreate(): void
     {
         // WF-008/NTF-003: один и тот же пользователь с ролями ic_manager и

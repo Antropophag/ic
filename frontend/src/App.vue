@@ -392,20 +392,31 @@ const pageNumbers = computed(() => {
 
 function reloadRegistryFromFirstPage() {
   if (currentPage.value === 1) loadRequests()
-  else currentPage.value = 1
+  else {
+    currentPage.value = 1
+    loadRequests()
+  }
 }
 
 watch([activeTab, statusFilter, sortDirection], reloadRegistryFromFirstPage)
-watch(currentPage, () => loadRequests())
 watch(query, () => {
   window.clearTimeout(registrySearchTimer)
   registrySearchTimer = window.setTimeout(reloadRegistryFromFirstPage, 300)
 })
 
-onBeforeUnmount(() => window.clearTimeout(registrySearchTimer))
+onBeforeUnmount(() => {
+  window.clearTimeout(registrySearchTimer)
+  registryRequestGuard.invalidate()
+})
 
 function toggleSort() {
   sortDirection.value = sortDirection.value === 'desc' ? 'asc' : 'desc'
+}
+
+function goToPage(page) {
+  if (page === currentPage.value) return
+  currentPage.value = page
+  loadRequests()
 }
 
 async function loadRequestDetails(item, preloadedDetail = null) {
@@ -686,7 +697,9 @@ async function loadRequests(rethrow = false) {
     registryPage.pageSize = result.pageSize ?? pageSize
     registryPage.pageCount = result.pageCount ?? 1
     registryPage.counts = result.counts ?? { active: result.items.length, all: result.items.length, mine: 0 }
-    currentPage.value = registryPage.page
+    if (currentPage.value !== registryPage.page) {
+      currentPage.value = registryPage.page
+    }
     if (!initialRequestHandled && initialRequestId !== null) {
       try {
         const linkedRequest = await resolveRequestDeepLink(initialRequestId, requests.value, requestApi.get)
@@ -1322,9 +1335,9 @@ onMounted(bootstrapAuth)
             <footer v-if="paged.total" class="pagination">
               <span>{{ (paged.page - 1) * pageSize + 1 }}–{{ Math.min(paged.page * pageSize, paged.total) }} из {{ paged.total }}</span>
               <span>
-                <button :disabled="paged.page <= 1" @click="currentPage = paged.page - 1">‹</button>
-                <button v-for="pageNumber in pageNumbers" :key="pageNumber" :class="{ current: pageNumber === paged.page }" @click="currentPage = pageNumber">{{ pageNumber }}</button>
-                <button :disabled="paged.page >= paged.pageCount" @click="currentPage = paged.page + 1">›</button>
+                <button :disabled="paged.page <= 1" @click="goToPage(paged.page - 1)">‹</button>
+                <button v-for="pageNumber in pageNumbers" :key="pageNumber" :class="{ current: pageNumber === paged.page }" @click="goToPage(pageNumber)">{{ pageNumber }}</button>
+                <button :disabled="paged.page >= paged.pageCount" @click="goToPage(paged.page + 1)">›</button>
               </span>
             </footer>
           </div>

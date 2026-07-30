@@ -307,8 +307,10 @@ final class RequestRepository
         }
         $whereSql = $where === [] ? '' : ' WHERE ' . implode(' AND ', $where);
         $joins = ' FROM {{%requests}} r JOIN {{%users}} u ON u.id = r.initiator_id '
-            . 'LEFT JOIN {{%request_assignments}} current_executor ON current_executor.request_id = r.id '
-            . "AND current_executor.assignment_type = 'executor' AND current_executor.valid_to IS NULL "
+            . 'LEFT JOIN {{%request_assignments}} current_executor ON current_executor.id = '
+            . '(SELECT MAX(executor_assignment.id) FROM {{%request_assignments}} executor_assignment '
+            . "WHERE executor_assignment.request_id = r.id AND executor_assignment.assignment_type = 'executor' "
+            . 'AND executor_assignment.valid_to IS NULL) '
             . 'LEFT JOIN {{%users}} executor ON executor.id = current_executor.user_id ';
 
         $total = (int) $this->db->createCommand(
@@ -372,8 +374,10 @@ final class RequestRepository
             . 'AND NOT EXISTS(SELECT 1 FROM {{%security_checks}} wsc WHERE wsc.request_id = r.id)) '
             . 'AS can_withdraw '
             . $joins
-            . 'LEFT JOIN {{%request_assignments}} current_expert ON current_expert.request_id = r.id '
-            . "AND current_expert.assignment_type = 'expert' AND current_expert.valid_to IS NULL "
+            . 'LEFT JOIN {{%request_assignments}} current_expert ON current_expert.id = '
+            . '(SELECT MAX(expert_assignment.id) FROM {{%request_assignments}} expert_assignment '
+            . "WHERE expert_assignment.request_id = r.id AND expert_assignment.assignment_type = 'expert' "
+            . 'AND expert_assignment.valid_to IS NULL) '
             . 'LEFT JOIN {{%users}} expert ON expert.id = current_expert.user_id '
             . $whereSql
             . ' ORDER BY r.number ' . ($sort === 'asc' ? 'ASC' : 'DESC') . ' LIMIT :limit OFFSET :offset',
