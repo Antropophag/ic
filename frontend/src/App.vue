@@ -5,7 +5,7 @@ import { getDevUserId, reconcileDevUserId, setDevUserId } from './devUsers'
 import { createConfirmDialog } from './confirmDialog'
 import { createLatestRequestGuard } from './latestRequestGuard'
 import { requestIdFromLocation, resolveRequestDeepLink, setRequestInUrl } from './requestDeepLink'
-import { REGISTRY_PAGE_SIZE, REQUEST_COLORS, REQUEST_STATUS_OPTIONS, canStartNow, canSubmitComment, commentFromApi, documentFromApi, documentKind, fromApi, historyFromApi, initialsFor, newestFirstFeed, withoutStaleActions } from './registry'
+import { REGISTRY_PAGE_SIZE, REQUEST_COLORS, REQUEST_STATUS_OPTIONS, canStartNow, canSubmitComment, commentFromApi, documentFromApi, documentKind, fromApi, historyFromApi, initialsFor, newestFirstFeed, securityMarkIcon, withoutStaleActions } from './registry'
 
 const activeTab = ref('active')
 const query = ref('')
@@ -361,12 +361,12 @@ function updateAdminUserRoles(userId, roles) {
 }
 
 const requests = ref([
-  { id: '000146', date: '27.07.2026', initiator: 'Максим Умнов', department: 'Бюро приводной техники', product: 'Лебёдка Furder VT40K', supplier: 'ООО «Вектор Технологий»', executor: 'С. И. Кашин', status: 'Заявка зарегистрирована', tone: 'blue', color: 'white', securityMark: '—' },
-  { id: '000145', date: '27.07.2026', initiator: 'Виктор Медведев', department: 'Отдел производственных закупок', product: 'IP-видеокамера DS-2CD2543G2-IS', supplier: 'ООО «Видеотехнология»', executor: 'С. В. Наумов', status: 'Заявка в работе', tone: 'cyan', color: 'white', securityMark: '—' },
-  { id: '000144', date: '24.07.2026', initiator: 'Андрей Соколов', department: 'Отдел главного конструктора', product: 'Ограничитель скорости ОС-2', supplier: 'АО «Лифткомплект»', executor: 'С. В. Прикуль', status: 'Работы приостановлены', tone: 'orange', color: 'white', securityMark: '—' },
-  { id: '000143', date: '22.07.2026', initiator: 'Елена Орлова', department: 'Служба закупок', product: 'Частотный преобразователь 15 кВт', supplier: 'ООО «Электропривод»', executor: 'С. Д. Шапошников', status: 'Подготовка заключения', tone: 'violet', color: 'white', securityMark: '—' },
-  { id: '000142', date: '21.07.2026', initiator: 'Павел Зимин', department: 'Управление качества', product: 'Буфер полиуретановый БП-100', supplier: 'ООО «Полимер»', executor: 'В. Я. Галкин', status: 'Контроль СБ', tone: 'yellow', color: 'white', securityMark: '✕' },
-  { id: '000141', date: '18.07.2026', initiator: 'Ирина Белова', department: 'Служба закупок', product: 'Датчик положения кабины', supplier: 'ООО «Сенсорика»', executor: 'В. В. Козлов', status: 'Заявка выполнена', tone: 'green', color: 'white', securityMark: '✓' },
+  { id: '000146', date: '27.07.2026', initiator: 'Максим Умнов', department: 'Бюро приводной техники', product: 'Лебёдка Furder VT40K', supplier: 'ООО «Вектор Технологий»', executor: 'С. И. Кашин', status: 'Заявка зарегистрирована', tone: 'blue', color: 'white', securityMark: null, securityMarkDisplay: securityMarkIcon(null) },
+  { id: '000145', date: '27.07.2026', initiator: 'Виктор Медведев', department: 'Отдел производственных закупок', product: 'IP-видеокамера DS-2CD2543G2-IS', supplier: 'ООО «Видеотехнология»', executor: 'С. В. Наумов', status: 'Заявка в работе', tone: 'cyan', color: 'white', securityMark: null, securityMarkDisplay: securityMarkIcon(null) },
+  { id: '000144', date: '24.07.2026', initiator: 'Андрей Соколов', department: 'Отдел главного конструктора', product: 'Ограничитель скорости ОС-2', supplier: 'АО «Лифткомплект»', executor: 'С. В. Прикуль', status: 'Работы приостановлены', tone: 'orange', color: 'white', securityMark: null, securityMarkDisplay: securityMarkIcon(null) },
+  { id: '000143', date: '22.07.2026', initiator: 'Елена Орлова', department: 'Служба закупок', product: 'Частотный преобразователь 15 кВт', supplier: 'ООО «Электропривод»', executor: 'С. Д. Шапошников', status: 'Подготовка заключения', tone: 'violet', color: 'white', securityMark: null, securityMarkDisplay: securityMarkIcon(null) },
+  { id: '000142', date: '21.07.2026', initiator: 'Павел Зимин', department: 'Управление качества', product: 'Буфер полиуретановый БП-100', supplier: 'ООО «Полимер»', executor: 'В. Я. Галкин', status: 'Контроль СБ', tone: 'yellow', color: 'white', securityMark: 'return', securityMarkDisplay: securityMarkIcon('return') },
+  { id: '000141', date: '18.07.2026', initiator: 'Ирина Белова', department: 'Служба закупок', product: 'Датчик положения кабины', supplier: 'ООО «Сенсорика»', executor: 'В. В. Козлов', status: 'Заявка выполнена', tone: 'green', color: 'white', securityMark: 'approve', securityMarkDisplay: securityMarkIcon('approve') },
 ])
 
 const registryPage = reactive({
@@ -1401,7 +1401,7 @@ onBeforeUnmount(() => window.removeEventListener('popstate', handlePopstate))
                     <td><b>{{ item.product }}</b><small :title="item.supplier">{{ item.supplier }}</small></td>
                     <td>{{ item.initiator }}<small :title="item.department">{{ item.department }}</small></td>
                     <td>{{ item.executor }}</td><td><span class="badge" :class="item.tone">{{ item.status }}</span></td>
-                    <td class="registry-indicator-cell">{{ item.securityMark }}</td>
+                    <td class="registry-indicator-cell"><span class="security-mark-icon" :class="item.securityMarkDisplay?.className" :title="item.securityMarkDisplay?.label" :aria-label="item.securityMarkDisplay?.label"><svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path :d="item.securityMarkDisplay?.path" /></svg></span></td>
                     <td class="registry-indicator-cell"><button v-if="item.lastCommentAuthor" type="button" class="avatar small registry-comment-avatar" :title="'Последний комментарий: ' + item.lastCommentAuthor" :aria-label="'Последний комментарий: ' + item.lastCommentAuthor" @click.stop="openLastComment(item)">{{ initialsFor(item.lastCommentAuthor) }}</button><span v-else class="muted-dash">—</span></td>
                     <td class="registry-indicator-cell"><button v-if="item.hasReport && item.reportVersionId && item.reportOriginalName" type="button" class="doc-icon pdf registry-report-icon" title="Скачать отчёт испытаний" aria-label="Скачать отчёт испытаний" @click.stop="downloadReport(item)">PDF</button><span v-else class="muted-dash">—</span></td>
                   </tr>
@@ -1555,7 +1555,7 @@ onBeforeUnmount(() => window.removeEventListener('popstate', handlePopstate))
                     </div>
                     <p v-if="reassignError" class="action-error">{{ reassignError }}</p>
                   </div>
-                  <div class="fact"><span>Отметка СБ</span><b>{{ selected.securityMark }}</b></div>
+                  <div class="fact"><span>Отметка СБ</span><b><span class="security-mark-icon" :class="selected.securityMarkDisplay?.className" :title="selected.securityMarkDisplay?.label" :aria-label="selected.securityMarkDisplay?.label"><svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path :d="selected.securityMarkDisplay?.path" /></svg></span></b></div>
                 </div>
               </article>
               <article class="card documents"><h3>Документы <span>{{ selected.documents?.length || 0 }}</span></h3>
