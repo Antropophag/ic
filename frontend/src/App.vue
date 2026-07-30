@@ -1251,14 +1251,14 @@ onMounted(bootstrapAuth)
             </div>
             <div class="table-wrap">
               <table>
-                <thead><tr><th class="sortable" @click="toggleSort">№ заявки {{ sortDirection === 'desc' ? '↓' : '↑' }}</th><th>Дата</th><th>Объект испытаний</th><th>Инициатор</th><th>Исполнитель</th><th>Статус</th><th>Отметка СБ</th></tr></thead>
+                <thead><tr><th class="sortable" @click="toggleSort">№ заявки {{ sortDirection === 'desc' ? '↓' : '↑' }}</th><th>Дата</th><th>Объект испытаний</th><th>Инициатор</th><th>Исполнитель</th><th>Статус</th><th>Отметка СБ</th><th></th></tr></thead>
                 <tbody>
                   <tr v-for="item in paged.items" :key="item.id" :class="'row-color-' + item.color" @click="openRequest(item)">
                     <td class="number">{{ item.id }}</td><td>{{ item.date }}</td>
                     <td><b>{{ item.product }}</b><small>{{ item.supplier }}</small></td>
                     <td>{{ item.initiator }}<small>{{ item.department }}</small></td>
                     <td>{{ item.executor }}</td><td><span class="badge" :class="item.tone">{{ item.status }}</span></td>
-                    <td>{{ item.securityMark }}</td>
+                    <td>{{ item.securityMark }}</td><td>›</td>
                   </tr>
                 </tbody>
               </table>
