@@ -156,6 +156,13 @@ export function canSubmitComment(item, detailLoading) {
   return Boolean(item?.canComment) && !detailLoading
 }
 
+// У руководителя ИЦ/лаборатории canStart истинно уже при отсутствии
+// исполнителя (право по ТЗ, WF-004) — кнопку показываем только после
+// назначения, иначе заявка уходит «В работе» с executor = null (issue #135).
+export function canStartNow(item) {
+  return Boolean(item?.canStart && item?.executorId)
+}
+
 const DOCUMENT_KINDS = {
   'application/pdf': { label: 'PDF', className: 'pdf' },
   'application/vnd.openxmlformats-officedocument.wordprocessingml.document': { label: 'DOC', className: 'docx' },

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { buildFeed, canSubmitComment, commentFromApi, documentFromApi, documentKind, filterRequests, fromApi, historyFromApi, paginate, withoutStaleActions } from './registry'
+import { buildFeed, canStartNow, canSubmitComment, commentFromApi, documentFromApi, documentKind, filterRequests, fromApi, historyFromApi, paginate, withoutStaleActions } from './registry'
 
 const registered = {
   id: 4,
@@ -212,6 +212,12 @@ it('does not allow a comment while an older detail response can still arrive', (
   expect(canSubmitComment({ canComment: true }, true)).toBe(false)
   expect(canSubmitComment({ canComment: true }, false)).toBe(true)
   expect(canSubmitComment({ canComment: false }, false)).toBe(false)
+})
+
+it('hides "Начать работу" for a leader until an executor is assigned', () => {
+  expect(canStartNow({ canStart: true, executorId: null })).toBe(false)
+  expect(canStartNow({ canStart: true, executorId: 7 })).toBe(true)
+  expect(canStartNow({ canStart: false, executorId: 7 })).toBe(false)
 })
 
 it('maps the latest document version without exposing its storage key', () => {
