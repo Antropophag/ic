@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { buildFeed, canStartNow, canSubmitComment, commentFromApi, documentFromApi, documentKind, filterRequests, fromApi, historyFromApi, initialsFor, newestFirstFeed, paginate, withoutStaleActions } from './registry'
+import { buildFeed, canStartNow, canSubmitComment, commentFromApi, documentFromApi, documentKind, filterRequests, fromApi, historyFromApi, initialsFor, newestFirstFeed, paginate, securityMarkIcon, withoutStaleActions } from './registry'
 
 const registered = {
   id: 4,
@@ -394,4 +394,17 @@ it('builds initials for an arbitrary display name, not just the logged-in user',
   expect(initialsFor('Плюшкин')).toBe('П')
   expect(initialsFor('')).toBe('?')
   expect(initialsFor(null)).toBe('?')
+})
+
+it('maps the raw security_mark code, not a display glyph (issue #148)', () => {
+  expect(fromApi({ ...registered, security_mark: 'approve' }).securityMark).toBe('approve')
+  expect(fromApi({ ...registered, security_mark: 'return' }).securityMark).toBe('return')
+  expect(fromApi({ ...registered, security_mark: null }).securityMark).toBeNull()
+})
+
+it('resolves a security mark icon for each SEC-002/SEC-003 state', () => {
+  expect(securityMarkIcon('approve')).toMatchObject({ className: 'approve', label: 'Согласовано' })
+  expect(securityMarkIcon('return')).toMatchObject({ className: 'return', label: 'Возвращено на доработку' })
+  expect(securityMarkIcon(null)).toMatchObject({ className: 'pending', label: 'Контроль ещё не проводился' })
+  expect(securityMarkIcon('unexpected')).toMatchObject({ className: 'pending' })
 })

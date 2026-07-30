@@ -64,7 +64,7 @@ export function fromApi(item) {
     color: REQUEST_COLORS.includes(item.color) ? item.color : 'white',
     status: STATUS_LABELS[item.status] || item.status,
     tone: STATUS_TONES[item.status] || 'blue',
-    securityMark: item.security_mark === 'approve' ? '✓' : item.security_mark === 'return' ? '✕' : '—',
+    securityMark: item.security_mark === 'approve' || item.security_mark === 'return' ? item.security_mark : null,
     lastCommentAuthor: item.last_comment_author || null,
     lastCommentBody: item.last_comment_body || null,
     lastCommentAt: item.last_comment_created_at ? new Date(item.last_comment_created_at).toLocaleString('ru-RU') : null,
@@ -179,6 +179,21 @@ export function canSubmitComment(item, detailLoading) {
 // назначения, иначе заявка уходит «В работе» с executor = null (issue #135).
 export function canStartNow(item) {
   return Boolean(item?.canStart && item?.executorId)
+}
+
+// SEC-002/SEC-003: approve/return — решения последнего контроля СБ,
+// null — контроль ещё не проводился. Символьное соответствие (было ✓/✕/—)
+// сохранено семантически, изменилось только визуальное представление
+// (issue #148) — иконка вместо текстового Unicode-символа, зависевшего от
+// шрифта/ОС и не имевшего явной семантики для скринридеров.
+const SECURITY_MARK_ICONS = {
+  approve: { className: 'approve', label: 'Согласовано', path: 'M3 8.5L6.5 12L13 4' },
+  return: { className: 'return', label: 'Возвращено на доработку', path: 'M4 4L12 12M12 4L4 12' },
+}
+const DEFAULT_SECURITY_MARK_ICON = { className: 'pending', label: 'Контроль ещё не проводился', path: 'M4 8H12' }
+
+export function securityMarkIcon(securityMark) {
+  return SECURITY_MARK_ICONS[securityMark] || DEFAULT_SECURITY_MARK_ICON
 }
 
 const DOCUMENT_KINDS = {
