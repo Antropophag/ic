@@ -507,7 +507,12 @@ final class RequestController extends Controller
 
         $actorId = $this->currentUserId();
         try {
-            return $this->repository()->rejectRequest($id, (int) $input->lockVersion, $actorId);
+            return $this->repository()->rejectRequest(
+                $id,
+                (int) $input->lockVersion,
+                $actorId,
+                $input->reason === '' ? null : (string) $input->reason,
+            );
         } catch (RequestNotFound $error) {
             throw new NotFoundHttpException($error->getMessage());
         } catch (RejectDenied $error) {

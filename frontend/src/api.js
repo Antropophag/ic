@@ -114,10 +114,10 @@ export const requestApi = {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ color, lockVersion }),
   }),
-  reject: (requestId, lockVersion) => request(`/api/v1/requests/${requestId}/reject`, {
+  reject: (requestId, lockVersion, reason) => request(`/api/v1/requests/${requestId}/reject`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ lockVersion }),
+    body: JSON.stringify({ lockVersion, reason }),
   }),
   withdraw: (requestId, lockVersion) => request(`/api/v1/requests/${requestId}/withdraw`, {
     method: 'POST',
