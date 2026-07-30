@@ -1,7 +1,7 @@
 <script setup>
 import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { adminApi, authApi, hasCsrfToken, requestApi, setCsrfToken } from './api'
-import { DEV_USERS, getDevUserId, setDevUserId } from './devUsers'
+import { getDevUserId, reconcileDevUserId, setDevUserId } from './devUsers'
 import { createConfirmDialog } from './confirmDialog'
 import { createLatestRequestGuard } from './latestRequestGuard'
 import { ACTIVE_STATUSES, REGISTRY_PAGE_SIZE, REQUEST_COLORS, buildFeed, canSubmitComment, commentFromApi, documentFromApi, filterRequests, fromApi, historyFromApi, paginate, withoutStaleActions } from './registry'
@@ -72,6 +72,7 @@ const draft = reactive({
   productName: '', manufacturer: '', supplier: '', sampleQuantity: 1, testMethod: '', comment: '',
 })
 const devUserId = ref(getDevUserId())
+const devUsers = ref([])
 // Пессимистичный старт (dev-режим), пока /auth/me не ответит — не мигаем
 // формой логина в единственном реально dev-развёртывании (локальная разработка/CI).
 const authDevMode = ref(true)
@@ -83,7 +84,8 @@ const loginError = ref('')
 
 const currentProfile = computed(() => {
   if (authDevMode.value) {
-    return DEV_USERS.find(user => user.id === devUserId.value) ?? DEV_USERS[0]
+    return devUsers.value.find(user => user.id === devUserId.value) ?? devUsers.value[0]
+      ?? { displayName: '', position: '', department: '', roles: [] }
   }
   return {
     displayName: authUser.value?.displayName || '',
@@ -111,6 +113,54 @@ function switchDevUser(rawId) {
   loadRequests()
 }
 
+const devUsersError = ref('')
+const devUsersLoading = ref(false)
+const devUsersRequestGuard = createLatestRequestGuard()
+
+// Отдельная функция (не инлайн в bootstrapAuth), чтобы кнопка «Повторить»
+// на экране devUsersError могла переиспользовать ту же логику, а не только
+// перезагрузку страницы. Гвардирована latestRequestGuard — повторные клики
+// «Повторить» не должны позволить более старому (в т.ч. позднему неуспешному)
+// ответу перезаписать результат более нового запроса.
+async function loadDevUsers() {
+  if (devUsersLoading.value) return false
+  devUsersLoading.value = true
+  // devUsersError НЕ сбрасывается здесь: блокирующий экран (v-else-if
+  //="devUsersError") должен оставаться видимым весь повтор — обнуление
+  // в начале открыло бы окно, где экран уже пропал, а основной интерфейс
+  // рендерится под ещё не загруженными dev-пользователями.
+  const requestToken = devUsersRequestGuard.begin(true)
+  try {
+    const devUsersResult = await authApi.devUsers()
+    if (!devUsersRequestGuard.isCurrent(requestToken, true)) return false
+    const items = Array.isArray(devUsersResult.items) ? devUsersResult.items : []
+    if (items.length === 0) {
+      // Пустой список — база не сидирована (или сидирована частично) —
+      // не менее опасно, чем сбой запроса: продолжать с devUserId по
+      // умолчанию значило бы работать под несуществующим актёром.
+      devUsersError.value = 'Список dev-пользователей пуст. Выполните ./yii dev/seed на backend.'
+      return false
+    }
+    devUsers.value = items
+    devUserId.value = reconcileDevUserId(items)
+    devUsersError.value = ''
+    return true
+  } catch {
+    if (!devUsersRequestGuard.isCurrent(requestToken, true)) return false
+    // Список dev-актёров не резолвлен — X-Dev-User-ID из localStorage мог
+    // не совпасть ни с одним реальным пользователем на этой БД (именно
+    // конфликт id, который чинит этот PR). Блокируем весь интерфейс явным
+    // экраном ошибки с повтором вместо loadRequests() под неверифицированным
+    // актёром — иначе получили бы неверные капабилити/403 без объяснения.
+    devUsersError.value = 'Не удалось загрузить список dev-пользователей.'
+    return false
+  } finally {
+    if (devUsersRequestGuard.isCurrent(requestToken, true)) {
+      devUsersLoading.value = false
+    }
+  }
+}
+
 async function bootstrapAuth() {
   authLoading.value = true
   try {
@@ -118,6 +168,9 @@ async function bootstrapAuth() {
     setCsrfToken(result.csrfToken)
     authDevMode.value = Boolean(result.devMode)
     authUser.value = result.user
+    if (authDevMode.value && !(await loadDevUsers())) {
+      return
+    }
     if (authDevMode.value || authUser.value) {
       await loadRequests()
     }
@@ -128,6 +181,12 @@ async function bootstrapAuth() {
     authUser.value = null
   } finally {
     authLoading.value = false
+  }
+}
+
+async function retryDevUsers() {
+  if (await loadDevUsers()) {
+    await loadRequests()
   }
 }
 
@@ -1020,6 +1079,14 @@ onMounted(bootstrapAuth)
 <template>
   <div class="shell">
     <div v-if="authLoading" class="auth-loading">Загрузка…</div>
+    <div v-else-if="devUsersError" class="auth-screen">
+      <div class="auth-card">
+        <p class="form-error">{{ devUsersError }}</p>
+        <button type="button" class="primary" :disabled="devUsersLoading" @click="retryDevUsers">
+          {{ devUsersLoading ? 'Повтор…' : 'Повторить' }}
+        </button>
+      </div>
+    </div>
     <div v-else-if="!authDevMode && !authUser" class="auth-screen">
       <form class="auth-card" @submit.prevent="login">
         <svg class="brand-mark" width="48" height="48" viewBox="0 0 40 40" fill="none" aria-hidden="true">
@@ -1071,7 +1138,7 @@ onMounted(bootstrapAuth)
                 :value="devUserId"
                 @change="switchDevUser($event.target.value)"
               >
-                <option v-for="user in DEV_USERS" :key="user.id" :value="user.id">{{ user.displayName }} — {{ user.position }}</option>
+                <option v-for="user in devUsers" :key="user.id" :value="user.id">{{ user.displayName }} — {{ user.position }}</option>
               </select>
               <span class="avatar">{{ currentInitials }}</span>
               <span><b>{{ currentProfile.displayName }}</b><small>{{ currentProfile.position }}</small></span>
