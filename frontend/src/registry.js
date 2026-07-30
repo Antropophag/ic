@@ -20,6 +20,7 @@ const STATUS_LABELS = {
 const STATUS_TONES = {
   registered: 'blue', in_progress: 'cyan', suspended: 'orange',
   opinion_preparation: 'violet', security_review: 'yellow', completed: 'green',
+  rejected: 'red', withdrawn: 'gray',
 }
 
 export const REQUEST_COLORS = ['white', 'red', 'orange', 'blue', 'violet', 'green']
