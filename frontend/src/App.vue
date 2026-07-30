@@ -125,7 +125,10 @@ const devUsersRequestGuard = createLatestRequestGuard()
 async function loadDevUsers() {
   if (devUsersLoading.value) return false
   devUsersLoading.value = true
-  devUsersError.value = ''
+  // devUsersError НЕ сбрасывается здесь: блокирующий экран (v-else-if
+  //="devUsersError") должен оставаться видимым весь повтор — обнуление
+  // в начале открыло бы окно, где экран уже пропал, а основной интерфейс
+  // рендерится под ещё не загруженными dev-пользователями.
   const requestToken = devUsersRequestGuard.begin(true)
   try {
     const devUsersResult = await authApi.devUsers()
@@ -140,6 +143,7 @@ async function loadDevUsers() {
     }
     devUsers.value = items
     devUserId.value = reconcileDevUserId(items)
+    devUsersError.value = ''
     return true
   } catch {
     if (!devUsersRequestGuard.isCurrent(requestToken, true)) return false
