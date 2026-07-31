@@ -289,6 +289,13 @@ async function seedDemoRequests() {
       demoSeedMessage.value = message;
       emit("demo-seed-message", message);
     }
+  } catch {
+    if (demoSeedGuard.isCurrent(token, true)) {
+      const message =
+        "Не удалось заполнить демо-данные. Обновите страницу и повторите попытку.";
+      demoSeedMessage.value = message;
+      emit("demo-seed-message", message);
+    }
   } finally {
     if (demoSeedGuard.isCurrent(token, true)) {
       demoSeedLoading.value = false;
