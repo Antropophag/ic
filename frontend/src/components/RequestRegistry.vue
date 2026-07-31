@@ -148,6 +148,7 @@ watch(() => props.devUserId, () => {
   createRequestGuard.invalidate();
   createLoading.value = false;
   showCreate.value = false;
+  lastCommentModal.value = null;
   resetCreateForm();
   reloadFirstPage();
 });

@@ -717,8 +717,31 @@ function invalidateRequests() {
   for (const guard of [detailRequestGuard, commentRequestGuard, commentsPageRequestGuard, documentRequestGuard, reportRequestGuard, opinionRequestGuard, securityRequestGuard, colorRequestGuard, rejectRequestGuard, withdrawRequestGuard, claimRequestGuard, reassignRequestGuard, deleteReportRequestGuard, suspendResumeRequestGuard, executorsRequestGuard, expertsRequestGuard, actionRequestGuard, downloadRequestGuard]) guard.invalidate()
 }
 
+function resetRequestLocalState() {
+  commentDraft.value = ''
+  opinionDraft.value = ''
+  showOpinionModal.value = false
+  startHintRevealed.value = false
+  executorChoice.value = ''
+  expertChoice.value = ''
+
+  for (const error of [
+    detailError, commentError, documentError, reportError, opinionError,
+    securityError, colorError, rejectError, withdrawError, claimError,
+    reassignError, deleteReportError, suspendResumeError,
+  ]) error.value = ''
+
+  for (const loading of [
+    actionLoading, detailLoading, commentLoading, olderCommentsLoading,
+    documentLoading, reportLoading, opinionLoading, securityLoading,
+    colorLoading, rejectLoading, withdrawLoading, claimLoading,
+    reassignLoading, deleteReportLoading, suspendResumeLoading,
+  ]) loading.value = false
+}
+
 watch(() => props.requestId, requestId => {
   invalidateRequests()
+  resetRequestLocalState()
   selected.value = { backendId: requestId }
   actionError.value = props.initialWarning
   loadRequestDetails(selected.value)
