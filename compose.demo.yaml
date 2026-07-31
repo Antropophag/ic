@@ -34,7 +34,9 @@ services:
     tmpfs:
       - /tmp
       - /app/runtime
-    command: ["sh", "-c", "while true; do php yii notification/send; sleep 60; done"]
+    command: ["php", "yii", "notification/work"]
+    stop_signal: SIGTERM
+    stop_grace_period: 15s
     restart: unless-stopped
 
   mariadb:

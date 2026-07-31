@@ -12,7 +12,7 @@ FROM php:8.3-fpm-alpine3.23
 # Build dependency follows the pinned Alpine base repository.
 # hadolint ignore=DL3018
 RUN apk add --no-cache libxml2-dev libzip-dev oniguruma-dev openldap-dev \
-    && docker-php-ext-install dom ldap mbstring pdo_mysql zip \
+    && docker-php-ext-install dom ldap mbstring pcntl pdo_mysql zip \
     && addgroup -S -g 10001 app \
     && adduser -S -D -H -u 10001 -G app app
 WORKDIR /app

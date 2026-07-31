@@ -5,7 +5,8 @@
 - backend: PHP 8.3, Yii2 REST API;
 - frontend: Vue 3, TypeScript, Vite, Pinia, Vue Router;
 - база: MariaDB;
-- инфраструктура: Nginx, PHP-FPM, worker очереди, Docker Compose;
+- инфраструктура: Nginx, PHP-FPM, долгоживущий Yii CLI scheduler из того же
+  backend-образа, Docker Compose;
 - PDF: серверная генерация из версионируемого HTML-шаблона.
 
 ## Модули
