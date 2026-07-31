@@ -1293,6 +1293,9 @@ async function startRequest() {
   const requestId = selected.value.backendId
   try {
     await requestApi.start(requestId, selected.value.lockVersion)
+    if (selected.value?.backendId === requestId) {
+      startHintRevealed.value = false
+    }
     try {
       await refreshSelected(requestId)
     } catch {
@@ -1584,7 +1587,7 @@ onBeforeUnmount(() => window.removeEventListener('popstate', handlePopstate))
                     <button v-if="selected.canReject" type="button" class="secondary danger" :disabled="rejectLoading" @click="rejectRequest">{{ rejectLoading ? 'Сохранение…' : 'Отказать в проведении испытаний' }}</button>
                   </div>
                   <a class="help-icon" href="/help/assignment.html" target="_blank" title="Инструкция по назначению и началу работы" aria-label="Инструкция по назначению и началу работы">?</a>
-                  <p v-if="startHintRevealed && startHint" class="hero-hint">{{ startHint }}</p>
+                  <p v-if="selected.canStart && startHintRevealed && startHint" class="hero-hint">{{ startHint }}</p>
                   <p v-if="actionError" class="action-error">{{ actionError }}</p>
                   <p v-if="suspendResumeError" class="action-error">{{ suspendResumeError }}</p>
                   <p v-if="rejectError" class="action-error">{{ rejectError }}</p>
@@ -1596,7 +1599,7 @@ onBeforeUnmount(() => window.removeEventListener('popstate', handlePopstate))
                     <button v-else-if="selected.canSuspend" type="button" class="secondary" :disabled="suspendResumeLoading" @click="suspendOrResumeRequest('suspend')">{{ suspendResumeLoading ? 'Сохранение…' : 'Приостановить работу' }}</button>
                     <button v-else-if="selected.canResume" type="button" class="primary" :disabled="suspendResumeLoading" @click="suspendOrResumeRequest('resume')">{{ suspendResumeLoading ? 'Сохранение…' : 'Возобновить работу' }}</button>
                   </div>
-                  <p v-if="startHintRevealed && startHint" class="hero-hint">{{ startHint }}</p>
+                  <p v-if="selected.canStart && startHintRevealed && startHint" class="hero-hint">{{ startHint }}</p>
                   <p v-if="actionError" class="action-error">{{ actionError }}</p>
                   <p v-if="suspendResumeError" class="action-error">{{ suspendResumeError }}</p>
                   <a class="help-icon" href="/help/assignment.html" target="_blank" title="Инструкция по назначению и началу работы" aria-label="Инструкция по назначению и началу работы">?</a>
