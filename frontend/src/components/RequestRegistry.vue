@@ -69,6 +69,19 @@ const demoSeedLoading = ref(false);
 const demoSeedMessage = ref("");
 let searchTimer = null;
 
+function resetCreateForm() {
+  Object.assign(draft, {
+    productName: "",
+    manufacturer: "",
+    supplier: "",
+    sampleQuantity: 1,
+    testMethod: "",
+    comment: "",
+  });
+  draftFiles.value = [];
+  createError.value = "";
+}
+
 const tabs = computed(() => [
   { id: "active", label: "Активные заявки", count: registryPage.counts.active },
   { id: "all", label: "Все заявки", count: registryPage.counts.all },
@@ -135,6 +148,7 @@ watch(() => props.devUserId, () => {
   createRequestGuard.invalidate();
   createLoading.value = false;
   showCreate.value = false;
+  resetCreateForm();
   reloadFirstPage();
 });
 watch(
@@ -216,15 +230,7 @@ async function createRequest() {
       commentFailed = true;
     }
   }
-  Object.assign(draft, {
-    productName: "",
-    manufacturer: "",
-    supplier: "",
-    sampleQuantity: 1,
-    testMethod: "",
-    comment: "",
-  });
-  draftFiles.value = [];
+  resetCreateForm();
   try {
     await loadRequests({ rethrow: true });
     if (!isCurrent()) return;

@@ -116,6 +116,17 @@ it('maps reject and withdraw permissions and history labels', () => {
   }).description).toBe('отозвал(а) заявку')
 })
 
+it('maps suspend and resume history actions to user-facing labels', () => {
+  expect(historyFromApi({
+    id: 22, kind: 'transition', action: 'suspend', actorName: 'Исполнитель',
+    ruleId: 'WF-010', occurredAt: '2026-07-31T10:00:00Z',
+  }).description).toBe('приостановил(а) работы по заявке')
+  expect(historyFromApi({
+    id: 23, kind: 'transition', action: 'resume', actorName: 'Исполнитель',
+    ruleId: 'WF-011', occurredAt: '2026-07-31T11:00:00Z',
+  }).description).toBe('возобновил(а) работы по заявке')
+})
+
 it('maps the report stage, permission and history label', () => {
   expect(fromApi({ ...registered, status: 'opinion_preparation', can_upload_report: 1, can_claim_expert: 1 })).toMatchObject({
     status: 'Подготовка заключения',
