@@ -1290,10 +1290,10 @@ async function startRequest() {
 
   actionLoading.value = true
   actionError.value = ''
+  startHintRevealed.value = false
   const requestId = selected.value.backendId
   try {
     await requestApi.start(requestId, selected.value.lockVersion)
-    startHintRevealed.value = false
     try {
       await refreshSelected(requestId)
     } catch {
