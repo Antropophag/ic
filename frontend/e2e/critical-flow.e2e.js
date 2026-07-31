@@ -48,10 +48,10 @@ test('заявка проходит критический путь до сог�
   })
   await page.goto('/')
   await page.getByRole('row').filter({ hasText: marker }).click()
-  await expect(page.getByText('Контроль СБ', { exact: true })).toBeVisible()
+  await expect(page.locator('.object-status-row').getByText('Контроль СБ', { exact: true })).toBeVisible()
   await page.getByRole('button', { name: 'Согласовать и завершить' }).click()
   await page.getByRole('button', { name: 'Согласовать', exact: true }).click()
-  await expect(page.getByText('Заявка выполнена', { exact: true })).toBeVisible()
+  await expect(page.locator('.object-status-row').getByText('Заявка выполнена', { exact: true })).toBeVisible()
   await expect(page.getByRole('button', { name: 'Согласовать и завершить' })).toHaveCount(0)
 
   await Promise.all([initiator.dispose(), manager.dispose(), executor.dispose(), expert.dispose()])
@@ -166,7 +166,7 @@ test('администратор управляет ролями и возвра
   await page.selectOption('.dev-user-switch', '6')
   await page.getByRole('button', { name: 'Администрирование' }).click()
   await expect(page.getByRole('heading', { name: 'Пользователи и роли' })).toBeVisible()
-  await expect(page.getByRole('cell', { name: 'Тестовый сотрудник' })).toBeVisible()
+  await expect(page.getByRole('cell', { name: 'Тестовый сотрудник', exact: true })).toBeVisible()
 
   await page.getByRole('button', { name: '← К реестру заявок' }).click()
   await expect(page.getByRole('heading', { name: 'Пользователи и роли' })).toHaveCount(0)
