@@ -127,7 +127,11 @@ final class NotificationOutboxProcessor
     private function recordFailure(int $id, int $attempts, \Throwable $error): void
     {
         if ($attempts >= self::MAX_ATTEMPTS) {
-            $values = ['status' => 'failed', 'last_error' => $error->getMessage()];
+            $values = [
+                'status' => 'failed',
+                'next_attempt_at' => Clock::now(),
+                'last_error' => $error->getMessage(),
+            ];
         } else {
             $delay = min(self::BACKOFF_BASE_SECONDS * (2 ** ($attempts - 1)), self::BACKOFF_MAX_SECONDS);
             $values = [

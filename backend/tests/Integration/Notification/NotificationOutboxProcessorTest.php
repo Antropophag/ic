@@ -77,6 +77,65 @@ final class NotificationOutboxProcessorTest extends IntegrationTestCase
         ));
     }
 
+    public function testFailedNotificationIsImmediatelyAvailableForExplicitManualRecovery(): void
+    {
+        $id = $this->enqueue();
+        $processor = new NotificationOutboxProcessor(
+            $this->db(),
+            static fn(): never => throw new \RuntimeException('SMTP unavailable'),
+        );
+
+        for ($attempt = 1; $attempt <= 5; $attempt++) {
+            $result = $processor->processAvailableBatch(20);
+            self::assertSame(1, $result['failed']);
+
+            if ($attempt < 5) {
+                $this->db()->createCommand()->update(
+                    '{{%notification_outbox}}',
+                    ['next_attempt_at' => Clock::now()],
+                    ['id' => $id],
+                )->execute();
+            }
+        }
+
+        $failedAt = Clock::now();
+        $row = $this->db()->createCommand(
+            'SELECT status, attempts, last_error, next_attempt_at '
+            . 'FROM {{%notification_outbox}} WHERE id = :id',
+            [':id' => $id],
+        )->queryOne();
+
+        self::assertSame('failed', $row['status']);
+        self::assertSame(5, (int) $row['attempts']);
+        self::assertSame('SMTP unavailable', $row['last_error']);
+        self::assertLessThanOrEqual($failedAt, $row['next_attempt_at']);
+
+        $automaticResult = $processor->processAvailableBatch(20);
+        self::assertSame(['sent' => 0, 'failed' => 0, 'skipped' => 0], $automaticResult);
+
+        $deliveries = 0;
+        $manualRecovery = new NotificationOutboxProcessor(
+            $this->db(),
+            static function () use (&$deliveries): void {
+                $deliveries++;
+            },
+        );
+        $recoveryResult = $manualRecovery->processAvailableBatch(20, true);
+        $sentRow = $this->db()->createCommand(
+            'SELECT status, sent_at FROM {{%notification_outbox}} WHERE id = :id',
+            [':id' => $id],
+        )->queryOne();
+
+        self::assertSame(1, $recoveryResult['sent']);
+        self::assertSame(1, $deliveries);
+        self::assertSame('sent', $sentRow['status']);
+        self::assertNotNull($sentRow['sent_at']);
+
+        $secondRecoveryResult = $manualRecovery->processAvailableBatch(20, true);
+        self::assertSame(0, $secondRecoveryResult['sent']);
+        self::assertSame(1, $deliveries);
+    }
+
     public function testExpiredSendingLeaseIsRecovered(): void
     {
         $id = $this->enqueue();
