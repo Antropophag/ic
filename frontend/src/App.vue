@@ -120,7 +120,7 @@ const startHint = computed(() => {
   return ''
 })
 const hasHeroAction = computed(() => Boolean(selected.value && (
-  selected.value.canAssignExecutor || canStartAction.value || selected.value.canUploadReport
+  selected.value.canAssignExecutor || selected.value.canStart || selected.value.canUploadReport
   || selected.value.canClaimExpert || selected.value.canReassignExpert || selected.value.canPublishOpinion
   || selected.value.canSecurityDecide || selected.value.canReject || selected.value.canWithdraw
   || selected.value.canDeleteReport || selected.value.canSuspend || selected.value.canResume
@@ -1596,6 +1596,7 @@ onBeforeUnmount(() => window.removeEventListener('popstate', handlePopstate))
                     <button v-else-if="selected.canSuspend" type="button" class="secondary" :disabled="suspendResumeLoading" @click="suspendOrResumeRequest('suspend')">{{ suspendResumeLoading ? 'Сохранение…' : 'Приостановить работу' }}</button>
                     <button v-else-if="selected.canResume" type="button" class="primary" :disabled="suspendResumeLoading" @click="suspendOrResumeRequest('resume')">{{ suspendResumeLoading ? 'Сохранение…' : 'Возобновить работу' }}</button>
                   </div>
+                  <p v-if="startHintRevealed && startHint" class="hero-hint">{{ startHint }}</p>
                   <p v-if="actionError" class="action-error">{{ actionError }}</p>
                   <p v-if="suspendResumeError" class="action-error">{{ suspendResumeError }}</p>
                   <a class="help-icon" href="/help/assignment.html" target="_blank" title="Инструкция по назначению и началу работы" aria-label="Инструкция по назначению и началу работы">?</a>
