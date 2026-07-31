@@ -17,7 +17,7 @@ const roleActionError = ref('')
 const requestGuard = createLatestRequestGuard()
 const createUserGuard = createLatestRequestGuard()
 const roleActionTokens = new Map()
-const pendingRoleActions = reactive(new Set())
+const pendingRoleUsers = reactive(new Set())
 let mounted = true
 
 async function load() {
@@ -80,10 +80,10 @@ async function assignRole(userId) {
   const roleId = Number(roleChoiceByUser[userId])
   if (!roleId) return
   const key = `assign:${userId}:${roleId}`
-  if (pendingRoleActions.has(key)) return
+  if (pendingRoleUsers.has(userId)) return
   const token = Symbol(key)
   roleActionTokens.set(userId, token)
-  pendingRoleActions.add(key)
+  pendingRoleUsers.add(userId)
   roleActionError.value = ''
   try {
     const result = await adminApi.assignRole(userId, roleId)
@@ -93,16 +93,16 @@ async function assignRole(userId) {
   } catch {
     if (mounted && roleActionTokens.get(userId) === token) roleActionError.value = 'Не удалось назначить роль.'
   } finally {
-    if (mounted) pendingRoleActions.delete(key)
+    if (mounted && roleActionTokens.get(userId) === token) pendingRoleUsers.delete(userId)
   }
 }
 
 async function revokeRole(userId, roleId) {
   const key = `revoke:${userId}:${roleId}`
-  if (pendingRoleActions.has(key)) return
+  if (pendingRoleUsers.has(userId)) return
   const token = Symbol(key)
   roleActionTokens.set(userId, token)
-  pendingRoleActions.add(key)
+  pendingRoleUsers.add(userId)
   roleActionError.value = ''
   try {
     const result = await adminApi.revokeRole(userId, roleId)
@@ -111,7 +111,7 @@ async function revokeRole(userId, roleId) {
   } catch {
     if (mounted && roleActionTokens.get(userId) === token) roleActionError.value = 'Не удалось отозвать роль.'
   } finally {
-    if (mounted) pendingRoleActions.delete(key)
+    if (mounted && roleActionTokens.get(userId) === token) pendingRoleUsers.delete(userId)
   }
 }
 
@@ -140,7 +140,7 @@ onBeforeUnmount(() => {
       <p v-if="roleActionError" class="action-error">{{ roleActionError }}</p>
       <div v-if="!loading" class="table-wrap">
         <table><thead><tr><th>ФИО</th><th>Логин AD</th><th>Email</th><th>Активен</th><th>Роли</th></tr></thead><tbody>
-          <tr v-for="user in users" :key="user.id"><td><b>{{ user.displayName }}</b></td><td>{{ user.adLogin }}</td><td>{{ user.email || '—' }}</td><td>{{ user.isActive ? 'да' : 'нет' }}</td><td><span v-for="role in user.roles" :key="role.id" class="role-chip">{{ role.name }}<button type="button" title="Отозвать роль" :aria-label="`Отозвать роль ${role.name} у ${user.displayName || user.adLogin}`" :disabled="pendingRoleActions.has(`revoke:${user.id}:${role.id}`)" @click="revokeRole(user.id, role.id)">×</button></span><span class="role-assign"><select v-model="roleChoiceByUser[user.id]"><option value="">Добавить роль…</option><option v-for="role in roles" :key="role.id" :value="role.id">{{ role.name }}</option></select><button type="button" class="secondary" :aria-label="`Назначить выбранную роль пользователю ${user.displayName || user.adLogin}`" :disabled="pendingRoleActions.has(`assign:${user.id}:${Number(roleChoiceByUser[user.id])}`)" @click="assignRole(user.id)">+</button></span></td></tr>
+          <tr v-for="user in users" :key="user.id"><td><b>{{ user.displayName }}</b></td><td>{{ user.adLogin }}</td><td>{{ user.email || '—' }}</td><td>{{ user.isActive ? 'да' : 'нет' }}</td><td><span v-for="role in user.roles" :key="role.id" class="role-chip">{{ role.name }}<button type="button" title="Отозвать роль" :aria-label="`Отозвать роль ${role.name} у ${user.displayName || user.adLogin}`" :disabled="pendingRoleUsers.has(user.id)" @click="revokeRole(user.id, role.id)">×</button></span><span class="role-assign"><select v-model="roleChoiceByUser[user.id]" :disabled="pendingRoleUsers.has(user.id)"><option value="">Добавить роль…</option><option v-for="role in roles" :key="role.id" :value="role.id">{{ role.name }}</option></select><button type="button" class="secondary" :aria-label="`Назначить выбранную роль пользователю ${user.displayName || user.adLogin}`" :disabled="pendingRoleUsers.has(user.id)" @click="assignRole(user.id)">+</button></span></td></tr>
         </tbody></table>
       </div>
     </div>

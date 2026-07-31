@@ -63,6 +63,7 @@ const draft = reactive({
 const registryGuard = createLatestRequestGuard();
 const downloadGuard = createLatestRequestGuard();
 const demoSeedGuard = createLatestRequestGuard();
+const createRequestGuard = createLatestRequestGuard();
 const confirmDialog = createConfirmDialog();
 const demoSeedLoading = ref(false);
 const demoSeedMessage = ref("");
@@ -130,7 +131,12 @@ watch(query, () => {
   window.clearTimeout(searchTimer);
   searchTimer = window.setTimeout(reloadFirstPage, 300);
 });
-watch(() => props.devUserId, reloadFirstPage);
+watch(() => props.devUserId, () => {
+  createRequestGuard.invalidate();
+  createLoading.value = false;
+  showCreate.value = false;
+  reloadFirstPage();
+});
 watch(
   () => props.refreshTrigger,
   () => {
@@ -170,10 +176,13 @@ async function createRequest() {
   createError.value = "";
   registryError.value = "";
   createLoading.value = true;
+  const token = createRequestGuard.begin(props.devUserId);
+  const isCurrent = () => createRequestGuard.isCurrent(token, props.devUserId);
   let created;
   try {
     created = await requestApi.create(draft);
   } catch (error) {
+    if (!isCurrent()) return;
     createError.value =
       error.status === 422
         ? "Проверьте обязательные поля формы."
@@ -183,11 +192,14 @@ async function createRequest() {
     createLoading.value = false;
     return;
   }
+  if (!isCurrent()) return;
   const failedFiles = [];
   for (const file of draftFiles.value) {
     try {
       await requestApi.uploadDocument(created.id, file);
+      if (!isCurrent()) return;
     } catch (error) {
+      if (!isCurrent()) return;
       failedFiles.push(
         `${file.name} (${error.status === 413 ? "файл слишком большой, максимум 10 МБ" : error.status === 422 ? "недопустимый формат или размер" : "ошибка загрузки"})`,
       );
@@ -198,7 +210,9 @@ async function createRequest() {
   if (comment) {
     try {
       await requestApi.addComment(created.id, comment);
+      if (!isCurrent()) return;
     } catch {
+      if (!isCurrent()) return;
       commentFailed = true;
     }
   }
@@ -213,6 +227,7 @@ async function createRequest() {
   draftFiles.value = [];
   try {
     await loadRequests({ rethrow: true });
+    if (!isCurrent()) return;
     const createdItem = requests.value.find(
       (item) => item.backendId === created.id,
     );
@@ -229,11 +244,13 @@ async function createRequest() {
     if (createdItem) emit("select-request", createdItem, warning);
     else registryError.value = warning;
   } catch {
-    registryError.value =
+    if (isCurrent()) registryError.value =
       "Заявка создана, но обновить реестр не удалось. Не создавайте её повторно; обновите страницу.";
   } finally {
-    showCreate.value = false;
-    createLoading.value = false;
+    if (isCurrent()) {
+      showCreate.value = false;
+      createLoading.value = false;
+    }
   }
 }
 
@@ -291,6 +308,7 @@ onBeforeUnmount(() => {
   registryGuard.invalidate();
   downloadGuard.invalidate();
   demoSeedGuard.invalidate();
+  createRequestGuard.invalidate();
 });
 </script>
 
