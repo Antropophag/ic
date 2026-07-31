@@ -325,18 +325,20 @@ async function setColorMark(color) {
 
 async function rejectRequest() {
   if (rejectLoading.value) return
+  const requestId = selected.value.backendId
+  const lockVersion = selected.value.lockVersion
   const confirmed = await confirmDialog.ask('Отказать в проведении испытаний по этой заявке?', {
     confirmLabel: 'Отказать',
     danger: true,
     reasonField: { required: false, placeholder: 'Например, образец не соответствует требованиям к отбору' },
   })
   if (!confirmed) return
-  const requestId = selected.value.backendId
+  if (selected.value?.backendId !== requestId) return
   const requestToken = rejectRequestGuard.begin(requestId)
   rejectLoading.value = true
   rejectError.value = ''
   try {
-    await requestApi.reject(requestId, selected.value.lockVersion, confirmed.reason || undefined)
+    await requestApi.reject(requestId, lockVersion, confirmed.reason || undefined)
     if (!rejectRequestGuard.isCurrent(requestToken, selected.value?.backendId)) return
     try {
       await refreshSelected(requestId)
@@ -362,18 +364,20 @@ async function rejectRequest() {
 
 async function withdrawRequest() {
   if (withdrawLoading.value) return
+  const requestId = selected.value.backendId
+  const lockVersion = selected.value.lockVersion
   const confirmed = await confirmDialog.ask('Отозвать эту заявку?', {
     confirmLabel: 'Отозвать',
     danger: true,
     reasonField: { required: false, placeholder: 'Например, заявка подана повторно с уточнёнными данными' },
   })
   if (!confirmed) return
-  const requestId = selected.value.backendId
+  if (selected.value?.backendId !== requestId) return
   const requestToken = withdrawRequestGuard.begin(requestId)
   withdrawLoading.value = true
   withdrawError.value = ''
   try {
-    await requestApi.withdraw(requestId, selected.value.lockVersion, confirmed.reason || undefined)
+    await requestApi.withdraw(requestId, lockVersion, confirmed.reason || undefined)
     if (!withdrawRequestGuard.isCurrent(requestToken, selected.value?.backendId)) return
     try {
       await refreshSelected(requestId)
@@ -718,6 +722,7 @@ function invalidateRequests() {
 }
 
 function resetRequestLocalState() {
+  confirmDialog.cancel()
   commentDraft.value = ''
   opinionDraft.value = ''
   showOpinionModal.value = false
@@ -747,7 +752,10 @@ watch(() => props.requestId, requestId => {
   loadRequestDetails(selected.value)
 }, { immediate: true })
 
-onBeforeUnmount(invalidateRequests)
+onBeforeUnmount(() => {
+  invalidateRequests()
+  confirmDialog.cancel()
+})
 </script>
 <template>
   <section class="page request-page">
