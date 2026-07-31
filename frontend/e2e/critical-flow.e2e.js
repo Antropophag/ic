@@ -48,10 +48,10 @@ test('заявка проходит критический путь до сог�
   })
   await page.goto('/')
   await page.getByRole('row').filter({ hasText: marker }).click()
-  await expect(page.getByText('Контроль СБ', { exact: true })).toBeVisible()
+  await expect(page.locator('.object-status-row').getByText('Контроль СБ', { exact: true })).toBeVisible()
   await page.getByRole('button', { name: 'Согласовать и завершить' }).click()
   await page.getByRole('button', { name: 'Согласовать', exact: true }).click()
-  await expect(page.getByText('Заявка выполнена', { exact: true })).toBeVisible()
+  await expect(page.locator('.object-status-row').getByText('Заявка выполнена', { exact: true })).toBeVisible()
   await expect(page.getByRole('button', { name: 'Согласовать и завершить' })).toHaveCount(0)
 
   await Promise.all([initiator.dispose(), manager.dispose(), executor.dispose(), expert.dispose()])
