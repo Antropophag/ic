@@ -116,6 +116,16 @@ export const requestApi = {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ lockVersion }),
   }),
+  suspend: (requestId, lockVersion) => request(`/api/v1/requests/${requestId}/suspend`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ lockVersion }),
+  }),
+  resume: (requestId, lockVersion) => request(`/api/v1/requests/${requestId}/resume`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ lockVersion }),
+  }),
   setColor: (requestId, color, lockVersion) => request(`/api/v1/requests/${requestId}/color`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -126,10 +136,10 @@ export const requestApi = {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ lockVersion, reason }),
   }),
-  withdraw: (requestId, lockVersion) => request(`/api/v1/requests/${requestId}/withdraw`, {
+  withdraw: (requestId, lockVersion, reason) => request(`/api/v1/requests/${requestId}/withdraw`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ lockVersion }),
+    body: JSON.stringify({ lockVersion, reason }),
   }),
 }
 

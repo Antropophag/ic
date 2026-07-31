@@ -8,6 +8,7 @@ use App\Application\Request\CreateRequestInput;
 use App\Domain\Request\AssignmentDenied;
 use App\Domain\Request\ConcurrentRequestModification;
 use App\Domain\Request\RejectDenied;
+use App\Domain\Request\SuspendResumeDenied;
 use App\Domain\Request\WithdrawDenied;
 use App\Infrastructure\Clock;
 use App\Infrastructure\Request\RequestRepository;
@@ -132,6 +133,110 @@ final class RequestRepositoryTest extends IntegrationTestCase
         $repository = new RequestRepository($this->db());
         $this->expectException(ConcurrentRequestModification::class);
         $repository->withdrawRequest($requestId, (int) $request['lock_version'], $initiator);
+    }
+
+    public function testSuspendAndResumeTransitionStatus(): void
+    {
+        $manager = $this->createUser('dev.it.manager-suspend', 'Руководитель приостановки');
+        $this->grantRole($manager, 'ic_manager');
+        $initiator = $this->createUser('dev.it.initiator-suspend', 'Инициатор приостановки');
+        $executor = $this->createUser('dev.it.executor-suspend', 'Исполнитель приостановки');
+        $this->grantRole($executor, 'ic_executor');
+        $request = $this->createRegisteredRequest($initiator, 'suspend-resume');
+        $requestId = (int) $request['id'];
+
+        $repository = new RequestRepository($this->db());
+        $repository->assignExecutor($requestId, $executor, (int) $request['lock_version'], $manager);
+        $started = $repository->startRequest($requestId, (int) $request['lock_version'] + 1, $manager);
+        self::assertSame('in_progress', $started['status']);
+
+        $suspended = $repository->suspendRequest($requestId, $started['lockVersion'], $executor);
+        self::assertSame('suspended', $suspended['status']);
+
+        $resumed = $repository->resumeRequest($requestId, $suspended['lockVersion'], $manager);
+        self::assertSame('in_progress', $resumed['status']);
+
+        $transitionCount = $this->scalar(
+            "SELECT COUNT(*) FROM {{%request_transitions}} WHERE request_id = :id AND rule_id = 'WF-005'",
+            [':id' => $requestId],
+        );
+        self::assertSame(2, (int) $transitionCount);
+    }
+
+    public function testOnlyAssignedExecutorOrManagerCanSuspend(): void
+    {
+        $manager = $this->createUser('dev.it.manager-suspend2', 'Руководитель приостановки 2');
+        $this->grantRole($manager, 'ic_manager');
+        $initiator = $this->createUser('dev.it.initiator-suspend2', 'Инициатор приостановки 2');
+        $executor = $this->createUser('dev.it.executor-suspend2', 'Исполнитель приостановки 2');
+        $this->grantRole($executor, 'ic_executor');
+        $otherExecutor = $this->createUser('dev.it.executor-suspend3', 'Другой исполнитель приостановки');
+        $this->grantRole($otherExecutor, 'ic_executor');
+        $request = $this->createRegisteredRequest($initiator, 'suspend-denied');
+        $requestId = (int) $request['id'];
+
+        $repository = new RequestRepository($this->db());
+        $repository->assignExecutor($requestId, $executor, (int) $request['lock_version'], $manager);
+        $started = $repository->startRequest($requestId, (int) $request['lock_version'] + 1, $manager);
+
+        $this->expectException(SuspendResumeDenied::class);
+        $repository->suspendRequest($requestId, $started['lockVersion'], $otherExecutor);
+    }
+
+    public function testSuspendFailsOnStaleLockVersion(): void
+    {
+        $manager = $this->createUser('dev.it.manager-suspend4', 'Руководитель приостановки 4');
+        $this->grantRole($manager, 'ic_manager');
+        $initiator = $this->createUser('dev.it.initiator-suspend4', 'Инициатор приостановки 4');
+        $request = $this->createRegisteredRequest($initiator, 'suspend-stale');
+        $requestId = (int) $request['id'];
+
+        $repository = new RequestRepository($this->db());
+        $started = $repository->startRequest($requestId, (int) $request['lock_version'], $manager);
+
+        $this->expectException(ConcurrentRequestModification::class);
+        $repository->suspendRequest($requestId, $started['lockVersion'] + 1, $manager);
+    }
+
+    public function testCanSuspendAndCanResumeFlagsInRegistry(): void
+    {
+        $manager = $this->createUser('dev.it.manager-suspend5', 'Руководитель приостановки 5');
+        $this->grantRole($manager, 'ic_manager');
+        $initiator = $this->createUser('dev.it.initiator-suspend5', 'Инициатор приостановки 5');
+        $outsider = $this->createUser('dev.it.outsider-suspend5', 'Посторонний приостановки');
+        $request = $this->createRegisteredRequest($initiator, 'suspend-flags');
+        $requestId = (int) $request['id'];
+
+        $repository = new RequestRepository($this->db());
+        $started = $repository->startRequest($requestId, (int) $request['lock_version'], $manager);
+
+        $managerRow = self::findRow($this->findAll($repository, $manager), $requestId);
+        self::assertSame(1, (int) $managerRow['can_suspend']);
+        self::assertSame(0, (int) $managerRow['can_resume']);
+
+        $outsiderRow = self::findRow($this->findAll($repository, $outsider), $requestId);
+        self::assertSame(0, (int) $outsiderRow['can_suspend']);
+
+        $repository->suspendRequest($requestId, $started['lockVersion'], $manager);
+        $managerRowAfter = self::findRow($this->findAll($repository, $manager), $requestId);
+        self::assertSame(0, (int) $managerRowAfter['can_suspend']);
+        self::assertSame(1, (int) $managerRowAfter['can_resume']);
+    }
+
+    public function testWithdrawSavesOptionalReason(): void
+    {
+        $initiator = $this->createUser('dev.it.initiator-withdrawreason', 'Инициатор причины отзыва');
+        $request = $this->createRegisteredRequest($initiator, 'withdraw-reason');
+        $requestId = (int) $request['id'];
+
+        $repository = new RequestRepository($this->db());
+        $repository->withdrawRequest($requestId, (int) $request['lock_version'], $initiator, 'Больше не актуально');
+
+        $savedReason = $this->scalar(
+            "SELECT reason FROM {{%request_transitions}} WHERE request_id = :id AND action = 'withdraw'",
+            [':id' => $requestId],
+        );
+        self::assertSame('Больше не актуально', $savedReason);
     }
 
     public function testCanRejectAndCanWithdrawFlagsInRegistry(): void

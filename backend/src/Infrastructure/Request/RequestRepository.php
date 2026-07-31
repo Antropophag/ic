@@ -20,6 +20,7 @@ use App\Domain\Request\RequestWorkflow;
 use App\Domain\Request\Role;
 use App\Domain\Request\SecurityDecisionPolicy;
 use App\Domain\Request\StartRequestPolicy;
+use App\Domain\Request\SuspendResumePolicy;
 use App\Domain\Request\WithdrawPolicy;
 use App\Infrastructure\Clock;
 use App\Infrastructure\Document\DocumentDownloadUrl;
@@ -360,6 +361,25 @@ final class RequestRepository
             . 'OR (current_executor.user_id = :start_executor AND EXISTS(SELECT 1 '
             . 'FROM {{%user_roles}} seur JOIN {{%roles}} ser ON ser.id = seur.role_id '
             . "WHERE seur.user_id = :start_executor_role AND ser.code = 'ic_executor')))) AS can_start, "
+            // WF-005: тот же круг актёров, что и у can_start (руководитель
+            // ИЦ/лаборатории или назначенный исполнитель), но применяется к
+            // паре переходов in_progress<->suspended, а не к registered.
+            . "(r.status = 'in_progress' AND EXISTS(SELECT 1 FROM {{%users}} spau "
+            . 'WHERE spau.id = :active_suspend_actor AND spau.is_active = 1) AND '
+            . '(EXISTS(SELECT 1 FROM {{%user_roles}} spur '
+            . 'JOIN {{%roles}} spr ON spr.id = spur.role_id '
+            . "WHERE spur.user_id = :suspend_manager AND spr.code IN ('ic_manager', 'laboratory_manager')) "
+            . 'OR (current_executor.user_id = :suspend_executor AND EXISTS(SELECT 1 '
+            . 'FROM {{%user_roles}} speur JOIN {{%roles}} sper ON sper.id = speur.role_id '
+            . "WHERE speur.user_id = :suspend_executor_role AND sper.code = 'ic_executor')))) AS can_suspend, "
+            . "(r.status = 'suspended' AND EXISTS(SELECT 1 FROM {{%users}} rsau "
+            . 'WHERE rsau.id = :active_resume_actor AND rsau.is_active = 1) AND '
+            . '(EXISTS(SELECT 1 FROM {{%user_roles}} rsur '
+            . 'JOIN {{%roles}} rsr ON rsr.id = rsur.role_id '
+            . "WHERE rsur.user_id = :resume_manager AND rsr.code IN ('ic_manager', 'laboratory_manager')) "
+            . 'OR (current_executor.user_id = :resume_executor AND EXISTS(SELECT 1 '
+            . 'FROM {{%user_roles}} rseur JOIN {{%roles}} rser ON rser.id = rseur.role_id '
+            . "WHERE rseur.user_id = :resume_executor_role AND rser.code = 'ic_executor')))) AS can_resume, "
             . "(EXISTS(SELECT 1 FROM {{%users}} cau WHERE cau.id = :active_comment_actor "
             . "AND cau.is_active = 1) AND r.status IN ('registered', 'in_progress', 'suspended', "
             . "'opinion_preparation', 'security_review')) AS can_comment, "
@@ -433,6 +453,14 @@ final class RequestRepository
                 ':active_start_actor' => $actorId,
                 ':start_executor' => $actorId,
                 ':start_executor_role' => $actorId,
+                ':active_suspend_actor' => $actorId,
+                ':suspend_manager' => $actorId,
+                ':suspend_executor' => $actorId,
+                ':suspend_executor_role' => $actorId,
+                ':active_resume_actor' => $actorId,
+                ':resume_manager' => $actorId,
+                ':resume_executor' => $actorId,
+                ':resume_executor_role' => $actorId,
                 ':active_comment_actor' => $actorId,
                 ':active_document_actor' => $actorId,
                 ':reject_actor' => $actorId,
@@ -500,6 +528,22 @@ final class RequestRepository
             . 'OR (current_executor.user_id = :start_executor AND EXISTS(SELECT 1 '
             . 'FROM {{%user_roles}} seur JOIN {{%roles}} ser ON ser.id = seur.role_id '
             . "WHERE seur.user_id = :start_executor_role AND ser.code = 'ic_executor')))) AS can_start, "
+            . "(r.status = 'in_progress' AND EXISTS(SELECT 1 FROM {{%users}} spau "
+            . 'WHERE spau.id = :active_suspend_actor AND spau.is_active = 1) AND '
+            . '(EXISTS(SELECT 1 FROM {{%user_roles}} spur '
+            . 'JOIN {{%roles}} spr ON spr.id = spur.role_id '
+            . "WHERE spur.user_id = :suspend_manager AND spr.code IN ('ic_manager', 'laboratory_manager')) "
+            . 'OR (current_executor.user_id = :suspend_executor AND EXISTS(SELECT 1 '
+            . 'FROM {{%user_roles}} speur JOIN {{%roles}} sper ON sper.id = speur.role_id '
+            . "WHERE speur.user_id = :suspend_executor_role AND sper.code = 'ic_executor')))) AS can_suspend, "
+            . "(r.status = 'suspended' AND EXISTS(SELECT 1 FROM {{%users}} rsau "
+            . 'WHERE rsau.id = :active_resume_actor AND rsau.is_active = 1) AND '
+            . '(EXISTS(SELECT 1 FROM {{%user_roles}} rsur '
+            . 'JOIN {{%roles}} rsr ON rsr.id = rsur.role_id '
+            . "WHERE rsur.user_id = :resume_manager AND rsr.code IN ('ic_manager', 'laboratory_manager')) "
+            . 'OR (current_executor.user_id = :resume_executor AND EXISTS(SELECT 1 '
+            . 'FROM {{%user_roles}} rseur JOIN {{%roles}} rser ON rser.id = rseur.role_id '
+            . "WHERE rseur.user_id = :resume_executor_role AND rser.code = 'ic_executor')))) AS can_resume, "
             . "(r.status IN ('registered', 'in_progress', 'suspended', 'opinion_preparation', "
             . "'security_review')) AS can_comment, "
             . "(r.status IN ('registered', 'in_progress', 'suspended', 'opinion_preparation', "
@@ -553,6 +597,14 @@ final class RequestRepository
                 ':start_manager' => $actorId,
                 ':start_executor' => $actorId,
                 ':start_executor_role' => $actorId,
+                ':suspend_manager' => $actorId,
+                ':active_suspend_actor' => $actorId,
+                ':suspend_executor' => $actorId,
+                ':suspend_executor_role' => $actorId,
+                ':resume_manager' => $actorId,
+                ':active_resume_actor' => $actorId,
+                ':resume_executor' => $actorId,
+                ':resume_executor_role' => $actorId,
                 ':report_actor' => $actorId,
                 ':report_manager' => $actorId,
                 ':delete_report_actor' => $actorId,
@@ -1298,6 +1350,141 @@ final class RequestRepository
         }
     }
 
+    /** @return array{requestId: int, status: string, lockVersion: int} */
+    public function suspendRequest(int $requestId, int $expectedLockVersion, int $actorId): array
+    {
+        return $this->transitionSuspendResume(
+            $requestId,
+            $expectedLockVersion,
+            $actorId,
+            RequestAction::Suspend,
+            'request.suspended',
+        );
+    }
+
+    /** @return array{requestId: int, status: string, lockVersion: int} */
+    public function resumeRequest(int $requestId, int $expectedLockVersion, int $actorId): array
+    {
+        return $this->transitionSuspendResume(
+            $requestId,
+            $expectedLockVersion,
+            $actorId,
+            RequestAction::Resume,
+            'request.resumed',
+        );
+    }
+
+    /** @return array{requestId: int, status: string, lockVersion: int} */
+    private function transitionSuspendResume(
+        int $requestId,
+        int $expectedLockVersion,
+        int $actorId,
+        RequestAction $action,
+        string $eventType,
+    ): array {
+        $transaction = $this->db->beginTransaction();
+        try {
+            $request = $this->db->createCommand(
+                'SELECT status, lock_version FROM {{%requests}} WHERE id = :id FOR UPDATE',
+                [':id' => $requestId],
+            )->queryOne();
+            if ($request === false) {
+                throw new RequestNotFound('Request not found');
+            }
+
+            $currentLockVersion = (int) $request['lock_version'];
+            if ($currentLockVersion !== $expectedLockVersion) {
+                throw new ConcurrentRequestModification();
+            }
+
+            $roles = $this->rolesFor($actorId);
+            $isCurrentExecutor = $this->isCurrentExecutor($requestId, $actorId);
+            $isActive = $this->isActiveUser($actorId);
+            $policy = new SuspendResumePolicy();
+            if ($action === RequestAction::Suspend) {
+                $policy->assertCanSuspend($roles, $isCurrentExecutor, $isActive);
+            } else {
+                $policy->assertCanResume($roles, $isCurrentExecutor, $isActive);
+            }
+
+            $currentStatus = RequestStatus::from((string) $request['status']);
+            $targetStatus = (new RequestWorkflow())->transition($currentStatus, $action, $roles);
+            $nextLockVersion = $currentLockVersion + 1;
+            $now = Clock::now();
+            $updated = $this->db->createCommand()->update(
+                '{{%requests}}',
+                [
+                    'status' => $targetStatus->value,
+                    'lock_version' => $nextLockVersion,
+                    'updated_at' => $now,
+                ],
+                [
+                    'id' => $requestId,
+                    'status' => $currentStatus->value,
+                    'lock_version' => $currentLockVersion,
+                ],
+            )->execute();
+            if ($updated !== 1) {
+                throw new ConcurrentRequestModification();
+            }
+
+            $this->db->createCommand()->insert('{{%request_transitions}}', [
+                'request_id' => $requestId,
+                'actor_id' => $actorId,
+                'from_status' => $currentStatus->value,
+                'to_status' => $targetStatus->value,
+                'action' => $action->value,
+                'rule_id' => 'WF-005',
+                'created_at' => $now,
+            ])->execute();
+            $this->db->createCommand()->insert('{{%audit_events}}', [
+                'event_type' => $eventType,
+                'entity_type' => 'request',
+                'entity_id' => $requestId,
+                'actor_id' => $actorId,
+                'rule_id' => 'WF-005',
+                'payload_json' => [
+                    'from_status' => $currentStatus->value,
+                    'to_status' => $targetStatus->value,
+                    'lock_version' => $nextLockVersion,
+                ],
+                'created_at' => $now,
+            ])->execute();
+            $transaction->commit();
+
+            return [
+                'requestId' => $requestId,
+                'status' => $targetStatus->value,
+                'lockVersion' => $nextLockVersion,
+            ];
+        } catch (\Throwable $error) {
+            $transaction->rollBack();
+            throw $error;
+        }
+    }
+
+    public function recordRejectedSuspendResume(int $requestId, int $actorId, string $ruleId): void
+    {
+        $participantsExist = $this->db->createCommand(
+            'SELECT COUNT(*) FROM {{%users}} u JOIN {{%requests}} r ON r.id = :request_id '
+            . 'WHERE u.id = :actor_id',
+            [':request_id' => $requestId, ':actor_id' => $actorId],
+        )->queryScalar();
+        if ((int) $participantsExist !== 1) {
+            return;
+        }
+
+        $this->db->createCommand()->insert('{{%audit_events}}', [
+            'event_type' => 'request.suspend_resume_denied',
+            'entity_type' => 'request',
+            'entity_id' => $requestId,
+            'actor_id' => $actorId,
+            'rule_id' => $ruleId,
+            'payload_json' => [],
+            'created_at' => Clock::now(),
+        ])->execute();
+    }
+
     public function recordRejectedStart(int $requestId, int $actorId, string $ruleId): void
     {
         $participantsExist = $this->db->createCommand(
@@ -1447,7 +1634,7 @@ final class RequestRepository
     ];
 
     /** @return array{requestId: int, status: string, lockVersion: int} */
-    public function withdrawRequest(int $requestId, int $expectedLockVersion, int $actorId): array
+    public function withdrawRequest(int $requestId, int $expectedLockVersion, int $actorId, ?string $reason = null): array
     {
         $transaction = $this->db->beginTransaction();
         try {
@@ -1497,6 +1684,7 @@ final class RequestRepository
                 'to_status' => RequestStatus::Withdrawn->value,
                 'action' => 'withdraw',
                 'rule_id' => 'WF-007',
+                'reason' => $reason,
                 'created_at' => $now,
             ])->execute();
             $this->db->createCommand()->insert('{{%audit_events}}', [
@@ -1509,6 +1697,7 @@ final class RequestRepository
                     'from_status' => $currentStatus->value,
                     'to_status' => RequestStatus::Withdrawn->value,
                     'lock_version' => $nextLockVersion,
+                    'reason' => $reason,
                 ],
                 'created_at' => $now,
             ])->execute();

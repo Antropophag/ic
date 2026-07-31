@@ -13,9 +13,11 @@ use App\Application\Request\ClaimExpertInput;
 use App\Application\Request\DeleteReportInput;
 use App\Application\Request\PublishOpinionInput;
 use App\Application\Request\RejectRequestInput;
+use App\Application\Request\ResumeRequestInput;
 use App\Application\Request\SecurityDecisionInput;
 use App\Application\Request\SetColorInput;
 use App\Application\Request\StartRequestInput;
+use App\Application\Request\SuspendRequestInput;
 use App\Application\Request\WithdrawRequestInput;
 use App\Domain\Request\AssignmentDenied;
 use App\Domain\Request\AssignmentTargetNotFound;
@@ -32,6 +34,7 @@ use App\Domain\Request\ReportDeletionDenied;
 use App\Domain\Request\OpinionDenied;
 use App\Domain\Request\SecurityDecisionDenied;
 use App\Domain\Request\StartDenied;
+use App\Domain\Request\SuspendResumeDenied;
 use App\Domain\Request\TransitionDenied;
 use App\Domain\Request\WithdrawDenied;
 use App\Infrastructure\Identity\CurrentUser;
@@ -511,6 +514,58 @@ final class RequestController extends Controller
     }
 
     /** @return array<string, mixed> */
+    public function actionSuspend(int $id): array
+    {
+        $input = new SuspendRequestInput();
+        $input->load(Yii::$app->request->bodyParams, '');
+        if (!$input->validate()) {
+            Yii::$app->response->statusCode = 422;
+            return ['errors' => $input->getErrors()];
+        }
+
+        $actorId = $this->currentUserId();
+        try {
+            return $this->repository()->suspendRequest($id, (int) $input->lockVersion, $actorId);
+        } catch (RequestNotFound $error) {
+            throw new NotFoundHttpException($error->getMessage());
+        } catch (SuspendResumeDenied $error) {
+            $this->recordRejectedSuspendResumeSafely($id, $actorId, $error->ruleId);
+            throw new ForbiddenHttpException($error->getMessage());
+        } catch (TransitionDenied $error) {
+            $this->recordRejectedSuspendResumeSafely($id, $actorId, $error->ruleId);
+            throw new ConflictHttpException($error->getMessage());
+        } catch (ConcurrentRequestModification $error) {
+            throw new ConflictHttpException($error->getMessage());
+        }
+    }
+
+    /** @return array<string, mixed> */
+    public function actionResume(int $id): array
+    {
+        $input = new ResumeRequestInput();
+        $input->load(Yii::$app->request->bodyParams, '');
+        if (!$input->validate()) {
+            Yii::$app->response->statusCode = 422;
+            return ['errors' => $input->getErrors()];
+        }
+
+        $actorId = $this->currentUserId();
+        try {
+            return $this->repository()->resumeRequest($id, (int) $input->lockVersion, $actorId);
+        } catch (RequestNotFound $error) {
+            throw new NotFoundHttpException($error->getMessage());
+        } catch (SuspendResumeDenied $error) {
+            $this->recordRejectedSuspendResumeSafely($id, $actorId, $error->ruleId);
+            throw new ForbiddenHttpException($error->getMessage());
+        } catch (TransitionDenied $error) {
+            $this->recordRejectedSuspendResumeSafely($id, $actorId, $error->ruleId);
+            throw new ConflictHttpException($error->getMessage());
+        } catch (ConcurrentRequestModification $error) {
+            throw new ConflictHttpException($error->getMessage());
+        }
+    }
+
+    /** @return array<string, mixed> */
     public function actionReject(int $id): array
     {
         $input = new RejectRequestInput();
@@ -551,7 +606,12 @@ final class RequestController extends Controller
 
         $actorId = $this->currentUserId();
         try {
-            return $this->repository()->withdrawRequest($id, (int) $input->lockVersion, $actorId);
+            return $this->repository()->withdrawRequest(
+                $id,
+                (int) $input->lockVersion,
+                $actorId,
+                ($input->reason === null || $input->reason === '') ? null : (string) $input->reason,
+            );
         } catch (RequestNotFound $error) {
             throw new NotFoundHttpException($error->getMessage());
         } catch (WithdrawDenied $error) {
@@ -584,6 +644,21 @@ final class RequestController extends Controller
         } catch (\Throwable $auditError) {
             Yii::error([
                 'message' => 'Не удалось записать аудит отклонённого запуска заявки.',
+                'requestId' => $requestId,
+                'actorId' => $actorId,
+                'ruleId' => $ruleId,
+                'exception' => $auditError,
+            ], __METHOD__);
+        }
+    }
+
+    private function recordRejectedSuspendResumeSafely(int $requestId, int $actorId, string $ruleId): void
+    {
+        try {
+            $this->repository()->recordRejectedSuspendResume($requestId, $actorId, $ruleId);
+        } catch (\Throwable $auditError) {
+            Yii::error([
+                'message' => 'Не удалось записать аудит отклонённой приостановки/возобновления заявки.',
                 'requestId' => $requestId,
                 'actorId' => $actorId,
                 'ruleId' => $ruleId,
