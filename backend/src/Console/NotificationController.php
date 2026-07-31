@@ -4,121 +4,158 @@ declare(strict_types=1);
 
 namespace App\Console;
 
-use App\Infrastructure\Clock;
-use App\Infrastructure\Notification\Mailer;
-use App\Infrastructure\Notification\NotificationTestRedirect;
+use App\Infrastructure\Notification\NotificationOutboxProcessor;
+use App\Infrastructure\Notification\NotificationWorker;
 use Yii;
 use yii\console\Controller;
 use yii\console\ExitCode;
 
 final class NotificationController extends Controller
 {
-    private const MAX_ATTEMPTS = 5;
-    private const BATCH_SIZE = 50;
-    // Аренда захвата: если обработчик упал после захвата записи (status =
-    // sending), запись становится доступной для повторного захвата не раньше
-    // чем через этот интервал — вместо того, чтобы зависнуть навсегда.
-    private const CLAIM_LEASE_SECONDS = 300;
-    private const BACKOFF_BASE_SECONDS = 60;
-    private const BACKOFF_MAX_SECONDS = 3600;
+    private const SEND_BATCH_SIZE = 50;
+    private const WORK_BATCH_SIZE = 20;
+
+    /** @var int|string|null */
+    public $limit;
+    /** @var int|string */
+    public $idleSleep = 2;
+    /** @var int|string */
+    public $errorSleep = 5;
+    /** @var bool|int|string */
+    public $includeFailed = false;
+
+    public function options($actionID): array
+    {
+        $options = match ($actionID) {
+            'send' => ['limit', 'includeFailed'],
+            'work' => ['limit', 'idleSleep', 'errorSleep'],
+            default => [],
+        };
+
+        return array_merge(parent::options($actionID), $options);
+    }
 
     public function actionSend(): int
     {
-        $mailer = new Mailer();
-        $sent = 0;
-        $failed = 0;
-
-        $ids = Yii::$app->db->createCommand(
-            "SELECT id FROM {{%notification_outbox}} WHERE status IN ('pending', 'sending') "
-            . 'AND next_attempt_at <= :now ORDER BY next_attempt_at LIMIT :limit',
-            [':now' => Clock::now(), ':limit' => self::BATCH_SIZE],
-        )->queryColumn();
-
-        foreach ($ids as $id) {
-            $id = (int) $id;
-            $now = Clock::now();
-
-            // Атомарный захват: срабатывает и на обычный pending, и на
-            // просроченную аренду sending (зависший после сбоя обработчик).
-            // next_attempt_at сразу сдвигается вперёд — это же поле служит
-            // границей аренды на время обработки этой записи.
-            $claimed = Yii::$app->db->createCommand(
-                "UPDATE {{%notification_outbox}} SET status = 'sending', attempts = attempts + 1, "
-                . 'next_attempt_at = :lease_until '
-                . "WHERE id = :id AND status IN ('pending', 'sending') AND next_attempt_at <= :now",
-                [
-                    ':id' => $id,
-                    ':now' => $now,
-                    ':lease_until' => gmdate('Y-m-d H:i:s.u', time() + self::CLAIM_LEASE_SECONDS),
-                ],
-            )->execute();
-            if ($claimed === 0) {
-                continue;
-            }
-
-            $row = Yii::$app->db->createCommand(
-                'SELECT request_id, recipient_email, recipient_name, subject, body, attempts '
-                . 'FROM {{%notification_outbox}} WHERE id = :id',
-                [':id' => $id],
-            )->queryOne();
-            if ($row === false) {
-                continue;
-            }
-
-            try {
-                [$recipientEmail, $subject, $body] = NotificationTestRedirect::apply(
-                    (string) $row['recipient_email'],
-                    (string) $row['recipient_name'],
-                    (string) $row['subject'],
-                    (string) $row['body'],
-                    getenv('NOTIFICATION_TEST_REDIRECT_EMAIL') ?: null,
-                );
-                $mailer->send((int) $row['request_id'], $recipientEmail, (string) $row['recipient_name'], $subject, $body);
-                // ACL-005/AUD-003: тело письма могло содержать одноразовые
-                // download-токены (см. DocumentDownloadUrl) — после успешной
-                // отправки они больше не нужны и не должны бессрочно
-                // храниться в БД открытым текстом.
-                Yii::$app->db->createCommand()->update(
-                    '{{%notification_outbox}}',
-                    [
-                        'status' => 'sent',
-                        'sent_at' => Clock::now(),
-                        'last_error' => null,
-                        'body' => '[доставлено, тело удалено после отправки]',
-                    ],
-                    ['id' => $id, 'status' => 'sending'],
-                )->execute();
-                $sent++;
-            } catch (\Throwable $error) {
-                $attempts = (int) $row['attempts'];
-                if ($attempts >= self::MAX_ATTEMPTS) {
-                    Yii::$app->db->createCommand()->update(
-                        '{{%notification_outbox}}',
-                        ['status' => 'failed', 'last_error' => $error->getMessage()],
-                        ['id' => $id, 'status' => 'sending'],
-                    )->execute();
-                } else {
-                    $delay = min(self::BACKOFF_BASE_SECONDS * (2 ** ($attempts - 1)), self::BACKOFF_MAX_SECONDS);
-                    Yii::$app->db->createCommand()->update(
-                        '{{%notification_outbox}}',
-                        [
-                            'status' => 'pending',
-                            'next_attempt_at' => gmdate('Y-m-d H:i:s.u', time() + $delay),
-                            'last_error' => $error->getMessage(),
-                        ],
-                        ['id' => $id, 'status' => 'sending'],
-                    )->execute();
-                }
-                $failed++;
-                Yii::error([
-                    'message' => 'Не удалось отправить уведомление.',
-                    'notificationId' => $id,
-                    'exception' => $error,
-                ], __METHOD__);
-            }
+        $settings = $this->sendSettings();
+        if ($settings === null) {
+            return ExitCode::USAGE;
         }
 
-        $this->stdout("Отправлено: {$sent}, ошибок: {$failed}.\n");
+        $result = $this->processor()->processAvailableBatch($settings['limit'], $settings['includeFailed']);
+        $this->stdout("Отправлено: {$result['sent']}, ошибок: {$result['failed']}.\n");
         return ExitCode::OK;
+    }
+
+    public function actionWork(): int
+    {
+        $settings = $this->workSettings();
+        if ($settings === null) {
+            return ExitCode::USAGE;
+        }
+        if (!extension_loaded('pcntl')) {
+            $this->stderr("Для notification/work требуется расширение pcntl.\n");
+            return ExitCode::UNSPECIFIED_ERROR;
+        }
+
+        $this->configureWorkerLogging();
+        $processor = $this->processor();
+        $worker = new NotificationWorker(
+            function (callable $shouldContinue) use ($processor, $settings): int {
+                $result = $processor->processAvailableBatch(
+                    $settings['limit'],
+                    false,
+                    $shouldContinue,
+                );
+                return $result['sent'] + $result['failed'] + $result['skipped'];
+            },
+            static function (int $seconds): void {
+                sleep($seconds);
+            },
+            static function (\Throwable $error): void {
+                Yii::error([
+                    'message' => 'Notification worker iteration failed',
+                    'exception' => $error,
+                ], __METHOD__);
+                Yii::getLogger()->flush(true);
+                if (Yii::$app->db->isActive) {
+                    Yii::$app->db->close();
+                }
+            },
+            $settings['idleSleep'],
+            $settings['errorSleep'],
+        );
+
+        pcntl_async_signals(true);
+        $stop = static function () use ($worker): void {
+            $worker->requestShutdown();
+        };
+        pcntl_signal(SIGTERM, $stop);
+        pcntl_signal(SIGINT, $stop);
+
+        Yii::info([
+            'message' => 'Notification worker started',
+            ...$settings,
+        ], __METHOD__);
+        Yii::getLogger()->flush(true);
+        $worker->run();
+        Yii::info(['message' => 'Notification worker stopped'], __METHOD__);
+        Yii::getLogger()->flush(true);
+        return ExitCode::OK;
+    }
+
+    /**
+     * @return null|array{limit: int, includeFailed: bool}
+     */
+    private function sendSettings(): ?array
+    {
+        $limit = $this->integerOption($this->limit ?? self::SEND_BATCH_SIZE, 'limit', 1);
+        $includeFailed = filter_var($this->includeFailed, FILTER_VALIDATE_BOOL, FILTER_NULL_ON_FAILURE);
+        if ($includeFailed === null) {
+            $this->stderr("Параметр --includeFailed должен быть 0 или 1.\n");
+        }
+        if ($limit === null || $includeFailed === null) {
+            return null;
+        }
+
+        return compact('limit', 'includeFailed');
+    }
+
+    /**
+     * @return null|array{limit: int, idleSleep: int, errorSleep: int}
+     */
+    private function workSettings(): ?array
+    {
+        $limit = $this->integerOption($this->limit ?? self::WORK_BATCH_SIZE, 'limit', 1);
+        $idleSleep = $this->integerOption($this->idleSleep, 'idleSleep', 1);
+        $errorSleep = $this->integerOption($this->errorSleep, 'errorSleep', 1);
+        if ($limit === null || $idleSleep === null || $errorSleep === null) {
+            return null;
+        }
+
+        return compact('limit', 'idleSleep', 'errorSleep');
+    }
+
+    private function integerOption(mixed $value, string $name, int $minimum): ?int
+    {
+        $parsed = filter_var($value, FILTER_VALIDATE_INT);
+        if ($parsed === false || $parsed < $minimum) {
+            $this->stderr("Параметр --{$name} должен быть положительным целым числом.\n");
+            return null;
+        }
+
+        return $parsed;
+    }
+
+    private function processor(): NotificationOutboxProcessor
+    {
+        return new NotificationOutboxProcessor(Yii::$app->db);
+    }
+
+    private function configureWorkerLogging(): void
+    {
+        foreach (Yii::$app->log->targets as $target) {
+            $target->except[] = 'yii\db\Command::query';
+        }
     }
 }

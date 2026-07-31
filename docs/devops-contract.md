@@ -23,8 +23,7 @@ docker compose up -d --build
 | `gateway` | Nginx, TLS termination либо upstream корпоративного proxy |
 | `backend` | неизменяемый PHP-FPM образ приложения |
 | `frontend` | статическая production-сборка Vue |
-| `worker` | очередь email, PDF и фоновых операций из того же backend image |
-| `scheduler` | периодические задания без встроенного cron в web-контейнере |
+| `scheduler` | долгоживущий `php yii notification/work` из того же backend image; обработка email outbox |
 | `mariadb` | локально/test; production может использовать управляемый сервер |
 | `mailpit` | только development/test, перехват почты |
 
@@ -39,7 +38,7 @@ docker compose up -d --build
 - non-root runtime user;
 - read-only root filesystem, где возможно;
 - healthcheck/readiness endpoint;
-- graceful shutdown worker;
+- graceful shutdown scheduler по SIGTERM/SIGINT;
 - отсутствие исходных секретов в слоях;
 - OCI labels с commit SHA и номером релиза;
 - отдельные persistent volumes только для документов и БД development-контура.
