@@ -40,23 +40,24 @@ const expertChoice = ref('')
 const opinionDraft = ref('')
 const opinionLoading = ref(false)
 const opinionError = ref('')
-const securityReason = ref('')
+const showOpinionModal = ref(false)
 const securityLoading = ref(false)
 const securityError = ref('')
 const colorLoading = ref(false)
 const colorError = ref('')
 const rejectLoading = ref(false)
 const rejectError = ref('')
-const rejectReason = ref('')
 const withdrawLoading = ref(false)
 const withdrawError = ref('')
 const claimLoading = ref(false)
 const claimError = ref('')
 const reassignLoading = ref(false)
 const reassignError = ref('')
-const reassignOpen = ref(false)
 const deleteReportLoading = ref(false)
 const deleteReportError = ref('')
+const suspendResumeLoading = ref(false)
+const suspendResumeError = ref('')
+const startHintRevealed = ref(false)
 const detailRequestGuard = createLatestRequestGuard()
 const commentRequestGuard = createLatestRequestGuard()
 const commentsPageRequestGuard = createLatestRequestGuard()
@@ -72,6 +73,7 @@ const withdrawRequestGuard = createLatestRequestGuard()
 const claimRequestGuard = createLatestRequestGuard()
 const reassignRequestGuard = createLatestRequestGuard()
 const deleteReportRequestGuard = createLatestRequestGuard()
+const suspendResumeRequestGuard = createLatestRequestGuard()
 const downloadReportRequestGuard = createLatestRequestGuard()
 const adminRequestGuard = createLatestRequestGuard()
 const confirmDialog = createConfirmDialog()
@@ -111,11 +113,17 @@ const feed = computed(() => newestFirstFeed(
   selected.value?.comments || [],
 ))
 const canStartAction = computed(() => canStartNow(selected.value))
+const startHint = computed(() => {
+  if (!selected.value) return ''
+  if (!selected.value.canStart) return 'Работа по заявке уже начата.'
+  if (!selected.value.executorId) return 'Начать работу можно после назначения исполнителя.'
+  return ''
+})
 const hasHeroAction = computed(() => Boolean(selected.value && (
   selected.value.canAssignExecutor || canStartAction.value || selected.value.canUploadReport
   || selected.value.canClaimExpert || selected.value.canReassignExpert || selected.value.canPublishOpinion
   || selected.value.canSecurityDecide || selected.value.canReject || selected.value.canWithdraw
-  || selected.value.canDeleteReport
+  || selected.value.canDeleteReport || selected.value.canSuspend || selected.value.canResume
 )))
 
 function switchDevUser(rawId) {
@@ -517,6 +525,7 @@ async function openRequest(item, preloadedDetail = null, { push = true } = {}) {
   claimRequestGuard.invalidate()
   reassignRequestGuard.invalidate()
   deleteReportRequestGuard.invalidate()
+  suspendResumeRequestGuard.invalidate()
   commentLoading.value = false
   commentError.value = ''
   commentDraft.value = ''
@@ -527,23 +536,24 @@ async function openRequest(item, preloadedDetail = null, { push = true } = {}) {
   opinionLoading.value = false
   opinionError.value = ''
   opinionDraft.value = ''
+  showOpinionModal.value = false
   securityLoading.value = false
   securityError.value = ''
-  securityReason.value = ''
   colorLoading.value = false
   colorError.value = ''
   rejectLoading.value = false
   rejectError.value = ''
-  rejectReason.value = ''
   withdrawLoading.value = false
   withdrawError.value = ''
   claimLoading.value = false
   claimError.value = ''
   reassignLoading.value = false
   reassignError.value = ''
-  reassignOpen.value = false
   deleteReportLoading.value = false
   deleteReportError.value = ''
+  suspendResumeLoading.value = false
+  suspendResumeError.value = ''
+  startHintRevealed.value = false
   actionError.value = ''
   setRequestInUrl(item.backendId, { push })
   await loadRequestDetails(item, preloadedDetail)
@@ -564,6 +574,7 @@ function closeRequest({ push = true } = {}) {
   claimRequestGuard.invalidate()
   reassignRequestGuard.invalidate()
   deleteReportRequestGuard.invalidate()
+  suspendResumeRequestGuard.invalidate()
   selected.value = null
   setRequestInUrl(null, { push })
   showAdmin.value = false
@@ -577,23 +588,24 @@ function closeRequest({ push = true } = {}) {
   reportError.value = ''
   opinionLoading.value = false
   opinionError.value = ''
+  showOpinionModal.value = false
   securityLoading.value = false
   securityError.value = ''
-  securityReason.value = ''
   colorLoading.value = false
   colorError.value = ''
   rejectLoading.value = false
   rejectError.value = ''
-  rejectReason.value = ''
   withdrawLoading.value = false
   withdrawError.value = ''
   claimLoading.value = false
   claimError.value = ''
   reassignLoading.value = false
   reassignError.value = ''
-  reassignOpen.value = false
   deleteReportLoading.value = false
   deleteReportError.value = ''
+  suspendResumeLoading.value = false
+  suspendResumeError.value = ''
+  startHintRevealed.value = false
 }
 
 // Открывает заявку по id из URL при переходе браузерными «назад»/«вперёд»:
@@ -982,13 +994,18 @@ async function setColorMark(color) {
 
 async function rejectRequest() {
   if (rejectLoading.value) return
-  if (!(await confirmDialog.ask('Отказать в проведении испытаний по этой заявке?', { confirmLabel: 'Отказать' }))) return
+  const confirmed = await confirmDialog.ask('Отказать в проведении испытаний по этой заявке?', {
+    confirmLabel: 'Отказать',
+    danger: true,
+    reasonField: { required: false, placeholder: 'Например, образец не соответствует требованиям к отбору' },
+  })
+  if (!confirmed) return
   const requestId = selected.value.backendId
   const requestToken = rejectRequestGuard.begin(requestId)
   rejectLoading.value = true
   rejectError.value = ''
   try {
-    await requestApi.reject(requestId, selected.value.lockVersion, rejectReason.value || undefined)
+    await requestApi.reject(requestId, selected.value.lockVersion, confirmed.reason || undefined)
     if (!rejectRequestGuard.isCurrent(requestToken, selected.value?.backendId)) return
     try {
       await refreshSelected(requestId)
@@ -1014,13 +1031,18 @@ async function rejectRequest() {
 
 async function withdrawRequest() {
   if (withdrawLoading.value) return
-  if (!(await confirmDialog.ask('Отозвать эту заявку?', { confirmLabel: 'Отозвать' }))) return
+  const confirmed = await confirmDialog.ask('Отозвать эту заявку?', {
+    confirmLabel: 'Отозвать',
+    danger: true,
+    reasonField: { required: false, placeholder: 'Например, заявка подана повторно с уточнёнными данными' },
+  })
+  if (!confirmed) return
   const requestId = selected.value.backendId
   const requestToken = withdrawRequestGuard.begin(requestId)
   withdrawLoading.value = true
   withdrawError.value = ''
   try {
-    await requestApi.withdraw(requestId, selected.value.lockVersion)
+    await requestApi.withdraw(requestId, selected.value.lockVersion, confirmed.reason || undefined)
     if (!withdrawRequestGuard.isCurrent(requestToken, selected.value?.backendId)) return
     try {
       await refreshSelected(requestId)
@@ -1105,15 +1127,6 @@ async function claimExpert() {
   }
 }
 
-function toggleReassign() {
-  if (reassignLoading.value) return
-  reassignOpen.value = !reassignOpen.value
-  if (!reassignOpen.value) {
-    reassignError.value = ''
-    expertChoice.value = ''
-  }
-}
-
 async function reassignExpert() {
   if (reassignLoading.value) return
   if (!expertChoice.value) {
@@ -1129,7 +1142,6 @@ async function reassignExpert() {
   try {
     await requestApi.reassignExpert(requestId, Number(expertChoice.value), selected.value.lockVersion)
     if (!reassignRequestGuard.isCurrent(requestToken, selected.value?.backendId)) return
-    reassignOpen.value = false
     try {
       await refreshSelected(requestId)
     } catch {
@@ -1184,14 +1196,17 @@ async function deleteReport() {
   }
 }
 
+function openOpinionModal() {
+  opinionError.value = ''
+  showOpinionModal.value = true
+}
+
 async function publishOpinion() {
   const body = opinionDraft.value.trim()
   if (body.length < 10) {
     opinionError.value = 'Заключение должно содержать не менее 10 символов.'
     return
   }
-  if (!(await confirmDialog.ask('Опубликовать заключение и передать заявку на контроль СБ?', { confirmLabel: 'Опубликовать' }))) return
-
   const requestId = selected.value.backendId
   const requestToken = opinionRequestGuard.begin(requestId)
   opinionLoading.value = true
@@ -1201,6 +1216,7 @@ async function publishOpinion() {
     if (!opinionRequestGuard.isCurrent(requestToken, selected.value?.backendId)) return
     selected.value = { ...selected.value, canPublishOpinion: false }
     opinionDraft.value = ''
+    showOpinionModal.value = false
     try {
       await refreshSelected(requestId)
     } catch {
@@ -1225,16 +1241,18 @@ async function publishOpinion() {
 }
 
 async function decideSecurity(decision) {
-  const reason = securityReason.value.trim()
-  if (decision === 'return' && !reason) {
-    securityError.value = 'Укажите причину возврата заявки.'
-    return
-  }
-  const prompt = decision === 'approve'
-    ? 'Согласовать заключение и завершить заявку?'
-    : 'Вернуть заявку исполнителю с указанной причиной?'
-  const confirmLabel = decision === 'approve' ? 'Согласовать' : 'Вернуть'
-  if (!(await confirmDialog.ask(prompt, { confirmLabel }))) return
+  const isApprove = decision === 'approve'
+  const confirmed = await confirmDialog.ask(
+    isApprove ? 'Согласовать заключение и завершить заявку?' : 'Вернуть заявку исполнителю с указанной причиной?',
+    isApprove
+      ? { confirmLabel: 'Согласовать', confirm: true }
+      : {
+        confirmLabel: 'Вернуть',
+        reasonField: { required: true, placeholder: 'Например, требуется уточнить формулировку вывода' },
+      },
+  )
+  if (!confirmed) return
+  const reason = isApprove ? null : confirmed.reason
 
   const requestId = selected.value.backendId
   const requestToken = securityRequestGuard.begin(requestId)
@@ -1244,7 +1262,6 @@ async function decideSecurity(decision) {
     await requestApi.decideSecurity(requestId, decision, reason || null, selected.value.lockVersion)
     if (!securityRequestGuard.isCurrent(requestToken, selected.value?.backendId)) return
     selected.value = { ...selected.value, canSecurityDecide: false }
-    securityReason.value = ''
     try {
       await refreshSelected(requestId)
     } catch {
@@ -1291,6 +1308,60 @@ async function startRequest() {
     }
   } finally {
     actionLoading.value = false
+  }
+}
+
+// Клик сохраняется и в визуально неактивном состоянии, чтобы объяснить,
+// почему руководитель пока не может начать работу без исполнителя.
+function handleStartClick() {
+  if (!canStartAction.value) {
+    startHintRevealed.value = true
+    return
+  }
+  startRequest()
+}
+
+async function suspendOrResumeRequest(action) {
+  if (suspendResumeLoading.value) return
+  const isSuspend = action === 'suspend'
+  const confirmed = await confirmDialog.ask(
+    isSuspend ? 'Приостановить работу по заявке?' : 'Возобновить работу по заявке?',
+    { confirmLabel: isSuspend ? 'Приостановить' : 'Возобновить' },
+  )
+  if (!confirmed) return
+
+  const requestId = selected.value.backendId
+  const requestToken = suspendResumeRequestGuard.begin(requestId)
+  suspendResumeLoading.value = true
+  suspendResumeError.value = ''
+  try {
+    await (isSuspend
+      ? requestApi.suspend(requestId, selected.value.lockVersion)
+      : requestApi.resume(requestId, selected.value.lockVersion))
+    if (!suspendResumeRequestGuard.isCurrent(requestToken, selected.value?.backendId)) return
+    try {
+      await refreshSelected(requestId)
+    } catch {
+      if (!suspendResumeRequestGuard.isCurrent(requestToken, selected.value?.backendId)) return
+      suspendResumeError.value = isSuspend
+        ? 'Работа приостановлена, но обновить карточку не удалось. Устаревшие действия отключены.'
+        : 'Работа возобновлена, но обновить карточку не удалось. Устаревшие действия отключены.'
+    }
+  } catch (error) {
+    if (!suspendResumeRequestGuard.isCurrent(requestToken, selected.value?.backendId)) return
+    if (error.status === 409) {
+      await recoverConflict(requestId, 'Заявка уже изменена.')
+    } else {
+      suspendResumeError.value = error.status === 403
+        ? 'Приостановить или возобновить работу может только назначенный исполнитель или руководитель.'
+        : isSuspend
+          ? 'Не удалось приостановить работу. Повторите попытку.'
+          : 'Не удалось возобновить работу. Повторите попытку.'
+    }
+  } finally {
+    if (suspendResumeRequestGuard.isCurrent(requestToken, selected.value?.backendId)) {
+      suspendResumeLoading.value = false
+    }
   }
 }
 
@@ -1503,20 +1574,32 @@ onBeforeUnmount(() => window.removeEventListener('popstate', handlePopstate))
           <div class="request-grid">
             <div class="stack">
               <article v-if="hasHeroAction" class="card hero">
-                <div v-if="selected.canAssignExecutor" class="hero-block">
-                  <h4>Назначить исполнителя</h4>
-                  <label class="inline-field">Исполнитель ИЦ<select v-model="executorChoice" :disabled="actionLoading"><option value="">Выберите сотрудника</option><option v-for="executor in executors" :key="executor.id" :value="executor.id">{{ executor.displayName }}</option></select></label>
-                  <div class="hero-actions"><button class="primary big" :disabled="actionLoading" @click="assignExecutor">{{ actionLoading ? 'Сохранение…' : 'Назначить' }}</button></div>
+                <div v-if="selected.canAssignExecutor || selected.canReject" class="hero-block">
+                  <div class="action-row action-row--manager has-help">
+                    <label v-if="selected.canAssignExecutor" class="inline-field"><span class="visually-hidden">Исполнитель ИЦ</span><select v-model="executorChoice" :disabled="actionLoading" aria-label="Исполнитель ИЦ"><option value="">Выберите сотрудника</option><option v-for="executor in executors" :key="executor.id" :value="executor.id">{{ executor.displayName }}</option></select></label>
+                    <button v-if="selected.canAssignExecutor" type="button" class="primary" :disabled="actionLoading || !executorChoice" @click="assignExecutor">{{ actionLoading ? 'Сохранение…' : (selected.executorId ? 'Переназначить' : 'Назначить') }}</button>
+                    <button v-if="selected.canStart" type="button" class="primary" :class="{ 'is-disabled': !canStartAction }" :aria-disabled="!canStartAction" :disabled="actionLoading" @click="handleStartClick">{{ actionLoading ? 'Запуск…' : 'Начать работу' }}</button>
+                    <button v-else-if="selected.canSuspend" type="button" class="secondary" :disabled="suspendResumeLoading" @click="suspendOrResumeRequest('suspend')">{{ suspendResumeLoading ? 'Сохранение…' : 'Приостановить работу' }}</button>
+                    <button v-else-if="selected.canResume" type="button" class="primary" :disabled="suspendResumeLoading" @click="suspendOrResumeRequest('resume')">{{ suspendResumeLoading ? 'Сохранение…' : 'Возобновить работу' }}</button>
+                    <button v-if="selected.canReject" type="button" class="secondary danger" :disabled="rejectLoading" @click="rejectRequest">{{ rejectLoading ? 'Сохранение…' : 'Отказать в проведении испытаний' }}</button>
+                  </div>
                   <a class="help-icon" href="/help/assignment.html" target="_blank" title="Инструкция по назначению и началу работы" aria-label="Инструкция по назначению и началу работы">?</a>
+                  <p v-if="startHintRevealed && startHint" class="hero-hint">{{ startHint }}</p>
+                  <p v-if="actionError" class="action-error">{{ actionError }}</p>
+                  <p v-if="suspendResumeError" class="action-error">{{ suspendResumeError }}</p>
+                  <p v-if="rejectError" class="action-error">{{ rejectError }}</p>
                 </div>
 
-                <div v-if="canStartAction" class="hero-block">
-                  <h4>Начать работу</h4>
-                  <p class="hero-sub">Заявка перейдёт в статус «В работе»</p>
-                  <div class="hero-actions"><button class="primary big" :disabled="actionLoading" @click="startRequest">{{ actionLoading ? 'Запуск…' : 'Начать работу' }}</button></div>
+                <div v-if="!selected.canAssignExecutor && !selected.canReject && (selected.canStart || selected.canSuspend || selected.canResume)" class="hero-block">
+                  <div class="action-row action-row--workflow">
+                    <button v-if="selected.canStart" type="button" class="primary" :class="{ 'is-disabled': !canStartAction }" :aria-disabled="!canStartAction" :disabled="actionLoading" @click="handleStartClick">{{ actionLoading ? 'Запуск…' : 'Начать работу' }}</button>
+                    <button v-else-if="selected.canSuspend" type="button" class="secondary" :disabled="suspendResumeLoading" @click="suspendOrResumeRequest('suspend')">{{ suspendResumeLoading ? 'Сохранение…' : 'Приостановить работу' }}</button>
+                    <button v-else-if="selected.canResume" type="button" class="primary" :disabled="suspendResumeLoading" @click="suspendOrResumeRequest('resume')">{{ suspendResumeLoading ? 'Сохранение…' : 'Возобновить работу' }}</button>
+                  </div>
+                  <p v-if="actionError" class="action-error">{{ actionError }}</p>
+                  <p v-if="suspendResumeError" class="action-error">{{ suspendResumeError }}</p>
                   <a class="help-icon" href="/help/assignment.html" target="_blank" title="Инструкция по назначению и началу работы" aria-label="Инструкция по назначению и началу работы">?</a>
                 </div>
-                <p v-if="actionError" class="action-error">{{ actionError }}</p>
 
                 <div v-if="selected.canUploadReport || selected.canDeleteReport" class="hero-block">
                   <h4>{{ !selected.canUploadReport ? 'Отчёт испытаний' : selected.canDeleteReport ? 'Загрузить новую версию отчёта' : 'Загрузите отчёт испытаний' }}</h4>
@@ -1538,27 +1621,30 @@ onBeforeUnmount(() => window.removeEventListener('popstate', handlePopstate))
                   <a class="help-icon" href="/help/expert-opinion.html" target="_blank" title="Инструкция по формированию заключения" aria-label="Инструкция по формированию заключения">?</a>
                 </div>
 
-                <div v-if="selected.canPublishOpinion" class="hero-block">
-                  <h4>Экспертное заключение</h4>
-                  <p class="hero-sub">Заявка перейдёт на контроль СБ сразу после публикации</p>
-                  <textarea v-model="opinionDraft" :disabled="opinionLoading" minlength="10" maxlength="20000" placeholder="Введите итоговое заключение по результатам испытаний"></textarea>
-                  <div class="hero-actions"><button class="primary big" :disabled="opinionLoading" @click="publishOpinion">{{ opinionLoading ? 'Публикация…' : 'Опубликовать и передать в СБ' }}</button></div>
-                  <p v-if="opinionError" class="action-error">{{ opinionError }}</p>
+                <div v-if="selected.canPublishOpinion || selected.canReassignExpert" class="hero-block">
+                  <div class="action-row action-row--expert has-help">
+                    <div v-if="selected.canPublishOpinion" class="expert-action-group expert-action-group--primary">
+                      <span class="action-group-label">Заключение</span>
+                      <button type="button" class="primary" :disabled="opinionLoading" @click="openOpinionModal">Написать заключение</button>
+                    </div>
+                    <div v-if="selected.canReassignExpert" class="expert-action-group expert-action-group--reassign">
+                      <span class="action-group-label">Переназначение</span>
+                      <select v-model="expertChoice" :disabled="reassignLoading" aria-label="Новый эксперт"><option value="">Выберите эксперта</option><option v-for="expert in experts.filter(candidate => candidate.id !== selected.expertId)" :key="expert.id" :value="expert.id">{{ expert.displayName }}</option></select>
+                      <button type="button" class="secondary" :disabled="reassignLoading || !expertChoice" @click="reassignExpert">{{ reassignLoading ? 'Сохранение…' : 'Переназначить' }}</button>
+                    </div>
+                  </div>
+                  <p v-if="reassignError" class="action-error">{{ reassignError }}</p>
                   <a class="help-icon" href="/help/expert-opinion.html" target="_blank" title="Инструкция по формированию заключения" aria-label="Инструкция по формированию заключения">?</a>
                 </div>
 
                 <div v-if="selected.canSecurityDecide" class="hero-block">
                   <h4>Решение по заключению</h4>
                   <div class="hero-actions"><button class="primary big confirm" :disabled="securityLoading" @click="decideSecurity('approve')">{{ securityLoading ? 'Сохранение…' : 'Согласовать и завершить' }}</button><button class="secondary big" :disabled="securityLoading" @click="decideSecurity('return')">Вернуть в работу</button></div>
-                  <label>Комментарий<textarea v-model="securityReason" :disabled="securityLoading" maxlength="5000" placeholder="Обязателен при возврате заявки"></textarea></label>
                   <p v-if="securityError" class="action-error">{{ securityError }}</p>
                   <a class="help-icon" href="/help/security-review.html" target="_blank" title="Инструкция по контролю СБ" aria-label="Инструкция по контролю СБ">?</a>
                 </div>
 
-                <div v-if="selected.canReject || selected.canWithdraw" class="hero-block hero-secondary">
-                  <label v-if="selected.canReject">Причина отказа (необязательно)<textarea v-model="rejectReason" :disabled="rejectLoading" maxlength="5000" placeholder="Например, образец не соответствует требованиям к отбору"></textarea></label>
-                  <button v-if="selected.canReject" class="secondary danger action-wide" :disabled="rejectLoading" @click="rejectRequest">{{ rejectLoading ? 'Сохранение…' : 'Отказать в проведении испытаний' }}</button>
-                  <p v-if="rejectError" class="action-error">{{ rejectError }}</p>
+                <div v-if="selected.canWithdraw" class="hero-block hero-secondary">
                   <button v-if="selected.canWithdraw" class="secondary action-wide" :disabled="withdrawLoading" @click="withdrawRequest">{{ withdrawLoading ? 'Сохранение…' : 'Отозвать заявку' }}</button>
                   <p v-if="withdrawError" class="action-error">{{ withdrawError }}</p>
                 </div>
@@ -1593,19 +1679,7 @@ onBeforeUnmount(() => window.removeEventListener('popstate', handlePopstate))
                 <div class="fact-list">
                   <div class="fact"><span>Инициатор</span><b>{{ selected.initiator }}</b></div>
                   <div class="fact"><span>Исполнитель</span><b>{{ selected.executor }}</b></div>
-                  <div v-if="!selected.canReassignExpert" class="fact"><span>Эксперт</span><b>{{ selected.expert }}</b></div>
-                  <div v-else class="fact reassign-fact">
-                    <span>Эксперт</span>
-                    <div class="name-row">
-                      <b>{{ selected.expert }}</b>
-                      <button type="button" class="reassign-toggle" :disabled="reassignLoading" @click="toggleReassign">{{ reassignOpen ? 'Отмена' : 'Переназначить' }}</button>
-                    </div>
-                    <div v-if="reassignOpen" class="reassign-controls">
-                      <select v-model="expertChoice" :disabled="reassignLoading" aria-label="Новый эксперт"><option value="">Выберите эксперта</option><option v-for="expert in experts.filter(candidate => candidate.id !== selected.expertId)" :key="expert.id" :value="expert.id">{{ expert.displayName }}</option></select>
-                      <button class="secondary" :disabled="reassignLoading" @click="reassignExpert">{{ reassignLoading ? 'Сохранение…' : 'Готово' }}</button>
-                    </div>
-                    <p v-if="reassignError" class="action-error">{{ reassignError }}</p>
-                  </div>
+                  <div class="fact"><span>Эксперт</span><b>{{ selected.expert }}</b></div>
                   <div class="fact"><span>Отметка СБ</span><b><span class="security-mark-icon" :class="selected.securityMarkDisplay?.className" :title="selected.securityMarkDisplay?.label" :aria-label="selected.securityMarkDisplay?.label"><svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path :d="selected.securityMarkDisplay?.path" /></svg></span></b></div>
                 </div>
               </article>
@@ -1640,11 +1714,31 @@ onBeforeUnmount(() => window.removeEventListener('popstate', handlePopstate))
       <div v-if="confirmDialog.state.open" class="overlay" @click.self="confirmDialog.cancel">
         <div class="modal confirm-modal">
           <p>{{ confirmDialog.state.message }}</p>
+          <label v-if="confirmDialog.state.reasonField" class="confirm-reason-field">
+            <span>Причина{{ confirmDialog.state.reasonField.required ? ' *' : ' (необязательно)' }}</span>
+            <textarea v-model="confirmDialog.state.reasonValue" maxlength="5000" :placeholder="confirmDialog.state.reasonField.placeholder"></textarea>
+          </label>
           <div class="modal-actions">
             <button type="button" class="secondary" @click="confirmDialog.cancel">Отмена</button>
-            <button type="button" class="primary" :class="{ danger: confirmDialog.state.danger }" @click="confirmDialog.accept">{{ confirmDialog.state.confirmLabel }}</button>
+            <button type="button" class="primary" :class="{ danger: confirmDialog.state.danger, confirm: confirmDialog.state.confirm }" :disabled="confirmDialog.state.reasonField?.required && !confirmDialog.state.reasonValue.trim()" @click="confirmDialog.accept">{{ confirmDialog.state.confirmLabel }}</button>
           </div>
         </div>
+      </div>
+
+      <div v-if="showOpinionModal" class="overlay" @click.self="!opinionLoading && (showOpinionModal = false)">
+        <form class="modal" @submit.prevent="publishOpinion">
+          <div class="modal-head"><h2>Экспертное заключение</h2><button type="button" :disabled="opinionLoading" @click="showOpinionModal = false">×</button></div>
+          <div class="fact-list opinion-summary">
+            <div class="fact"><span>Объект испытаний</span><b>{{ selected.product }}</b></div>
+            <div class="fact"><span>Производитель</span><b>{{ selected.manufacturer || '—' }}</b></div>
+            <div class="fact"><span>Поставщик</span><b>{{ selected.supplier }}</b></div>
+            <div class="fact"><span>Количество образцов</span><b>{{ selected.sampleQuantity || '—' }} шт.</b></div>
+            <div class="fact wide"><span>Метод испытаний</span><b>{{ selected.testMethod || '—' }}</b></div>
+          </div>
+          <textarea v-model="opinionDraft" :disabled="opinionLoading" maxlength="20000" required placeholder="Введите текст заключения (не менее 10 символов)"></textarea>
+          <p v-if="opinionError" class="action-error">{{ opinionError }}</p>
+          <div class="modal-actions"><button type="button" class="secondary" :disabled="opinionLoading" @click="showOpinionModal = false">Отмена</button><button class="primary" :disabled="opinionLoading">{{ opinionLoading ? 'Публикация…' : 'Опубликовать и передать в СБ' }}</button></div>
+        </form>
       </div>
 
       <div v-if="lastCommentModal" class="overlay" @click.self="lastCommentModal = null">
