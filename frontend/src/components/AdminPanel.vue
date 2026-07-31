@@ -15,6 +15,10 @@ const createUserError = ref('')
 const roleChoiceByUser = reactive({})
 const roleActionError = ref('')
 const requestGuard = createLatestRequestGuard()
+const createUserGuard = createLatestRequestGuard()
+const roleActionTokens = new Map()
+const pendingRoleActions = reactive(new Set())
+let mounted = true
 
 async function load() {
   loading.value = true
@@ -23,8 +27,8 @@ async function load() {
   try {
     const [usersResult, rolesResult] = await Promise.all([adminApi.users(), adminApi.roles()])
     if (!requestGuard.isCurrent(token, true)) return
-    users.value = usersResult.items
-    roles.value = rolesResult.items
+    users.value = Array.isArray(usersResult.items) ? usersResult.items : []
+    roles.value = Array.isArray(rolesResult.items) ? rolesResult.items : []
   } catch {
     if (requestGuard.isCurrent(token, true)) error.value = 'Не удалось загрузить список пользователей.'
   } finally {
@@ -40,26 +44,31 @@ async function createUser() {
   }
   createUserLoading.value = true
   createUserError.value = ''
+  const token = createUserGuard.begin(true)
   try {
     const user = await adminApi.createUser(newUserAdLogin.value)
+    if (!createUserGuard.isCurrent(token, true)) return
     let createdUser = user
     try {
       const result = await adminApi.assignRole(user.id, Number(newUserRoleId.value))
+      if (!createUserGuard.isCurrent(token, true)) return
       createdUser = { ...user, roles: result.items }
     } catch {
+      if (!createUserGuard.isCurrent(token, true)) return
       createUserError.value = 'Пользователь создан, но не удалось сразу назначить роль — назначьте её в списке ниже.'
     }
-    users.value = [...users.value, createdUser].sort((a, b) => a.displayName.localeCompare(b.displayName, 'ru'))
+    users.value = [...users.value, createdUser].sort((a, b) => (a.displayName || '').localeCompare(b.displayName || '', 'ru'))
     newUserAdLogin.value = ''
     newUserRoleId.value = ''
   } catch (caught) {
+    if (!createUserGuard.isCurrent(token, true)) return
     createUserError.value = caught.status === 409
       ? 'Пользователь с таким логином AD уже существует.'
       : caught.status === 422
         ? 'Логин AD может содержать только латинские буквы, цифры, точку, дефис и подчёркивание.'
         : 'Не удалось создать пользователя.'
   } finally {
-    createUserLoading.value = false
+    if (createUserGuard.isCurrent(token, true)) createUserLoading.value = false
   }
 }
 
@@ -70,24 +79,49 @@ function updateRoles(userId, nextRoles) {
 async function assignRole(userId) {
   const roleId = Number(roleChoiceByUser[userId])
   if (!roleId) return
+  const key = `assign:${userId}:${roleId}`
+  if (pendingRoleActions.has(key)) return
+  const token = Symbol(key)
+  roleActionTokens.set(userId, token)
+  pendingRoleActions.add(key)
   roleActionError.value = ''
   try {
     const result = await adminApi.assignRole(userId, roleId)
+    if (!mounted || roleActionTokens.get(userId) !== token) return
     updateRoles(userId, result.items)
     roleChoiceByUser[userId] = ''
-  } catch { roleActionError.value = 'Не удалось назначить роль.' }
+  } catch {
+    if (mounted && roleActionTokens.get(userId) === token) roleActionError.value = 'Не удалось назначить роль.'
+  } finally {
+    if (mounted) pendingRoleActions.delete(key)
+  }
 }
 
 async function revokeRole(userId, roleId) {
+  const key = `revoke:${userId}:${roleId}`
+  if (pendingRoleActions.has(key)) return
+  const token = Symbol(key)
+  roleActionTokens.set(userId, token)
+  pendingRoleActions.add(key)
   roleActionError.value = ''
   try {
     const result = await adminApi.revokeRole(userId, roleId)
+    if (!mounted || roleActionTokens.get(userId) !== token) return
     updateRoles(userId, result.items)
-  } catch { roleActionError.value = 'Не удалось отозвать роль.' }
+  } catch {
+    if (mounted && roleActionTokens.get(userId) === token) roleActionError.value = 'Не удалось отозвать роль.'
+  } finally {
+    if (mounted) pendingRoleActions.delete(key)
+  }
 }
 
 onMounted(load)
-onBeforeUnmount(() => requestGuard.invalidate())
+onBeforeUnmount(() => {
+  mounted = false
+  requestGuard.invalidate()
+  createUserGuard.invalidate()
+  roleActionTokens.clear()
+})
 </script>
 
 <template>
@@ -106,7 +140,7 @@ onBeforeUnmount(() => requestGuard.invalidate())
       <p v-if="roleActionError" class="action-error">{{ roleActionError }}</p>
       <div v-if="!loading" class="table-wrap">
         <table><thead><tr><th>ФИО</th><th>Логин AD</th><th>Email</th><th>Активен</th><th>Роли</th></tr></thead><tbody>
-          <tr v-for="user in users" :key="user.id"><td><b>{{ user.displayName }}</b></td><td>{{ user.adLogin }}</td><td>{{ user.email || '—' }}</td><td>{{ user.isActive ? 'да' : 'нет' }}</td><td><span v-for="role in user.roles" :key="role.id" class="role-chip">{{ role.name }}<button type="button" title="Отозвать роль" @click="revokeRole(user.id, role.id)">×</button></span><span class="role-assign"><select v-model="roleChoiceByUser[user.id]"><option value="">Добавить роль…</option><option v-for="role in roles" :key="role.id" :value="role.id">{{ role.name }}</option></select><button type="button" class="secondary" @click="assignRole(user.id)">+</button></span></td></tr>
+          <tr v-for="user in users" :key="user.id"><td><b>{{ user.displayName }}</b></td><td>{{ user.adLogin }}</td><td>{{ user.email || '—' }}</td><td>{{ user.isActive ? 'да' : 'нет' }}</td><td><span v-for="role in user.roles" :key="role.id" class="role-chip">{{ role.name }}<button type="button" title="Отозвать роль" :aria-label="`Отозвать роль ${role.name} у ${user.displayName || user.adLogin}`" :disabled="pendingRoleActions.has(`revoke:${user.id}:${role.id}`)" @click="revokeRole(user.id, role.id)">×</button></span><span class="role-assign"><select v-model="roleChoiceByUser[user.id]"><option value="">Добавить роль…</option><option v-for="role in roles" :key="role.id" :value="role.id">{{ role.name }}</option></select><button type="button" class="secondary" :aria-label="`Назначить выбранную роль пользователю ${user.displayName || user.adLogin}`" :disabled="pendingRoleActions.has(`assign:${user.id}:${Number(roleChoiceByUser[user.id])}`)" @click="assignRole(user.id)">+</button></span></td></tr>
         </tbody></table>
       </div>
     </div>

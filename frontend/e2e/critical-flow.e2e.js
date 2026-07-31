@@ -166,7 +166,7 @@ test('администратор управляет ролями и возвра
   await page.selectOption('.dev-user-switch', '6')
   await page.getByRole('button', { name: 'Администрирование' }).click()
   await expect(page.getByRole('heading', { name: 'Пользователи и роли' })).toBeVisible()
-  await expect(page.getByRole('cell', { name: 'Тестовый сотрудник' })).toBeVisible()
+  await expect(page.getByRole('cell', { name: 'Тестовый сотрудник', exact: true })).toBeVisible()
 
   await page.getByRole('button', { name: '← К реестру заявок' }).click()
   await expect(page.getByRole('heading', { name: 'Пользователи и роли' })).toHaveCount(0)

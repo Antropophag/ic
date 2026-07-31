@@ -2,10 +2,11 @@
 import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import { requestApi } from '../api'
 import { createConfirmDialog } from '../confirmDialog'
+import { triggerBlobDownload } from '../download'
 import { createLatestRequestGuard } from '../latestRequestGuard'
 import { REQUEST_COLORS, canStartNow, canSubmitComment, commentFromApi, documentFromApi, documentKind, fromApi, historyFromApi, newestFirstFeed, withoutStaleActions } from '../registry'
 
-const props = defineProps({ requestId: { type: Number, required: true }, currentInitials: { type: String, default: '' } })
+const props = defineProps({ requestId: { type: Number, required: true }, currentInitials: { type: String, default: '' }, initialWarning: { type: String, default: '' } })
 const emit = defineEmits(['loaded', 'unavailable', 'updated'])
 const selected = ref(null)
 const actionError = ref('')
@@ -61,6 +62,8 @@ const deleteReportRequestGuard = createLatestRequestGuard()
 const suspendResumeRequestGuard = createLatestRequestGuard()
 const executorsRequestGuard = createLatestRequestGuard()
 const expertsRequestGuard = createLatestRequestGuard()
+const actionRequestGuard = createLatestRequestGuard()
+const downloadRequestGuard = createLatestRequestGuard()
 const confirmDialog = createConfirmDialog()
 const feed = computed(() => newestFirstFeed(selected.value?.history || [], selected.value?.comments || []))
 const canStartAction = computed(() => canStartNow(selected.value))
@@ -76,7 +79,7 @@ const hasHeroAction = computed(() => Boolean(selected.value && (
   || selected.value.canSecurityDecide || selected.value.canReject || selected.value.canWithdraw || selected.value.canDeleteReport
   || selected.value.canSuspend || selected.value.canResume
 )))
-async function loadRequestDetails(item, preloadedDetail = null) {
+async function loadRequestDetails(item) {
   const requestToken = detailRequestGuard.begin(item.backendId)
   selected.value = item
   detailError.value = ''
@@ -86,7 +89,7 @@ async function loadRequestDetails(item, preloadedDetail = null) {
   if (item.canAssignExecutor && !executors.value.length) loadExecutors()
   if (item.canReassignExpert && !experts.value.length) loadExperts()
   try {
-    const result = preloadedDetail ?? await requestApi.get(item.backendId)
+    const result = await requestApi.get(item.backendId)
     if (!detailRequestGuard.isCurrent(requestToken, selected.value?.backendId)) return
     selected.value = {
       ...fromApi(result.item),
@@ -169,25 +172,16 @@ async function uploadDocument(event) {
   }
 }
 
-function triggerBlobDownload(blob, filename) {
-  const url = URL.createObjectURL(blob)
-  const link = window.document.createElement('a')
-  link.href = url
-  link.download = filename
-  link.click()
-  // Отложенный revoke: некоторые браузеры ещё не успели начать чтение
-  // blob-URL синхронно после click(), немедленный revokeObjectURL иногда
-  // обрывает скачивание.
-  window.setTimeout(() => URL.revokeObjectURL(url), 0)
-}
-
 async function downloadDocument(document) {
+  const requestId = selected.value.backendId
+  const token = downloadRequestGuard.begin(requestId)
   documentError.value = ''
   try {
     const blob = await requestApi.downloadDocument(document.versionId)
+    if (!downloadRequestGuard.isCurrent(token, selected.value?.backendId)) return
     triggerBlobDownload(blob, document.originalName)
   } catch {
-    documentError.value = 'Не удалось скачать документ.'
+    if (downloadRequestGuard.isCurrent(token, selected.value?.backendId)) documentError.value = 'Не удалось скачать документ.'
   }
 }
 
@@ -408,19 +402,24 @@ async function assignExecutor() {
     actionError.value = 'Выберите исполнителя.'
     return
   }
+  const requestId = selected.value.backendId
+  const lockVersion = selected.value.lockVersion
   if (!(await confirmDialog.ask('Назначить выбранного исполнителя на заявку?', { confirmLabel: 'Назначить' }))) return
+  if (selected.value?.backendId !== requestId) return
 
+  const requestToken = actionRequestGuard.begin(requestId)
   actionLoading.value = true
   actionError.value = ''
-  const requestId = selected.value.backendId
   try {
-    await requestApi.assignExecutor(requestId, Number(executorChoice.value), selected.value.lockVersion)
+    await requestApi.assignExecutor(requestId, Number(executorChoice.value), lockVersion)
+    if (!actionRequestGuard.isCurrent(requestToken, selected.value?.backendId)) return
     try {
       await refreshSelected(requestId)
     } catch {
-      actionError.value = 'Исполнитель назначен, но обновить карточку не удалось. Устаревшие действия отключены.'
+      if (actionRequestGuard.isCurrent(requestToken, selected.value?.backendId)) actionError.value = 'Исполнитель назначен, но обновить карточку не удалось. Устаревшие действия отключены.'
     }
   } catch (error) {
+    if (!actionRequestGuard.isCurrent(requestToken, selected.value?.backendId)) return
     if (error.status === 409) {
       await recoverConflict(requestId, 'Заявка уже изменена.')
     } else {
@@ -429,7 +428,7 @@ async function assignExecutor() {
         : 'Не удалось назначить исполнителя. Обновите страницу и повторите попытку.'
     }
   } finally {
-    actionLoading.value = false
+    if (actionRequestGuard.isCurrent(requestToken, selected.value?.backendId)) actionLoading.value = false
   }
 }
 
@@ -564,7 +563,7 @@ async function publishOpinion() {
     try {
       await refreshSelected(requestId)
     } catch {
-      opinionError.value = 'Заключение опубликовано, но обновить карточку не удалось. Не отправляйте его повторно.'
+      actionError.value = 'Заключение опубликовано, но обновить карточку не удалось. Не отправляйте его повторно.'
     }
   } catch (error) {
     if (!opinionRequestGuard.isCurrent(requestToken, selected.value?.backendId)) return
@@ -609,7 +608,7 @@ async function decideSecurity(decision) {
     try {
       await refreshSelected(requestId)
     } catch {
-      securityError.value = 'Решение сохранено, но обновить карточку не удалось. Устаревшие действия отключены.'
+      actionError.value = 'Решение сохранено, но обновить карточку не удалось. Устаревшие действия отключены.'
     }
   } catch (error) {
     if (!securityRequestGuard.isCurrent(requestToken, selected.value?.backendId)) return
@@ -630,22 +629,25 @@ async function decideSecurity(decision) {
 }
 
 async function startRequest() {
+  const requestId = selected.value.backendId
+  const lockVersion = selected.value.lockVersion
   if (!(await confirmDialog.ask('Перевести заявку в работу?', { confirmLabel: 'Начать работу' }))) return
+  if (selected.value?.backendId !== requestId) return
 
+  const requestToken = actionRequestGuard.begin(requestId)
   actionLoading.value = true
   actionError.value = ''
-  const requestId = selected.value.backendId
   try {
-    await requestApi.start(requestId, selected.value.lockVersion)
-    if (selected.value?.backendId === requestId) {
-      startHintRevealed.value = false
-    }
+    await requestApi.start(requestId, lockVersion)
+    if (!actionRequestGuard.isCurrent(requestToken, selected.value?.backendId)) return
+    startHintRevealed.value = false
     try {
       await refreshSelected(requestId)
     } catch {
-      actionError.value = 'Заявка переведена в работу, но обновить карточку не удалось. Устаревшие действия отключены.'
+      if (actionRequestGuard.isCurrent(requestToken, selected.value?.backendId)) actionError.value = 'Заявка переведена в работу, но обновить карточку не удалось. Устаревшие действия отключены.'
     }
   } catch (error) {
+    if (!actionRequestGuard.isCurrent(requestToken, selected.value?.backendId)) return
     if (error.status === 409) {
       await recoverConflict(requestId, 'Заявка уже изменена.')
     } else {
@@ -654,7 +656,7 @@ async function startRequest() {
         : 'Не удалось перевести заявку в работу. Повторите попытку.'
     }
   } finally {
-    actionLoading.value = false
+    if (actionRequestGuard.isCurrent(requestToken, selected.value?.backendId)) actionLoading.value = false
   }
 }
 
@@ -712,12 +714,13 @@ async function suspendOrResumeRequest(action) {
 
 
 function invalidateRequests() {
-  for (const guard of [detailRequestGuard, commentRequestGuard, commentsPageRequestGuard, documentRequestGuard, reportRequestGuard, opinionRequestGuard, securityRequestGuard, colorRequestGuard, rejectRequestGuard, withdrawRequestGuard, claimRequestGuard, reassignRequestGuard, deleteReportRequestGuard, suspendResumeRequestGuard, executorsRequestGuard, expertsRequestGuard]) guard.invalidate()
+  for (const guard of [detailRequestGuard, commentRequestGuard, commentsPageRequestGuard, documentRequestGuard, reportRequestGuard, opinionRequestGuard, securityRequestGuard, colorRequestGuard, rejectRequestGuard, withdrawRequestGuard, claimRequestGuard, reassignRequestGuard, deleteReportRequestGuard, suspendResumeRequestGuard, executorsRequestGuard, expertsRequestGuard, actionRequestGuard, downloadRequestGuard]) guard.invalidate()
 }
 
 watch(() => props.requestId, requestId => {
   invalidateRequests()
   selected.value = { backendId: requestId }
+  actionError.value = props.initialWarning
   loadRequestDetails(selected.value)
 }, { immediate: true })
 
@@ -755,7 +758,7 @@ onBeforeUnmount(invalidateRequests)
     </article>
     <div class="request-grid">
       <div class="stack">
-        <article v-if="hasHeroAction" class="card hero">
+        <article v-if="hasHeroAction || actionError" class="card hero">
           <div v-if="selected.canAssignExecutor || selected.canReject" class="hero-block">
             <div class="action-row action-row--manager has-help">
               <label v-if="selected.canAssignExecutor" class="inline-field"><span class="visually-hidden">Исполнитель ИЦ</span><select v-model="executorChoice" :disabled="actionLoading" aria-label="Исполнитель ИЦ"><option value="">Выберите сотрудника</option><option v-for="executor in executors" :key="executor.id" :value="executor.id">{{ executor.displayName }}</option></select></label>
@@ -767,21 +770,19 @@ onBeforeUnmount(invalidateRequests)
               <a class="help-icon" href="/help/assignment.html" target="_blank" title="Инструкция по назначению и началу работы" aria-label="Инструкция по назначению и началу работы">?</a>
             </div>
             <p v-if="selected.canStart && startHintRevealed && startHint" class="hero-hint">{{ startHint }}</p>
-            <p v-if="actionError" class="action-error">{{ actionError }}</p>
             <p v-if="suspendResumeError" class="action-error">{{ suspendResumeError }}</p>
             <p v-if="rejectError" class="action-error">{{ rejectError }}</p>
           </div>
 
           <div v-if="!selected.canAssignExecutor && !selected.canReject && (selected.canStart || selected.canSuspend || selected.canResume)" class="hero-block">
-            <div class="action-row action-row--workflow">
+            <div class="action-row action-row--workflow has-help">
               <button v-if="selected.canStart" type="button" class="primary" :class="{ 'is-disabled': !canStartAction }" :aria-disabled="!canStartAction" :disabled="actionLoading" @click="handleStartClick">{{ actionLoading ? 'Запуск…' : 'Начать работу' }}</button>
               <button v-else-if="selected.canSuspend" type="button" class="secondary" :disabled="suspendResumeLoading" @click="suspendOrResumeRequest('suspend')">{{ suspendResumeLoading ? 'Сохранение…' : 'Приостановить работу' }}</button>
               <button v-else-if="selected.canResume" type="button" class="primary" :disabled="suspendResumeLoading" @click="suspendOrResumeRequest('resume')">{{ suspendResumeLoading ? 'Сохранение…' : 'Возобновить работу' }}</button>
+              <a class="help-icon" href="/help/assignment.html" target="_blank" title="Инструкция по назначению и началу работы" aria-label="Инструкция по назначению и началу работы">?</a>
             </div>
             <p v-if="selected.canStart && startHintRevealed && startHint" class="hero-hint">{{ startHint }}</p>
-            <p v-if="actionError" class="action-error">{{ actionError }}</p>
             <p v-if="suspendResumeError" class="action-error">{{ suspendResumeError }}</p>
-            <a class="help-icon" href="/help/assignment.html" target="_blank" title="Инструкция по назначению и началу работы" aria-label="Инструкция по назначению и началу работы">?</a>
           </div>
 
           <div v-if="selected.canUploadReport || selected.canDeleteReport" class="hero-block">
@@ -833,6 +834,7 @@ onBeforeUnmount(invalidateRequests)
             <button type="button" class="secondary danger" :disabled="withdrawLoading" @click="withdrawRequest">{{ withdrawLoading ? 'Сохранение…' : 'Отозвать заявку' }}</button>
             <p v-if="withdrawError" class="action-error">{{ withdrawError }}</p>
           </div>
+          <p v-if="actionError" class="action-error">{{ actionError }}</p>
         </article>
 
         <article class="card feed">

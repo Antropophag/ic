@@ -20,7 +20,11 @@ const devUsersLoading = ref(false)
 const selectedRequestId = ref(requestIdFromLocation())
 const selectedRequestTitle = ref(null)
 const showAdmin = ref(false)
-const registry = ref(null)
+const requestWarning = ref('')
+const registryRefreshTrigger = ref(0)
+const demoSeedTrigger = ref(0)
+const demoSeedLoading = ref(false)
+const demoSeedMessage = ref('')
 const devUsersGuard = createLatestRequestGuard()
 
 const currentProfile = computed(() => {
@@ -78,16 +82,19 @@ async function bootstrapAuth() {
   }
 }
 
-function openRequest(item) {
+function openRequest(item, warning = '') {
   selectedRequestId.value = item.backendId
   selectedRequestTitle.value = item
+  requestWarning.value = warning
   showAdmin.value = false
   setRequestInUrl(item.backendId, { push: true })
 }
 
 function closeRequest({ push = true } = {}) {
+  if (selectedRequestId.value) registryRefreshTrigger.value += 1
   selectedRequestId.value = null
   selectedRequestTitle.value = null
+  requestWarning.value = ''
   setRequestInUrl(null, { push })
 }
 
@@ -95,7 +102,22 @@ function switchDevUser(rawId) {
   const id = Number(rawId)
   setDevUserId(id)
   devUserId.value = id
+  showAdmin.value = false
   closeRequest()
+}
+
+function returnHome() {
+  showAdmin.value = false
+  closeRequest()
+}
+
+function openAdmin() {
+  showAdmin.value = true
+  closeRequest({ push: false })
+}
+
+function refreshRegistry() {
+  registryRefreshTrigger.value += 1
 }
 
 async function logout() {
@@ -143,29 +165,32 @@ onBeforeUnmount(() => {
         <header class="topbar">
           <div class="topbar-inner">
             <div class="brand-block">
-              <button type="button" class="brand-mark-btn" title="На главную" :disabled="!selectedRequestId" @click="closeRequest()">
+              <button type="button" class="brand-mark-btn" title="На главную" :disabled="!selectedRequestId && !showAdmin" @click="returnHome">
                 <svg class="brand-mark" width="48" height="48" viewBox="0 0 40 40" fill="none" aria-hidden="true"><rect x="2" y="2" width="36" height="36" rx="10" fill="currentColor" /><path d="M12 25a8 8 0 1 1 16 0" stroke="#fff" stroke-width="2" stroke-linecap="round" /><path d="M12 25h2M26 25h2M20 15v2" stroke="#fff" stroke-width="1.6" stroke-linecap="round" /><path d="M20 25l5-6.5" stroke="#fff" stroke-width="2" stroke-linecap="round" /><circle cx="20" cy="25" r="1.6" fill="#fff" /></svg>
               </button>
               <div><p class="eyebrow">АО «ЩЛЗ» · Испытательный центр</p><h1>{{ selectedRequestTitle ? `Заявка №${selectedRequestTitle.id} от ${selectedRequestTitle.date}` : selectedRequestId ? 'Заявка' : 'Заявки на проведение испытаний' }}</h1></div>
             </div>
             <div class="profile">
               <select v-if="authDevMode" class="dev-user-switch" title="Dev-переключатель пользователя (только APP_ENV=dev)" :value="devUserId" @change="switchDevUser($event.target.value)"><option v-for="user in devUsers" :key="user.id" :value="user.id">{{ user.displayName }} — {{ user.position }}</option></select>
-              <button v-if="authDevMode" type="button" class="secondary demo-seed-button" :disabled="registry?.demoSeedLoading" @click="registry?.seedDemoRequests()">{{ registry?.demoSeedLoading ? 'Заполнение…' : 'Заполнить демо' }}</button>
-              <span v-if="authDevMode && registry?.demoSeedMessage" class="demo-seed-message" role="status">{{ registry.demoSeedMessage }}</span>
+              <button v-if="authDevMode" type="button" class="secondary demo-seed-button" :disabled="demoSeedLoading" @click="demoSeedTrigger += 1">{{ demoSeedLoading ? 'Заполнение…' : 'Заполнить демо' }}</button>
+              <span v-if="authDevMode && demoSeedMessage" class="demo-seed-message" role="status">{{ demoSeedMessage }}</span>
               <span class="avatar">{{ currentInitials }}</span><span><b>{{ currentProfile.displayName }}</b><small>{{ currentProfile.position }}</small></span>
-              <button v-if="isAdministrator" type="button" class="secondary" @click="showAdmin = true; closeRequest({ push: false })">Администрирование</button>
+              <button v-if="isAdministrator" type="button" class="secondary" @click="openAdmin">Администрирование</button>
               <button v-if="!authDevMode" type="button" class="secondary" @click="logout">Выйти</button>
             </div>
           </div>
         </header>
         <AdminPanel v-if="showAdmin" @close="showAdmin = false" />
-        <RequestDetails v-else-if="selectedRequestId" :request-id="selectedRequestId" :current-initials="currentInitials" @loaded="selectedRequestTitle = $event" @close="closeRequest()" />
+        <RequestDetails v-else-if="selectedRequestId" :request-id="selectedRequestId" :current-initials="currentInitials" :initial-warning="requestWarning" @loaded="selectedRequestTitle = $event" @updated="refreshRegistry" @close="closeRequest()" />
         <RequestRegistry
-          ref="registry"
           :active="!showAdmin && !selectedRequestId"
           :dev-user-id="devUserId"
+          :refresh-trigger="registryRefreshTrigger"
+          :demo-seed-trigger="demoSeedTrigger"
           @reset="showAdmin = false; closeRequest({ push: false })"
           @select-request="openRequest"
+          @demo-seed-loading="demoSeedLoading = $event"
+          @demo-seed-message="demoSeedMessage = $event"
         />
       </main>
     </template>
