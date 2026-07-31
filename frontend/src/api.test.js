@@ -233,6 +233,35 @@ it('withdraws a request with optimistic locking', async () => {
   }))
 })
 
+it('withdraws a request with an optional reason', async () => {
+  const fetchMock = vi.fn().mockResolvedValue(new Response('{}', { status: 200 }))
+  vi.stubGlobal('fetch', fetchMock)
+
+  await requestApi.withdraw(7, 2, 'Заявка подана повторно')
+
+  expect(fetchMock).toHaveBeenCalledWith('/api/v1/requests/7/withdraw', expect.objectContaining({
+    method: 'POST',
+    body: JSON.stringify({ lockVersion: 2, reason: 'Заявка подана повторно' }),
+  }))
+})
+
+it('suspends and resumes a request with optimistic locking', async () => {
+  const fetchMock = vi.fn().mockResolvedValue(new Response('{}', { status: 200 }))
+  vi.stubGlobal('fetch', fetchMock)
+
+  await requestApi.suspend(7, 2)
+  await requestApi.resume(7, 3)
+
+  expect(fetchMock).toHaveBeenNthCalledWith(1, '/api/v1/requests/7/suspend', expect.objectContaining({
+    method: 'POST',
+    body: JSON.stringify({ lockVersion: 2 }),
+  }))
+  expect(fetchMock).toHaveBeenNthCalledWith(2, '/api/v1/requests/7/resume', expect.objectContaining({
+    method: 'POST',
+    body: JSON.stringify({ lockVersion: 3 }),
+  }))
+})
+
 it('deletes a report with optimistic locking', async () => {
   const fetchMock = vi.fn().mockResolvedValue(new Response('{}', { status: 200 }))
   vi.stubGlobal('fetch', fetchMock)
