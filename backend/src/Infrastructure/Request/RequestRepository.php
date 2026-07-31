@@ -528,13 +528,17 @@ final class RequestRepository
             . 'OR (current_executor.user_id = :start_executor AND EXISTS(SELECT 1 '
             . 'FROM {{%user_roles}} seur JOIN {{%roles}} ser ON ser.id = seur.role_id '
             . "WHERE seur.user_id = :start_executor_role AND ser.code = 'ic_executor')))) AS can_start, "
-            . "(r.status = 'in_progress' AND (EXISTS(SELECT 1 FROM {{%user_roles}} spur "
+            . "(r.status = 'in_progress' AND EXISTS(SELECT 1 FROM {{%users}} spau "
+            . 'WHERE spau.id = :active_suspend_actor AND spau.is_active = 1) AND '
+            . '(EXISTS(SELECT 1 FROM {{%user_roles}} spur '
             . 'JOIN {{%roles}} spr ON spr.id = spur.role_id '
             . "WHERE spur.user_id = :suspend_manager AND spr.code IN ('ic_manager', 'laboratory_manager')) "
             . 'OR (current_executor.user_id = :suspend_executor AND EXISTS(SELECT 1 '
             . 'FROM {{%user_roles}} speur JOIN {{%roles}} sper ON sper.id = speur.role_id '
             . "WHERE speur.user_id = :suspend_executor_role AND sper.code = 'ic_executor')))) AS can_suspend, "
-            . "(r.status = 'suspended' AND (EXISTS(SELECT 1 FROM {{%user_roles}} rsur "
+            . "(r.status = 'suspended' AND EXISTS(SELECT 1 FROM {{%users}} rsau "
+            . 'WHERE rsau.id = :active_resume_actor AND rsau.is_active = 1) AND '
+            . '(EXISTS(SELECT 1 FROM {{%user_roles}} rsur '
             . 'JOIN {{%roles}} rsr ON rsr.id = rsur.role_id '
             . "WHERE rsur.user_id = :resume_manager AND rsr.code IN ('ic_manager', 'laboratory_manager')) "
             . 'OR (current_executor.user_id = :resume_executor AND EXISTS(SELECT 1 '
@@ -594,9 +598,11 @@ final class RequestRepository
                 ':start_executor' => $actorId,
                 ':start_executor_role' => $actorId,
                 ':suspend_manager' => $actorId,
+                ':active_suspend_actor' => $actorId,
                 ':suspend_executor' => $actorId,
                 ':suspend_executor_role' => $actorId,
                 ':resume_manager' => $actorId,
+                ':active_resume_actor' => $actorId,
                 ':resume_executor' => $actorId,
                 ':resume_executor_role' => $actorId,
                 ':report_actor' => $actorId,

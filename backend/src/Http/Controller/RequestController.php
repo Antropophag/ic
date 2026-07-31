@@ -531,8 +531,10 @@ final class RequestController extends Controller
         } catch (SuspendResumeDenied $error) {
             $this->recordRejectedSuspendResumeSafely($id, $actorId, $error->ruleId);
             throw new ForbiddenHttpException($error->getMessage());
-        } catch (TransitionDenied | ConcurrentRequestModification $error) {
+        } catch (TransitionDenied $error) {
             $this->recordRejectedSuspendResumeSafely($id, $actorId, $error->ruleId);
+            throw new ConflictHttpException($error->getMessage());
+        } catch (ConcurrentRequestModification $error) {
             throw new ConflictHttpException($error->getMessage());
         }
     }
@@ -555,8 +557,10 @@ final class RequestController extends Controller
         } catch (SuspendResumeDenied $error) {
             $this->recordRejectedSuspendResumeSafely($id, $actorId, $error->ruleId);
             throw new ForbiddenHttpException($error->getMessage());
-        } catch (TransitionDenied | ConcurrentRequestModification $error) {
+        } catch (TransitionDenied $error) {
             $this->recordRejectedSuspendResumeSafely($id, $actorId, $error->ruleId);
+            throw new ConflictHttpException($error->getMessage());
+        } catch (ConcurrentRequestModification $error) {
             throw new ConflictHttpException($error->getMessage());
         }
     }
