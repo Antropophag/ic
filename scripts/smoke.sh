@@ -8,7 +8,10 @@ manager=${MANAGER_USER_ID:-1}
 wait_attempt=0
 until curl -fsS "$base_url/health/ready" >/dev/null; do
   wait_attempt=$((wait_attempt + 1))
-  [ "$wait_attempt" -lt 30 ] || { echo "Readiness timeout" >&2; exit 1; }
+  [ "$wait_attempt" -lt 30 ] || {
+    echo "Readiness timeout" >&2
+    exit 1
+  }
   sleep 1
 done
 curl -fsS "$base_url/health/live" | grep -q '"status":"ok"'

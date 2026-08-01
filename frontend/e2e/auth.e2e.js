@@ -6,7 +6,7 @@ test('настоящий AD принимает корректные учётны
   })
   expect(response.ok(), await response.text()).toBe(true)
   const body = await response.json()
-  expect(body.user.adLogin).toBe('initiator')
+  expect(body.user.displayName).toBe('Initiator Test')
   expect(body.user.email).toBe('initiator@ic.test')
 })
 

@@ -8,7 +8,10 @@ $compose up -d mariadb
 attempt=0
 until $compose exec -T mariadb healthcheck.sh --connect --innodb_initialized >/dev/null 2>&1; do
   attempt=$((attempt + 1))
-  [ "$attempt" -lt 30 ] || { echo "Test MariaDB did not become healthy" >&2; exit 1; }
+  [ "$attempt" -lt 30 ] || {
+    echo "Test MariaDB did not become healthy" >&2
+    exit 1
+  }
   sleep 1
 done
 docker build --file docker/coverage.Dockerfile --tag "$image" .

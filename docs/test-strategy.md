@@ -83,3 +83,19 @@ reset-controller не зарегистрирован.
 | Compose/infrastructure | Smoke + runtime contracts |
 
 Coverage остаётся метрикой Domain/Application, а не всего backend Infrastructure.
+
+## Перенос проверок из прежнего smoke
+
+Backend unit/integration-наборы не удалялись: компактный проект уже имел полезные
+локализованные проверки workflow, policy, storage и outbox. Избыточность была в
+990-строчном последовательном smoke-сценарии.
+
+| Удалённая проверка | Чем заменена | Почему проще |
+|---|---|---|
+| Полный workflow через цепочку `curl` | `critical-flow.e2e.js` и PHPUnit integration | браузер защищает маршрут, integration точно диагностирует правило |
+| Детальные outbox/retry проверки через SQL из shell | `NotificationOutboxProcessorTest.php` и SMTP runtime contract | lease/backoff проверяются без хрупкого shell orchestration |
+| LDAP и восстановление соединений внутри общего сценария | `auth.e2e.js` и `test-runtime-contracts.sh` | сбой интеграции изолирован и воспроизводим |
+| Многошаговая подготовка общих demo-данных | идемпотентный `php yii test/reset` | каждый прогон начинает с известного состояния |
+
+Короткий `smoke.sh` оставляет только readiness/liveness и один ключевой API-маршрут:
+создание, чтение, назначение и начало работы.

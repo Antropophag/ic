@@ -11,12 +11,13 @@ if [ ! -f "$state" ]; then
   samba-tool domain provision --server-role=dc --use-rfc2307 \
     --realm="$realm" --domain="$domain" --adminpass="$admin_password" \
     --dns-backend=SAMBA_INTERNAL
+  sed -i '/^\[global\]/a\\tldap server require strong auth = no' /etc/samba/smb.conf
   cp /etc/samba/smb.conf /var/lib/samba/test-smb.conf
   cp /var/lib/samba/private/krb5.conf /var/lib/samba/test-krb5.conf
 fi
 
-test -f /etc/samba/smb.conf || cp /var/lib/samba/test-smb.conf /etc/samba/smb.conf
-test -f /etc/krb5.conf || cp /var/lib/samba/test-krb5.conf /etc/krb5.conf
+cp /var/lib/samba/test-smb.conf /etc/samba/smb.conf
+cp /var/lib/samba/test-krb5.conf /etc/krb5.conf
 
 samba --foreground --no-process-group &
 samba_pid=$!
@@ -42,12 +43,11 @@ create_user() {
 for pair in \
   initiator:Initiator ic_manager:ICManager laboratory_manager:LabManager \
   executor:Executor expert:Expert security_officer:Security \
-  administrator:Administrator employee_without_roles:Employee disabled_user:Disabled
-do
+  administrator:Administrator employee_without_roles:Employee disabled_user:Disabled; do
   create_user "${pair%%:*}" "${pair#*:}"
 done
 
-for group in ICManagers LaboratoryManagers Executors Experts SecurityOfficers Administrators; do
+for group in ICManagers LaboratoryManagers Executors Experts SecurityOfficers; do
   samba-tool group show "$group" >/dev/null 2>&1 || samba-tool group add "$group"
 done
 samba-tool group addmembers ICManagers ic_manager >/dev/null 2>&1 || true

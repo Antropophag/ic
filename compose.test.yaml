@@ -55,6 +55,9 @@ services:
 
   mailpit:
     image: axllent/mailpit:v1.27.8
+    environment:
+      MP_SMTP_AUTH_ACCEPT_ANY: "1"
+      MP_SMTP_AUTH_ALLOW_INSECURE: "1"
     ports: ["18025:8025"]
     healthcheck:
       test: ["CMD", "/mailpit", "readyz"]
@@ -67,10 +70,11 @@ services:
       context: .
       dockerfile: docker/test-ad.Dockerfile
     hostname: ad
+    cap_add: [SYS_ADMIN]
     volumes:
       - test-ad-data:/var/lib/samba
     healthcheck:
-      test: ["CMD-SHELL", "ldapsearch -x -H ldap://127.0.0.1 -b DC=ic,DC=test -s base dn >/dev/null 2>&1"]
+      test: ["CMD-SHELL", "ldapsearch -x -H ldap://127.0.0.1 -D Administrator@IC.TEST -w 'TestPassword1!' -b DC=ic,DC=test -s base dn >/dev/null 2>&1"]
       interval: 3s
       timeout: 3s
       retries: 40

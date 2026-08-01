@@ -17,8 +17,8 @@ final class CurrentUser
 
     public function id(Request $request): int
     {
-        // Dev-заголовок работает только при APP_ENV=dev — используется dev
-        // UI, smoke-тестами и E2E, никогда не создаёт production-backdoor.
+        // Управляемые заголовки доступны только в dev/test: X-Test-User-ID
+        // существует исключительно в test, а production игнорирует оба.
         if (in_array(YII_ENV, ['dev', 'test'], true)) {
             $header = YII_ENV === 'test'
                 ? ($request->headers->get('X-Test-User-ID') ?? $request->headers->get('X-Dev-User-ID'))
