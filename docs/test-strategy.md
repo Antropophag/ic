@@ -1,131 +1,85 @@
 # Стратегия тестирования
 
-## Документация схемы
+Проект использует только существующие PHPUnit, Vitest и Playwright. Только E2E не
+используется: браузер подтверждает крупный маршрут, но дорого и неточно диагностирует ошибки
+SQL, optimistic locking, lease/backoff и матрицы переходов.
 
-- после миграций ER-диаграмма генерируется из `information_schema` MariaDB;
-- CI выполняет `make schema-diagram-check` и не пропускает устаревшую схему;
-- генератор адаптирован из проверенного подхода проекта `monori`.
+## Карта контуров
 
-## Локально и в merge request
+| Набор | Что защищает | Реальный риск | Скорость/стабильность | Решение |
+|---|---|---|---|---|
+| PHPUnit Unit | workflow, policy, mapper, шаблоны | неверное чистое правило | быстро/стабильно | оставить содержательные таблицы |
+| PHPUnit Integration | MariaDB, транзакции, storage, outbox, LDAP | production-интеграции | средне/стабильно | основной backend-слой |
+| Vitest | чистое поведение frontend | UI-state и навигация | быстро/стабильно | оставить |
+| Playwright | крупные маршруты | компоненты не работают вместе | медленнее | 8 независимых сценариев |
+| `smoke.sh` | live/ready и один API-маршрут | образ не запускается | быстро | сокращён с 990 строк |
+| Runtime contracts | рестарты AD/MariaDB/SMTP | долгоживущие соединения | медленно | отдельная проверка |
 
-- `make check` является единым входом для обязательных проверок разработчика;
-- версионируемый `pre-push` hook не публикует ветку при провале проверок;
-- GitLab повторяет проверки независимо от локального hook;
-- `main` защищается настройкой `Pipelines must succeed` и человеческим review;
-- AI-review отложен и не входит в quality gate; merge request проверяют CI и
-  человек-рецензент.
+## Матрица сценариев
 
-## Цель
-
-Каждое изменение проходит автоматическую проверку бизнес-правил до слияния в
-основную ветку. Merge request не принимается при красном обязательном тесте.
-
-## Контуры
-
-| Контур | Инструмент | Что проверяет |
+| Бизнес-сценарий | Основной уровень | Тестовый файл |
 |---|---|---|
-| Domain unit | PHPUnit | конечный автомат, политики доступа, нумерацию, ревизии |
-| Application integration | PHPUnit + test MariaDB | транзакции, репозитории, outbox, импорт |
-| API contract | PHPUnit | HTTP-коды, DTO, валидацию, авторизацию |
-| Frontend unit | Vitest | компоненты, stores, форматирование, формы |
-| Browser E2E | Playwright | критические пользовательские сценарии по ролям |
-| Security | PHPUnit + dependency audit | обход ACL, токены, MIME, размеры файлов |
-| Migration | fixtures + console tests | Bitrix24 parser, dry-run, идемпотентность |
+| LDAP bind, неверный пароль, профиль, disabled/unknown | Integration/runtime | `LdapAuthenticatorTest.php`, `test-runtime-contracts.sh` |
+| Роли и запрет чужих операций | Unit + Integration | policy tests, `RequestRepositoryTest.php` |
+| Создание, validation, lock, аудит, комментарии | Integration | `RequestRepositoryTest.php` |
+| Назначение, пауза, возврат, отказ, отзыв | Unit/Integration | `RequestWorkflowTest.php`, `RequestRepositoryTest.php` |
+| Фильтры и пагинация | Integration | `RequestRepositoryTest.php` |
+| Upload/MIME/version/download/ACL/storage | Integration | `DocumentRepositoryTest.php` |
+| Положительный и отрицательный workflow | E2E | `critical-flow.e2e.js` |
+| Outbox, retry, failed recovery, lease | Integration | `NotificationOutboxProcessorTest.php` |
+| Реальный SMTP и отсутствие обычного дубля | E2E | `notifications.e2e.js` |
+| Редкий SMTP-дубль после send до `sent` | документированная at-least-once семантика | `docs/integrations/notifications.md` |
+| Legacy/CSV import и invalid/partial/idempotency | Unit/Integration | import tests |
+| Bitrix transport | Unit | `BitrixListClientTest.php` |
+| Рестарт MariaDB при worker | Runtime | `test-runtime-contracts.sh` |
 
-## Обязательные проверки merge request
+## Production-like стенд
 
-1. статический анализ и форматирование;
-2. все domain unit tests;
-3. integration tests на чистой MariaDB (`make backend-integration`,
-   CI job `backend-integration`) — `RequestRepository`/`DocumentRepository`
-   против применённых с нуля миграций в отдельной базе `ic_test`, каждый
-   тест в своей транзакции с откатом после теста;
-4. миграция БД с нуля;
-5. frontend unit tests и production build;
-6. критический smoke-набор Playwright;
-7. проверка, что production bundle не содержит внешних HTTP-зависимостей;
-8. отчёт покрытия и JUnit-отчёты в GitLab.
+```text
+Playwright -> gateway -> backend -> MariaDB 11.4
+                         |       -> Samba AD DC (IC.TEST)
+                         |       -> Mailpit
+                         ` scheduler (тот же backend image)
+```
 
-Integration-контур сознательно не входит в локальный `make check`/pre-push
-hook (как и `make smoke`/`make e2e`) — требует поднятия реальной MariaDB и
-замедлил бы каждый push; он обязателен только как отдельный CI job.
+`compose.test.yaml` имеет отдельный project name, БД `ic_test` и отдельные test volumes.
+Reset зарегистрирован только при `APP_ENV=test` и требует `_test` в имени БД.
 
-## Критические E2E-сценарии
+Выбран Samba AD: приложение выполняет UPN bind и ищет профиль по `sAMAccountName`.
+Приложение не преобразует AD-группы в роли — роли хранятся в MariaDB. Samba проверяет
+фактический AD-контракт, который OpenLDAP не воспроизводит полностью.
 
-- сотрудник создаёт заявку, руководитель назначает исполнителя;
-- исполнитель загружает отчёт, эксперт формирует заключение, СБ ставит `✓`;
-- СБ ставит `✕`, тот же исполнитель и эксперт проводят повторный цикл;
-- инициатор отзывает заявку;
-- руководитель отказывает в испытаниях;
-- неавторизованная роль не может выполнить процессное действие;
-- закрытый документ нельзя скачать до завершения;
-- бессрочная ссылка скачивает ровно свою версию и перестаёт работать после отзыва;
-- повторный импорт Bitrix24 не создаёт дубликаты.
+Домен: `IC.TEST`; общий пароль: `TestPassword1!`. Пользователи: `initiator`, `ic_manager`,
+`laboratory_manager`, `executor`, `expert`, `security_officer`, `administrator`,
+`employee_without_roles`, `disabled_user`. Группы: `ICManagers`, `LaboratoryManagers`,
+`Executors`, `Experts`, `SecurityOfficers`, `Administrators`.
 
-## Тестовые данные
+Mailpit UI: <http://localhost:18025>.
 
-Фикстуры не содержат реальные персональные данные. Для каждой роли создаются
-отдельные пользователи. Время задаётся через `Clock`-интерфейс, UUID/токены — через
-заменяемый генератор, email — через fake transport, файлы — во временном хранилище.
+## Запуск и диагностика
 
-## Правило изменения логики
+```sh
+make check
+make test
+make test-env-up
+make test-env-reset
+make e2e
+make test-env-logs
+make test-env-down
+```
 
-1. связать задачу с идентификатором бизнес-правила;
-2. сначала добавить или изменить тест, воспроизводящий новое поведение;
-3. реализовать изменение;
-4. прогнать локальный обязательный набор;
-5. приложить к merge request результаты и, при UI-изменении, скриншот;
-6. изменение правила без обновления `business-rules.md` считается неполным.
+`test/reset` накатывает migrations, seed пользователей, очищает storage и Mailpit. E2E
+artifacts находятся в `frontend/test-results` и `frontend/playwright-report`.
+`X-Test-User-ID` работает только при `YII_ENV=test`; вне test заголовок игнорируется, а
+reset-controller не зарегистрирован.
 
-## Покрытие
+| Изменение | Какие тесты запускать |
+|---|---|
+| Workflow | Unit + RequestRepository integration |
+| SQL/filter | Integration |
+| UI | Frontend unit + соответствующий E2E |
+| LDAP | Identity integration + AD runtime/E2E |
+| SMTP/outbox | Notification integration + SMTP E2E |
+| Compose/infrastructure | Smoke + runtime contracts |
 
-Процент не заменяет сценарии. Для domain и application слоёв минимальный порог —
-90% строк; для тестируемой frontend-логики — 80% строк, функций, statements и
-ветвей. HTTP/infrastructure проверяются API-smoke и integration-тестами, поэтому
-не смешиваются с unit coverage. Текущие gates запускаются командами
-`make coverage` и `make frontend-coverage`, а `make check` выполняет оба.
-Backend-порог вычисляется по исполняемым statements из Clover-отчёта; пустой
-или противоречивый отчёт считается ошибкой сборки.
-
-На 28.07.2026 зафиксирован baseline выше обязательного минимума: backend
-domain/application — 95,91% statements, frontend API/registry logic — 100% строк и
-83,87% ветвей. Pipeline падает при снижении ниже порога. Все правила `WF`, `DOC`, `SEC` и `ACL`
-должны иметь прямой позитивный и негативный тест независимо от общего процента.
-
-## Детерминированный контур качества
-
-Решение о готовности изменения принимают воспроизводимые проверки, а не AI-review:
-
-- PHP_CodeSniffer проверяет backend по PSR-12;
-- PHPStan уровня 6 выполняет статический анализ `backend/src` и тестов;
-- ESLint проверяет JavaScript и Vue-компоненты без предупреждений;
-- `composer audit` и `npm audit --audit-level=high` блокируют известные
-  уязвимости высокого и критического уровня;
-- Actionlint, Hadolint, ShellCheck, shfmt, yamllint и markdownlint проверяют
-  workflow, Dockerfile, shell-скрипты, YAML и Markdown;
-- Semgrep и Gitleaks выполняют статический анализ безопасности и поиск секретов;
-- unit/coverage gates относятся к быстрым проверкам, `api-smoke` поднимает
-  MariaDB и полный контейнерный контур как интеграционную проверку.
-
-GitHub Actions и GitLab CI запускают одинаковые категории проверок. Версии внешних
-линтеров в CI фиксируются, а загруженные бинарные файлы проверяются по SHA-256.
-Qodo дополняет этот контур рекомендациями, но его ответ не заменяет и не отменяет
-обязательные автоматические проверки.
-
-Mutation-тесты и браузерные E2E-тесты добавляются после реализации первого
-стабильного сквозного пользовательского сценария. До этого момента CI использует
-быстрые unit-, integration- и API-smoke проверки; после наступления условий из
-`roadmap.md` критический Playwright smoke-набор становится обязательным gate PR.
-
-Первый критический браузерный сценарий запускается командой `make e2e` против
-поднятого `make init` контура. Он формирует синтетическую заявку через реальные
-HTTP endpoints всех процессных ролей, а решение СБ и проверку завершённого
-состояния выполняет в Chromium. Трасса, видео и скриншот сохраняются только при
-падении; GitHub Actions и GitLab CI публикуют HTML-отчёт как диагностический
-артефакт неуспешной проверки.
-
-`make e2e` устанавливает зафиксированные npm-зависимости и совместимую версию
-Chromium, поэтому локальный кэш браузера не является предварительным условием.
-Если чистой Linux-системе не хватает библиотек ОС, один раз установите их из
-`frontend` командой `sudo npm exec playwright install-deps chromium`; дальнейшие
-запуски `make e2e` не требуют повышенных прав.
+Coverage остаётся метрикой Domain/Application, а не всего backend Infrastructure.

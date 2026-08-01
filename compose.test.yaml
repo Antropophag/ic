@@ -1,0 +1,83 @@
+name: shlz-test-registry-test
+
+services:
+  gateway:
+    build:
+      context: .
+      dockerfile: docker/gateway.Dockerfile
+    ports: ["18080:8080"]
+    depends_on:
+      backend: {condition: service_started}
+
+  backend:
+    build:
+      context: .
+      dockerfile: docker/backend.Dockerfile
+    env_file: .env.test
+    depends_on:
+      mariadb: {condition: service_healthy}
+      ad: {condition: service_healthy}
+      mailpit: {condition: service_healthy}
+    read_only: true
+    tmpfs: [/tmp, /app/runtime]
+    volumes:
+      - test-document-data:/app/storage/documents
+
+  scheduler:
+    build:
+      context: .
+      dockerfile: docker/backend.Dockerfile
+    env_file: .env.test
+    depends_on:
+      mariadb: {condition: service_healthy}
+      mailpit: {condition: service_healthy}
+    read_only: true
+    tmpfs: [/tmp, /app/runtime]
+    command: ["php", "yii", "notification/work"]
+    stop_signal: SIGTERM
+    stop_grace_period: 15s
+    restart: unless-stopped
+
+  mariadb:
+    image: mariadb:11.4.7-noble
+    environment:
+      MARIADB_DATABASE: ic_test
+      MARIADB_USER: ic_test
+      MARIADB_PASSWORD: ic_test_password
+      MARIADB_ROOT_PASSWORD: ic_test_root_password
+    volumes:
+      - test-mariadb-data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+  mailpit:
+    image: axllent/mailpit:v1.27.8
+    ports: ["18025:8025"]
+    healthcheck:
+      test: ["CMD", "/mailpit", "readyz"]
+      interval: 2s
+      timeout: 3s
+      retries: 20
+
+  ad:
+    build:
+      context: .
+      dockerfile: docker/test-ad.Dockerfile
+    hostname: ad
+    volumes:
+      - test-ad-data:/var/lib/samba
+    healthcheck:
+      test: ["CMD-SHELL", "ldapsearch -x -H ldap://127.0.0.1 -b DC=ic,DC=test -s base dn >/dev/null 2>&1"]
+      interval: 3s
+      timeout: 3s
+      retries: 40
+      start_period: 15s
+    restart: unless-stopped
+
+volumes:
+  test-mariadb-data:
+  test-document-data:
+  test-ad-data:

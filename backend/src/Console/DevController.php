@@ -109,8 +109,8 @@ final class DevController extends Controller
 
     public function actionSeed(): int
     {
-        if (YII_ENV !== 'dev') {
-            $this->stderr("Development seed is disabled outside APP_ENV=dev.\n");
+        if (!in_array(YII_ENV, ['dev', 'test'], true)) {
+            $this->stderr("Development seed is disabled outside APP_ENV=dev/test.\n");
             return ExitCode::UNSPECIFIED_ERROR;
         }
 
@@ -182,8 +182,8 @@ final class DevController extends Controller
 
     public function actionSeedRequests(): int
     {
-        if (YII_ENV !== 'dev') {
-            $this->stderr("Development request seed is disabled outside APP_ENV=dev.\n");
+        if (!in_array(YII_ENV, ['dev', 'test'], true)) {
+            $this->stderr("Development request seed is disabled outside APP_ENV=dev/test.\n");
             return ExitCode::UNSPECIFIED_ERROR;
         }
 

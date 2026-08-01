@@ -4,7 +4,7 @@ export default defineConfig({
   testDir: './e2e',
   testMatch: '**/*.e2e.js',
   fullyParallel: false,
-  retries: process.env.CI ? 1 : 0,
+  retries: 0,
   reporter: process.env.CI ? [['line'], ['html', { open: 'never' }]] : 'line',
   use: {
     baseURL: process.env.E2E_BASE_URL || 'http://localhost:8080',

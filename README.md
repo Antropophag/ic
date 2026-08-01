@@ -100,13 +100,26 @@ docker compose exec backend php yii notification/send
 make smoke
 ```
 
-Интеграционные тесты `RequestRepository`/`DocumentRepository` против отдельной
-тестовой базы `ic_test` в том же сервисе MariaDB (не требует полного запуска
-`make init`, поднимает только `mariadb`):
+Быстрые unit и integration-тесты:
 
 ```bash
-make backend-integration
+make check
+make test
 ```
+
+Полный изолированный стенд использует production-образы приложения, MariaDB
+11.4, Samba AD `IC.TEST`, Mailpit и scheduler:
+
+```bash
+make test-env-up
+make test-env-reset
+make e2e
+make test-env-logs
+make test-env-down
+```
+
+Mailpit UI: `http://localhost:18025`. Пользователи, матрица рисков и
+диагностика описаны в `docs/test-strategy.md`.
 
 ## Демо на чистой Windows-машине
 

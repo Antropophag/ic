@@ -1,6 +1,6 @@
 .DEFAULT_GOAL := help
 
-.PHONY: help init up down setup check backend-quality coverage backend-integration frontend-quality frontend-coverage e2e repo-quality smoke demo-bundle frontend-build schema-diagram schema-diagram-check
+.PHONY: help init up down setup check test backend-quality coverage backend-integration frontend-quality frontend-coverage e2e test-env-up test-env-reset test-env-down test-env-destroy test-env-logs runtime-contracts repo-quality smoke demo-bundle frontend-build schema-diagram schema-diagram-check
 
 help:
 	@echo "up                    Build and start the development stack"
@@ -8,12 +8,14 @@ help:
 	@echo "down                  Stop the development stack"
 	@echo "setup                 Enable repository Git hooks"
 	@echo "check                 Run the same checks as CI before push"
+	@echo "test                  Run backend unit and MariaDB integration tests"
 	@echo "backend-quality       Run PHP style, static analysis and dependency audit"
 	@echo "coverage              Enforce backend domain/application coverage >= 90%"
 	@echo "backend-integration   Run Infrastructure repository tests against real MariaDB"
 	@echo "frontend-quality      Run frontend lint and dependency audit"
 	@echo "frontend-coverage     Enforce frontend logic coverage >= 80%"
-	@echo "e2e                   Run critical browser flow against the running stack"
+	@echo "e2e                   Run the production-like Playwright stand"
+	@echo "test-env-up/reset/down Manage the isolated test stand"
 	@echo "repo-quality          Lint workflows, Dockerfiles, shell, YAML and Markdown"
 	@echo "smoke                 Check the running API end-to-end"
 	@echo "demo-bundle           Build an offline Windows demo bundle"
@@ -35,6 +37,11 @@ setup:
 
 check:
 	sh scripts/check.sh
+
+test:
+	docker build --file docker/coverage.Dockerfile --tag shlz-test-registry-coverage .
+	docker run --rm shlz-test-registry-coverage vendor/bin/phpunit
+	sh scripts/backend-integration.sh
 
 backend-quality:
 	docker build --file docker/coverage.Dockerfile --tag shlz-test-registry-coverage .
@@ -64,9 +71,25 @@ frontend-coverage:
 	npm --prefix frontend run coverage
 
 e2e:
-	npm --prefix frontend ci --no-audit --no-fund
-	cd frontend && npm exec playwright install chromium
-	npm --prefix frontend run e2e
+	sh scripts/e2e.sh
+
+test-env-up:
+	sh scripts/test-env.sh up
+
+test-env-reset:
+	sh scripts/test-env.sh reset
+
+test-env-down:
+	sh scripts/test-env.sh down
+
+test-env-destroy:
+	sh scripts/test-env.sh destroy
+
+test-env-logs:
+	sh scripts/test-env.sh logs
+
+runtime-contracts:
+	sh scripts/test-runtime-contracts.sh
 
 frontend-quality:
 	npm --prefix frontend ci --no-audit --no-fund

@@ -35,7 +35,7 @@ final class AuthController extends Controller
         // login/logout — это state-changing действия с cookie-сессией и
         // обязаны быть защищены (login CSRF мог бы аутентифицировать
         // жертву под чужой сессией).
-        $this->enableCsrfValidation = YII_ENV !== 'dev';
+        $this->enableCsrfValidation = !in_array(YII_ENV, ['dev', 'test'], true);
 
         return parent::beforeAction($action);
     }
@@ -50,7 +50,7 @@ final class AuthController extends Controller
         // — YII_ENV, а не признак production-сборки Vite: и smoke, и E2E
         // гоняют собранный фронтенд против backend с APP_ENV=dev.
         $csrfToken = Yii::$app->request->csrfToken;
-        $devMode = YII_ENV === 'dev';
+        $devMode = in_array(YII_ENV, ['dev', 'test'], true);
 
         try {
             $userId = (new CurrentUser(Yii::$app->db))->id(Yii::$app->request);
@@ -80,7 +80,7 @@ final class AuthController extends Controller
      */
     public function actionDevUsers(): array
     {
-        if (YII_ENV !== 'dev') {
+        if (!in_array(YII_ENV, ['dev', 'test'], true)) {
             throw new NotFoundHttpException();
         }
 

@@ -174,15 +174,3 @@ test('администратор управляет ролями и возвра
 
   expect(errors).toEqual([])
 })
-
-test('dev-кнопка подтверждает полный сброс и заполняет реестр демо-заявками', async ({ page }) => {
-  await page.goto('/')
-  await page.getByRole('button', { name: 'Заполнить демо' }).click()
-
-  await expect(page.getByText(/Все существующие заявки, комментарии и файлы/)).toBeVisible()
-  await page.getByRole('button', { name: 'Заполнить демо', exact: true }).last().click()
-
-  await expect(page.getByRole('status')).toHaveText('Создано демо-заявок: 7.')
-  await expect(page.getByRole('row')).toHaveCount(8)
-  await expect(page.getByRole('row').filter({ hasText: 'Вектор-Демо' })).toBeVisible()
-})

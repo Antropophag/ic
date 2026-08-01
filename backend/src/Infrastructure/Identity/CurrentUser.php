@@ -19,8 +19,11 @@ final class CurrentUser
     {
         // Dev-заголовок работает только при APP_ENV=dev — используется dev
         // UI, smoke-тестами и E2E, никогда не создаёт production-backdoor.
-        if (YII_ENV === 'dev') {
-            $id = filter_var($request->headers->get('X-Dev-User-ID'), FILTER_VALIDATE_INT);
+        if (in_array(YII_ENV, ['dev', 'test'], true)) {
+            $header = YII_ENV === 'test'
+                ? ($request->headers->get('X-Test-User-ID') ?? $request->headers->get('X-Dev-User-ID'))
+                : $request->headers->get('X-Dev-User-ID');
+            $id = filter_var($header, FILTER_VALIDATE_INT);
             if ($id !== false && $id > 0) {
                 return $id;
             }
