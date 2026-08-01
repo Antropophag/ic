@@ -23,7 +23,7 @@ services:
     read_only: true
     tmpfs: [/tmp, /app/runtime]
     volumes:
-      - test-document-data:/app/storage/documents
+      - test-document-data:/app/storage/test-documents
 
   scheduler:
     build:

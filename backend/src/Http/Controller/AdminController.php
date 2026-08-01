@@ -30,7 +30,7 @@ final class AdminController extends Controller
 
     public function beforeAction($action): bool
     {
-        $this->enableCsrfValidation = !in_array(YII_ENV, ['dev', 'test'], true);
+        $this->enableCsrfValidation = YII_ENV !== 'dev';
 
         return parent::beforeAction($action);
     }

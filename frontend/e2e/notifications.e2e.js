@@ -16,10 +16,13 @@ async function findMessages(marker) {
 }
 
 test('новая заявка доставляет письма через настоящий SMTP без повторной отправки', async ({ request }) => {
-  await fetch(`${mailpit}/api/v1/messages`, { method: 'DELETE' })
   const marker = `SMTP-E2E-${Date.now()}`
-  const response = await request.post('/api/v1/requests', {
+  const me = await request.get('/api/v1/auth/me', {
     headers: { 'X-Test-User-ID': '3' },
+  })
+  const { csrfToken } = await me.json()
+  const response = await request.post('/api/v1/requests', {
+    headers: { 'X-Test-User-ID': '3', 'X-CSRF-Token': csrfToken },
     data: {
       productName: marker,
       manufacturer: 'E2E',

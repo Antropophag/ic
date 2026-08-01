@@ -3,7 +3,7 @@
 /.env
 /.env.*
 !/.env.example
-!/.env.dev
+!/.env.dev.example
 !/.env.test
 
 /prototype/node_modules/

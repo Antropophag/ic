@@ -4,10 +4,8 @@ declare(strict_types=1);
 
 namespace App\Console;
 
-use FilesystemIterator;
-use RecursiveDirectoryIterator;
-use RecursiveIteratorIterator;
 use Yii;
+use yii\helpers\FileHelper;
 use yii\console\Controller;
 use yii\console\ExitCode;
 
@@ -23,8 +21,9 @@ final class TestController extends Controller
         if ($result !== null && (int) $result !== ExitCode::OK) {
             return (int) $result;
         }
-        $this->clearStorage();
-        $this->clearMailpit();
+        if (!$this->clearStorage() || !$this->clearMailpit()) {
+            return ExitCode::UNSPECIFIED_ERROR;
+        }
 
         return (int) Yii::$app->runAction('dev/seed');
     }
@@ -49,30 +48,34 @@ final class TestController extends Controller
         return true;
     }
 
-    private function clearStorage(): void
+    private function clearStorage(): bool
     {
-        $path = getenv('DOCUMENT_STORAGE_PATH') ?: '/app/storage/documents';
-        if (!is_dir($path)) {
-            return;
+        $path = (string) getenv('DOCUMENT_STORAGE_PATH');
+        $expectedPath = '/app/storage/test-documents/data';
+        if ($path !== $expectedPath || is_link($path)) {
+            $this->stderr("Refusing test storage cleanup: DOCUMENT_STORAGE_PATH must be $expectedPath.\n");
+            return false;
         }
-        $items = new RecursiveIteratorIterator(
-            new RecursiveDirectoryIterator($path, FilesystemIterator::SKIP_DOTS),
-            RecursiveIteratorIterator::CHILD_FIRST,
-        );
-        foreach ($items as $item) {
-            if ($item->isDir()) {
-                rmdir($item->getPathname());
-            } else {
-                unlink($item->getPathname());
+
+        if (is_dir($path)) {
+            foreach (FileHelper::findDirectories($path) as $directory) {
+                if (is_link($directory)) {
+                    $this->stderr("Refusing test storage cleanup: symlinks are not allowed.\n");
+                    return false;
+                }
             }
+            FileHelper::removeDirectory($path);
         }
+
+        FileHelper::createDirectory($path);
+        return true;
     }
 
-    private function clearMailpit(): void
+    private function clearMailpit(): bool
     {
         $baseUrl = rtrim(getenv('MAILPIT_API_URL') ?: '', '/');
         if ($baseUrl === '') {
-            return;
+            return true;
         }
         $context = stream_context_create(['http' => [
             'method' => 'DELETE',
@@ -80,8 +83,12 @@ final class TestController extends Controller
             'ignore_errors' => true,
         ]]);
         $result = @file_get_contents($baseUrl . '/api/v1/messages', false, $context);
-        if ($result === false) {
+        $status = $http_response_header[0] ?? '';
+        if ($result === false || preg_match('/\s2\d\d(?:\s|$)/', $status) !== 1) {
             $this->stderr("Mailpit mailbox could not be cleared.\n");
+            return false;
         }
+
+        return true;
     }
 }

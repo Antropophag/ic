@@ -35,7 +35,7 @@ final class AuthController extends Controller
         // login/logout — это state-changing действия с cookie-сессией и
         // обязаны быть защищены (login CSRF мог бы аутентифицировать
         // жертву под чужой сессией).
-        $this->enableCsrfValidation = !in_array(YII_ENV, ['dev', 'test'], true);
+        $this->enableCsrfValidation = YII_ENV !== 'dev';
 
         return parent::beforeAction($action);
     }
@@ -74,8 +74,8 @@ final class AuthController extends Controller
      * эндпоинт (список актёров нужен фронтенду ДО выбора, под кем логиниться
      * через X-Dev-User-ID — авторизовывать не под кем). Данные — фиксированные
      * синтетические аккаунты (dev.*@example.invalid), не секрет; а сам
-     * dev-режим уже принимает любой X-Dev-User-ID без проверки существования
-     * (CurrentUser), так что этот список не расширяет модель угроз dev-стенда.
+     * CurrentUser принимает из X-Dev-User-ID только существующий активный
+     * профиль, так что список не расширяет модель угроз dev-стенда.
      *
      * @return array{items: list<array<string, mixed>>}
      */

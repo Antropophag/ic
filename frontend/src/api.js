@@ -75,7 +75,7 @@ export const requestApi = {
   }),
   downloadDocument: async (versionId) => {
     const response = await fetch(`/api/v1/document-versions/${versionId}/download`, {
-      headers: { ...(devMode ? devHeaders() : {}) },
+      headers: authHeaders(),
     })
     if (!response.ok) {
       const error = new Error('Не удалось скачать документ')

@@ -28,16 +28,22 @@ case "$action" in
 up)
   $compose config --quiet
   $compose up -d --build
-  assert_health "${TEST_BASE_URL:-http://localhost:18080}/health/ready" ready
   assert_health "${TEST_BASE_URL:-http://localhost:18080}/health/live" ok
   wait_url "${MAILPIT_BASE_URL:-http://localhost:18025}/api/v1/info"
   ;;
 reset)
   $compose run --rm backend php yii test/reset
+  assert_health "${TEST_BASE_URL:-http://localhost:18080}/health/ready" ready
   ;;
 down) $compose down --remove-orphans ;;
 destroy) $compose down --volumes --remove-orphans ;;
-logs) $compose logs --no-color --tail=200 "${2:-}" ;;
+logs)
+  if [ "$#" -gt 1 ]; then
+    $compose logs --no-color --tail=200 "$2"
+  else
+    $compose logs --no-color --tail=200
+  fi
+  ;;
 *)
   echo "Usage: $0 up|reset|down|destroy|logs [service]" >&2
   exit 2

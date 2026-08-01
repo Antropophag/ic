@@ -1,9 +1,23 @@
 import { expect, request as playwrightRequest, test } from '@playwright/test'
 
 async function apiFor(baseURL, userId) {
-  return playwrightRequest.newContext({
+  const bootstrap = await playwrightRequest.newContext({
     baseURL,
     extraHTTPHeaders: { 'X-Test-User-ID': String(userId) },
+  })
+  const me = await bootstrap.get('/api/v1/auth/me')
+  expect(me.ok(), await me.text()).toBe(true)
+  const { csrfToken } = await me.json()
+  const storageState = await bootstrap.storageState()
+  await bootstrap.dispose()
+
+  return playwrightRequest.newContext({
+    baseURL,
+    storageState,
+    extraHTTPHeaders: {
+      'X-Test-User-ID': String(userId),
+      'X-CSRF-Token': csrfToken,
+    },
   })
 }
 
