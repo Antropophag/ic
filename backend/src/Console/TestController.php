@@ -67,8 +67,7 @@ final class TestController extends Controller
             FileHelper::removeDirectory($path);
         }
 
-        FileHelper::createDirectory($path);
-        return true;
+        return FileHelper::createDirectory($path);
     }
 
     private function clearMailpit(): bool

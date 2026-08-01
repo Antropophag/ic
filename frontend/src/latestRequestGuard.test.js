@@ -20,4 +20,13 @@ describe('latest request guard', () => {
     expect(guard.isCurrent(second, 11)).toBe(true)
     expect(guard.isCurrent(second, 10)).toBe(false)
   })
+
+  it('rejects a pending logout response after application unmount', () => {
+    const guard = createLatestRequestGuard()
+    const logout = guard.begin(true)
+
+    guard.invalidate()
+
+    expect(guard.isCurrent(logout, true)).toBe(false)
+  })
 })

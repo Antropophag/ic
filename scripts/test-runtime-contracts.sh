@@ -25,11 +25,43 @@ trap 'exit 143' TERM
 
 csrf_token() {
   curl_with_timeout -fsS -b "$cookie_jar" -c "$cookie_jar" "$base/api/v1/auth/me" |
-    sed -n 's/.*"csrfToken":"\([^"]*\)".*/\1/p'
+    json_field csrfToken
+}
+
+json_field() {
+  node -e '
+    const fs = require("fs")
+    const raw = fs.readFileSync(0, "utf8")
+    try {
+      const value = JSON.parse(raw)[process.argv[1]]
+      if (value === undefined || value === null) process.exit(1)
+      process.stdout.write(String(value))
+    } catch (error) {
+      console.error("Invalid JSON response: " + raw)
+      process.exit(1)
+    }
+  ' "$1"
+}
+
+mailpit_message_count() {
+  curl_with_timeout -fsS "$mailpit/api/v1/messages" |
+    node -e '
+      const fs = require("fs")
+      const raw = fs.readFileSync(0, "utf8")
+      try {
+        const result = JSON.parse(raw)
+        const messages = result.messages || result.items
+        if (!Array.isArray(messages)) process.exit(1)
+        process.stdout.write(String(messages.length))
+      } catch (error) {
+        console.error("Invalid Mailpit response: " + raw)
+        process.exit(1)
+      }
+    '
 }
 
 echo "Проверка защиты test identity окружением"
-curl_with_timeout -fsS "$base/api/v1/auth/me" | grep -q '"devMode":false'
+[ "$(curl_with_timeout -fsS "$base/api/v1/auth/me" | json_field devMode)" = false ]
 test_identity_code=$(curl_with_timeout -sS -o /dev/null -w '%{http_code}' \
   -H 'X-Test-User-ID: 3' "$base/api/v1/requests")
 [ "$test_identity_code" = 200 ]
@@ -105,7 +137,7 @@ echo "Проверка восстановления SMTP и повторной �
 curl_with_timeout -fsS -X DELETE "$mailpit/api/v1/messages" >/dev/null
 $compose stop mailpit
 created=$(create_request "SMTP runtime")
-request_id=$(printf '%s' "$created" | sed -n 's/.*"id":\([0-9][0-9]*\).*/\1/p')
+request_id=$(printf '%s' "$created" | json_field id)
 [ -n "$request_id" ]
 sleep 7
 $compose ps --status running scheduler | grep -q scheduler
@@ -116,7 +148,7 @@ $compose start mailpit
 $compose exec -T mariadb mariadb -uic_test -pic_test_password ic_test \
   -e "UPDATE notification_outbox SET next_attempt_at=CURRENT_TIMESTAMP WHERE request_id=$request_id AND status='pending'"
 mail_attempt=0
-until [ "$(curl_with_timeout -fsS "$mailpit/api/v1/messages" | grep -o '\"ID\"' | wc -l)" -gt 0 ]; do
+until [ "$(mailpit_message_count)" -gt 0 ]; do
   mail_attempt=$((mail_attempt + 1))
   [ "$mail_attempt" -lt 20 ] || exit 1
   sleep 1
@@ -137,10 +169,10 @@ done
 $compose ps --status running scheduler | grep -q scheduler
 curl_with_timeout -fsS -X DELETE "$mailpit/api/v1/messages" >/dev/null
 created=$(create_request "DB reconnect")
-request_id=$(printf '%s' "$created" | sed -n 's/.*"id":\([0-9][0-9]*\).*/\1/p')
+request_id=$(printf '%s' "$created" | json_field id)
 [ -n "$request_id" ]
 mail_attempt=0
-until [ "$(curl_with_timeout -fsS "$mailpit/api/v1/messages" | grep -o '\"ID\"' | wc -l)" -gt 0 ]; do
+until [ "$(mailpit_message_count)" -gt 0 ]; do
   mail_attempt=$((mail_attempt + 1))
   [ "$mail_attempt" -lt 20 ] || exit 1
   sleep 1

@@ -20,6 +20,7 @@ test('новая заявка доставляет письма через на�
   const me = await request.get('/api/v1/auth/me', {
     headers: { 'X-Test-User-ID': '3' },
   })
+  expect(me.ok(), await me.text()).toBe(true)
   const { csrfToken } = await me.json()
   const response = await request.post('/api/v1/requests', {
     headers: { 'X-Test-User-ID': '3', 'X-CSRF-Token': csrfToken },

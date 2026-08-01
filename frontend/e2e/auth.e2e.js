@@ -16,6 +16,7 @@ test('настоящий AD принимает корректные учётны
   expect(login).toBeTruthy()
   expect(password).toBeTruthy()
   const me = await request.get('/api/v1/auth/me')
+  expect(me.ok(), await me.text()).toBe(true)
   const { csrfToken } = await me.json()
   const response = await request.post('/api/v1/auth/login', {
     headers: { 'X-CSRF-Token': csrfToken },
@@ -29,6 +30,7 @@ test('настоящий AD принимает корректные учётны
 
 test('настоящий AD отклоняет неверный пароль', async ({ request }) => {
   const me = await request.get('/api/v1/auth/me')
+  expect(me.ok(), await me.text()).toBe(true)
   const { csrfToken } = await me.json()
   const response = await request.post('/api/v1/auth/login', {
     headers: { 'X-CSRF-Token': csrfToken },

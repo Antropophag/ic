@@ -128,19 +128,21 @@ function refreshRegistry() {
 }
 
 async function logout() {
-  authGuard.invalidate()
+  const token = authGuard.begin(true)
   devUsersGuard.invalidate()
+  let csrfToken = ''
   try {
     const result = await authApi.logout()
-    setCsrfToken(result.csrfToken)
+    csrfToken = result.csrfToken
   } catch {
-    setCsrfToken('')
-  } finally {
-    setDevMode(false)
-    authDevMode.value = false
-    authUser.value = null
-    closeRequest({ push: false })
+    // Logout still clears local state when the current request fails.
   }
+  if (!authGuard.isCurrent(token, true)) return
+  setCsrfToken(csrfToken)
+  setDevMode(false)
+  authDevMode.value = false
+  authUser.value = null
+  closeRequest({ push: false })
 }
 
 function handlePopState() {
