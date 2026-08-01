@@ -17,12 +17,12 @@ final class CurrentUser
 
     public function id(Request $request): int
     {
-        // Управляемые заголовки доступны только в dev/test: X-Test-User-ID
-        // существует исключительно в test, а production игнорирует оба.
-        if (in_array(YII_ENV, ['dev', 'test'], true)) {
-            $header = YII_ENV === 'test'
-                ? ($request->headers->get('X-Test-User-ID') ?? $request->headers->get('X-Dev-User-ID'))
-                : $request->headers->get('X-Dev-User-ID');
+        // Интерактивный dev-заголовок и скрытая test identity разделены
+        // типом приложения. Production игнорирует оба без feature flags.
+        if (YII_ENV === 'dev' || YII_ENV === 'test') {
+            $header = YII_ENV === 'dev'
+                ? $request->headers->get('X-Dev-User-ID')
+                : $request->headers->get('X-Test-User-ID');
             $id = filter_var($header, FILTER_VALIDATE_INT);
             if ($id !== false && $id > 0) {
                 return $id;

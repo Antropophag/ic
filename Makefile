@@ -23,13 +23,13 @@ help:
 	@echo "schema-diagram-check  Fail if the committed ER diagram is stale"
 
 up:
-	docker compose up -d --build
+	docker compose -f compose.yaml -f compose.dev.yaml --env-file .env.dev up -d --build
 
 init:
 	sh scripts/init-dev.sh
 
 down:
-	docker compose down
+	docker compose -f compose.yaml -f compose.dev.yaml --env-file .env.dev down
 
 setup:
 	sh scripts/install-git-hooks.sh

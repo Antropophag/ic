@@ -12,6 +12,7 @@ trap cleanup EXIT INT TERM
 cleanup
 
 echo "Test identity environment guard contract"
+curl -fsS "$base/api/v1/auth/me" | grep -q '"devMode":false'
 test_identity_code=$(curl -sS -o /dev/null -w '%{http_code}' \
   -H 'X-Test-User-ID: 3' "$base/api/v1/requests")
 [ "$test_identity_code" = 200 ]

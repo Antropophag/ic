@@ -1,0 +1,10 @@
+services:
+  backend:
+    env_file: !override [.env.dev]
+    environment:
+      APP_ENV: dev
+
+  scheduler:
+    env_file: !override [.env.dev]
+    environment:
+      APP_ENV: dev

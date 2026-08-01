@@ -4,9 +4,9 @@ set -eu
 project_root=$(CDPATH='' cd -- "$(dirname -- "$0")/.." && pwd)
 cd "$project_root"
 
-docker compose up -d --build
-docker compose run --rm backend ./yii migrate/up
-docker compose run --rm backend ./yii dev/seed
+docker compose -f compose.yaml -f compose.dev.yaml --env-file .env.dev up -d --build
+docker compose -f compose.yaml -f compose.dev.yaml --env-file .env.dev run --rm backend ./yii migrate/up
+docker compose -f compose.yaml -f compose.dev.yaml --env-file .env.dev run --rm backend ./yii dev/seed
 
 echo "Portal: http://localhost:8080"
 echo "Readiness: http://localhost:8080/health/ready"

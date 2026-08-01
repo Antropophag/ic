@@ -34,6 +34,10 @@ SQL, optimistic locking, lease/backoff и матрицы переходов.
 
 ## Production-like стенд
 
+Режим приложения задаётся самим `compose.test.yaml` (`APP_ENV=test`), а не
+содержимым `.env.test`. Файл `.env.test` хранит только значения конфигурации
+изолированного стенда.
+
 ```text
 Playwright -> gateway -> backend -> MariaDB 11.4
                          |       -> Samba AD DC (IC.TEST)
@@ -43,6 +47,11 @@ Playwright -> gateway -> backend -> MariaDB 11.4
 
 `compose.test.yaml` имеет отдельный project name, БД `ic_test` и отдельные test volumes.
 Reset зарегистрирован только при `APP_ENV=test` и требует `_test` в имени БД.
+
+При ручном открытии test-стенда пользователь видит обычную форму входа и
+аутентифицируется в Samba AD. Автоматические integration/E2E могут отдельно
+использовать `X-Test-User-ID`; этот механизм не включает dev-переключатель во
+frontend и принимается backend только при `APP_ENV=test`.
 
 Выбран Samba AD: приложение выполняет UPN bind и ищет профиль по `sAMAccountName`.
 Приложение не преобразует AD-группы в роли — роли хранятся в MariaDB. Samba проверяет
@@ -69,8 +78,9 @@ make test-env-down
 
 `test/reset` накатывает migrations, seed пользователей, очищает storage и Mailpit. E2E
 artifacts находятся в `frontend/test-results` и `frontend/playwright-report`.
-`X-Test-User-ID` работает только при `YII_ENV=test`; вне test заголовок игнорируется, а
-reset-controller не зарегистрирован.
+`X-Test-User-ID` работает только при `YII_ENV=test`; вне test заголовок
+игнорируется, а reset-controller не зарегистрирован. `X-Dev-User-ID`
+принимается только при `APP_ENV=dev`.
 
 | Изменение | Какие тесты запускать |
 |---|---|

@@ -12,6 +12,12 @@ async function expectOk(response) {
   return response.json()
 }
 
+async function useTestIdentity(page, userId) {
+  await page.route('**/api/**', async route => {
+    await route.continue({ headers: { ...route.request().headers(), 'X-Test-User-ID': String(userId) } })
+  })
+}
+
 test('заявка проходит критический путь до согласования СБ', async ({ page, baseURL }) => {
   const marker = `E2E-${Date.now()}`
   const initiator = await apiFor(baseURL, 3)
@@ -77,8 +83,8 @@ test('комментарий, оставленный при создании з�
   const marker = `E2E-comment-${Date.now()}`
   const comment = 'Срочно, испытания нужны до конца недели.'
 
+  await useTestIdentity(page, 3)
   await page.goto('/')
-  await page.selectOption('.dev-user-switch', '3')
   await page.getByRole('button', { name: '＋ Новая заявка' }).click()
   await page.getByPlaceholder('Введите наименование продукции').fill(marker)
   await page.getByPlaceholder('Наименование производителя').fill('Тестовый производитель')
@@ -146,8 +152,8 @@ test('кнопка «назад» браузера возвращает из к�
   const errors = []
   page.on('pageerror', error => errors.push(error.message))
 
+  await useTestIdentity(page, 3)
   await page.goto('/')
-  await page.selectOption('.dev-user-switch', '3')
   await page.getByRole('button', { name: '＋ Новая заявка' }).click()
   await page.getByPlaceholder('Введите наименование продукции').fill(marker)
   await page.getByPlaceholder('Наименование производителя').fill('Тестовый производитель')
@@ -178,8 +184,8 @@ test('администратор управляет ролями и возвра
   const errors = []
   page.on('pageerror', error => errors.push(error.message))
 
+  await useTestIdentity(page, 6)
   await page.goto('/')
-  await page.selectOption('.dev-user-switch', '6')
   await page.getByRole('button', { name: 'Администрирование' }).click()
   await expect(page.getByRole('heading', { name: 'Пользователи и роли' })).toBeVisible()
   await expect(page.getByRole('cell', { name: 'Тестовый сотрудник', exact: true })).toBeVisible()

@@ -17,6 +17,8 @@ services:
       context: .
       dockerfile: docker/backend.Dockerfile
     env_file: .env
+    environment:
+      APP_ENV: prod
     depends_on:
       mariadb:
         condition: service_healthy
@@ -33,6 +35,8 @@ services:
       context: .
       dockerfile: docker/backend.Dockerfile
     env_file: .env
+    environment:
+      APP_ENV: prod
     depends_on:
       mariadb:
         condition: service_healthy

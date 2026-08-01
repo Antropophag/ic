@@ -14,6 +14,8 @@ services:
       context: .
       dockerfile: docker/backend.Dockerfile
     env_file: .env.test
+    environment:
+      APP_ENV: test
     depends_on:
       mariadb: {condition: service_healthy}
       ad: {condition: service_healthy}
@@ -28,6 +30,8 @@ services:
       context: .
       dockerfile: docker/backend.Dockerfile
     env_file: .env.test
+    environment:
+      APP_ENV: test
     depends_on:
       mariadb: {condition: service_healthy}
       mailpit: {condition: service_healthy}

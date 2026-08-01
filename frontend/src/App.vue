@@ -1,6 +1,6 @@
 <script setup>
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
-import { authApi, setCsrfToken } from './api'
+import { authApi, setCsrfToken, setDevMode } from './api'
 import AuthScreen from './components/AuthScreen.vue'
 import AdminPanel from './components/AdminPanel.vue'
 import RequestDetails from './components/RequestDetails.vue'
@@ -72,10 +72,12 @@ async function bootstrapAuth() {
     const result = await authApi.me()
     setCsrfToken(result.csrfToken)
     authDevMode.value = Boolean(result.devMode)
+    setDevMode(authDevMode.value)
     authUser.value = result.user
     if (authDevMode.value) await loadDevUsers()
   } catch {
     authDevMode.value = false
+    setDevMode(false)
     authUser.value = null
   } finally {
     authLoading.value = false
