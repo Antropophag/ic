@@ -1,6 +1,6 @@
 .DEFAULT_GOAL := help
 
-.PHONY: help init up down setup check test backend-quality coverage backend-integration frontend-quality frontend-coverage e2e test-env-up test-env-reset test-env-down test-env-destroy test-env-logs runtime-contracts repo-quality smoke demo-bundle frontend-build schema-diagram schema-diagram-check
+.PHONY: help init up down setup check test backend-quality coverage backend-integration frontend-quality frontend-coverage e2e test-env-up test-env-reset test-env-down test-env-destroy test-env-logs repo-quality demo-bundle frontend-build schema-diagram schema-diagram-check
 
 help:
 	@echo "up                    Build and start the development stack"
@@ -17,7 +17,6 @@ help:
 	@echo "e2e                   Run the production-like Playwright stand"
 	@echo "test-env-up/reset/down Manage the isolated test stand"
 	@echo "repo-quality          Lint workflows, Dockerfiles, shell, YAML and Markdown"
-	@echo "smoke                 Check the running API end-to-end"
 	@echo "demo-bundle           Build an offline Windows demo bundle"
 	@echo "frontend-build        Verify the production frontend build"
 	@echo "schema-diagram        Regenerate ER diagram from migrated MariaDB"
@@ -42,6 +41,8 @@ test:
 	docker build --file docker/coverage.Dockerfile --tag shlz-test-registry-coverage .
 	docker run --rm shlz-test-registry-coverage vendor/bin/phpunit
 	sh scripts/backend-integration.sh
+	npm --prefix frontend ci --no-audit --no-fund
+	npm --prefix frontend test
 
 backend-quality:
 	docker build --file docker/coverage.Dockerfile --tag shlz-test-registry-coverage .
@@ -88,9 +89,6 @@ test-env-destroy:
 test-env-logs:
 	sh scripts/test-env.sh logs
 
-runtime-contracts:
-	sh scripts/test-runtime-contracts.sh
-
 frontend-quality:
 	npm --prefix frontend ci --no-audit --no-fund
 	npm --prefix frontend run lint
@@ -102,9 +100,6 @@ repo-quality:
 		npm --prefix frontend ci --no-audit --no-fund; \
 	fi
 	sh scripts/lint-repository.sh
-
-smoke:
-	sh scripts/smoke.sh
 
 demo-bundle:
 	sh scripts/build-demo-bundle.sh

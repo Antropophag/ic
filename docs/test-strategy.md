@@ -12,8 +12,7 @@ SQL, optimistic locking, lease/backoff и матрицы переходов.
 | PHPUnit Integration | MariaDB, транзакции, storage, outbox, LDAP | production-интеграции | средне/стабильно | основной backend-слой |
 | Vitest | чистое поведение frontend | UI-state и навигация | быстро/стабильно | оставить |
 | Playwright | крупные маршруты | компоненты не работают вместе | медленнее | 8 независимых сценариев |
-| `smoke.sh` | live/ready и один API-маршрут | образ не запускается | быстро | сокращён с 990 строк |
-| Runtime contracts | рестарты AD/MariaDB/SMTP | долгоживущие соединения | медленно | отдельная проверка |
+| Runtime contracts | рестарты AD/MariaDB/SMTP | долгоживущие соединения | медленно | этап `make e2e` |
 
 ## Матрица сценариев
 
@@ -80,22 +79,26 @@ reset-controller не зарегистрирован.
 | UI | Frontend unit + соответствующий E2E |
 | LDAP | Identity integration + AD runtime/E2E |
 | SMTP/outbox | Notification integration + SMTP E2E |
-| Compose/infrastructure | Smoke + runtime contracts |
+| Compose/infrastructure | E2E setup + runtime contracts |
 
 Coverage остаётся метрикой Domain/Application, а не всего backend Infrastructure.
 
-## Перенос проверок из прежнего smoke
+## Распределение прежней shell-проверки
 
 Backend unit/integration-наборы не удалялись: компактный проект уже имел полезные
 локализованные проверки workflow, policy, storage и outbox. Избыточность была в
-990-строчном последовательном smoke-сценарии.
+отдельном последовательном shell-сценарии. После появления обязательного production-like
+E2E у него не осталось уникальной ответственности.
 
-| Удалённая проверка | Чем заменена | Почему проще |
+| Бывшая проверка | Новый основной тест | Что подтверждается |
 |---|---|---|
-| Полный workflow через цепочку `curl` | `critical-flow.e2e.js` и PHPUnit integration | браузер защищает маршрут, integration точно диагностирует правило |
-| Детальные outbox/retry проверки через SQL из shell | `NotificationOutboxProcessorTest.php` и SMTP runtime contract | lease/backoff проверяются без хрупкого shell orchestration |
-| LDAP и восстановление соединений внутри общего сценария | `auth.e2e.js` и `test-runtime-contracts.sh` | сбой интеграции изолирован и воспроизводим |
-| Многошаговая подготовка общих demo-данных | идемпотентный `php yii test/reset` | каждый прогон начинает с известного состояния |
+| readiness | `test-env.sh up` | gateway отвечает `status=ready`, MariaDB и storage доступны |
+| liveness | `test-env.sh up` | gateway отвечает `status=ok` до запуска Playwright |
+| создание и чтение заявки | `critical-flow.e2e.js` | HTTP routes, JSON и сохранение в настоящей MariaDB |
+| назначение и начало работы | `RequestRepositoryTest.php`, `RequestWorkflowTest.php`, `critical-flow.e2e.js` | правило, транзакция, версии и внешний HTTP-маршрут |
+| gateway/backend/DB connectivity | `critical-flow.e2e.js` | production-like компоненты работают вместе без backend mock |
+| test identity | `test-runtime-contracts.sh` | заголовок работает в test и получает 401 при `APP_ENV=prod` |
 
-Короткий `smoke.sh` оставляет только readiness/liveness и один ключевой API-маршрут:
-создание, чтение, назначение и начало работы.
+`make e2e` последовательно валидирует Compose, поднимает стенд, проверяет health-контракты,
+выполняет reset, Playwright и затем разрушительные runtime-проверки. Любая ошибка
+останавливает команду с ненулевым кодом; teardown выполняется всегда.

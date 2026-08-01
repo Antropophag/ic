@@ -17,10 +17,19 @@ wait_url() {
   done
 }
 
+assert_health() {
+  url=$1
+  expected=$2
+  wait_url "$url"
+  curl -fsS "$url" | grep -q "\"status\":\"$expected\""
+}
+
 case "$action" in
 up)
+  $compose config --quiet
   $compose up -d --build
-  wait_url "${TEST_BASE_URL:-http://localhost:18080}/health/ready"
+  assert_health "${TEST_BASE_URL:-http://localhost:18080}/health/ready" ready
+  assert_health "${TEST_BASE_URL:-http://localhost:18080}/health/live" ok
   wait_url "${MAILPIT_BASE_URL:-http://localhost:18025}/api/v1/info"
   ;;
 reset)

@@ -47,7 +47,7 @@ final class AuthController extends Controller
         // фронтенд должен получить токен до первой формы логина, иначе сам
         // логин будет отклонён проверкой CSRF (RequestController). devMode
         // решает, показывать ли фронтенду dev-переключатель или форму входа
-        // — YII_ENV, а не признак production-сборки Vite: и smoke, и E2E
+        // — YII_ENV, а не признак production-сборки Vite: E2E
         // гоняют собранный фронтенд против backend с APP_ENV=dev.
         $csrfToken = Yii::$app->request->csrfToken;
         $devMode = in_array(YII_ENV, ['dev', 'test'], true);

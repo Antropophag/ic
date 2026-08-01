@@ -3,6 +3,32 @@ set -eu
 cd "$(CDPATH='' cd -- "$(dirname -- "$0")/.." && pwd)"
 compose='docker compose -f compose.test.yaml'
 base=${TEST_BASE_URL:-http://localhost:18080}
+prod_identity_container=ic-test-prod-identity-contract
+
+cleanup() {
+  docker rm -f "$prod_identity_container" >/dev/null 2>&1 || true
+}
+trap cleanup EXIT INT TERM
+cleanup
+
+echo "Test identity environment guard contract"
+test_identity_code=$(curl -sS -o /dev/null -w '%{http_code}' \
+  -H 'X-Test-User-ID: 3' "$base/api/v1/requests")
+[ "$test_identity_code" = 200 ]
+$compose run -d --name "$prod_identity_container" \
+  --publish 127.0.0.1:18081:8080 \
+  -e APP_ENV=prod backend \
+  php -S 0.0.0.0:8080 -t public public/index.php >/dev/null
+attempt=0
+until curl -fsS http://localhost:18081/health/live >/dev/null 2>&1; do
+  attempt=$((attempt + 1))
+  [ "$attempt" -lt 20 ] || exit 1
+  sleep 1
+done
+production_header_code=$(curl -sS -o /dev/null -w '%{http_code}' \
+  -H 'X-Test-User-ID: 3' http://localhost:18081/api/v1/requests)
+[ "$production_header_code" = 401 ]
+cleanup
 
 echo "LDAP bind/profile contract"
 login_code=$(curl -sS -o /tmp/ic-login.json -w '%{http_code}' -H 'Content-Type: application/json' \

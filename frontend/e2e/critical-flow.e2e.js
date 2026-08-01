@@ -3,7 +3,7 @@ import { expect, request as playwrightRequest, test } from '@playwright/test'
 async function apiFor(baseURL, userId) {
   return playwrightRequest.newContext({
     baseURL,
-    extraHTTPHeaders: { 'X-Dev-User-ID': String(userId) },
+    extraHTTPHeaders: { 'X-Test-User-ID': String(userId) },
   })
 }
 
@@ -27,12 +27,28 @@ test('заявка проходит критический путь до сог�
     testMethod: 'Критический E2E-сценарий',
   } }))
   const requestId = created.id
-  await expectOk(await manager.post(`/api/v1/requests/${requestId}/executor`, {
+  expect(created).toMatchObject({
+    id: requestId,
+    status: 'registered',
+  })
+
+  const persisted = await expectOk(await initiator.get(`/api/v1/requests/${requestId}`))
+  expect(persisted.item).toMatchObject({
+    id: requestId,
+    product_name: marker,
+    status: 'registered',
+    lockVersion: 1,
+  })
+
+  const assigned = await expectOk(await manager.post(`/api/v1/requests/${requestId}/executor`, {
     data: { executorId: 2, lockVersion: 1 },
   }))
-  await expectOk(await manager.post(`/api/v1/requests/${requestId}/start`, {
+  expect(assigned).toMatchObject({ executorId: 2, lockVersion: 2 })
+
+  const started = await expectOk(await manager.post(`/api/v1/requests/${requestId}/start`, {
     data: { lockVersion: 2 },
   }))
+  expect(started).toMatchObject({ status: 'in_progress', lockVersion: 3 })
   await expectOk(await executor.post(`/api/v1/requests/${requestId}/report`, {
     multipart: { file: { name: 'e2e-report.pdf', mimeType: 'application/pdf', buffer: Buffer.from('%PDF-1.4\n%%EOF') } },
   }))
@@ -44,7 +60,7 @@ test('заявка проходит критический путь до сог�
   }))
 
   await page.route('**/api/**', async route => {
-    await route.continue({ headers: { ...route.request().headers(), 'X-Dev-User-ID': '5' } })
+    await route.continue({ headers: { ...route.request().headers(), 'X-Test-User-ID': '5' } })
   })
   await page.goto('/')
   await page.getByRole('row').filter({ hasText: marker }).click()
@@ -104,7 +120,7 @@ test('реестр показывает индикаторы последнег�
   }))
 
   await page.route('**/api/**', async route => {
-    await route.continue({ headers: { ...route.request().headers(), 'X-Dev-User-ID': '2' } })
+    await route.continue({ headers: { ...route.request().headers(), 'X-Test-User-ID': '2' } })
   })
   await page.goto('/')
   const row = page.getByRole('row').filter({ hasText: marker })

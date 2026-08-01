@@ -94,12 +94,6 @@ backend-образа. Команда `notification/work` загружает Yii 
 docker compose exec backend php yii notification/send
 ```
 
-Проверка работающего контура с созданием тестовой заявки:
-
-```bash
-make smoke
-```
-
 Быстрые unit и integration-тесты:
 
 ```bash
