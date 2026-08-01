@@ -17,11 +17,14 @@ final class CurrentUser
 
     public function id(Request $request): int
     {
-        // Dev-заголовок работает только при APP_ENV=dev — используется dev
-        // UI, smoke-тестами и E2E, никогда не создаёт production-backdoor.
-        if (YII_ENV === 'dev') {
-            $id = filter_var($request->headers->get('X-Dev-User-ID'), FILTER_VALIDATE_INT);
-            if ($id !== false && $id > 0) {
+        // Интерактивный dev-заголовок и скрытая test identity разделены
+        // типом приложения. Production игнорирует оба без feature flags.
+        if (YII_ENV === 'dev' || YII_ENV === 'test') {
+            $header = YII_ENV === 'dev'
+                ? $request->headers->get('X-Dev-User-ID')
+                : $request->headers->get('X-Test-User-ID');
+            $id = filter_var($header, FILTER_VALIDATE_INT);
+            if ($id !== false && $id > 0 && $this->isActive($id)) {
                 return $id;
             }
         }
@@ -31,15 +34,21 @@ final class CurrentUser
             // AUTH-003 проверяется на каждый запрос, а не только при входе —
             // отключение локального профиля должно немедленно обрывать уже
             // открытую сессию, а не только блокировать следующий логин.
-            $isActive = $this->db->createCommand(
-                'SELECT is_active FROM {{%users}} WHERE id = :id',
-                [':id' => $sessionUserId],
-            )->queryScalar();
-            if ($isActive !== false && (bool) $isActive) {
+            if ($this->isActive($sessionUserId)) {
                 return $sessionUserId;
             }
         }
 
         throw new UnauthorizedHttpException('Authentication required');
+    }
+
+    private function isActive(int $userId): bool
+    {
+        $isActive = $this->db->createCommand(
+            'SELECT is_active FROM {{%users}} WHERE id = :id',
+            [':id' => $userId],
+        )->queryScalar();
+
+        return $isActive !== false && (bool) $isActive;
     }
 }

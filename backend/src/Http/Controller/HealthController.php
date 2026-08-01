@@ -48,7 +48,7 @@ final class HealthController extends Controller
             throw new ForbiddenHttpException($error->getMessage());
         }
 
-        Yii::error('Logging smoke probe', 'health.logging');
+        Yii::error('Logging probe', 'health.logging');
         Yii::getLogger()->flush(true);
 
         return ['status' => 'ok'];

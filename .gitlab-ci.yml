@@ -45,28 +45,7 @@ backend-coverage:
     - docker run --rm --volume "$CI_PROJECT_DIR/backend/build/coverage:/app/build/coverage" shlz-test-registry-coverage
     - python3 scripts/check_coverage.py backend/build/coverage/clover.xml --minimum 90
 
-api-smoke:
-  stage: test
-  image: docker:29.0.0-cli
-  services:
-    - name: docker:29.0.0-dind
-      command: ["--tls=false"]
-  variables:
-    DOCKER_HOST: tcp://docker:2375
-    DOCKER_TLS_CERTDIR: ""
-    BASE_URL: http://docker:8080
-  before_script:
-    - apk add --no-cache curl
-    - cp .env.example .env
-  script:
-    - docker compose up -d --build
-    - docker compose run --rm backend ./yii migrate/up
-    - docker compose run --rm backend ./yii dev/seed
-    - sh scripts/smoke.sh
-  after_script:
-    - docker compose down --volumes
-
-browser-e2e:
+production-like-e2e:
   stage: test
   image: mcr.microsoft.com/playwright:v1.62.0-noble
   services:
@@ -75,19 +54,20 @@ browser-e2e:
   variables:
     DOCKER_HOST: tcp://docker:2375
     DOCKER_TLS_CERTDIR: ""
-    E2E_BASE_URL: http://docker:8080
+    E2E_BASE_URL: http://docker:18080
+    TEST_BASE_URL: http://docker:18080
+    MAILPIT_BASE_URL: http://docker:18025
   before_script:
     - apt-get update
     - apt-get install -y --no-install-recommends docker.io docker-compose-v2
-    - cp .env.example .env
   script:
-    - docker compose up -d --build
-    - docker compose run --rm backend ./yii migrate/up
-    - docker compose run --rm backend ./yii dev/seed
+    - make test-env-up
+    - make test-env-reset
     - npm --prefix frontend ci --no-audit --no-fund
     - npm --prefix frontend run e2e
+    - make runtime-contracts
   after_script:
-    - docker compose down --volumes
+    - docker compose -f compose.test.yaml down --volumes
   artifacts:
     when: on_failure
     paths:

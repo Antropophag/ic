@@ -1,15 +1,35 @@
 import { expect, request as playwrightRequest, test } from '@playwright/test'
 
 async function apiFor(baseURL, userId) {
+  const bootstrap = await playwrightRequest.newContext({
+    baseURL,
+    extraHTTPHeaders: { 'X-Test-User-ID': String(userId) },
+  })
+  const me = await bootstrap.get('/api/v1/auth/me')
+  expect(me.ok(), await me.text()).toBe(true)
+  const { csrfToken } = await me.json()
+  const storageState = await bootstrap.storageState()
+  await bootstrap.dispose()
+
   return playwrightRequest.newContext({
     baseURL,
-    extraHTTPHeaders: { 'X-Dev-User-ID': String(userId) },
+    storageState,
+    extraHTTPHeaders: {
+      'X-Test-User-ID': String(userId),
+      'X-CSRF-Token': csrfToken,
+    },
   })
 }
 
 async function expectOk(response) {
   expect(response.ok(), await response.text()).toBe(true)
   return response.json()
+}
+
+async function useTestIdentity(page, userId) {
+  await page.route('**/api/**', async route => {
+    await route.continue({ headers: { ...route.request().headers(), 'X-Test-User-ID': String(userId) } })
+  })
 }
 
 test('заявка проходит критический путь до согласования СБ', async ({ page, baseURL }) => {
@@ -27,12 +47,28 @@ test('заявка проходит критический путь до сог�
     testMethod: 'Критический E2E-сценарий',
   } }))
   const requestId = created.id
-  await expectOk(await manager.post(`/api/v1/requests/${requestId}/executor`, {
+  expect(created).toMatchObject({
+    id: requestId,
+    status: 'registered',
+  })
+
+  const persisted = await expectOk(await initiator.get(`/api/v1/requests/${requestId}`))
+  expect(persisted.item).toMatchObject({
+    id: requestId,
+    product_name: marker,
+    status: 'registered',
+    lockVersion: 1,
+  })
+
+  const assigned = await expectOk(await manager.post(`/api/v1/requests/${requestId}/executor`, {
     data: { executorId: 2, lockVersion: 1 },
   }))
-  await expectOk(await manager.post(`/api/v1/requests/${requestId}/start`, {
+  expect(assigned).toMatchObject({ executorId: 2, lockVersion: 2 })
+
+  const started = await expectOk(await manager.post(`/api/v1/requests/${requestId}/start`, {
     data: { lockVersion: 2 },
   }))
+  expect(started).toMatchObject({ status: 'in_progress', lockVersion: 3 })
   await expectOk(await executor.post(`/api/v1/requests/${requestId}/report`, {
     multipart: { file: { name: 'e2e-report.pdf', mimeType: 'application/pdf', buffer: Buffer.from('%PDF-1.4\n%%EOF') } },
   }))
@@ -44,7 +80,7 @@ test('заявка проходит критический путь до сог�
   }))
 
   await page.route('**/api/**', async route => {
-    await route.continue({ headers: { ...route.request().headers(), 'X-Dev-User-ID': '5' } })
+    await route.continue({ headers: { ...route.request().headers(), 'X-Test-User-ID': '5' } })
   })
   await page.goto('/')
   await page.getByRole('row').filter({ hasText: marker }).click()
@@ -61,8 +97,8 @@ test('комментарий, оставленный при создании з�
   const marker = `E2E-comment-${Date.now()}`
   const comment = 'Срочно, испытания нужны до конца недели.'
 
+  await useTestIdentity(page, 3)
   await page.goto('/')
-  await page.selectOption('.dev-user-switch', '3')
   await page.getByRole('button', { name: '＋ Новая заявка' }).click()
   await page.getByPlaceholder('Введите наименование продукции').fill(marker)
   await page.getByPlaceholder('Наименование производителя').fill('Тестовый производитель')
@@ -104,7 +140,7 @@ test('реестр показывает индикаторы последнег�
   }))
 
   await page.route('**/api/**', async route => {
-    await route.continue({ headers: { ...route.request().headers(), 'X-Dev-User-ID': '2' } })
+    await route.continue({ headers: { ...route.request().headers(), 'X-Test-User-ID': '2' } })
   })
   await page.goto('/')
   const row = page.getByRole('row').filter({ hasText: marker })
@@ -130,8 +166,8 @@ test('кнопка «назад» браузера возвращает из к�
   const errors = []
   page.on('pageerror', error => errors.push(error.message))
 
+  await useTestIdentity(page, 3)
   await page.goto('/')
-  await page.selectOption('.dev-user-switch', '3')
   await page.getByRole('button', { name: '＋ Новая заявка' }).click()
   await page.getByPlaceholder('Введите наименование продукции').fill(marker)
   await page.getByPlaceholder('Наименование производителя').fill('Тестовый производитель')
@@ -162,8 +198,8 @@ test('администратор управляет ролями и возвра
   const errors = []
   page.on('pageerror', error => errors.push(error.message))
 
+  await useTestIdentity(page, 6)
   await page.goto('/')
-  await page.selectOption('.dev-user-switch', '6')
   await page.getByRole('button', { name: 'Администрирование' }).click()
   await expect(page.getByRole('heading', { name: 'Пользователи и роли' })).toBeVisible()
   await expect(page.getByRole('cell', { name: 'Тестовый сотрудник', exact: true })).toBeVisible()
@@ -173,16 +209,4 @@ test('администратор управляет ролями и возвра
   await expect(page.getByPlaceholder('Поиск по заявкам')).toBeVisible()
 
   expect(errors).toEqual([])
-})
-
-test('dev-кнопка подтверждает полный сброс и заполняет реестр демо-заявками', async ({ page }) => {
-  await page.goto('/')
-  await page.getByRole('button', { name: 'Заполнить демо' }).click()
-
-  await expect(page.getByText(/Все существующие заявки, комментарии и файлы/)).toBeVisible()
-  await page.getByRole('button', { name: 'Заполнить демо', exact: true }).last().click()
-
-  await expect(page.getByRole('status')).toHaveText('Создано демо-заявок: 7.')
-  await expect(page.getByRole('row')).toHaveCount(8)
-  await expect(page.getByRole('row').filter({ hasText: 'Вектор-Демо' })).toBeVisible()
 })

@@ -1,6 +1,6 @@
 <script setup>
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
-import { authApi, setCsrfToken } from './api'
+import { authApi, setCsrfToken, setDevMode } from './api'
 import AuthScreen from './components/AuthScreen.vue'
 import AdminPanel from './components/AdminPanel.vue'
 import RequestDetails from './components/RequestDetails.vue'
@@ -26,6 +26,7 @@ const demoSeedTrigger = ref(0)
 const demoSeedLoading = ref(false)
 const demoSeedMessage = ref('')
 const devUsersGuard = createLatestRequestGuard()
+const authGuard = createLatestRequestGuard()
 
 const currentProfile = computed(() => {
   if (authDevMode.value) {
@@ -42,12 +43,13 @@ const currentProfile = computed(() => {
 const currentInitials = computed(() => initialsFor(currentProfile.value.displayName))
 const isAdministrator = computed(() => (currentProfile.value.roles || []).includes('administrator'))
 
-async function loadDevUsers() {
+async function loadDevUsers(authToken = null) {
   if (devUsersLoading.value) return false
   devUsersLoading.value = true
   const token = devUsersGuard.begin(true)
   try {
     const result = await authApi.devUsers()
+    if (authToken !== null && !authGuard.isCurrent(authToken, true)) return false
     if (!devUsersGuard.isCurrent(token, true)) return false
     const items = Array.isArray(result.items) ? result.items : []
     if (!items.length) {
@@ -67,18 +69,23 @@ async function loadDevUsers() {
 }
 
 async function bootstrapAuth() {
+  const token = authGuard.begin(true)
   authLoading.value = true
   try {
     const result = await authApi.me()
+    if (!authGuard.isCurrent(token, true)) return
     setCsrfToken(result.csrfToken)
     authDevMode.value = Boolean(result.devMode)
+    setDevMode(authDevMode.value)
     authUser.value = result.user
-    if (authDevMode.value) await loadDevUsers()
+    if (authDevMode.value) await loadDevUsers(token)
   } catch {
+    if (!authGuard.isCurrent(token, true)) return
     authDevMode.value = false
+    setDevMode(false)
     authUser.value = null
   } finally {
-    authLoading.value = false
+    if (authGuard.isCurrent(token, true)) authLoading.value = false
   }
 }
 
@@ -121,15 +128,21 @@ function refreshRegistry() {
 }
 
 async function logout() {
+  const token = authGuard.begin(true)
+  devUsersGuard.invalidate()
+  let csrfToken = ''
   try {
     const result = await authApi.logout()
-    setCsrfToken(result.csrfToken)
+    csrfToken = result.csrfToken
   } catch {
-    setCsrfToken('')
-  } finally {
-    authUser.value = null
-    closeRequest({ push: false })
+    // Logout still clears local state when the current request fails.
   }
+  if (!authGuard.isCurrent(token, true)) return
+  setCsrfToken(csrfToken)
+  setDevMode(false)
+  authDevMode.value = false
+  authUser.value = null
+  closeRequest({ push: false })
 }
 
 function handlePopState() {
@@ -145,6 +158,7 @@ onMounted(() => {
 onBeforeUnmount(() => {
   window.removeEventListener('popstate', handlePopState)
   devUsersGuard.invalidate()
+  authGuard.invalidate()
 })
 </script>
 

@@ -9,6 +9,11 @@ function devHeaders() {
 // включает enableCsrfValidation вне YII_ENV=dev). Токен приходит из ответа
 // /api/v1/auth/me или /auth/login и хранится здесь на время сессии SPA.
 let csrfToken = ''
+let devMode = false
+
+export function setDevMode(enabled) {
+  devMode = Boolean(enabled)
+}
 
 export function setCsrfToken(token) {
   csrfToken = token || ''
@@ -19,7 +24,7 @@ export function hasCsrfToken() {
 }
 
 function authHeaders() {
-  return { ...devHeaders(), ...(csrfToken ? { 'X-CSRF-Token': csrfToken } : {}) }
+  return { ...(devMode ? devHeaders() : {}), ...(csrfToken ? { 'X-CSRF-Token': csrfToken } : {}) }
 }
 
 async function request(path, options = {}) {
@@ -70,7 +75,7 @@ export const requestApi = {
   }),
   downloadDocument: async (versionId) => {
     const response = await fetch(`/api/v1/document-versions/${versionId}/download`, {
-      headers: { ...devHeaders() },
+      headers: authHeaders(),
     })
     if (!response.ok) {
       const error = new Error('Не удалось скачать документ')

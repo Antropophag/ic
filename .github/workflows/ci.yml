@@ -103,21 +103,7 @@ jobs:
       - if: always()
         run: docker compose down --volumes
 
-  api-smoke:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v7
-        with:
-          persist-credentials: false
-      - run: cp .env.example .env
-      - run: docker compose up -d --build
-      - run: docker compose run --rm backend ./yii migrate/up
-      - run: docker compose run --rm backend ./yii dev/seed
-      - run: make smoke
-      - if: always()
-        run: docker compose down --volumes
-
-  browser-e2e:
+  production-like-e2e:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -128,23 +114,14 @@ jobs:
           node-version: 22
           cache: npm
           cache-dependency-path: frontend/package-lock.json
-      - run: cp .env.example .env
-      - run: docker compose up -d --build
-      - run: docker compose run --rm backend ./yii migrate/up
-      - run: docker compose run --rm backend ./yii dev/seed
-      - run: npm ci --no-audit --no-fund
-        working-directory: frontend
-      - run: npx playwright install --with-deps chromium
-        working-directory: frontend
-      - run: npm run e2e
-        working-directory: frontend
+      - run: make e2e
       - if: failure()
         uses: actions/upload-artifact@v4
         with:
           name: playwright-report
           path: frontend/playwright-report/
       - if: always()
-        run: docker compose down --volumes
+        run: docker compose -f compose.test.yaml down --volumes
 
   analyze:
     runs-on: ubuntu-latest

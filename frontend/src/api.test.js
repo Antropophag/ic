@@ -1,11 +1,12 @@
 import { afterEach, expect, it, vi } from 'vitest'
-import { adminApi, authApi, hasCsrfToken, requestApi, setCsrfToken } from './api'
+import { adminApi, authApi, hasCsrfToken, requestApi, setCsrfToken, setDevMode } from './api'
 import { setDevUserId } from './devUsers'
 
 afterEach(() => {
   vi.unstubAllGlobals()
   setDevUserId(1)
   setCsrfToken('')
+  setDevMode(false)
 })
 
 it('loads the registry as JSON', async () => {
@@ -278,12 +279,23 @@ it('sends the currently selected dev user as the actor header', async () => {
   const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({ items: [] }), { status: 200 }))
   vi.stubGlobal('fetch', fetchMock)
   setDevUserId(4)
+  setDevMode(true)
 
   await requestApi.list()
 
   expect(fetchMock).toHaveBeenCalledWith('/api/v1/requests', expect.objectContaining({
     headers: expect.objectContaining({ 'X-Dev-User-ID': '4' }),
   }))
+})
+
+it('does not send the dev actor header outside explicit dev mode', async () => {
+  const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({ items: [] }), { status: 200 }))
+  vi.stubGlobal('fetch', fetchMock)
+  setDevUserId(4)
+
+  await requestApi.list()
+
+  expect(fetchMock.mock.calls[0][1].headers).not.toHaveProperty('X-Dev-User-ID')
 })
 
 it('omits the CSRF header until a token is set', async () => {

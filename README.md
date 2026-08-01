@@ -57,7 +57,6 @@ npm run dev
 ## Запуск рабочего контура
 
 ```bash
-cp .env.example .env
 make init
 ```
 
@@ -65,12 +64,30 @@ make init
 `http://localhost:8080/health/ready`. Миграции выполняются отдельной
 идемпотентной командой, а не автоматически при старте web-контейнера.
 
+Окружения разделены явно:
+
+- `.env` — локальная незакоммиченная production-конфигурация с LDAP-входом;
+- `.env.dev` — локальная незакоммиченная конфигурация режима с переключателем
+  пользователей, которую создают из безопасного `.env.dev.example` и используют
+  в `make up`, `make init` и `make down`;
+- `.env.test` — изолированный стенд с настоящим входом через Samba AD,
+  test-reset и скрытой test identity для автоматических сценариев.
+
+Production-конфигурацию создают из `.env.example`: `cp .env.example .env`.
+Dev-конфигурацию создают отдельно: `cp .env.dev.example .env.dev`, затем
+заполняют локальные LDAP/SMTP-параметры.
+Файлы `.env*` содержат только значения настроек. Выбор режима выполняет
+Compose: `compose.yaml` задаёт `APP_ENV=prod`, `compose.dev.yaml` переопределяет
+его на `dev`, а `compose.test.yaml` задаёт `test`.
+Режим авторизации не является feature flag: `prod` и `test` показывают LDAP-форму,
+а только `dev` включает локальный переключатель. Test identity не появляется в UI.
+
 Dev-пользователи (`dev/seed`) заведены с адресами на зарезервированном
 недоставляемом домене `*@example.invalid` — письма о заявках, созданных под
 ними, технически «отправляются» (попадают в `notification_outbox` и уходят из
 него без ошибки), но реально никуда не долетают. Чтобы при ручном
 тестировании полного цикла получать эти письма на свой ящик, укажите его в
-`.env`:
+`.env.dev`:
 
 ```dotenv
 NOTIFICATION_TEST_REDIRECT_EMAIL=you@example.com
@@ -80,8 +97,8 @@ NOTIFICATION_TEST_REDIRECT_EMAIL=you@example.com
 production. Письмо в этом случае реально уходит на указанный адрес: тема
 получает пометку `[Тест, настоящий получатель: Имя <email>]`, а тело письма
 начинается строкой `Письмо адресовано: ...` с исходным адресатом, за которой
-следует оригинальный текст. После изменения `.env` пересоберите и
-перезапустите контейнеры (`docker compose up -d --build`), чтобы
+следует оригинальный текст. После изменения `.env.dev` пересоберите и
+перезапустите контейнеры (`make up`), чтобы
 `backend`/`scheduler` подхватили новое значение. `scheduler` — не отдельное
 приложение или микросервис, а долгоживущий PHP CLI-процесс из того же
 backend-образа. Команда `notification/work` загружает Yii один раз и
@@ -91,22 +108,29 @@ backend-образа. Команда `notification/work` загружает Yii 
 Разовую обработку одной пачки можно запустить вручную:
 
 ```bash
-docker compose exec backend php yii notification/send
+docker compose -f compose.yaml -f compose.dev.yaml --env-file .env.dev exec backend php yii notification/send
 ```
 
-Проверка работающего контура с созданием тестовой заявки:
+Быстрые unit и integration-тесты:
 
 ```bash
-make smoke
+make check
+make test
 ```
 
-Интеграционные тесты `RequestRepository`/`DocumentRepository` против отдельной
-тестовой базы `ic_test` в том же сервисе MariaDB (не требует полного запуска
-`make init`, поднимает только `mariadb`):
+Полный изолированный стенд использует production-образы приложения, MariaDB
+11.4, Samba AD `IC.TEST`, Mailpit и scheduler:
 
 ```bash
-make backend-integration
+make test-env-up
+make test-env-reset
+make e2e
+make test-env-logs
+make test-env-down
 ```
+
+Mailpit UI: `http://localhost:18025`. Пользователи, матрица рисков и
+диагностика описаны в `docs/test-strategy.md`.
 
 ## Демо на чистой Windows-машине
 

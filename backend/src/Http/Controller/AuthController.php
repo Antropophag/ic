@@ -47,8 +47,9 @@ final class AuthController extends Controller
         // фронтенд должен получить токен до первой формы логина, иначе сам
         // логин будет отклонён проверкой CSRF (RequestController). devMode
         // решает, показывать ли фронтенду dev-переключатель или форму входа
-        // — YII_ENV, а не признак production-сборки Vite: и smoke, и E2E
-        // гоняют собранный фронтенд против backend с APP_ENV=dev.
+        // определяется типом приложения, а не сборкой Vite. Test — это
+        // LDAP-вход с отдельной скрытой test identity для автотестов, но без
+        // интерактивного переключателя пользователей.
         $csrfToken = Yii::$app->request->csrfToken;
         $devMode = YII_ENV === 'dev';
 
@@ -73,8 +74,8 @@ final class AuthController extends Controller
      * эндпоинт (список актёров нужен фронтенду ДО выбора, под кем логиниться
      * через X-Dev-User-ID — авторизовывать не под кем). Данные — фиксированные
      * синтетические аккаунты (dev.*@example.invalid), не секрет; а сам
-     * dev-режим уже принимает любой X-Dev-User-ID без проверки существования
-     * (CurrentUser), так что этот список не расширяет модель угроз dev-стенда.
+     * CurrentUser принимает из X-Dev-User-ID только существующий активный
+     * профиль, так что список не расширяет модель угроз dev-стенда.
      *
      * @return array{items: list<array<string, mixed>>}
      */

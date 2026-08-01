@@ -13,6 +13,8 @@ services:
   backend:
     image: shlz-test-registry-backend:demo
     env_file: .env
+    environment:
+      APP_ENV: dev
     depends_on:
       mariadb:
         condition: service_healthy
@@ -27,6 +29,8 @@ services:
   scheduler:
     image: shlz-test-registry-backend:demo
     env_file: .env
+    environment:
+      APP_ENV: dev
     depends_on:
       mariadb:
         condition: service_healthy

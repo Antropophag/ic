@@ -1,0 +1,26 @@
+#!/bin/sh
+set -eu
+project_root=$(CDPATH='' cd -- "$(dirname -- "$0")/.." && pwd)
+cd "$project_root"
+cleanup() {
+  cd "$project_root"
+  sh scripts/test-env.sh down
+}
+trap cleanup EXIT
+trap 'exit 130' INT
+trap 'exit 143' TERM
+sh scripts/test-env.sh up
+sh scripts/test-env.sh reset
+npm --prefix frontend ci --no-audit --no-fund
+cd frontend
+if [ -n "${CI:-}" ]; then
+  npm exec -- playwright install --with-deps chromium
+else
+  npm exec -- playwright install chromium
+fi
+E2E_BASE_URL="${TEST_BASE_URL:-http://localhost:18080}" \
+  MAILPIT_BASE_URL="${MAILPIT_BASE_URL:-http://localhost:18025}" \
+  TEST_AD_LOGIN="${TEST_AD_LOGIN:-initiator}" \
+  TEST_AD_PASSWORD="${TEST_AD_PASSWORD:-TestPassword1!}" npm run e2e
+cd "$project_root"
+sh scripts/test-runtime-contracts.sh

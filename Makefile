@@ -1,6 +1,6 @@
 .DEFAULT_GOAL := help
 
-.PHONY: help init up down setup check backend-quality coverage backend-integration frontend-quality frontend-coverage e2e repo-quality smoke demo-bundle frontend-build schema-diagram schema-diagram-check
+.PHONY: help init up down setup check test backend-quality coverage backend-integration frontend-quality frontend-coverage e2e test-env-up test-env-reset test-env-down test-env-destroy test-env-logs repo-quality demo-bundle frontend-build schema-diagram schema-diagram-check
 
 help:
 	@echo "up                    Build and start the development stack"
@@ -8,33 +8,41 @@ help:
 	@echo "down                  Stop the development stack"
 	@echo "setup                 Enable repository Git hooks"
 	@echo "check                 Run the same checks as CI before push"
+	@echo "test                  Run backend unit and MariaDB integration tests"
 	@echo "backend-quality       Run PHP style, static analysis and dependency audit"
 	@echo "coverage              Enforce backend domain/application coverage >= 90%"
 	@echo "backend-integration   Run Infrastructure repository tests against real MariaDB"
 	@echo "frontend-quality      Run frontend lint and dependency audit"
 	@echo "frontend-coverage     Enforce frontend logic coverage >= 80%"
-	@echo "e2e                   Run critical browser flow against the running stack"
+	@echo "e2e                   Run the production-like Playwright stand"
+	@echo "test-env-up/reset/down Manage the isolated test stand"
 	@echo "repo-quality          Lint workflows, Dockerfiles, shell, YAML and Markdown"
-	@echo "smoke                 Check the running API end-to-end"
 	@echo "demo-bundle           Build an offline Windows demo bundle"
 	@echo "frontend-build        Verify the production frontend build"
 	@echo "schema-diagram        Regenerate ER diagram from migrated MariaDB"
 	@echo "schema-diagram-check  Fail if the committed ER diagram is stale"
 
 up:
-	docker compose up -d --build
+	docker compose -f compose.yaml -f compose.dev.yaml --env-file .env.dev up -d --build
 
 init:
 	sh scripts/init-dev.sh
 
 down:
-	docker compose down
+	docker compose -f compose.yaml -f compose.dev.yaml --env-file .env.dev down
 
 setup:
 	sh scripts/install-git-hooks.sh
 
 check:
 	sh scripts/check.sh
+
+test:
+	docker build --file docker/coverage.Dockerfile --tag shlz-test-registry-coverage .
+	docker run --rm shlz-test-registry-coverage vendor/bin/phpunit
+	sh scripts/backend-integration.sh
+	npm --prefix frontend ci --no-audit --no-fund
+	npm --prefix frontend test
 
 backend-quality:
 	docker build --file docker/coverage.Dockerfile --tag shlz-test-registry-coverage .
@@ -64,9 +72,22 @@ frontend-coverage:
 	npm --prefix frontend run coverage
 
 e2e:
-	npm --prefix frontend ci --no-audit --no-fund
-	cd frontend && npm exec playwright install chromium
-	npm --prefix frontend run e2e
+	sh scripts/e2e.sh
+
+test-env-up:
+	sh scripts/test-env.sh up
+
+test-env-reset:
+	sh scripts/test-env.sh reset
+
+test-env-down:
+	sh scripts/test-env.sh down
+
+test-env-destroy:
+	sh scripts/test-env.sh destroy
+
+test-env-logs:
+	sh scripts/test-env.sh logs
 
 frontend-quality:
 	npm --prefix frontend ci --no-audit --no-fund
@@ -79,9 +100,6 @@ repo-quality:
 		npm --prefix frontend ci --no-audit --no-fund; \
 	fi
 	sh scripts/lint-repository.sh
-
-smoke:
-	sh scripts/smoke.sh
 
 demo-bundle:
 	sh scripts/build-demo-bundle.sh

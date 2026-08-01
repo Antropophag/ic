@@ -14,7 +14,7 @@ final class DevController extends Controller
 {
     /**
      * Основные шесть профилей закреплены за фиксированными id: на них ссылаются
-     * smoke-тесты и E2E. Фиксированный id не гарантирован на давно живущей
+     * E2E. Фиксированный id не гарантирован на давно живущей
      * демо-базе (см. actionSeed() ниже) — dev-переключатель пользователя во
      * фронтенде поэтому резолвит актуальные id через
      * AuthController::actionDevUsers(), которая читает ad_login отсюда же
@@ -109,8 +109,8 @@ final class DevController extends Controller
 
     public function actionSeed(): int
     {
-        if (YII_ENV !== 'dev') {
-            $this->stderr("Development seed is disabled outside APP_ENV=dev.\n");
+        if (!in_array(YII_ENV, ['dev', 'test'], true)) {
+            $this->stderr("Development seed is disabled outside APP_ENV=dev/test.\n");
             return ExitCode::UNSPECIFIED_ERROR;
         }
 
@@ -182,8 +182,8 @@ final class DevController extends Controller
 
     public function actionSeedRequests(): int
     {
-        if (YII_ENV !== 'dev') {
-            $this->stderr("Development request seed is disabled outside APP_ENV=dev.\n");
+        if (!in_array(YII_ENV, ['dev', 'test'], true)) {
+            $this->stderr("Development request seed is disabled outside APP_ENV=dev/test.\n");
             return ExitCode::UNSPECIFIED_ERROR;
         }
 
