@@ -14,7 +14,7 @@ curl_with_timeout() {
 restore_services() {
   status=$?
   trap - EXIT INT TERM
-  $compose up -d ad mailpit mariadb scheduler >/dev/null 2>&1 || true
+  $compose start ad mailpit mariadb scheduler >/dev/null 2>&1 || true
   rm -f "$cookie_jar"
   exit "$status"
 }
@@ -64,6 +64,10 @@ db_query() {
   $compose exec -T mariadb sh -eu -c \
     'mariadb -N -u"$MARIADB_USER" -p"$MARIADB_PASSWORD" "$MARIADB_DATABASE" -e "$1"' \
     sh "$1"
+}
+
+service_running() {
+  $compose ps "$1" | grep -Eiq 'running|Up'
 }
 
 echo "Проверка защиты test identity окружением"
@@ -149,7 +153,7 @@ created=$(create_request "SMTP runtime")
 request_id=$(printf '%s' "$created" | json_field id)
 [ -n "$request_id" ]
 sleep 7
-$compose ps --status running scheduler | grep -q scheduler
+service_running scheduler
 attempts=$(db_query "SELECT MAX(attempts) FROM notification_outbox WHERE request_id=$request_id")
 [ "${attempts:-0}" -gt 0 ]
 $compose start mailpit
@@ -164,7 +168,7 @@ done
 echo "Проверка переподключения к MariaDB"
 $compose stop mariadb
 sleep 3
-$compose ps --status running scheduler | grep -q scheduler
+service_running scheduler
 $compose logs scheduler | grep -q 'Notification worker iteration failed'
 $compose start mariadb
 attempt=0
@@ -173,7 +177,7 @@ until curl_with_timeout -fsS "$base/health/ready" >/dev/null 2>&1; do
   [ "$attempt" -lt 40 ] || exit 1
   sleep 1
 done
-$compose ps --status running scheduler | grep -q scheduler
+service_running scheduler
 curl_with_timeout -fsS -X DELETE "$mailpit/api/v1/messages" >/dev/null
 created=$(create_request "DB reconnect")
 request_id=$(printf '%s' "$created" | json_field id)
@@ -188,13 +192,13 @@ done
 echo "Проверка корректного завершения notification worker по SIGTERM"
 $compose kill -s SIGTERM scheduler
 attempt=0
-while $compose ps --status running scheduler | grep -q scheduler; do
+while service_running scheduler; do
   attempt=$((attempt + 1))
   [ "$attempt" -lt 15 ] || exit 1
   sleep 1
 done
 $compose logs scheduler | grep -q 'Notification worker stopped'
-$compose up -d scheduler
-$compose ps --status running scheduler | grep -q scheduler
+$compose start scheduler
+service_running scheduler
 
 echo "Runtime-проверки успешно завершены"
