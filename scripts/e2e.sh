@@ -9,7 +9,7 @@ cleanup() {
   if [ "$status" -ne 0 ]; then
     echo "Test deployment failed; container status and recent logs follow." >&2
     $COMPOSE --env-file .env.test -f compose.test.yaml ps >&2 || true
-    $COMPOSE --env-file .env.test -f compose.test.yaml logs --no-color --tail=200 >&2 || true
+    $COMPOSE --env-file .env.test -f compose.test.yaml logs --tail=200 >&2 || true
   fi
   sh scripts/test-env.sh down || true
   return "$status"

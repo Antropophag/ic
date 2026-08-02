@@ -40,9 +40,9 @@ down) $compose down --remove-orphans ;;
 destroy) $compose down --volumes --remove-orphans ;;
 logs)
   if [ "$#" -gt 1 ]; then
-    $compose logs --no-color --tail=200 "$2"
+    $compose logs --tail=200 "$2"
   else
-    $compose logs --no-color --tail=200
+    $compose logs --tail=200
   fi
   ;;
 *)

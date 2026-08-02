@@ -165,7 +165,7 @@ echo "Проверка переподключения к MariaDB"
 $compose stop mariadb
 sleep 3
 $compose ps --status running scheduler | grep -q scheduler
-$compose logs --no-color scheduler | grep -q 'Notification worker iteration failed'
+$compose logs scheduler | grep -q 'Notification worker iteration failed'
 $compose start mariadb
 attempt=0
 until curl_with_timeout -fsS "$base/health/ready" >/dev/null 2>&1; do
@@ -193,7 +193,7 @@ while $compose ps --status running scheduler | grep -q scheduler; do
   [ "$attempt" -lt 15 ] || exit 1
   sleep 1
 done
-$compose logs --no-color scheduler | grep -q 'Notification worker stopped'
+$compose logs scheduler | grep -q 'Notification worker stopped'
 $compose up -d scheduler
 $compose ps --status running scheduler | grep -q scheduler
 
