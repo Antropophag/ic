@@ -85,7 +85,7 @@ final class DevController extends Controller
         $database = Yii::$app->db->createCommand('SELECT DATABASE()')->queryScalar();
         if (!is_string($database) || !DatabasePurpose::isDevelopment($database)) {
             throw new ForbiddenHttpException(
-                'Development tools are available only on a database ending with _dev.',
+                'Инструменты разработки доступны только для БД с именем, оканчивающимся на _dev.',
             );
         }
     }

@@ -24,7 +24,27 @@ printf '%s' "$users" | node -e '
   }
 '
 
-for id in 1 2 3 4 5 6 7; do
+user_ids=$(printf '%s' "$users" | node -e '
+  const fs = require("fs")
+  const result = JSON.parse(fs.readFileSync(0, "utf8"))
+  process.stdout.write(result.items.map((user) => user.id).join(" "))
+')
+admin_id=$(printf '%s' "$users" | node -e '
+  const fs = require("fs")
+  const result = JSON.parse(fs.readFileSync(0, "utf8"))
+  const user = result.items.find((item) => item.roles.includes("administrator"))
+  if (!user) process.exit(1)
+  process.stdout.write(String(user.id))
+')
+non_admin_id=$(printf '%s' "$users" | node -e '
+  const fs = require("fs")
+  const result = JSON.parse(fs.readFileSync(0, "utf8"))
+  const user = result.items.find((item) => !item.roles.includes("administrator"))
+  if (!user) process.exit(1)
+  process.stdout.write(String(user.id))
+')
+
+for id in $user_ids; do
   curl -fsS -H "X-Dev-User-ID: $id" "$base/api/v1/auth/me" |
     node -e '
       const fs = require("fs")
@@ -35,21 +55,21 @@ done
 
 cookie_jar=$(mktemp)
 trap 'rm -f "$cookie_jar"' EXIT INT TERM
-csrf=$(curl -fsS -b "$cookie_jar" -c "$cookie_jar" -H 'X-Dev-User-ID: 3' \
+csrf=$(curl -fsS -b "$cookie_jar" -c "$cookie_jar" -H "X-Dev-User-ID: $non_admin_id" \
   "$base/api/v1/auth/me" | node -e '
     const fs = require("fs")
     process.stdout.write(JSON.parse(fs.readFileSync(0, "utf8")).csrfToken)
   ')
 seed_code=$(curl -sS -o /dev/null -w '%{http_code}' -b "$cookie_jar" -c "$cookie_jar" \
-  -H 'X-Dev-User-ID: 3' -H "X-CSRF-Token: $csrf" -X POST "$base/api/v1/dev/seed-requests")
+  -H "X-Dev-User-ID: $non_admin_id" -H "X-CSRF-Token: $csrf" -X POST "$base/api/v1/dev/seed-requests")
 [ "$seed_code" = 403 ]
-csrf=$(curl -fsS -b "$cookie_jar" -c "$cookie_jar" -H 'X-Dev-User-ID: 6' \
+csrf=$(curl -fsS -b "$cookie_jar" -c "$cookie_jar" -H "X-Dev-User-ID: $admin_id" \
   "$base/api/v1/auth/me" | node -e '
     const fs = require("fs")
     process.stdout.write(JSON.parse(fs.readFileSync(0, "utf8")).csrfToken)
   ')
 seed_code=$(curl -sS -o /dev/null -w '%{http_code}' -b "$cookie_jar" -c "$cookie_jar" \
-  -H 'X-Dev-User-ID: 6' -H "X-CSRF-Token: $csrf" -X POST "$base/api/v1/dev/seed-requests")
+  -H "X-Dev-User-ID: $admin_id" -H "X-CSRF-Token: $csrf" -X POST "$base/api/v1/dev/seed-requests")
 [ "$seed_code" = 200 ]
 rm -f "$cookie_jar"
 trap - EXIT INT TERM
