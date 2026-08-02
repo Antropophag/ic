@@ -1,6 +1,6 @@
 .DEFAULT_GOAL := help
 
-COMPOSE ?= $(shell if docker compose version >/dev/null 2>&1; then printf 'docker compose'; elif podman compose version >/dev/null 2>&1; then printf 'podman compose'; fi)
+COMPOSE ?= $(shell if docker compose version >/dev/null 2>&1; then printf 'docker compose'; elif command -v podman-compose >/dev/null 2>&1; then printf 'podman-compose'; elif podman compose version >/dev/null 2>&1; then printf 'podman compose'; fi)
 CONTAINER_ENGINE ?= $(firstword $(COMPOSE))
 export COMPOSE CONTAINER_ENGINE
 
