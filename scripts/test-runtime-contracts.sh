@@ -67,7 +67,7 @@ db_query() {
 }
 
 service_running() {
-  $compose ps "$1" | grep -Eiq 'running|Up'
+  $compose ps | grep -Ei "$1" | grep -Eiq 'running|Up'
 }
 
 echo "Проверка защиты test identity окружением"
