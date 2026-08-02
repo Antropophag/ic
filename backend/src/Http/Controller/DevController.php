@@ -30,6 +30,8 @@ final class DevController extends Controller
     /** @return array{items: list<array<string, mixed>>} */
     public function actionUsers(): array
     {
+        $this->assertDevelopmentDatabase();
+
         $adLogins = array_column(\App\Console\DevController::CORE_USERS, 'ad_login');
         $params = [];
         $placeholders = [];
@@ -59,6 +61,8 @@ final class DevController extends Controller
     /** @return array{requests: int, comments: int, documents: int} */
     public function actionSeedRequests(): array
     {
+        $this->assertDevelopmentDatabase();
+
         $actorId = (new CurrentUser(Yii::$app->db))->id(Yii::$app->request);
         $isAdministrator = Yii::$app->db->createCommand(
             'SELECT 1 FROM {{%user_roles}} ur '
@@ -70,16 +74,19 @@ final class DevController extends Controller
             throw new ForbiddenHttpException('Для сброса реестра требуются права администратора.');
         }
 
-        $database = Yii::$app->db->createCommand('SELECT DATABASE()')->queryScalar();
-        if (!is_string($database) || !DatabasePurpose::isDevelopment($database)) {
-            throw new ForbiddenHttpException(
-                'Development request seed is available only on a database ending with _dev.',
-            );
-        }
-
         return (new DevelopmentRequestSeeder(
             Yii::$app->db,
             new DocumentStorage(getenv('DOCUMENT_STORAGE_PATH') ?: '/app/storage/documents'),
         ))->seed();
+    }
+
+    private function assertDevelopmentDatabase(): void
+    {
+        $database = Yii::$app->db->createCommand('SELECT DATABASE()')->queryScalar();
+        if (!is_string($database) || !DatabasePurpose::isDevelopment($database)) {
+            throw new ForbiddenHttpException(
+                'Development tools are available only on a database ending with _dev.',
+            );
+        }
     }
 }
