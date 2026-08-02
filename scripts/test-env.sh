@@ -27,7 +27,7 @@ assert_health() {
 
 case "$action" in
 up)
-  $compose config --quiet
+  $compose config >/dev/null
   $compose up -d --build
   assert_health "${TEST_BASE_URL:-http://localhost:18080}/health/live" ok
   assert_health "${TEST_BASE_URL:-http://localhost:18080}/health/ready" ready

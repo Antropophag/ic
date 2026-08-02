@@ -12,7 +12,7 @@ cd "$project_root"
 
 export COMPOSE_ENV_FILE=.env.dev
 compose="$COMPOSE --env-file .env.dev -f compose.yaml -f compose.dev.yaml"
-$compose config --quiet
+$compose config >/dev/null
 $compose up -d --build
 $compose run --rm backend php yii migrate/up --interactive=0
 $compose run --rm backend php yii dev/seed
