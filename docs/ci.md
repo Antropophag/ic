@@ -1,4 +1,4 @@
-# Continuous integration
+# Непрерывная интеграция
 
 GitHub Actions и GitLab CI используют Makefile как источник истины.
 

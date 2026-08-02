@@ -7,6 +7,7 @@ namespace App\Http\Controller;
 use App\Infrastructure\Development\DevelopmentRequestSeeder;
 use App\Infrastructure\Deployment\DatabasePurpose;
 use App\Infrastructure\Document\DocumentStorage;
+use App\Infrastructure\Identity\CurrentUser;
 use Yii;
 use yii\rest\Controller;
 use yii\web\ForbiddenHttpException;
@@ -58,6 +59,17 @@ final class DevController extends Controller
     /** @return array{requests: int, comments: int, documents: int} */
     public function actionSeedRequests(): array
     {
+        $actorId = (new CurrentUser(Yii::$app->db))->id(Yii::$app->request);
+        $isAdministrator = Yii::$app->db->createCommand(
+            'SELECT 1 FROM {{%user_roles}} ur '
+            . 'INNER JOIN {{%roles}} r ON r.id = ur.role_id '
+            . 'WHERE ur.user_id = :user_id AND r.code = :role_code',
+            [':user_id' => $actorId, ':role_code' => 'administrator'],
+        )->queryScalar();
+        if ($isAdministrator === false) {
+            throw new ForbiddenHttpException('Для сброса реестра требуются права администратора.');
+        }
+
         $database = Yii::$app->db->createCommand('SELECT DATABASE()')->queryScalar();
         if (!is_string($database) || !DatabasePurpose::isDevelopment($database)) {
             throw new ForbiddenHttpException(

@@ -16,8 +16,13 @@ RUN for attempt in 1 2 3; do \
     && rm -rf /var/lib/apt/lists/*
 # Test fixture image follows the pinned Debian base repository.
 # hadolint ignore=DL3008
-RUN apt-get -o Acquire::Retries=5 update \
-    && apt-get -o Acquire::Retries=5 install --yes --no-install-recommends winbind \
+RUN for attempt in 1 2 3; do \
+        apt-get -o Acquire::Retries=5 update \
+        && apt-get -o Acquire::Retries=5 install --yes --no-install-recommends winbind \
+        && break; \
+        test "$attempt" -lt 3 || exit 1; \
+        sleep 3; \
+    done \
     && rm -rf /var/lib/apt/lists/*
 COPY docker/test-ad/entrypoint.sh /usr/local/bin/test-ad-entrypoint
 RUN chmod 0755 /usr/local/bin/test-ad-entrypoint

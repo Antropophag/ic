@@ -172,7 +172,8 @@ service_running scheduler
 $compose logs scheduler | grep -q 'Notification worker iteration failed'
 $compose start mariadb
 attempt=0
-until curl_with_timeout -fsS "$base/health/ready" >/dev/null 2>&1; do
+until db_query 'SELECT 1 FROM notification_outbox LIMIT 1' >/dev/null 2>&1 &&
+  curl_with_timeout -fsS "$base/health/ready" >/dev/null 2>&1; do
   attempt=$((attempt + 1))
   [ "$attempt" -lt 40 ] || exit 1
   sleep 1

@@ -12,4 +12,5 @@ EXPOSE 8080
 
 FROM production AS development
 COPY frontend/dev/dev-tools.js /srv/frontend/dev-tools.js
-RUN sed -i 's#</head>#<script type="module" src="/dev-tools.js"></script></head>#' /srv/frontend/index.html
+RUN sed -i 's#</head>#<script type="module" src="/dev-tools.js"></script></head>#' /srv/frontend/index.html \
+    && grep -q '<script type="module" src="/dev-tools.js"></script>' /srv/frontend/index.html

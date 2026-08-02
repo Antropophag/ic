@@ -12,7 +12,7 @@ scheduler (тот же backend image, php yii notification/work)
 Различия окружений не зашиты в приложение. `compose.dev.yaml` физически
 подключает development target фронтенда и файлы `deployment/dev/*`.
 `compose.test.yaml` подключает `deployment/test/*`, Samba AD и Mailpit.
-Production получает ни одного из этих файлов.
+Production не получает ни одного из этих файлов.
 
 Development identity — обычная запись `users` и ролей в MariaDB. Отдельный
 dev script получает безопасный список (`id`, отображаемое имя, должность),

@@ -22,7 +22,12 @@ deployment управляется явной Compose-командой выше.
 
 Scheduler запускает `php yii notification/work`, использует тот же backend
 image и завершается по SIGTERM с grace period 15 секунд. Разовая ручная
-обработка: `docker compose exec backend php yii notification/send`.
+обработка:
+
+```sh
+docker compose --env-file .env -f compose.yaml exec backend php yii notification/send
+sudo podman-compose --in-pod false --env-file .env -f compose.yaml exec backend php yii notification/send
+```
 
 Готовность: `/health/ready`; liveness: `/health/live`. Документы хранятся в
 именованном volume, MariaDB — в отдельном volume.

@@ -13,7 +13,8 @@
 Development deployment дополнительно монтирует маршруты:
 
 - `GET /api/v1/dev/users` — безопасный список активных seeded users;
-- `POST /api/v1/dev/seed-requests` — подготовка development-данных.
+- `POST /api/v1/dev/seed-requests` — подготовка development-данных; запрос
+  требует выбранного активного пользователя с ролью `administrator`.
 
 Они отсутствуют в production и test route table. Header `X-Dev-User-ID`
 принимается только когда `compose.dev.yaml` смонтировал development

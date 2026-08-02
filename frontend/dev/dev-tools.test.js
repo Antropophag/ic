@@ -4,12 +4,14 @@ import {
   loadUsers,
   renderUserSwitcher,
   selectedUserId,
+  startDevelopmentTools,
 } from './dev-tools'
 
 function browserWindow(fetch = vi.fn()) {
   const values = new Map()
   return {
     fetch,
+    addEventListener: vi.fn(),
     location: { href: 'http://localhost:8080/requests', origin: 'http://localhost:8080', reload: vi.fn() },
     localStorage: {
       getItem: (key) => values.get(key) ?? null,
@@ -91,5 +93,41 @@ describe('standalone development tools', () => {
     select.listeners.change()
     expect(selectedUserId(browser)).toBe('2')
     expect(browser.location.reload).toHaveBeenCalledOnce()
+  })
+
+  it('replaces an invalid persisted selection with the first available user', () => {
+    const browser = browserWindow()
+    browser.localStorage.setItem('ic.dev.userId', '999')
+    const body = element('body')
+    renderUserSwitcher(browser, { body, createElement: (tag) => element(tag) }, [
+      { id: 1, displayName: 'Manager', position: 'IC', roles: ['ic_manager'] },
+    ])
+
+    expect(selectedUserId(browser)).toBe('1')
+    expect(browser.location.reload).toHaveBeenCalledOnce()
+    expect(body.children).toEqual([])
+  })
+
+  it('does not render a switcher for an empty user list', () => {
+    const browser = browserWindow()
+    const body = element('body')
+    renderUserSwitcher(browser, { body, createElement: (tag) => element(tag) }, [])
+
+    expect(body.children).toEqual([])
+    expect(browser.location.reload).not.toHaveBeenCalled()
+  })
+
+  it('starts after DOMContentLoaded and reports an unavailable endpoint', async () => {
+    const browser = browserWindow(vi.fn().mockResolvedValue({ ok: false, status: 503 }))
+    const error = vi.spyOn(console, 'error').mockImplementation(() => {})
+    startDevelopmentTools(browser, { body: element('body'), createElement: (tag) => element(tag) })
+
+    expect(browser.addEventListener).toHaveBeenCalledWith('DOMContentLoaded', expect.any(Function))
+    browser.addEventListener.mock.calls[0][1]()
+    await vi.waitFor(() => expect(error).toHaveBeenCalledWith(
+      'Development tools failed:',
+      expect.objectContaining({ message: 'Development users are unavailable (503)' }),
+    ))
+    error.mockRestore()
   })
 })

@@ -33,17 +33,41 @@ for id in 1 2 3 4 5 6 7; do
     '
 done
 
+cookie_jar=$(mktemp)
+trap 'rm -f "$cookie_jar"' EXIT INT TERM
+csrf=$(curl -fsS -b "$cookie_jar" -c "$cookie_jar" -H 'X-Dev-User-ID: 3' \
+  "$base/api/v1/auth/me" | node -e '
+    const fs = require("fs")
+    process.stdout.write(JSON.parse(fs.readFileSync(0, "utf8")).csrfToken)
+  ')
+seed_code=$(curl -sS -o /dev/null -w '%{http_code}' -b "$cookie_jar" -c "$cookie_jar" \
+  -H 'X-Dev-User-ID: 3' -H "X-CSRF-Token: $csrf" -X POST "$base/api/v1/dev/seed-requests")
+[ "$seed_code" = 403 ]
+csrf=$(curl -fsS -b "$cookie_jar" -c "$cookie_jar" -H 'X-Dev-User-ID: 6' \
+  "$base/api/v1/auth/me" | node -e '
+    const fs = require("fs")
+    process.stdout.write(JSON.parse(fs.readFileSync(0, "utf8")).csrfToken)
+  ')
+seed_code=$(curl -sS -o /dev/null -w '%{http_code}' -b "$cookie_jar" -c "$cookie_jar" \
+  -H 'X-Dev-User-ID: 6' -H "X-CSRF-Token: $csrf" -X POST "$base/api/v1/dev/seed-requests")
+[ "$seed_code" = 200 ]
+rm -f "$cookie_jar"
+trap - EXIT INT TERM
+
 test_header_code=$(curl -sS -o /dev/null -w '%{http_code}' \
   -H 'X-Test-User-ID: 1' "$base/api/v1/requests")
 [ "$test_header_code" = 401 ]
 
 set +e
-$compose exec -T backend php yii test/reset >/tmp/ic-dev-test-command.out 2>&1
+test_command_output=$(mktemp)
+trap 'rm -f "$test_command_output"' EXIT INT TERM
+$compose exec -T backend php yii test/reset >"$test_command_output" 2>&1
 test_route_code=$?
 set -e
 [ "$test_route_code" -ne 0 ]
-grep -q 'Unknown command "test/reset"' /tmp/ic-dev-test-command.out
-rm -f /tmp/ic-dev-test-command.out
+grep -q 'Unknown command "test/reset"' "$test_command_output"
+rm -f "$test_command_output"
+trap - EXIT INT TERM
 
 before_users=$($compose exec -T mariadb sh -c \
   'mariadb -N -u"$MARIADB_USER" -p"$MARIADB_PASSWORD" "$MARIADB_DATABASE" -e "SELECT COUNT(*) FROM users"')
@@ -72,7 +96,7 @@ for database in ic ic_test; do
   refusal_code=$?
   set -e
   [ "$refusal_code" -ne 0 ]
-  printf '%s' "$refusal" | grep -q 'must end with _dev'
+  printf '%s' "$refusal" | grep -q 'должно оканчиваться на _dev'
   tables_after=$($compose exec -T mariadb sh -c \
     "mariadb -N -u root -p\"\$MARIADB_ROOT_PASSWORD\" -e \
       \"SELECT COUNT(*) FROM information_schema.tables WHERE table_schema='$database'\"")

@@ -126,6 +126,26 @@ final class DevController extends Controller
      */
     public function seedUsers(): int
     {
+        $transaction = Yii::$app->db->beginTransaction();
+        try {
+            $result = $this->seedUsersInTransaction();
+            if ($result !== ExitCode::OK) {
+                $transaction->rollBack();
+                return $result;
+            }
+
+            $transaction->commit();
+            return $result;
+        } catch (\Throwable $error) {
+            if ($transaction->isActive) {
+                $transaction->rollBack();
+            }
+            throw $error;
+        }
+    }
+
+    private function seedUsersInTransaction(): int
+    {
         $allRoles = array_merge(
             array_column(self::CORE_USERS, 'roles'),
             array_column(self::ADDITIONAL_EXECUTORS, 'roles'),
@@ -140,7 +160,7 @@ final class DevController extends Controller
             )->queryScalar();
             if ($roleId === false) {
                 $this->stderr(
-                    "Role '{$roleCode}' is missing. Run database migrations before dev/seed.\n",
+                    "Роль '{$roleCode}' отсутствует. Выполните миграции перед dev/seed.\n",
                 );
                 return ExitCode::UNSPECIFIED_ERROR;
             }
@@ -165,8 +185,8 @@ final class DevController extends Controller
             )->queryScalar();
             if ($existingAdLogin !== false && $existingAdLogin !== $user['ad_login']) {
                 $this->stdout(
-                    "Core user id={$userId} is taken by '{$existingAdLogin}' on this "
-                    . "database — seeding '{$user['ad_login']}' by ad_login instead of id.\n",
+                    "Идентификатор основного пользователя id={$userId} уже занят '{$existingAdLogin}'; "
+                    . "профиль '{$user['ad_login']}' будет создан по ad_login без изменения чужой записи.\n",
                 );
                 $this->seedByAdLogin([$user['ad_login'] => $user], $roleIds, $now);
                 continue;
@@ -188,7 +208,7 @@ final class DevController extends Controller
         $this->seedByAdLogin(self::ADDITIONAL_EXECUTORS, $roleIds, $now);
         $this->seedByAdLogin(self::ADDITIONAL_EXPERTS, $roleIds, $now);
 
-        $this->stdout("Development users and roles are ready.\n");
+        $this->stdout("Пользователи и роли среды разработки подготовлены.\n");
         return ExitCode::OK;
     }
 
@@ -209,8 +229,8 @@ final class DevController extends Controller
         }
 
         $this->stdout(
-            "Development registry reset: {$result['requests']} requests, "
-            . "{$result['comments']} comments, {$result['documents']} documents.\n",
+            "Реестр среды разработки сброшен: заявок — {$result['requests']}, "
+            . "комментариев — {$result['comments']}, документов — {$result['documents']}.\n",
         );
         return ExitCode::OK;
     }
@@ -221,7 +241,7 @@ final class DevController extends Controller
         if (!is_string($database) || !DatabasePurpose::isDevelopment($database)) {
             $actual = is_string($database) && $database !== '' ? $database : '(unknown)';
             $this->stderr(
-                "Refusing development seed: connected database '{$actual}' must end with _dev.\n",
+                "Заполнение запрещено: имя подключённой БД '{$actual}' должно оканчиваться на _dev.\n",
             );
             return false;
         }
