@@ -56,22 +56,6 @@ e2e:
     when: on_failure
     paths: [frontend/playwright-report/]
 
-podman:
-  stage: test
-  image: mcr.microsoft.com/playwright:v1.62.0-noble
-  before_script:
-    - apt-get update
-    - apt-get install -y --no-install-recommends make podman podman-compose
-  variables:
-    COMPOSE: podman-compose --in-pod false
-    CONTAINER_ENGINE: podman
-  script: [make e2e]
-  after_script:
-    - make _test-down
-  artifacts:
-    when: on_failure
-    paths: [frontend/playwright-report/]
-
 analyze:
   stage: test
   image: semgrep/semgrep
