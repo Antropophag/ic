@@ -42,6 +42,7 @@ use App\Infrastructure\Document\DocumentRepository;
 use App\Infrastructure\Document\DocumentStorage;
 use App\Infrastructure\Document\OfficeDocumentInspector;
 use App\Infrastructure\Document\OpinionPdfRenderer;
+use App\Infrastructure\Request\RequestQuery;
 use App\Infrastructure\Request\RequestRepository;
 use Yii;
 use yii\rest\Controller;
@@ -82,7 +83,7 @@ final class RequestController extends Controller
             return ['errors' => $input->getErrors()];
         }
 
-        return $this->repository()->findPage(
+        return $this->query()->findPage(
             $this->currentUserId(),
             (int) $input->page,
             (int) $input->pageSize,
@@ -98,7 +99,7 @@ final class RequestController extends Controller
     {
         $actorId = $this->currentUserId();
         try {
-            return $this->repository()->findDetails($id, $actorId);
+            return $this->query()->findDetails($id, $actorId);
         } catch (RequestNotFound $error) {
             throw new NotFoundHttpException($error->getMessage());
         }
@@ -139,7 +140,7 @@ final class RequestController extends Controller
             return ['items' => [], 'hasMore' => false, 'nextBeforeId' => null];
         }
         try {
-            return $this->repository()->findCommentsPage(
+            return $this->query()->findCommentsPage(
                 $id,
                 $this->currentUserId(),
                 $beforeId === false ? null : $beforeId,
@@ -292,14 +293,14 @@ final class RequestController extends Controller
     public function actionExecutors(): array
     {
         $this->currentUserId();
-        return ['items' => $this->repository()->findActiveExecutors()];
+        return ['items' => $this->query()->findActiveExecutors()];
     }
 
     /** @return array{items: list<array{id: int, displayName: string}>} */
     public function actionExperts(): array
     {
         $this->currentUserId();
-        return ['items' => $this->repository()->findActiveExperts()];
+        return ['items' => $this->query()->findActiveExperts()];
     }
 
     /** @return array<string, mixed> */
@@ -835,6 +836,11 @@ final class RequestController extends Controller
     private function repository(): RequestRepository
     {
         return new RequestRepository(Yii::$app->db);
+    }
+
+    private function query(): RequestQuery
+    {
+        return new RequestQuery(Yii::$app->db);
     }
 
     private function documents(): DocumentRepository
