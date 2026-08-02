@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Infrastructure\Identity;
 
+use App\Infrastructure\Deployment\DatabasePurpose;
 use Yii;
 use yii\db\Connection;
 use yii\web\Request;
@@ -18,7 +19,7 @@ final class CurrentUser
     public function id(Request $request): int
     {
         $identityHeader = Yii::$app->params['identityHeader'] ?? null;
-        if (is_string($identityHeader) && $identityHeader !== '') {
+        if (is_string($identityHeader) && $this->allowsIdentityHeader($identityHeader)) {
             $header = $request->headers->get($identityHeader);
             $id = filter_var($header, FILTER_VALIDATE_INT);
             if ($id !== false && $id > 0 && $this->isActive($id)) {
@@ -47,5 +48,13 @@ final class CurrentUser
         )->queryScalar();
 
         return $isActive !== false && (bool) $isActive;
+    }
+
+    private function allowsIdentityHeader(string $identityHeader): bool
+    {
+        $database = $this->db->createCommand('SELECT DATABASE()')->queryScalar();
+
+        return is_string($database)
+            && DatabasePurpose::allowsIdentityHeader($database, $identityHeader);
     }
 }

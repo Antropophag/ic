@@ -41,4 +41,49 @@ final class DatabasePurposeTest extends TestCase
     {
         self::assertSame($expected, DatabasePurpose::isTest($database));
     }
+
+    /** @return iterable<string, array{string, string, bool}> */
+    public static function identityHeaders(): iterable
+    {
+        yield 'development header on development database' => [
+            'ic_dev',
+            DatabasePurpose::DEVELOPMENT_IDENTITY_HEADER,
+            true,
+        ];
+        yield 'development header on production database' => [
+            'ic',
+            DatabasePurpose::DEVELOPMENT_IDENTITY_HEADER,
+            false,
+        ];
+        yield 'development header on test database' => [
+            'ic_test',
+            DatabasePurpose::DEVELOPMENT_IDENTITY_HEADER,
+            false,
+        ];
+        yield 'test header on test database' => [
+            'ic_test',
+            DatabasePurpose::TEST_IDENTITY_HEADER,
+            true,
+        ];
+        yield 'test header on production database' => [
+            'ic',
+            DatabasePurpose::TEST_IDENTITY_HEADER,
+            false,
+        ];
+        yield 'test header on development database' => [
+            'ic_dev',
+            DatabasePurpose::TEST_IDENTITY_HEADER,
+            false,
+        ];
+        yield 'arbitrary header is never trusted' => ['ic_dev', 'X-User-ID', false];
+    }
+
+    #[DataProvider('identityHeaders')]
+    public function testIdentityHeaderMustMatchDatabasePurpose(
+        string $database,
+        string $header,
+        bool $expected,
+    ): void {
+        self::assertSame($expected, DatabasePurpose::allowsIdentityHeader($database, $header));
+    }
 }
