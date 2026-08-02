@@ -1,10 +1,14 @@
 services:
+  frontend:
+    build:
+      target: development
+
   backend:
-    env_file: !override [.env.dev]
-    environment:
-      APP_ENV: dev
+    volumes:
+      - document-data:/app/storage/documents
+      - ./deployment/dev/web.php:/app/deployment/web.php:ro
+      - ./deployment/dev/console.php:/app/deployment/console.php:ro
 
   scheduler:
-    env_file: !override [.env.dev]
-    environment:
-      APP_ENV: dev
+    volumes:
+      - ./deployment/dev/console.php:/app/deployment/console.php:ro

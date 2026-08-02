@@ -23,7 +23,7 @@ return [
             'username' => $env('DB_USER', 'ic'),
             'password' => $env('DB_PASSWORD'),
             'charset' => 'utf8mb4',
-            'enableSchemaCache' => YII_ENV === 'prod',
+            'enableSchemaCache' => true,
         ],
         'log' => [
             'traceLevel' => YII_DEBUG ? 3 : 0,

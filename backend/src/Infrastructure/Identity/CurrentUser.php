@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Infrastructure\Identity;
 
+use App\Infrastructure\Deployment\DatabasePurpose;
 use Yii;
 use yii\db\Connection;
 use yii\web\Request;
@@ -17,12 +18,9 @@ final class CurrentUser
 
     public function id(Request $request): int
     {
-        // Интерактивный dev-заголовок и скрытая test identity разделены
-        // типом приложения. Production игнорирует оба без feature flags.
-        if (YII_ENV === 'dev' || YII_ENV === 'test') {
-            $header = YII_ENV === 'dev'
-                ? $request->headers->get('X-Dev-User-ID')
-                : $request->headers->get('X-Test-User-ID');
+        $identityHeader = Yii::$app->params['identityHeader'] ?? null;
+        if (is_string($identityHeader) && $this->allowsIdentityHeader($identityHeader)) {
+            $header = $request->headers->get($identityHeader);
             $id = filter_var($header, FILTER_VALIDATE_INT);
             if ($id !== false && $id > 0 && $this->isActive($id)) {
                 return $id;
@@ -50,5 +48,13 @@ final class CurrentUser
         )->queryScalar();
 
         return $isActive !== false && (bool) $isActive;
+    }
+
+    private function allowsIdentityHeader(string $identityHeader): bool
+    {
+        $database = $this->db->createCommand('SELECT DATABASE()')->queryScalar();
+
+        return is_string($database)
+            && DatabasePurpose::allowsIdentityHeader($database, $identityHeader);
     }
 }

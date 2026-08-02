@@ -1,10 +1,10 @@
 #!/bin/sh
 set -eu
 cd "$(CDPATH='' cd -- "$(dirname -- "$0")/.." && pwd)"
-compose='docker compose -f compose.test.yaml'
+: "${COMPOSE:?COMPOSE must be provided by Makefile}"
+compose="$COMPOSE --env-file .env.test -f compose.test.yaml"
 base=${TEST_BASE_URL:-http://localhost:18080}
 mailpit=${MAILPIT_BASE_URL:-http://localhost:18025}
-prod_identity_container="ic-test-prod-identity-contract-$$"
 cookie_jar=$(mktemp)
 
 curl_with_timeout() {
@@ -14,8 +14,7 @@ curl_with_timeout() {
 restore_services() {
   status=$?
   trap - EXIT INT TERM
-  docker rm -f "$prod_identity_container" >/dev/null 2>&1 || true
-  $compose up -d ad mailpit mariadb scheduler >/dev/null 2>&1 || true
+  $compose start ad mailpit mariadb scheduler >/dev/null 2>&1 || true
   rm -f "$cookie_jar"
   exit "$status"
 }
@@ -60,38 +59,52 @@ mailpit_message_count() {
     '
 }
 
+db_query() {
+  # shellcheck disable=SC2016 # Переменные раскрываются внутри mariadb-контейнера.
+  $compose exec -T mariadb sh -eu -c \
+    'mariadb -N -u"$MARIADB_USER" -p"$MARIADB_PASSWORD" "$MARIADB_DATABASE" -e "$1"' \
+    sh "$1"
+}
+
+service_running() {
+  $compose ps | grep -Ei "$1" | grep -Eiq 'running|Up'
+}
+
 echo "Проверка защиты test identity окружением"
-[ "$(curl_with_timeout -fsS "$base/api/v1/auth/me" | json_field devMode)" = false ]
+index_html=$(curl_with_timeout -fsS "$base/")
+if printf '%s' "$index_html" | grep -q 'dev-tools.js'; then
+  echo "Production frontend unexpectedly includes dev-tools.js" >&2
+  exit 1
+fi
+assets=$(printf '%s' "$index_html" | sed -n 's/.*src="\([^"]*\.js\)".*/\1/p')
+for asset in $assets; do
+  if curl_with_timeout -fsS "$base$asset" | grep -Eq 'X-Dev-User-ID|/api/v1/dev/users'; then
+    echo "Production frontend asset unexpectedly includes development identity code: $asset" >&2
+    exit 1
+  fi
+done
 test_identity_code=$(curl_with_timeout -sS -o /dev/null -w '%{http_code}' \
   -H 'X-Test-User-ID: 3' "$base/api/v1/requests")
 [ "$test_identity_code" = 200 ]
 missing_identity_code=$(curl_with_timeout -sS -o /dev/null -w '%{http_code}' \
   -H 'X-Test-User-ID: 999999' "$base/api/v1/requests")
 [ "$missing_identity_code" = 401 ]
-$compose exec -T mariadb mariadb -uic_test -pic_test_password ic_test \
-  -e 'UPDATE users SET is_active=0 WHERE id=3'
+db_query 'UPDATE users SET is_active=0 WHERE id=3'
 disabled_identity_code=$(curl_with_timeout -sS -o /dev/null -w '%{http_code}' \
   -H 'X-Test-User-ID: 3' "$base/api/v1/requests")
-$compose exec -T mariadb mariadb -uic_test -pic_test_password ic_test \
-  -e 'UPDATE users SET is_active=1 WHERE id=3'
+db_query 'UPDATE users SET is_active=1 WHERE id=3'
 [ "$disabled_identity_code" = 401 ]
-$compose run -d --name "$prod_identity_container" \
-  --publish 127.0.0.1::8080 \
-  -e APP_ENV=prod backend \
-  php -S 0.0.0.0:8080 -t public public/index.php >/dev/null
-prod_port=$(docker port "$prod_identity_container" 8080/tcp | sed -n 's/.*://p' | head -n 1)
-[ -n "$prod_port" ]
-prod_base="http://127.0.0.1:$prod_port"
-attempt=0
-until curl_with_timeout -fsS "$prod_base/health/live" >/dev/null 2>&1; do
-  attempt=$((attempt + 1))
-  [ "$attempt" -lt 20 ] || exit 1
-  sleep 1
-done
-production_header_code=$(curl_with_timeout -sS -o /dev/null -w '%{http_code}' \
-  -H 'X-Test-User-ID: 3' "$prod_base/api/v1/requests")
-[ "$production_header_code" = 401 ]
-docker rm -f "$prod_identity_container" >/dev/null
+dev_route_code=$(curl_with_timeout -sS -o /dev/null -w '%{http_code}' "$base/api/v1/dev/users")
+[ "$dev_route_code" = 404 ]
+dev_identity_code=$(curl_with_timeout -sS -o /dev/null -w '%{http_code}' \
+  -H 'X-Dev-User-ID: 3' "$base/api/v1/requests")
+[ "$dev_identity_code" = 401 ]
+set +e
+dev_command_output=$($compose exec -T backend php yii dev/seed 2>&1)
+dev_command_code=$?
+set -e
+[ "$dev_command_code" -ne 0 ]
+printf '%s' "$dev_command_output" | grep -q 'Unknown command "dev/seed"'
 
 echo "Проверка LDAP bind и профиля"
 csrf=$(csrf_token)
@@ -140,13 +153,11 @@ created=$(create_request "SMTP runtime")
 request_id=$(printf '%s' "$created" | json_field id)
 [ -n "$request_id" ]
 sleep 7
-$compose ps --status running scheduler | grep -q scheduler
-attempts=$($compose exec -T mariadb mariadb -N -uic_test -pic_test_password ic_test \
-  -e "SELECT MAX(attempts) FROM notification_outbox WHERE request_id=$request_id")
+service_running scheduler
+attempts=$(db_query "SELECT MAX(attempts) FROM notification_outbox WHERE request_id=$request_id")
 [ "${attempts:-0}" -gt 0 ]
 $compose start mailpit
-$compose exec -T mariadb mariadb -uic_test -pic_test_password ic_test \
-  -e "UPDATE notification_outbox SET next_attempt_at=CURRENT_TIMESTAMP WHERE request_id=$request_id AND status='pending'"
+db_query "UPDATE notification_outbox SET next_attempt_at=CURRENT_TIMESTAMP WHERE request_id=$request_id AND status='pending'"
 mail_attempt=0
 until [ "$(mailpit_message_count)" -gt 0 ]; do
   mail_attempt=$((mail_attempt + 1))
@@ -157,16 +168,17 @@ done
 echo "Проверка переподключения к MariaDB"
 $compose stop mariadb
 sleep 3
-$compose ps --status running scheduler | grep -q scheduler
-$compose logs --no-color scheduler | grep -q 'Notification worker iteration failed'
+service_running scheduler
+$compose logs scheduler | grep -q 'Notification worker iteration failed'
 $compose start mariadb
 attempt=0
-until curl_with_timeout -fsS "$base/health/ready" >/dev/null 2>&1; do
+until db_query 'SELECT 1 FROM notification_outbox LIMIT 1' >/dev/null 2>&1 &&
+  curl_with_timeout -fsS "$base/health/ready" >/dev/null 2>&1; do
   attempt=$((attempt + 1))
   [ "$attempt" -lt 40 ] || exit 1
   sleep 1
 done
-$compose ps --status running scheduler | grep -q scheduler
+service_running scheduler
 curl_with_timeout -fsS -X DELETE "$mailpit/api/v1/messages" >/dev/null
 created=$(create_request "DB reconnect")
 request_id=$(printf '%s' "$created" | json_field id)
@@ -181,13 +193,13 @@ done
 echo "Проверка корректного завершения notification worker по SIGTERM"
 $compose kill -s SIGTERM scheduler
 attempt=0
-while $compose ps --status running scheduler | grep -q scheduler; do
+while service_running scheduler; do
   attempt=$((attempt + 1))
   [ "$attempt" -lt 15 ] || exit 1
   sleep 1
 done
-$compose logs --no-color scheduler | grep -q 'Notification worker stopped'
-$compose up -d scheduler
-$compose ps --status running scheduler | grep -q scheduler
+$compose logs scheduler | grep -q 'Notification worker stopped'
+$compose start scheduler
+service_running scheduler
 
 echo "Runtime-проверки успешно завершены"

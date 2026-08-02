@@ -67,7 +67,7 @@ final class RequestController extends Controller
         // yii\rest\Controller отключает CSRF по умолчанию (рассчитан на
         // token-based auth без cookie) — вне dev включаем явно, иначе
         // LDAP-сессия (реальные cookie) останется без защиты от CSRF.
-        $this->enableCsrfValidation = YII_ENV !== 'dev';
+        $this->enableCsrfValidation = true;
 
         return parent::beforeAction($action);
     }

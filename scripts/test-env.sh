@@ -1,7 +1,8 @@
 #!/bin/sh
 set -eu
 cd "$(CDPATH='' cd -- "$(dirname -- "$0")/.." && pwd)"
-compose='docker compose -f compose.test.yaml'
+: "${COMPOSE:?COMPOSE must be provided by Makefile}"
+compose="$COMPOSE --env-file .env.test -f compose.test.yaml"
 action=${1:-}
 
 wait_url() {
@@ -26,7 +27,7 @@ assert_health() {
 
 case "$action" in
 up)
-  $compose config --quiet
+  $compose config >/dev/null
   $compose up -d --build
   assert_health "${TEST_BASE_URL:-http://localhost:18080}/health/live" ok
   wait_url "${MAILPIT_BASE_URL:-http://localhost:18025}/api/v1/info"
@@ -39,9 +40,9 @@ down) $compose down --remove-orphans ;;
 destroy) $compose down --volumes --remove-orphans ;;
 logs)
   if [ "$#" -gt 1 ]; then
-    $compose logs --no-color --tail=200 "$2"
+    $compose logs --tail=200 "$2"
   else
-    $compose logs --no-color --tail=200
+    $compose logs --tail=200
   fi
   ;;
 *)

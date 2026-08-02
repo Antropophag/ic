@@ -1,16 +1,14 @@
 <script setup>
 import {
   computed,
-  nextTick,
   onBeforeUnmount,
   onMounted,
   reactive,
   ref,
   watch,
 } from "vue";
-import { devApi, requestApi } from "../api";
+import { requestApi } from "../api";
 import { createConfirmDialog } from "../confirmDialog";
-import { clearDemoRegistry, runDemoSeed } from "../demoSeed";
 import { triggerBlobDownload } from "../download";
 import { createLatestRequestGuard } from "../latestRequestGuard";
 import {
@@ -22,15 +20,10 @@ import {
 
 const props = defineProps({
   active: { type: Boolean, default: true },
-  devUserId: { type: Number, default: null },
   refreshTrigger: { type: Number, default: 0 },
-  demoSeedTrigger: { type: Number, default: 0 },
 });
 const emit = defineEmits([
-  "reset",
   "select-request",
-  "demo-seed-loading",
-  "demo-seed-message",
 ]);
 const activeTab = ref("active");
 const query = ref("");
@@ -62,11 +55,8 @@ const draft = reactive({
 });
 const registryGuard = createLatestRequestGuard();
 const downloadGuard = createLatestRequestGuard();
-const demoSeedGuard = createLatestRequestGuard();
 const createRequestGuard = createLatestRequestGuard();
 const confirmDialog = createConfirmDialog();
-const demoSeedLoading = ref(false);
-const demoSeedMessage = ref("");
 let searchTimer = null;
 
 function resetCreateForm() {
@@ -101,7 +91,7 @@ const pageNumbers = computed(() => {
 });
 
 async function loadRequests({ rethrow = false } = {}) {
-  const token = registryGuard.begin(props.devUserId);
+  const token = registryGuard.begin(true);
   try {
     const result = await requestApi.list({
       page: currentPage.value,
@@ -111,7 +101,7 @@ async function loadRequests({ rethrow = false } = {}) {
       query: query.value.trim(),
       sort: sortDirection.value,
     });
-    if (!registryGuard.isCurrent(token, props.devUserId)) return;
+    if (!registryGuard.isCurrent(token, true)) return;
     registryError.value = "";
     requests.value = result.items.map(fromApi);
     Object.assign(registryPage, {
@@ -128,7 +118,7 @@ async function loadRequests({ rethrow = false } = {}) {
     currentPage.value = registryPage.page;
   } catch (error) {
     if (rethrow) throw error;
-    if (registryGuard.isCurrent(token, props.devUserId))
+    if (registryGuard.isCurrent(token, true))
       registryError.value =
         "Не удалось загрузить реестр заявок. Повторите попытку.";
   }
@@ -144,14 +134,6 @@ watch(query, () => {
   window.clearTimeout(searchTimer);
   searchTimer = window.setTimeout(reloadFirstPage, 300);
 });
-watch(() => props.devUserId, () => {
-  createRequestGuard.invalidate();
-  createLoading.value = false;
-  showCreate.value = false;
-  lastCommentModal.value = null;
-  resetCreateForm();
-  reloadFirstPage();
-});
 watch(
   () => props.refreshTrigger,
   () => {
@@ -164,8 +146,6 @@ watch(
     if (active) loadRequests();
   },
 );
-watch(() => props.demoSeedTrigger, seedDemoRequests);
-
 function goToPage(page) {
   if (page === currentPage.value) return;
   currentPage.value = page;
@@ -191,8 +171,8 @@ async function createRequest() {
   createError.value = "";
   registryError.value = "";
   createLoading.value = true;
-  const token = createRequestGuard.begin(props.devUserId);
-  const isCurrent = () => createRequestGuard.isCurrent(token, props.devUserId);
+  const token = createRequestGuard.begin(true);
+  const isCurrent = () => createRequestGuard.isCurrent(token, true);
   let created;
   try {
     created = await requestApi.create(draft);
@@ -261,56 +241,6 @@ async function createRequest() {
   }
 }
 
-async function seedDemoRequests() {
-  if (demoSeedLoading.value) return;
-  const confirmed = await confirmDialog.ask(
-    "Все существующие заявки, комментарии и файлы будут безвозвратно удалены и заменены синтетическими демо-данными. Пользователи не изменятся.",
-    { confirmLabel: "Заполнить демо", danger: true },
-  );
-  if (!confirmed) return;
-  demoSeedLoading.value = true;
-  demoSeedMessage.value = "";
-  emit("demo-seed-loading", true);
-  emit("demo-seed-message", "");
-  const token = demoSeedGuard.begin(true);
-  try {
-    const message = await runDemoSeed(
-      () => devApi.seedRequests(),
-      () => {
-        emit("reset");
-        registryError.value = "";
-        showCreate.value = false;
-        activeTab.value = "all";
-        statusFilter.value = "";
-        query.value = "";
-        currentPage.value = 1;
-        clearDemoRegistry(requests, registryPage);
-      },
-      async () => {
-        await nextTick();
-        await loadRequests({ rethrow: true });
-      },
-      () => demoSeedGuard.isCurrent(token, true),
-    );
-    if (message !== null) {
-      demoSeedMessage.value = message;
-      emit("demo-seed-message", message);
-    }
-  } catch {
-    if (demoSeedGuard.isCurrent(token, true)) {
-      const message =
-        "Не удалось заполнить демо-данные. Обновите страницу и повторите попытку.";
-      demoSeedMessage.value = message;
-      emit("demo-seed-message", message);
-    }
-  } finally {
-    if (demoSeedGuard.isCurrent(token, true)) {
-      demoSeedLoading.value = false;
-      emit("demo-seed-loading", false);
-    }
-  }
-}
-
 defineExpose({
   openCreate: () => {
     showCreate.value = true;
@@ -321,7 +251,6 @@ onBeforeUnmount(() => {
   window.clearTimeout(searchTimer);
   registryGuard.invalidate();
   downloadGuard.invalidate();
-  demoSeedGuard.invalidate();
   createRequestGuard.invalidate();
 });
 </script>

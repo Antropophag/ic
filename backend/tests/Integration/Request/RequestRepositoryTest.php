@@ -566,12 +566,16 @@ final class RequestRepositoryTest extends IntegrationTestCase
 
         $request = $this->createRegisteredRequest($paddedEmailInitiator, 'notify-trim');
 
-        $managerNotified = $this->scalar(
+        $blankRecipientCount = $this->scalar(
             "SELECT COUNT(*) FROM {{%notification_outbox}} "
-            . "WHERE request_id = :id AND recipient_email LIKE '%manager%'",
+            . "WHERE request_id = :id AND TRIM(recipient_email) = ''",
             [':id' => $request['id']],
         );
-        self::assertSame(0, (int) $managerNotified, 'Пробельный email не должен считаться валидным получателем');
+        self::assertSame(
+            0,
+            (int) $blankRecipientCount,
+            'Пробельный email не должен считаться валидным получателем',
+        );
 
         $initiatorRecipient = $this->scalar(
             "SELECT recipient_email FROM {{%notification_outbox}} "

@@ -1,4 +1,4 @@
-FROM php:8.3-cli-alpine3.23
+FROM docker.io/library/php:8.3-cli-alpine3.23
 
 ARG XDEBUG_VERSION=3.5.3
 

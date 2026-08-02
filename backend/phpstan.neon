@@ -5,6 +5,4 @@ parameters:
         - tests
     bootstrapFiles:
         - phpstan-bootstrap.php
-    dynamicConstantNames:
-        - YII_ENV
     tmpDir: build/phpstan

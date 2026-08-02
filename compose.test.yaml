@@ -1,10 +1,11 @@
 name: shlz-test-registry-test
 
 services:
-  gateway:
+  frontend:
     build:
       context: .
-      dockerfile: docker/gateway.Dockerfile
+      dockerfile: docker/frontend.Dockerfile
+      target: production
     ports: ["18080:8080"]
     depends_on:
       backend: {condition: service_started}
@@ -13,9 +14,8 @@ services:
     build:
       context: .
       dockerfile: docker/backend.Dockerfile
+      target: test
     env_file: .env.test
-    environment:
-      APP_ENV: test
     depends_on:
       mariadb: {condition: service_healthy}
       ad: {condition: service_healthy}
@@ -24,19 +24,22 @@ services:
     tmpfs: [/tmp, /app/runtime]
     volumes:
       - test-document-data:/app/storage/test-documents
+      - ./deployment/test/web.php:/app/deployment/web.php:ro
+      - ./deployment/test/console.php:/app/deployment/console.php:ro
 
   scheduler:
     build:
       context: .
       dockerfile: docker/backend.Dockerfile
+      target: test
     env_file: .env.test
-    environment:
-      APP_ENV: test
     depends_on:
       mariadb: {condition: service_healthy}
       mailpit: {condition: service_healthy}
     read_only: true
     tmpfs: [/tmp, /app/runtime]
+    volumes:
+      - ./deployment/test/console.php:/app/deployment/console.php:ro
     command: ["php", "yii", "notification/work"]
     stop_signal: SIGTERM
     stop_grace_period: 15s
@@ -45,10 +48,10 @@ services:
   mariadb:
     image: mariadb:11.4.7-noble
     environment:
-      MARIADB_DATABASE: ic_test
-      MARIADB_USER: ic_test
-      MARIADB_PASSWORD: ic_test_password
-      MARIADB_ROOT_PASSWORD: ic_test_root_password
+      MARIADB_DATABASE: ${DB_NAME}
+      MARIADB_USER: ${DB_USER}
+      MARIADB_PASSWORD: ${DB_PASSWORD}
+      MARIADB_ROOT_PASSWORD: ${DB_ROOT_PASSWORD}
     volumes:
       - test-mariadb-data:/var/lib/mysql
     healthcheck:
@@ -73,6 +76,7 @@ services:
     build:
       context: .
       dockerfile: docker/test-ad.Dockerfile
+      network: host
     hostname: ad
     cap_add: [SYS_ADMIN]
     volumes:

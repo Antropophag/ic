@@ -1,114 +1,86 @@
 # Стратегия тестирования
 
-Проект использует только существующие PHPUnit, Vitest и Playwright. Только E2E не
-используется: браузер подтверждает крупный маршрут, но дорого и неточно диагностирует ошибки
-SQL, optimistic locking, lease/backoff и матрицы переходов.
+Проект использует три framework: PHPUnit, Vitest и Playwright. Основной
+backend-уровень — Integration с настоящей MariaDB; браузер защищает только
+крупные пользовательские маршруты.
 
-## Карта контуров
-
-| Набор | Что защищает | Реальный риск | Скорость/стабильность | Решение |
-|---|---|---|---|---|
-| PHPUnit Unit | workflow, policy, mapper, шаблоны | неверное чистое правило | быстро/стабильно | оставить содержательные таблицы |
-| PHPUnit Integration | MariaDB, транзакции, storage, outbox, LDAP | production-интеграции | средне/стабильно | основной backend-слой |
-| Vitest | чистое поведение frontend | UI-state и навигация | быстро/стабильно | оставить |
-| Playwright | крупные маршруты | компоненты не работают вместе | медленнее | 8 независимых сценариев |
-| Runtime contracts | рестарты AD/MariaDB/SMTP | долгоживущие соединения | медленно | этап `make e2e` |
-
-## Матрица сценариев
-
-| Бизнес-сценарий | Основной уровень | Тестовый файл |
+| Уровень | Что защищает | Команда |
 |---|---|---|
-| LDAP bind, неверный пароль, профиль, disabled/unknown | Integration/runtime | `LdapAuthenticatorTest.php`, `test-runtime-contracts.sh` |
-| Роли и запрет чужих операций | Unit + Integration | policy tests, `RequestRepositoryTest.php` |
-| Создание, validation, lock, аудит, комментарии | Integration | `RequestRepositoryTest.php` |
-| Назначение, пауза, возврат, отказ, отзыв | Unit/Integration | `RequestWorkflowTest.php`, `RequestRepositoryTest.php` |
-| Фильтры и пагинация | Integration | `RequestRepositoryTest.php` |
-| Upload/MIME/version/download/ACL/storage | Integration | `DocumentRepositoryTest.php` |
-| Положительный и отрицательный workflow | E2E | `critical-flow.e2e.js` |
-| Outbox, retry, failed recovery, lease | Integration | `NotificationOutboxProcessorTest.php` |
-| Реальный SMTP и отсутствие обычного дубля | E2E | `notifications.e2e.js` |
-| Редкий SMTP-дубль после send до `sent` | документированная at-least-once семантика | `docs/integrations/notifications.md` |
-| Legacy/CSV import и invalid/partial/idempotency | Unit/Integration | import tests |
-| Bitrix transport | Unit | `BitrixListClientTest.php` |
-| Рестарт MariaDB при worker | Runtime | `test-runtime-contracts.sh` |
+| PHPUnit Unit | чистые workflow, policy, mapper, шаблоны | `make check` |
+| PHPUnit Integration | SQL, транзакции, документы, outbox, LDAP adapter | `make e2e` |
+| Vitest | frontend-логика и API client | `make check` |
+| Playwright | вход и критические маршруты через реальный `frontend` | `make e2e` |
+| Runtime contracts | LDAP/SMTP/MariaDB/scheduler recovery | `make e2e` |
 
-## Production-like стенд
-
-Режим приложения задаётся самим `compose.test.yaml` (`APP_ENV=test`), а не
-содержимым `.env.test`. Файл `.env.test` хранит только значения конфигурации
-изолированного стенда.
+## Единый стенд
 
 ```text
-Playwright -> gateway -> backend -> MariaDB 11.4
-                         |       -> Samba AD DC (IC.TEST)
-                         |       -> Mailpit
-                         ` scheduler (тот же backend image)
+Playwright
+    -> frontend
+        -> backend
+            -> MariaDB 11.4
+            -> Samba AD (IC.TEST)
+            -> Mailpit
+    -> scheduler -> notification outbox
 ```
 
-`compose.test.yaml` имеет отдельный project name, БД `ic_test` и отдельные test volumes.
-Reset зарегистрирован только при `APP_ENV=test` и требует `_test` в имени БД.
+`compose.test.yaml` и `.env.test` являются единственным test deployment.
+Integration не создаёт отдельную MariaDB или специальную Docker network.
+Reset выполняет миграции с нуля, очищает test storage и Mailpit, затем
+идемпотентно загружает пользователей. Защита reset основана на имени БД с
+`_test` и точном test storage path.
 
-При ручном открытии test-стенда пользователь видит обычную форму входа и
-аутентифицируется в Samba AD. Автоматические integration/E2E могут отдельно
-использовать `X-Test-User-ID`; этот механизм не включает dev-переключатель во
-frontend и принимается backend только при `APP_ENV=test`.
+Test identity физически подключён файлом `deployment/test/web.php`. В обычном
+и development deployment заголовок `X-Test-User-ID` не настроен. Dev API,
+наоборот, отсутствует в test и production конфигурациях.
 
-Выбран Samba AD: приложение выполняет UPN bind и ищет профиль по `sAMAccountName`.
-Приложение не преобразует AD-группы в роли — роли хранятся в MariaDB. Samba проверяет
-фактический AD-контракт, который OpenLDAP не воспроизводит полностью.
+Основной bootstrap проверяет только фиксированные пути
+`/app/deployment/web.php` и `/app/deployment/console.php`. Production-образ не
+содержит эти файлы; development и test монтируют разные read-only fragments
+вне web root. Test console fragment содержит только `test/reset`, development
+console fragment — только `dev/seed`.
 
-Домен: `IC.TEST`; общий пароль: `TestPassword1!`. Пользователи: `initiator`, `ic_manager`,
-`laboratory_manager`, `executor`, `expert`, `security_officer`, `administrator`,
-`employee_without_roles`, `disabled_user`. Группы: `ICManagers`, `LaboratoryManagers`,
-`Executors`, `Experts`, `SecurityOfficers`, `Administrators`.
+| Возможность | Production | Development | Test |
+|---|---:|---:|---:|
+| Dev endpoint и identity | нет | да | нет |
+| Test identity/reset | нет | нет | да |
+| Standalone dev frontend script | нет | да | нет |
 
-Mailpit UI: <http://localhost:18025>.
-
-## Запуск и диагностика
+## Полный прогон
 
 ```sh
-make check
 make test
-make test-env-up
-make test-env-reset
-make e2e
-make test-env-logs
-make test-env-down
 ```
 
-`test/reset` накатывает migrations, seed пользователей, очищает storage и Mailpit. E2E
-artifacts находятся в `frontend/test-results` и `frontend/playwright-report`.
-`X-Test-User-ID` работает только при `YII_ENV=test`; вне test заголовок
-игнорируется, а reset-controller не зарегистрирован. `X-Dev-User-ID`
-принимается только при `APP_ENV=dev`.
+Порядок: быстрые проверки, Compose validation, сборка test deployment,
+readiness/liveness через внешний `frontend`, reset, backend Integration,
+Playwright и затем разрушающие runtime contracts. Стенд останавливается даже
+при ошибке. `make e2e` выполняет ту же production-like часть без `check`.
 
-| Изменение | Какие тесты запускать |
+Runtime contracts проверяют реальный LDAP bind и группы, восстановление LDAP,
+SMTP failure/recovery, reconnect scheduler после рестарта MariaDB и SIGTERM.
+Playwright artifacts находятся в `frontend/playwright-report`.
+
+| Изменение | Какие проверки запускать |
 |---|---|
-| Workflow | Unit + RequestRepository integration |
-| SQL/filter | Integration |
-| UI | Frontend unit + соответствующий E2E |
-| LDAP | Identity integration + AD runtime/E2E |
-| SMTP/outbox | Notification integration + SMTP E2E |
-| Compose/infrastructure | E2E setup + runtime contracts |
+| Workflow/policy | `make check` и соответствующий Integration |
+| SQL, migration, filter | `make e2e` |
+| UI | Vitest и соответствующий Playwright |
+| LDAP | Identity Integration и runtime contracts |
+| SMTP/outbox | Notification Integration и runtime contracts |
+| Compose/infrastructure | `make e2e` |
 
-Coverage остаётся метрикой Domain/Application, а не всего backend Infrastructure.
+## Frontend test contour
 
-## Распределение прежней shell-проверки
+До инфраструктурного рефакторинга Vitest выполнял 101 тест. Удалены ровно 12
+тестов вместе с двумя больше не существующими production-модулями:
 
-Backend unit/integration-наборы не удалялись: компактный проект уже имел полезные
-локализованные проверки workflow, policy, storage и outbox. Избыточность была в
-отдельном последовательном shell-сценарии. После появления обязательного production-like
-E2E у него не осталось уникальной ответственности.
+| Удалённый файл | Тестов | Что защищал | Текущее покрытие |
+|---|---:|---|---|
+| `src/devUsers.test.js` | 7 | встроенный в Vue выбор dev identity | 4 теста физически отдельного `dev/dev-tools.js` плюс development runtime contract |
+| `src/demoSeed.test.js` | 5 | destructive demo seed UI | demo deployment и функция удалены, заменяемого production-поведения нет |
 
-| Бывшая проверка | Новый основной тест | Что подтверждается |
-|---|---|---|
-| readiness | `test-env.sh up` | gateway отвечает `status=ready`, MariaDB и storage доступны |
-| liveness | `test-env.sh up` | gateway отвечает `status=ok` до запуска Playwright |
-| создание и чтение заявки | `critical-flow.e2e.js` | HTTP routes, JSON и сохранение в настоящей MariaDB |
-| назначение и начало работы | `RequestRepositoryTest.php`, `RequestWorkflowTest.php`, `critical-flow.e2e.js` | правило, транзакция, версии и внешний HTTP-маршрут |
-| gateway/backend/DB connectivity | `critical-flow.e2e.js` | production-like компоненты работают вместе без backend mock |
-| test identity | `test-runtime-contracts.sh` | заголовок работает в test и получает 401 при `APP_ENV=prod` |
-
-`make e2e` последовательно валидирует Compose, поднимает стенд, проверяет health-контракты,
-выполняет reset, Playwright и затем разрушительные runtime-проверки. Любая ошибка
-останавливает команду с ненулевым кодом; teardown выполняется всегда.
+Production Vitest-набор сохранил 89 тестов. Standalone development tools
+добавляют ещё 4, поэтому `npm test`/`make check` выполняют 93 теста: загрузка
+безопасного списка, отказ endpoint, same-origin identity header,
+`localStorage`, отображение ролей и переключение после reload.

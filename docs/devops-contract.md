@@ -1,69 +1,33 @@
-# Контракт поставки для DevOps
+# Эксплуатационный контракт
 
-## Ожидаемый быстрый старт
+Production Compose содержит четыре сервиса: `frontend`, `backend`, `scheduler`
+и `mariadb`. `frontend` принимает HTTP, раздаёт статический production bundle
+и проксирует `/api` и `/health` в PHP-FPM.
 
-После появления полного приложения тестовый контур должен запускаться одной
-командой:
+`.env.example` — production template. Секреты не коммитятся. `compose.yaml`
+не задаёт режим приложения: он передаёт только настройки интеграций из `.env`.
 
-```bash
-docker compose up -d --build
+```sh
+cp .env.example .env
+make doctor
+make up
+docker compose --env-file .env -f compose.yaml logs
+docker compose --env-file .env -f compose.yaml down
 ```
 
-Затем отдельная идемпотентная команда выполняет readiness check, миграции и
-создание первой аварийной учётной записи администратора.
+Docker Compose и Podman Compose равноправны. Makefile определяет доступную
+реализацию и экспортирует `COMPOSE`/`CONTAINER_ENGINE` в scripts. Публичные
+`make logs` и `make down` однозначно относятся к development; production-like
+deployment управляется явной Compose-командой выше.
 
-Для демонстрационной Windows-машины pipeline формирует автономный комплект с
-готовыми образами. Целевая машина не выполняет `composer install` или `npm ci` и
-не зависит от внешних package registry; см. `demo-workstation.md`.
+Scheduler запускает `php yii notification/work`, использует тот же backend
+image и завершается по SIGTERM с grace period 15 секунд. Разовая ручная
+обработка:
 
-## Сервисы Compose
+```sh
+docker compose --env-file .env -f compose.yaml exec backend php yii notification/send
+sudo podman-compose --in-pod false --env-file .env -f compose.yaml exec backend php yii notification/send
+```
 
-| Сервис | Назначение |
-|---|---|
-| `gateway` | Nginx, TLS termination либо upstream корпоративного proxy |
-| `backend` | неизменяемый PHP-FPM образ приложения |
-| `frontend` | статическая production-сборка Vue |
-| `scheduler` | долгоживущий `php yii notification/work` из того же backend image; обработка email outbox |
-| `mariadb` | локально/test; production может использовать управляемый сервер |
-| `mailpit` | только development/test, перехват почты |
-
-Для очереди на первом этапе используется database-backed queue Yii2, чтобы не
-вводить Redis без необходимости. Масштабирование не требует изменения доменной
-логики.
-
-## Требования к образам
-
-- multi-stage build;
-- фиксированные версии базовых образов и dependency lock-файлы;
-- non-root runtime user;
-- read-only root filesystem, где возможно;
-- healthcheck/readiness endpoint;
-- graceful shutdown scheduler по SIGTERM/SIGINT;
-- отсутствие исходных секретов в слоях;
-- OCI labels с commit SHA и номером релиза;
-- отдельные persistent volumes только для документов и БД development-контура.
-
-## Наблюдаемость
-
-- структурированные JSON-логи в stdout/stderr;
-- request/correlation ID проходит через HTTP, очередь и аудит;
-- `/health/live` не проверяет внешние зависимости;
-- `/health/ready` проверяет БД и доступность файлового хранилища;
-- доступный только администраторам dev-only `/health/logging` проверяет доставку
-  Yii-лога в stderr контейнера;
-- метрики очереди: pending, retry, failed;
-- SMTP/LDAP credentials никогда не выводятся в health response.
-
-## Резервное копирование
-
-- MariaDB: регулярный логический/физический backup по политике предприятия;
-- документы: согласованная snapshot/backup политика;
-- БД и документы восстанавливаются на одну согласованную временную точку;
-- restore drill документируется и регулярно проверяется;
-- контейнерные образы не являются резервной копией данных.
-
-## Перед production
-
-DevOps получает заполненные runbook'и: prerequisites, install, configuration,
-deploy, upgrade, rollback, backup, restore, monitoring и troubleshooting. Команды
-проверяются на чистом тестовом сервере, а не только на машине разработчика.
+Готовность: `/health/ready`; liveness: `/health/live`. Документы хранятся в
+именованном volume, MariaDB — в отдельном volume.

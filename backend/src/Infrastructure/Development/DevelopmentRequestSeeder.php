@@ -8,8 +8,8 @@ use App\Infrastructure\Document\DocumentStorage;
 use Yii;
 use yii\db\Connection;
 
-/** Resets request data and creates a deterministic, entirely synthetic demo registry. */
-final class DemoRequestSeeder
+/** Resets request data and creates a deterministic, entirely synthetic development registry. */
+final class DevelopmentRequestSeeder
 {
     private const REQUIRED_USERS = [
         'manager' => 'dev.user',
@@ -210,9 +210,9 @@ final class DemoRequestSeeder
     private function insertAttachment(int $requestId, string $type, string $name, int $userId, int $age): array
     {
         $content = "Синтетический демонстрационный документ\nЗаявка: {$requestId}\nРеальные данные не используются.\n";
-        $temporary = tempnam(sys_get_temp_dir(), 'ic-demo-');
+        $temporary = tempnam(sys_get_temp_dir(), 'ic-development-');
         if ($temporary === false || file_put_contents($temporary, $content) === false) {
-            throw new \RuntimeException('Cannot create demo attachment.');
+            throw new \RuntimeException('Cannot create development attachment.');
         }
         try {
             $key = $this->storage->store($temporary);
@@ -247,7 +247,7 @@ final class DemoRequestSeeder
             $this->storage->delete($key);
         } catch (\Throwable $error) {
             Yii::warning([
-                'message' => 'Failed to delete a demo document during compensating cleanup.',
+                'message' => 'Failed to delete a development document during compensating cleanup.',
                 'storage_key' => $key,
                 'exception' => $error::class,
                 'error' => $error->getMessage(),

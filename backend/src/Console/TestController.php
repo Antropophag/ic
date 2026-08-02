@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Console;
 
+use App\Infrastructure\Deployment\DatabasePurpose;
 use Yii;
 use yii\helpers\FileHelper;
 use yii\console\Controller;
@@ -17,7 +18,11 @@ final class TestController extends Controller
             return ExitCode::UNSPECIFIED_ERROR;
         }
 
-        $result = Yii::$app->runAction('migrate/fresh');
+        if (!$this->dropTestTables()) {
+            return ExitCode::UNSPECIFIED_ERROR;
+        }
+
+        $result = Yii::$app->runAction('migrate/up', ['interactive' => false]);
         if ($result !== null && (int) $result !== ExitCode::OK) {
             return (int) $result;
         }
@@ -25,7 +30,7 @@ final class TestController extends Controller
             return ExitCode::UNSPECIFIED_ERROR;
         }
 
-        return (int) Yii::$app->runAction('dev/seed');
+        return (new DevController('dev-seeder', $this->module))->seedUsers();
     }
 
     public function actionSeed(): int
@@ -34,14 +39,15 @@ final class TestController extends Controller
             return ExitCode::UNSPECIFIED_ERROR;
         }
 
-        return (int) Yii::$app->runAction('dev/seed');
+        return (new DevController('dev-seeder', $this->module))->seedUsers();
     }
 
     private function isSafe(): bool
     {
-        $database = (string) getenv('DB_NAME');
-        if (YII_ENV !== 'test' || !str_contains($database, '_test')) {
-            $this->stderr("Refusing test reset: APP_ENV=test and DB_NAME containing _test are required.\n");
+        $database = Yii::$app->db->createCommand('SELECT DATABASE()')->queryScalar();
+        if (!is_string($database) || !DatabasePurpose::isTest($database)) {
+            $actual = is_string($database) && $database !== '' ? $database : '(unknown)';
+            $this->stderr("Refusing test reset: connected database '{$actual}' must end with _test.\n");
             return false;
         }
 
@@ -68,6 +74,27 @@ final class TestController extends Controller
         }
 
         return FileHelper::createDirectory($path);
+    }
+
+    private function dropTestTables(): bool
+    {
+        $db = Yii::$app->db;
+        $schema = $db->schema;
+
+        try {
+            $db->createCommand('SET FOREIGN_KEY_CHECKS = 0')->execute();
+            foreach ($schema->getTableNames('', true) as $table) {
+                $db->createCommand()->dropTable($table)->execute();
+            }
+        } catch (\Throwable $error) {
+            $this->stderr("Test database could not be reset: {$error->getMessage()}\n");
+            return false;
+        } finally {
+            $db->createCommand('SET FOREIGN_KEY_CHECKS = 1')->execute();
+            $schema->refresh();
+        }
+
+        return true;
     }
 
     private function clearMailpit(): bool
