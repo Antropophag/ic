@@ -40,6 +40,7 @@ use App\Infrastructure\Document\OpinionPdfRenderer;
 use App\Infrastructure\Request\RequestQuery;
 use App\Infrastructure\Request\RequestRepository;
 use Yii;
+use yii\base\Model;
 use yii\rest\Controller;
 use yii\web\Response;
 use yii\web\ConflictHttpException;
@@ -104,10 +105,8 @@ final class RequestController extends Controller
     public function actionAddComment(int $id): array
     {
         $input = new AddCommentInput();
-        $input->load(Yii::$app->request->bodyParams, '');
-        if (!$input->validate()) {
-            Yii::$app->response->statusCode = 422;
-            return ['errors' => $input->getErrors()];
+        if (($errors = $this->bodyValidationErrors($input)) !== null) {
+            return $errors;
         }
 
         try {
@@ -226,10 +225,8 @@ final class RequestController extends Controller
     public function actionDeleteReport(int $id): array
     {
         $input = new LockVersionInput();
-        $input->load(Yii::$app->request->bodyParams, '');
-        if (!$input->validate()) {
-            Yii::$app->response->statusCode = 422;
-            return ['errors' => $input->getErrors()];
+        if (($errors = $this->bodyValidationErrors($input)) !== null) {
+            return $errors;
         }
 
         $actorId = $this->currentUserId();
@@ -302,10 +299,8 @@ final class RequestController extends Controller
     public function actionCreate(): array
     {
         $input = new CreateRequestInput();
-        $input->load(Yii::$app->request->bodyParams, '');
-        if (!$input->validate()) {
-            Yii::$app->response->statusCode = 422;
-            return ['errors' => $input->getErrors()];
+        if (($errors = $this->bodyValidationErrors($input)) !== null) {
+            return $errors;
         }
 
         $actorId = $this->currentUserId();
@@ -324,10 +319,8 @@ final class RequestController extends Controller
     public function actionSetColor(int $id): array
     {
         $input = new SetColorInput();
-        $input->load(Yii::$app->request->bodyParams, '');
-        if (!$input->validate()) {
-            Yii::$app->response->statusCode = 422;
-            return ['errors' => $input->getErrors()];
+        if (($errors = $this->bodyValidationErrors($input)) !== null) {
+            return $errors;
         }
 
         $actorId = $this->currentUserId();
@@ -349,10 +342,8 @@ final class RequestController extends Controller
     public function actionAssignExecutor(int $id): array
     {
         $input = new AssignExecutorInput();
-        $input->load(Yii::$app->request->bodyParams, '');
-        if (!$input->validate()) {
-            Yii::$app->response->statusCode = 422;
-            return ['errors' => $input->getErrors()];
+        if (($errors = $this->bodyValidationErrors($input)) !== null) {
+            return $errors;
         }
 
         $executorId = (int) $input->executorId;
@@ -380,10 +371,8 @@ final class RequestController extends Controller
     public function actionClaimExpert(int $id): array
     {
         $input = new LockVersionInput();
-        $input->load(Yii::$app->request->bodyParams, '');
-        if (!$input->validate()) {
-            Yii::$app->response->statusCode = 422;
-            return ['errors' => $input->getErrors()];
+        if (($errors = $this->bodyValidationErrors($input)) !== null) {
+            return $errors;
         }
 
         $actorId = $this->currentUserId();
@@ -404,10 +393,8 @@ final class RequestController extends Controller
     public function actionReassignExpert(int $id): array
     {
         $input = new AssignExpertInput();
-        $input->load(Yii::$app->request->bodyParams, '');
-        if (!$input->validate()) {
-            Yii::$app->response->statusCode = 422;
-            return ['errors' => $input->getErrors()];
+        if (($errors = $this->bodyValidationErrors($input)) !== null) {
+            return $errors;
         }
 
         $expertId = (int) $input->expertId;
@@ -429,10 +416,8 @@ final class RequestController extends Controller
     public function actionPublishOpinion(int $id): array
     {
         $input = new PublishOpinionInput();
-        $input->load(Yii::$app->request->bodyParams, '');
-        if (!$input->validate()) {
-            Yii::$app->response->statusCode = 422;
-            return ['errors' => $input->getErrors()];
+        if (($errors = $this->bodyValidationErrors($input)) !== null) {
+            return $errors;
         }
 
         $actorId = $this->currentUserId();
@@ -459,10 +444,8 @@ final class RequestController extends Controller
     public function actionSecurityDecision(int $id): array
     {
         $input = new SecurityDecisionInput();
-        $input->load(Yii::$app->request->bodyParams, '');
-        if (!$input->validate()) {
-            Yii::$app->response->statusCode = 422;
-            return ['errors' => $input->getErrors()];
+        if (($errors = $this->bodyValidationErrors($input)) !== null) {
+            return $errors;
         }
 
         $actorId = $this->currentUserId();
@@ -489,10 +472,8 @@ final class RequestController extends Controller
     public function actionStart(int $id): array
     {
         $input = new LockVersionInput();
-        $input->load(Yii::$app->request->bodyParams, '');
-        if (!$input->validate()) {
-            Yii::$app->response->statusCode = 422;
-            return ['errors' => $input->getErrors()];
+        if (($errors = $this->bodyValidationErrors($input)) !== null) {
+            return $errors;
         }
 
         $actorId = $this->currentUserId();
@@ -513,10 +494,8 @@ final class RequestController extends Controller
     public function actionSuspend(int $id): array
     {
         $input = new LockVersionInput();
-        $input->load(Yii::$app->request->bodyParams, '');
-        if (!$input->validate()) {
-            Yii::$app->response->statusCode = 422;
-            return ['errors' => $input->getErrors()];
+        if (($errors = $this->bodyValidationErrors($input)) !== null) {
+            return $errors;
         }
 
         $actorId = $this->currentUserId();
@@ -539,10 +518,8 @@ final class RequestController extends Controller
     public function actionResume(int $id): array
     {
         $input = new LockVersionInput();
-        $input->load(Yii::$app->request->bodyParams, '');
-        if (!$input->validate()) {
-            Yii::$app->response->statusCode = 422;
-            return ['errors' => $input->getErrors()];
+        if (($errors = $this->bodyValidationErrors($input)) !== null) {
+            return $errors;
         }
 
         $actorId = $this->currentUserId();
@@ -565,10 +542,8 @@ final class RequestController extends Controller
     public function actionReject(int $id): array
     {
         $input = new CancelRequestInput();
-        $input->load(Yii::$app->request->bodyParams, '');
-        if (!$input->validate()) {
-            Yii::$app->response->statusCode = 422;
-            return ['errors' => $input->getErrors()];
+        if (($errors = $this->bodyValidationErrors($input)) !== null) {
+            return $errors;
         }
 
         $actorId = $this->currentUserId();
@@ -594,10 +569,8 @@ final class RequestController extends Controller
     public function actionWithdraw(int $id): array
     {
         $input = new CancelRequestInput();
-        $input->load(Yii::$app->request->bodyParams, '');
-        if (!$input->validate()) {
-            Yii::$app->response->statusCode = 422;
-            return ['errors' => $input->getErrors()];
+        if (($errors = $this->bodyValidationErrors($input)) !== null) {
+            return $errors;
         }
 
         $actorId = $this->currentUserId();
@@ -621,91 +594,62 @@ final class RequestController extends Controller
 
     private function recordRejectedCreateSafely(int $actorId, string $ruleId): void
     {
-        try {
-            $this->repository()->recordRejectedCreate($actorId, $ruleId);
-        } catch (\Throwable $auditError) {
-            Yii::error([
-                'message' => 'Не удалось записать аудит отклонённого создания заявки.',
-                'actorId' => $actorId,
-                'ruleId' => $ruleId,
-                'exception' => $auditError,
-            ], __METHOD__);
-        }
+        $this->recordRejectedSafely(
+            fn () => $this->repository()->recordRejectedCreate($actorId, $ruleId),
+            'Не удалось записать аудит отклонённого создания заявки.',
+            ['actorId' => $actorId, 'ruleId' => $ruleId],
+            __METHOD__,
+        );
     }
 
     private function recordRejectedStartSafely(int $requestId, int $actorId, string $ruleId): void
     {
-        try {
-            $this->repository()->recordRejectedStart($requestId, $actorId, $ruleId);
-        } catch (\Throwable $auditError) {
-            Yii::error([
-                'message' => 'Не удалось записать аудит отклонённого запуска заявки.',
-                'requestId' => $requestId,
-                'actorId' => $actorId,
-                'ruleId' => $ruleId,
-                'exception' => $auditError,
-            ], __METHOD__);
-        }
+        $this->recordRejectedSafely(
+            fn () => $this->repository()->recordRejectedStart($requestId, $actorId, $ruleId),
+            'Не удалось записать аудит отклонённого запуска заявки.',
+            ['requestId' => $requestId, 'actorId' => $actorId, 'ruleId' => $ruleId],
+            __METHOD__,
+        );
     }
 
     private function recordRejectedSuspendResumeSafely(int $requestId, int $actorId, string $ruleId): void
     {
-        try {
-            $this->repository()->recordRejectedSuspendResume($requestId, $actorId, $ruleId);
-        } catch (\Throwable $auditError) {
-            Yii::error([
-                'message' => 'Не удалось записать аудит отклонённой приостановки/возобновления заявки.',
-                'requestId' => $requestId,
-                'actorId' => $actorId,
-                'ruleId' => $ruleId,
-                'exception' => $auditError,
-            ], __METHOD__);
-        }
+        $this->recordRejectedSafely(
+            fn () => $this->repository()->recordRejectedSuspendResume($requestId, $actorId, $ruleId),
+            'Не удалось записать аудит отклонённой приостановки/возобновления заявки.',
+            ['requestId' => $requestId, 'actorId' => $actorId, 'ruleId' => $ruleId],
+            __METHOD__,
+        );
     }
 
     private function recordRejectedRejectSafely(int $requestId, int $actorId, string $ruleId): void
     {
-        try {
-            $this->repository()->recordRejectedReject($requestId, $actorId, $ruleId);
-        } catch (\Throwable $auditError) {
-            Yii::error([
-                'message' => 'Не удалось записать аудит отклонённого отказа в испытаниях.',
-                'requestId' => $requestId,
-                'actorId' => $actorId,
-                'ruleId' => $ruleId,
-                'exception' => $auditError,
-            ], __METHOD__);
-        }
+        $this->recordRejectedSafely(
+            fn () => $this->repository()->recordRejectedReject($requestId, $actorId, $ruleId),
+            'Не удалось записать аудит отклонённого отказа в испытаниях.',
+            ['requestId' => $requestId, 'actorId' => $actorId, 'ruleId' => $ruleId],
+            __METHOD__,
+        );
     }
 
     private function recordRejectedWithdrawSafely(int $requestId, int $actorId, string $ruleId): void
     {
-        try {
-            $this->repository()->recordRejectedWithdraw($requestId, $actorId, $ruleId);
-        } catch (\Throwable $auditError) {
-            Yii::error([
-                'message' => 'Не удалось записать аудит отклонённого отзыва заявки.',
-                'requestId' => $requestId,
-                'actorId' => $actorId,
-                'ruleId' => $ruleId,
-                'exception' => $auditError,
-            ], __METHOD__);
-        }
+        $this->recordRejectedSafely(
+            fn () => $this->repository()->recordRejectedWithdraw($requestId, $actorId, $ruleId),
+            'Не удалось записать аудит отклонённого отзыва заявки.',
+            ['requestId' => $requestId, 'actorId' => $actorId, 'ruleId' => $ruleId],
+            __METHOD__,
+        );
     }
 
     private function recordRejectedColorSafely(int $requestId, int $actorId, string $ruleId): void
     {
-        try {
-            $this->repository()->recordRejectedColor($requestId, $actorId, $ruleId);
-        } catch (\Throwable $auditError) {
-            Yii::error([
-                'message' => 'Не удалось записать аудит отклонённой цветовой метки.',
-                'requestId' => $requestId,
-                'actorId' => $actorId,
-                'ruleId' => $ruleId,
-                'exception' => $auditError,
-            ], __METHOD__);
-        }
+        $this->recordRejectedSafely(
+            fn () => $this->repository()->recordRejectedColor($requestId, $actorId, $ruleId),
+            'Не удалось записать аудит отклонённой цветовой метки.',
+            ['requestId' => $requestId, 'actorId' => $actorId, 'ruleId' => $ruleId],
+            __METHOD__,
+        );
     }
 
     private function recordRejectedAssignmentSafely(
@@ -714,18 +658,17 @@ final class RequestController extends Controller
         int $actorId,
         string $ruleId,
     ): void {
-        try {
-            $this->repository()->recordRejectedAssignment($requestId, $executorId, $actorId, $ruleId);
-        } catch (\Throwable $auditError) {
-            Yii::error([
-                'message' => 'Не удалось записать аудит отклонённого назначения.',
+        $this->recordRejectedSafely(
+            fn () => $this->repository()->recordRejectedAssignment($requestId, $executorId, $actorId, $ruleId),
+            'Не удалось записать аудит отклонённого назначения.',
+            [
                 'requestId' => $requestId,
                 'executorId' => $executorId,
                 'actorId' => $actorId,
                 'ruleId' => $ruleId,
-                'exception' => $auditError,
-            ], __METHOD__);
-        }
+            ],
+            __METHOD__,
+        );
     }
 
     private function recordRejectedExpertAssignmentSafely(
@@ -734,93 +677,99 @@ final class RequestController extends Controller
         int $actorId,
         string $ruleId,
     ): void {
-        try {
-            $this->repository()->recordRejectedExpertAssignment($requestId, $expertId, $actorId, $ruleId);
-        } catch (\Throwable $auditError) {
-            Yii::error([
-                'message' => 'Не удалось записать аудит отклонённого назначения эксперта.',
+        $this->recordRejectedSafely(
+            fn () => $this->repository()->recordRejectedExpertAssignment($requestId, $expertId, $actorId, $ruleId),
+            'Не удалось записать аудит отклонённого назначения эксперта.',
+            [
                 'requestId' => $requestId,
                 'expertId' => $expertId,
                 'actorId' => $actorId,
                 'ruleId' => $ruleId,
-                'exception' => $auditError,
-            ], __METHOD__);
-        }
+            ],
+            __METHOD__,
+        );
     }
 
     private function recordRejectedDownloadSafely(int $versionId, int $actorId, string $reason): void
     {
-        try {
-            $this->documents()->recordRejectedDownload($versionId, $actorId, $reason);
-        } catch (\Throwable $auditError) {
-            Yii::error([
-                'message' => 'Не удалось записать аудит отклонённого скачивания.',
-                'versionId' => $versionId,
-                'actorId' => $actorId,
-                'reason' => $reason,
-                'exception' => $auditError,
-            ], __METHOD__);
-        }
+        $this->recordRejectedSafely(
+            fn () => $this->documents()->recordRejectedDownload($versionId, $actorId, $reason),
+            'Не удалось записать аудит отклонённого скачивания.',
+            ['versionId' => $versionId, 'actorId' => $actorId, 'reason' => $reason],
+            __METHOD__,
+        );
     }
 
     private function recordRejectedReportSafely(int $requestId, int $actorId, string $ruleId): void
     {
-        try {
-            $this->documents()->recordRejectedReportUpload($requestId, $actorId, $ruleId);
-        } catch (\Throwable $auditError) {
-            Yii::error([
-                'message' => 'Не удалось записать аудит отклонённой загрузки отчёта.',
-                'requestId' => $requestId,
-                'actorId' => $actorId,
-                'ruleId' => $ruleId,
-                'exception' => $auditError,
-            ], __METHOD__);
-        }
+        $this->recordRejectedSafely(
+            fn () => $this->documents()->recordRejectedReportUpload($requestId, $actorId, $ruleId),
+            'Не удалось записать аудит отклонённой загрузки отчёта.',
+            ['requestId' => $requestId, 'actorId' => $actorId, 'ruleId' => $ruleId],
+            __METHOD__,
+        );
     }
 
     private function recordRejectedReportDeletionSafely(int $requestId, int $actorId, string $ruleId): void
     {
-        try {
-            $this->documents()->recordRejectedReportDeletion($requestId, $actorId, $ruleId);
-        } catch (\Throwable $auditError) {
-            Yii::error([
-                'message' => 'Не удалось записать аудит отклонённого удаления отчёта.',
-                'requestId' => $requestId,
-                'actorId' => $actorId,
-                'ruleId' => $ruleId,
-                'exception' => $auditError,
-            ], __METHOD__);
-        }
+        $this->recordRejectedSafely(
+            fn () => $this->documents()->recordRejectedReportDeletion($requestId, $actorId, $ruleId),
+            'Не удалось записать аудит отклонённого удаления отчёта.',
+            ['requestId' => $requestId, 'actorId' => $actorId, 'ruleId' => $ruleId],
+            __METHOD__,
+        );
     }
 
     private function recordRejectedOpinionSafely(int $requestId, int $actorId, string $ruleId): void
     {
-        try {
-            $this->documents()->recordRejectedOpinion($requestId, $actorId, $ruleId);
-        } catch (\Throwable $auditError) {
-            Yii::error([
-                'message' => 'Не удалось записать аудит отклонённой публикации заключения.',
-                'requestId' => $requestId,
-                'actorId' => $actorId,
-                'ruleId' => $ruleId,
-                'exception' => $auditError,
-            ], __METHOD__);
-        }
+        $this->recordRejectedSafely(
+            fn () => $this->documents()->recordRejectedOpinion($requestId, $actorId, $ruleId),
+            'Не удалось записать аудит отклонённой публикации заключения.',
+            ['requestId' => $requestId, 'actorId' => $actorId, 'ruleId' => $ruleId],
+            __METHOD__,
+        );
     }
 
     private function recordRejectedSecurityDecisionSafely(int $requestId, int $actorId, string $ruleId): void
     {
+        $this->recordRejectedSafely(
+            fn () => $this->repository()->recordRejectedSecurityDecision($requestId, $actorId, $ruleId),
+            'Не удалось записать аудит отклонённого решения СБ.',
+            ['requestId' => $requestId, 'actorId' => $actorId, 'ruleId' => $ruleId],
+            __METHOD__,
+        );
+    }
+
+    /**
+     * @param callable(): void $record
+     * @param array<string, int|string> $context
+     */
+    private function recordRejectedSafely(
+        callable $record,
+        string $message,
+        array $context,
+        string $category,
+    ): void {
         try {
-            $this->repository()->recordRejectedSecurityDecision($requestId, $actorId, $ruleId);
+            $record();
         } catch (\Throwable $auditError) {
-            Yii::error([
-                'message' => 'Не удалось записать аудит отклонённого решения СБ.',
-                'requestId' => $requestId,
-                'actorId' => $actorId,
-                'ruleId' => $ruleId,
-                'exception' => $auditError,
-            ], __METHOD__);
+            Yii::error(
+                ['message' => $message, ...$context, 'exception' => $auditError],
+                $category,
+            );
         }
+    }
+
+    /** @return array{errors: array<string, list<string>>}|null */
+    private function bodyValidationErrors(Model $input): ?array
+    {
+        $input->load(Yii::$app->request->bodyParams, '');
+        if ($input->validate()) {
+            return null;
+        }
+
+        Yii::$app->response->statusCode = 422;
+        return ['errors' => $input->getErrors()];
     }
 
     private function currentUserId(): int
