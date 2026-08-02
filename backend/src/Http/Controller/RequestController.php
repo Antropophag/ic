@@ -9,16 +9,11 @@ use App\Application\Request\ListRequestsInput;
 use App\Application\Request\AddCommentInput;
 use App\Application\Request\AssignExecutorInput;
 use App\Application\Request\AssignExpertInput;
-use App\Application\Request\ClaimExpertInput;
-use App\Application\Request\DeleteReportInput;
+use App\Application\Request\CancelRequestInput;
+use App\Application\Request\LockVersionInput;
 use App\Application\Request\PublishOpinionInput;
-use App\Application\Request\RejectRequestInput;
-use App\Application\Request\ResumeRequestInput;
 use App\Application\Request\SecurityDecisionInput;
 use App\Application\Request\SetColorInput;
-use App\Application\Request\StartRequestInput;
-use App\Application\Request\SuspendRequestInput;
-use App\Application\Request\WithdrawRequestInput;
 use App\Domain\Request\AssignmentDenied;
 use App\Domain\Request\AssignmentTargetNotFound;
 use App\Domain\Request\AttachmentDenied;
@@ -230,7 +225,7 @@ final class RequestController extends Controller
     /** @return array<string, mixed> */
     public function actionDeleteReport(int $id): array
     {
-        $input = new DeleteReportInput();
+        $input = new LockVersionInput();
         $input->load(Yii::$app->request->bodyParams, '');
         if (!$input->validate()) {
             Yii::$app->response->statusCode = 422;
@@ -384,7 +379,7 @@ final class RequestController extends Controller
     /** @return array<string, mixed> */
     public function actionClaimExpert(int $id): array
     {
-        $input = new ClaimExpertInput();
+        $input = new LockVersionInput();
         $input->load(Yii::$app->request->bodyParams, '');
         if (!$input->validate()) {
             Yii::$app->response->statusCode = 422;
@@ -493,7 +488,7 @@ final class RequestController extends Controller
     /** @return array<string, mixed> */
     public function actionStart(int $id): array
     {
-        $input = new StartRequestInput();
+        $input = new LockVersionInput();
         $input->load(Yii::$app->request->bodyParams, '');
         if (!$input->validate()) {
             Yii::$app->response->statusCode = 422;
@@ -517,7 +512,7 @@ final class RequestController extends Controller
     /** @return array<string, mixed> */
     public function actionSuspend(int $id): array
     {
-        $input = new SuspendRequestInput();
+        $input = new LockVersionInput();
         $input->load(Yii::$app->request->bodyParams, '');
         if (!$input->validate()) {
             Yii::$app->response->statusCode = 422;
@@ -543,7 +538,7 @@ final class RequestController extends Controller
     /** @return array<string, mixed> */
     public function actionResume(int $id): array
     {
-        $input = new ResumeRequestInput();
+        $input = new LockVersionInput();
         $input->load(Yii::$app->request->bodyParams, '');
         if (!$input->validate()) {
             Yii::$app->response->statusCode = 422;
@@ -569,7 +564,7 @@ final class RequestController extends Controller
     /** @return array<string, mixed> */
     public function actionReject(int $id): array
     {
-        $input = new RejectRequestInput();
+        $input = new CancelRequestInput();
         $input->load(Yii::$app->request->bodyParams, '');
         if (!$input->validate()) {
             Yii::$app->response->statusCode = 422;
@@ -598,7 +593,7 @@ final class RequestController extends Controller
     /** @return array<string, mixed> */
     public function actionWithdraw(int $id): array
     {
-        $input = new WithdrawRequestInput();
+        $input = new CancelRequestInput();
         $input->load(Yii::$app->request->bodyParams, '');
         if (!$input->validate()) {
             Yii::$app->response->statusCode = 422;
