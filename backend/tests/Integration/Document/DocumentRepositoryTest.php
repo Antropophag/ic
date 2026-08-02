@@ -10,6 +10,7 @@ use App\Domain\Request\RequestNotFound;
 use App\Infrastructure\Clock;
 use App\Infrastructure\Document\DocumentRepository;
 use App\Infrastructure\Document\DocumentStorage;
+use App\Infrastructure\Request\RequestQuery;
 use App\Infrastructure\Request\RequestRepository;
 use Tests\Integration\IntegrationTestCase;
 
@@ -134,7 +135,7 @@ final class DocumentRepositoryTest extends IntegrationTestCase
         );
         self::assertSame('DOC-002', $auditRuleId);
 
-        $history = (new RequestRepository($this->db()))->findDetails($requestId, $executor)['history'];
+        $history = (new RequestQuery($this->db()))->findDetails($requestId, $executor)['history'];
         $uploadEvent = array_values(array_filter(
             $history,
             static fn (array $event): bool => $event['action'] === 'upload_report',
@@ -143,7 +144,7 @@ final class DocumentRepositoryTest extends IntegrationTestCase
         self::assertSame((int) $result['versionId'], (int) $uploadEvent[0]['versionId']);
         self::assertSame('report.pdf', $uploadEvent[0]['originalName']);
 
-        $outsiderHistory = (new RequestRepository($this->db()))->findDetails($requestId, $outsider)['history'];
+        $outsiderHistory = (new RequestQuery($this->db()))->findDetails($requestId, $outsider)['history'];
         $outsiderUploadEvent = array_values(array_filter(
             $outsiderHistory,
             static fn (array $event): bool => $event['action'] === 'upload_report',
@@ -152,7 +153,7 @@ final class DocumentRepositoryTest extends IntegrationTestCase
         self::assertNull($outsiderUploadEvent[0]['originalName']);
 
         $repository->deleteReport($requestId, (int) $result['lockVersion'], $executor);
-        $historyAfterDeletion = (new RequestRepository($this->db()))->findDetails($requestId, $executor)['history'];
+        $historyAfterDeletion = (new RequestQuery($this->db()))->findDetails($requestId, $executor)['history'];
         $deletedUploadEvent = array_values(array_filter(
             $historyAfterDeletion,
             static fn (array $event): bool => $event['action'] === 'upload_report',

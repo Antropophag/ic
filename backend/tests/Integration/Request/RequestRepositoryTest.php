@@ -8,10 +8,12 @@ use App\Application\Request\CreateRequestInput;
 use App\Domain\Request\AssignmentDenied;
 use App\Domain\Request\ConcurrentRequestModification;
 use App\Domain\Request\RejectDenied;
+use App\Domain\Request\RequestNotFound;
 use App\Domain\Request\SuspendResumeDenied;
 use App\Domain\Request\WithdrawDenied;
 use App\Infrastructure\Clock;
 use App\Infrastructure\Request\RequestRepository;
+use App\Infrastructure\Request\RequestQuery;
 use Tests\Integration\IntegrationTestCase;
 
 final class RequestRepositoryTest extends IntegrationTestCase
@@ -210,15 +212,15 @@ final class RequestRepositoryTest extends IntegrationTestCase
         $repository = new RequestRepository($this->db());
         $started = $repository->startRequest($requestId, (int) $request['lock_version'], $manager);
 
-        $managerRow = self::findRow($this->findAll($repository, $manager), $requestId);
+        $managerRow = self::findRow($this->findAll($manager), $requestId);
         self::assertSame(1, (int) $managerRow['can_suspend']);
         self::assertSame(0, (int) $managerRow['can_resume']);
 
-        $outsiderRow = self::findRow($this->findAll($repository, $outsider), $requestId);
+        $outsiderRow = self::findRow($this->findAll($outsider), $requestId);
         self::assertSame(0, (int) $outsiderRow['can_suspend']);
 
         $repository->suspendRequest($requestId, $started['lockVersion'], $manager);
-        $managerRowAfter = self::findRow($this->findAll($repository, $manager), $requestId);
+        $managerRowAfter = self::findRow($this->findAll($manager), $requestId);
         self::assertSame(0, (int) $managerRowAfter['can_suspend']);
         self::assertSame(1, (int) $managerRowAfter['can_resume']);
     }
@@ -246,14 +248,12 @@ final class RequestRepositoryTest extends IntegrationTestCase
         $initiator = $this->createUser('dev.it.initiator6', 'Тестовый инициатор 6');
         $request = $this->createRegisteredRequest($initiator, 'registry-flags');
 
-        $repository = new RequestRepository($this->db());
-
-        $managerPage = $repository->findPage($manager, 1, 100, 'all', null, '', 'desc');
+        $managerPage = (new RequestQuery($this->db()))->findPage($manager, 1, 100, 'all', null, '', 'desc');
         $managerRow = self::findRow($managerPage['items'], (int) $request['id']);
         self::assertSame(1, (int) $managerRow['can_reject']);
         self::assertSame(0, (int) $managerRow['can_withdraw']);
 
-        $initiatorPage = $repository->findPage($initiator, 1, 100, 'all', null, '', 'desc');
+        $initiatorPage = (new RequestQuery($this->db()))->findPage($initiator, 1, 100, 'all', null, '', 'desc');
         $initiatorRow = self::findRow($initiatorPage['items'], (int) $request['id']);
         self::assertSame(0, (int) $initiatorRow['can_reject']);
         self::assertSame(1, (int) $initiatorRow['can_withdraw']);
@@ -267,8 +267,15 @@ final class RequestRepositoryTest extends IntegrationTestCase
         $this->createRegisteredRequest($initiator, 'уникальный насос второй');
         $this->createRegisteredRequest($other, 'постороннее изделие');
 
-        $repository = new RequestRepository($this->db());
-        $page = $repository->findPage($initiator, 1, 1, 'mine', 'registered', 'уникальный насос', 'asc');
+        $page = (new RequestQuery($this->db()))->findPage(
+            $initiator,
+            1,
+            1,
+            'mine',
+            'registered',
+            'уникальный насос',
+            'asc',
+        );
 
         self::assertSame(2, $page['total']);
         self::assertSame(1, $page['page']);
@@ -297,7 +304,7 @@ final class RequestRepositoryTest extends IntegrationTestCase
             ])->execute();
         }
 
-        $page = (new RequestRepository($this->db()))->findPage(
+        $page = (new RequestQuery($this->db()))->findPage(
             $initiator,
             1,
             1,
@@ -314,9 +321,99 @@ final class RequestRepositoryTest extends IntegrationTestCase
     }
 
     /** @return list<array<string, mixed>> */
-    private function findAll(RequestRepository $repository, int $actorId): array
+    private function findAll(int $actorId): array
     {
-        return $repository->findPage($actorId, 1, 500, 'all', null, '', 'desc')['items'];
+        return (new RequestQuery($this->db()))->findPage($actorId, 1, 500, 'all', null, '', 'desc')['items'];
+    }
+
+    public function testCommentsQueryKeepsCursorPaginationOrderAndShape(): void
+    {
+        $initiator = $this->createUser('dev.it.comments.initiator', 'Автор заявки');
+        $author = $this->createUser('dev.it.comments.author', 'Автор комментария');
+        $requestId = (int) $this->createRegisteredRequest($initiator, 'comments-query')['id'];
+
+        for ($index = 1; $index <= 52; ++$index) {
+            $this->db()->createCommand()->insert('{{%request_comments}}', [
+                'request_id' => $requestId,
+                'author_id' => $author,
+                'body' => "Комментарий {$index}",
+                'created_at' => Clock::now(),
+            ])->execute();
+        }
+
+        $query = new RequestQuery($this->db());
+        $firstPage = $query->findCommentsPage($requestId, $initiator, null);
+
+        self::assertSame(['items', 'hasMore', 'nextBeforeId'], array_keys($firstPage));
+        self::assertCount(50, $firstPage['items']);
+        self::assertTrue($firstPage['hasMore']);
+        self::assertSame('Комментарий 3', $firstPage['items'][0]['body']);
+        self::assertSame('Комментарий 52', $firstPage['items'][49]['body']);
+        self::assertSame((int) $firstPage['items'][0]['id'], $firstPage['nextBeforeId']);
+        self::assertSame(
+            ['id', 'body', 'createdAt', 'authorName'],
+            array_keys($firstPage['items'][0]),
+        );
+
+        $secondPage = $query->findCommentsPage($requestId, $initiator, $firstPage['nextBeforeId']);
+        self::assertSame(['Комментарий 1', 'Комментарий 2'], array_column($secondPage['items'], 'body'));
+        self::assertFalse($secondPage['hasMore']);
+    }
+
+    public function testCommentsQueryHidesRequestFromInactiveViewer(): void
+    {
+        $initiator = $this->createUser('dev.it.comments.owner', 'Автор заявки');
+        $inactiveViewer = $this->createUser(
+            'dev.it.comments.inactive',
+            'Неактивный пользователь',
+            isActive: false,
+        );
+        $requestId = (int) $this->createRegisteredRequest($initiator, 'comments-inactive')['id'];
+
+        $this->expectException(RequestNotFound::class);
+        (new RequestQuery($this->db()))->findCommentsPage($requestId, $inactiveViewer, null);
+    }
+
+    public function testUserQueriesReturnOnlyActiveUsersWithExpectedRoleAndSortOrder(): void
+    {
+        $executorB = $this->createUser('dev.it.lookup.executor-b', 'Яков Исполнитель');
+        $executorA = $this->createUser('dev.it.lookup.executor-a', 'Анна Исполнитель');
+        $inactiveExecutor = $this->createUser(
+            'dev.it.lookup.executor-inactive',
+            'Борис Исполнитель',
+            isActive: false,
+        );
+        $expert = $this->createUser('dev.it.lookup.expert', 'Вера Эксперт');
+        $unrelated = $this->createUser('dev.it.lookup.unrelated', 'Григорий Сотрудник');
+        $this->grantRole($executorB, 'ic_executor');
+        $this->grantRole($executorA, 'ic_executor');
+        $this->grantRole($inactiveExecutor, 'ic_executor');
+        $this->grantRole($expert, 'expert');
+        $this->grantRole($unrelated, 'employee');
+
+        $query = new RequestQuery($this->db());
+
+        $executors = $query->findActiveExecutors();
+        self::assertContains(['id' => $executorA, 'displayName' => 'Анна Исполнитель'], $executors);
+        self::assertContains(['id' => $executorB, 'displayName' => 'Яков Исполнитель'], $executors);
+        self::assertNotContains(['id' => $inactiveExecutor, 'displayName' => 'Борис Исполнитель'], $executors);
+        self::assertNotContains(['id' => $unrelated, 'displayName' => 'Григорий Сотрудник'], $executors);
+        self::assertSame(
+            array_column($executors, 'id'),
+            array_values(array_unique(array_column($executors, 'id'))),
+        );
+        $executorNames = array_column($executors, 'displayName');
+        $sortedExecutorNames = $executorNames;
+        sort($sortedExecutorNames, SORT_STRING);
+        self::assertSame($sortedExecutorNames, $executorNames);
+
+        $experts = $query->findActiveExperts();
+        self::assertContains(['id' => $expert, 'displayName' => 'Вера Эксперт'], $experts);
+        self::assertNotContains(['id' => $unrelated, 'displayName' => 'Григорий Сотрудник'], $experts);
+        self::assertSame(
+            array_column($experts, 'id'),
+            array_values(array_unique(array_column($experts, 'id'))),
+        );
     }
 
     public function testRegistryShowsOnlyTheMostRecentComment(): void
@@ -328,12 +425,12 @@ final class RequestRepositoryTest extends IntegrationTestCase
         $requestId = (int) $request['id'];
 
         $repository = new RequestRepository($this->db());
-        self::assertNull(self::findRow($this->findAll($repository, $manager), $requestId)['last_comment_author']);
+        self::assertNull(self::findRow($this->findAll($manager), $requestId)['last_comment_author']);
 
         $repository->addComment($requestId, $initiator, 'Первый комментарий');
         $repository->addComment($requestId, $manager, 'Второй, самый свежий комментарий');
 
-        $row = self::findRow($this->findAll($repository, $manager), $requestId);
+        $row = self::findRow($this->findAll($manager), $requestId);
         self::assertSame('Руководитель просмотра комментария', $row['last_comment_author']);
         self::assertSame('Второй, самый свежий комментарий', $row['last_comment_body']);
         self::assertMatchesRegularExpression(
@@ -353,7 +450,7 @@ final class RequestRepositoryTest extends IntegrationTestCase
         $repository = new RequestRepository($this->db());
         $repository->addComment($requestId, $initiator, str_repeat('а', 600));
 
-        $row = self::findRow($this->findAll($repository, $initiator), $requestId);
+        $row = self::findRow($this->findAll($initiator), $requestId);
         self::assertSame(str_repeat('а', 500) . '…', $row['last_comment_body']);
     }
 
@@ -410,24 +507,24 @@ final class RequestRepositoryTest extends IntegrationTestCase
         ])->execute();
 
         $repository = new RequestRepository($this->db());
-        $executorRow = self::findRow($this->findAll($repository, $executor), $requestId);
+        $executorRow = self::findRow($this->findAll($executor), $requestId);
         self::assertSame(1, (int) $executorRow['has_report']);
         self::assertSame('report.pdf', $executorRow['report_original_name']);
         self::assertNotNull($executorRow['report_version_id']);
 
-        $managerRow = self::findRow($this->findAll($repository, $manager), $requestId);
+        $managerRow = self::findRow($this->findAll($manager), $requestId);
         self::assertSame(1, (int) $managerRow['has_report']);
         self::assertSame('report.pdf', $managerRow['report_original_name']);
 
-        $labManagerRow = self::findRow($this->findAll($repository, $labManager), $requestId);
+        $labManagerRow = self::findRow($this->findAll($labManager), $requestId);
         self::assertSame(1, (int) $labManagerRow['has_report']);
         self::assertSame('report.pdf', $labManagerRow['report_original_name']);
 
-        $expertRow = self::findRow($this->findAll($repository, $expert), $requestId);
+        $expertRow = self::findRow($this->findAll($expert), $requestId);
         self::assertSame(1, (int) $expertRow['has_report']);
         self::assertSame('report.pdf', $expertRow['report_original_name']);
 
-        $outsiderRow = self::findRow($this->findAll($repository, $outsider), $requestId);
+        $outsiderRow = self::findRow($this->findAll($outsider), $requestId);
         self::assertSame(0, (int) $outsiderRow['has_report']);
         self::assertNull($outsiderRow['report_version_id']);
         self::assertNull($outsiderRow['report_original_name']);
@@ -437,7 +534,7 @@ final class RequestRepositoryTest extends IntegrationTestCase
             ['status' => 'completed'],
             ['id' => $requestId],
         )->execute();
-        $outsiderAfterCompletion = self::findRow($this->findAll($repository, $outsider), $requestId);
+        $outsiderAfterCompletion = self::findRow($this->findAll($outsider), $requestId);
         self::assertSame(1, (int) $outsiderAfterCompletion['has_report']);
         self::assertSame('report.pdf', $outsiderAfterCompletion['report_original_name']);
     }
@@ -483,7 +580,7 @@ final class RequestRepositoryTest extends IntegrationTestCase
         ])->execute();
 
         $row = self::findRow(
-            $this->findAll(new RequestRepository($this->db()), $executor),
+            $this->findAll($executor),
             $requestId,
         );
         self::assertSame(0, (int) $row['has_report']);
@@ -639,11 +736,11 @@ final class RequestRepositoryTest extends IntegrationTestCase
 
         $repository = new RequestRepository($this->db());
 
-        $expertDetails = $repository->findDetails($requestId, $expert);
+        $expertDetails = (new RequestQuery($this->db()))->findDetails($requestId, $expert);
         self::assertNotEmpty($expertDetails['documents']);
         self::assertSame('report', $expertDetails['documents'][0]['documentType']);
 
-        $outsiderDetails = $repository->findDetails($requestId, $outsider);
+        $outsiderDetails = (new RequestQuery($this->db()))->findDetails($requestId, $outsider);
         self::assertEmpty($outsiderDetails['documents']);
     }
 
@@ -812,7 +909,7 @@ final class RequestRepositoryTest extends IntegrationTestCase
         $claimed = $repository->claimExpert($requestId, (int) $assigned['lockVersion'], $firstExpert);
         $repository->reassignExpert($requestId, $secondExpert, (int) $claimed['lockVersion'], $firstExpert);
 
-        $history = $repository->findDetails($requestId, $manager)['history'];
+        $history = (new RequestQuery($this->db()))->findDetails($requestId, $manager)['history'];
         $byAction = [];
         foreach ($history as $row) {
             $byAction[$row['action']] = $row;
@@ -855,7 +952,7 @@ final class RequestRepositoryTest extends IntegrationTestCase
             ),
         );
 
-        $history = $repository->findDetails($requestId, $manager)['history'];
+        $history = (new RequestQuery($this->db()))->findDetails($requestId, $manager)['history'];
         $byAction = [];
         foreach ($history as $row) {
             $byAction[$row['action']] = $row;

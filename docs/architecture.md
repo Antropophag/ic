@@ -14,6 +14,11 @@ scheduler (тот же backend image, php yii notification/work)
 `compose.test.yaml` подключает `deployment/test/*`, Samba AD и Mailpit.
 Production не получает ни одного из этих файлов.
 
+Чтение заявок для HTTP/UI разделено без дополнительного слоя: `RequestController`
+обращается к `RequestQuery` за реестром, карточкой, комментариями и списками
+исполнителей/экспертов. Изменяющие транзакционные операции, аудит и постановка
+уведомлений в outbox остаются в `RequestRepository`.
+
 Development identity — обычная запись `users` и ролей в MariaDB. Отдельный
 dev script получает безопасный список (`id`, отображаемое имя, должность),
 сохраняет выбор в браузере и добавляет настроенный deployment-ом header.
