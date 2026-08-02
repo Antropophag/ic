@@ -11,7 +11,7 @@ final class AssignRoleInput extends Model
     // mixed, а не ?int: типизированное свойство при несовместимом JSON-типе
     // (например, строка не из цифр) бросает TypeError уже при Model::load(),
     // до того как отработает валидатор 'integer' — тот же паттерн, что и у
-    // остальных integer-полей проекта (см. AssignExecutorInput, StartRequestInput),
+    // остальных integer-полей проекта (см. AssignExecutorInput, LockVersionInput),
     // иначе клиент получит 500 вместо контролируемого 422.
     public mixed $roleId = null;
 

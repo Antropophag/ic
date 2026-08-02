@@ -6,7 +6,7 @@ namespace App\Application\Request;
 
 use yii\base\Model;
 
-final class DeleteReportInput extends Model
+final class LockVersionInput extends Model
 {
     public mixed $lockVersion = null;
 
