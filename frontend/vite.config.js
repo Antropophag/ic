@@ -6,7 +6,7 @@ export default defineConfig({
   test: {
     coverage: {
       provider: 'v8',
-      include: ['src/api.js', 'src/confirmDialog.js', 'src/devUsers.js', 'src/latestRequestGuard.js', 'src/registry.js'],
+      include: ['src/api.js', 'src/confirmDialog.js', 'src/latestRequestGuard.js', 'src/registry.js'],
       reporter: ['text', 'json-summary'],
       thresholds: {
         lines: 80,

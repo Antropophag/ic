@@ -15,100 +15,38 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  frontend:
+  check:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
-        with:
-          persist-credentials: false
-      - uses: actions/setup-node@v7
-        with:
-          node-version: 22
-          cache: npm
-          cache-dependency-path: frontend/package-lock.json
-      - run: npm ci --no-audit --no-fund
-        working-directory: frontend
-      - run: npm run lint
-        working-directory: frontend
-      - run: npm run audit
-        working-directory: frontend
-      - run: npm run build
-        working-directory: frontend
-      - run: npm run coverage
-        working-directory: frontend
-
-  backend:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v7
-        with:
-          persist-credentials: false
-      - run: make backend-quality
-      - run: make coverage
-
-  repository-quality:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v7
-        with:
-          persist-credentials: false
+        with: {persist-credentials: false}
       - uses: actions/setup-node@v7
         with:
           node-version: 22
           cache: npm
           cache-dependency-path: frontend/package-lock.json
       - uses: actions/setup-python@v7
-        with:
-          python-version: "3.13"
-      - run: npm ci --no-audit --no-fund
-        working-directory: frontend
-      - name: Установить фиксированные версии линтеров
-        env:
-          ACTIONLINT_VERSION: "1.7.7"
-          ACTIONLINT_SHA256: "023070a287cd8cccd71515fedc843f1985bf96c436b7effaecce67290e7e0757"
-          HADOLINT_VERSION: "2.12.0"
-          HADOLINT_SHA256: "56de6d5e5ec427e17b74fa48d51271c7fc0d61244bf5c90e828aab8362d55010"
-          SHFMT_VERSION: "3.10.0"
-          SHFMT_SHA256: "1f57a384d59542f8fac5f503da1f3ea44242f46dff969569e80b524d64b71dbc"
-        run: |
-          set -euo pipefail
-          sudo apt-get update
-          sudo apt-get install -y shellcheck
-          pip install "yamllint==1.37.1"
+        with: {python-version: "3.13"}
+      - run: sh scripts/install-ci-linters.sh
+      - run: make check
 
-          shfmt_bin="shfmt_v${SHFMT_VERSION}_linux_amd64"
-          curl -sSfL "https://github.com/mvdan/sh/releases/download/v${SHFMT_VERSION}/${shfmt_bin}" -o "${shfmt_bin}"
-          echo "${SHFMT_SHA256}  ${shfmt_bin}" | sha256sum -c -
-          sudo install -m 0755 "${shfmt_bin}" /usr/local/bin/shfmt
-
-          curl -sSfL "https://github.com/hadolint/hadolint/releases/download/v${HADOLINT_VERSION}/hadolint-Linux-x86_64" -o hadolint
-          echo "${HADOLINT_SHA256}  hadolint" | sha256sum -c -
-          sudo install -m 0755 hadolint /usr/local/bin/hadolint
-
-          actionlint_archive="actionlint_${ACTIONLINT_VERSION}_linux_amd64.tar.gz"
-          curl -sSfL "https://github.com/rhysd/actionlint/releases/download/v${ACTIONLINT_VERSION}/${actionlint_archive}" -o "${actionlint_archive}"
-          echo "${ACTIONLINT_SHA256}  ${actionlint_archive}" | sha256sum -c -
-          tar -xzf "${actionlint_archive}" actionlint
-          sudo install -m 0755 actionlint /usr/local/bin/actionlint
-      - run: make repo-quality
-
-  backend-integration:
+  coverage:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
+        with: {persist-credentials: false}
+      - uses: actions/setup-node@v7
         with:
-          persist-credentials: false
-      - run: cp .env.example .env
-      - run: make backend-integration
-      - if: always()
-        run: docker compose down --volumes
+          node-version: 22
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - run: make coverage
 
-  production-like-e2e:
+  e2e:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
-        with:
-          persist-credentials: false
+        with: {persist-credentials: false}
       - uses: actions/setup-node@v7
         with:
           node-version: 22
@@ -121,17 +59,45 @@ jobs:
           name: playwright-report
           path: frontend/playwright-report/
       - if: always()
-        run: docker compose -f compose.test.yaml down --volumes
+        run: make _test-down
+
+  podman:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with: {persist-credentials: false}
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - name: Install Podman Compose
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes podman podman-compose
+      - name: Run the production-like suite with Podman
+        run: make e2e
+        env:
+          COMPOSE: sudo podman-compose --in-pod false
+          CONTAINER_ENGINE: sudo podman
+      - if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: podman-playwright-report
+          path: frontend/playwright-report/
+      - if: always()
+        run: make _test-down
+        env:
+          COMPOSE: sudo podman-compose --in-pod false
+          CONTAINER_ENGINE: sudo podman
 
   analyze:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
-        with:
-          persist-credentials: false
+        with: {persist-credentials: false}
       - uses: actions/setup-python@v7
-        with:
-          python-version: "3.13"
+        with: {python-version: "3.13"}
       - run: pip install semgrep
       - run: semgrep scan --config auto --error backend/src frontend/src
 

@@ -1,19 +1,7 @@
-import { getDevUserId } from './devUsers'
-
-function devHeaders() {
-  return { 'X-Dev-User-ID': String(getDevUserId()) }
-}
-
-// Вне dev-режима сессия аутентифицируется cookie, а не заголовком — но
-// state-changing запросы всё равно требуют CSRF-токен (RequestController
-// включает enableCsrfValidation вне YII_ENV=dev). Токен приходит из ответа
+// Сессия аутентифицируется cookie. State-changing запросы требуют
+// CSRF-токен. Токен приходит из ответа
 // /api/v1/auth/me или /auth/login и хранится здесь на время сессии SPA.
 let csrfToken = ''
-let devMode = false
-
-export function setDevMode(enabled) {
-  devMode = Boolean(enabled)
-}
 
 export function setCsrfToken(token) {
   csrfToken = token || ''
@@ -24,7 +12,7 @@ export function hasCsrfToken() {
 }
 
 function authHeaders() {
-  return { ...(devMode ? devHeaders() : {}), ...(csrfToken ? { 'X-CSRF-Token': csrfToken } : {}) }
+  return csrfToken ? { 'X-CSRF-Token': csrfToken } : {}
 }
 
 async function request(path, options = {}) {
@@ -150,17 +138,12 @@ export const requestApi = {
 
 export const authApi = {
   me: () => request('/api/v1/auth/me'),
-  devUsers: () => request('/api/v1/auth/dev-users'),
   login: (login, password) => request('/api/v1/auth/login', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ login, password }),
   }),
   logout: () => request('/api/v1/auth/logout', { method: 'POST' }),
-}
-
-export const devApi = {
-  seedRequests: () => request('/api/v1/dev/seed-requests', { method: 'POST' }),
 }
 
 export const adminApi = {

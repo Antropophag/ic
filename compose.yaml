@@ -1,12 +1,13 @@
 name: shlz-test-registry
 
 services:
-  gateway:
+  frontend:
     build:
       context: .
-      dockerfile: docker/gateway.Dockerfile
+      dockerfile: docker/frontend.Dockerfile
+      target: production
     ports:
-      - "8080:8080"
+      - "${FRONTEND_PORT:-8080}:8080"
     depends_on:
       backend:
         condition: service_started
@@ -16,9 +17,8 @@ services:
     build:
       context: .
       dockerfile: docker/backend.Dockerfile
-    env_file: .env
-    environment:
-      APP_ENV: prod
+      target: production
+    env_file: ${COMPOSE_ENV_FILE:-.env}
     depends_on:
       mariadb:
         condition: service_healthy
@@ -34,9 +34,8 @@ services:
     build:
       context: .
       dockerfile: docker/backend.Dockerfile
-    env_file: .env
-    environment:
-      APP_ENV: prod
+      target: production
+    env_file: ${COMPOSE_ENV_FILE:-.env}
     depends_on:
       mariadb:
         condition: service_healthy

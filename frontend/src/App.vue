@@ -1,72 +1,31 @@
 <script setup>
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
-import { authApi, setCsrfToken, setDevMode } from './api'
+import { authApi, setCsrfToken } from './api'
 import AuthScreen from './components/AuthScreen.vue'
 import AdminPanel from './components/AdminPanel.vue'
 import RequestDetails from './components/RequestDetails.vue'
 import RequestRegistry from './components/RequestRegistry.vue'
-import { getDevUserId, reconcileDevUserId, setDevUserId } from './devUsers'
 import { createLatestRequestGuard } from './latestRequestGuard'
 import { requestIdFromLocation, setRequestInUrl } from './requestDeepLink'
 import { initialsFor } from './registry'
 
 const authLoading = ref(true)
-const authDevMode = ref(true)
 const authUser = ref(null)
-const devUsers = ref([])
-const devUserId = ref(getDevUserId())
-const devUsersError = ref('')
-const devUsersLoading = ref(false)
 const selectedRequestId = ref(requestIdFromLocation())
 const selectedRequestTitle = ref(null)
 const showAdmin = ref(false)
 const requestWarning = ref('')
 const registryRefreshTrigger = ref(0)
-const demoSeedTrigger = ref(0)
-const demoSeedLoading = ref(false)
-const demoSeedMessage = ref('')
-const devUsersGuard = createLatestRequestGuard()
 const authGuard = createLatestRequestGuard()
 
-const currentProfile = computed(() => {
-  if (authDevMode.value) {
-    return devUsers.value.find(user => user.id === devUserId.value) ?? devUsers.value[0]
-      ?? { displayName: '', position: '', department: '', roles: [] }
-  }
-  return {
-    displayName: authUser.value?.displayName || '',
-    position: authUser.value?.position || '',
-    department: authUser.value?.department || '',
-    roles: authUser.value?.roles || [],
-  }
-})
+const currentProfile = computed(() => ({
+  displayName: authUser.value?.displayName || '',
+  position: authUser.value?.position || '',
+  department: authUser.value?.department || '',
+  roles: authUser.value?.roles || [],
+}))
 const currentInitials = computed(() => initialsFor(currentProfile.value.displayName))
 const isAdministrator = computed(() => (currentProfile.value.roles || []).includes('administrator'))
-
-async function loadDevUsers(authToken = null) {
-  if (devUsersLoading.value) return false
-  devUsersLoading.value = true
-  const token = devUsersGuard.begin(true)
-  try {
-    const result = await authApi.devUsers()
-    if (authToken !== null && !authGuard.isCurrent(authToken, true)) return false
-    if (!devUsersGuard.isCurrent(token, true)) return false
-    const items = Array.isArray(result.items) ? result.items : []
-    if (!items.length) {
-      devUsersError.value = 'Список dev-пользователей пуст. Выполните ./yii dev/seed на backend.'
-      return false
-    }
-    devUsers.value = items
-    devUserId.value = reconcileDevUserId(items)
-    devUsersError.value = ''
-    return true
-  } catch {
-    if (devUsersGuard.isCurrent(token, true)) devUsersError.value = 'Не удалось загрузить список dev-пользователей.'
-    return false
-  } finally {
-    if (devUsersGuard.isCurrent(token, true)) devUsersLoading.value = false
-  }
-}
 
 async function bootstrapAuth() {
   const token = authGuard.begin(true)
@@ -75,14 +34,9 @@ async function bootstrapAuth() {
     const result = await authApi.me()
     if (!authGuard.isCurrent(token, true)) return
     setCsrfToken(result.csrfToken)
-    authDevMode.value = Boolean(result.devMode)
-    setDevMode(authDevMode.value)
     authUser.value = result.user
-    if (authDevMode.value) await loadDevUsers(token)
   } catch {
     if (!authGuard.isCurrent(token, true)) return
-    authDevMode.value = false
-    setDevMode(false)
     authUser.value = null
   } finally {
     if (authGuard.isCurrent(token, true)) authLoading.value = false
@@ -105,14 +59,6 @@ function closeRequest({ push = true } = {}) {
   setRequestInUrl(null, { push })
 }
 
-function switchDevUser(rawId) {
-  const id = Number(rawId)
-  setDevUserId(id)
-  devUserId.value = id
-  showAdmin.value = false
-  closeRequest()
-}
-
 function returnHome() {
   showAdmin.value = false
   closeRequest()
@@ -129,7 +75,6 @@ function refreshRegistry() {
 
 async function logout() {
   const token = authGuard.begin(true)
-  devUsersGuard.invalidate()
   let csrfToken = ''
   try {
     const result = await authApi.logout()
@@ -139,8 +84,6 @@ async function logout() {
   }
   if (!authGuard.isCurrent(token, true)) return
   setCsrfToken(csrfToken)
-  setDevMode(false)
-  authDevMode.value = false
   authUser.value = null
   closeRequest({ push: false })
 }
@@ -157,7 +100,6 @@ onMounted(() => {
 })
 onBeforeUnmount(() => {
   window.removeEventListener('popstate', handlePopState)
-  devUsersGuard.invalidate()
   authGuard.invalidate()
 })
 </script>
@@ -165,15 +107,7 @@ onBeforeUnmount(() => {
 <template>
   <div class="shell">
     <div v-if="authLoading" class="auth-loading">Загрузка…</div>
-    <div v-else-if="devUsersError" class="auth-screen">
-      <div class="auth-card">
-        <p class="form-error">{{ devUsersError }}</p>
-        <button type="button" class="primary" :disabled="devUsersLoading" @click="loadDevUsers">
-          {{ devUsersLoading ? 'Повтор…' : 'Повторить' }}
-        </button>
-      </div>
-    </div>
-    <AuthScreen v-else-if="!authDevMode && !authUser" @authenticated="authUser = $event" />
+    <AuthScreen v-else-if="!authUser" @authenticated="authUser = $event" />
     <template v-else>
       <main>
         <header class="topbar">
@@ -185,12 +119,9 @@ onBeforeUnmount(() => {
               <div><p class="eyebrow">АО «ЩЛЗ» · Испытательный центр</p><h1>{{ selectedRequestTitle ? `Заявка №${selectedRequestTitle.id} от ${selectedRequestTitle.date}` : selectedRequestId ? 'Заявка' : 'Заявки на проведение испытаний' }}</h1></div>
             </div>
             <div class="profile">
-              <select v-if="authDevMode" class="dev-user-switch" title="Dev-переключатель пользователя (только APP_ENV=dev)" :value="devUserId" @change="switchDevUser($event.target.value)"><option v-for="user in devUsers" :key="user.id" :value="user.id">{{ user.displayName }} — {{ user.position }}</option></select>
-              <button v-if="authDevMode" type="button" class="secondary demo-seed-button" :disabled="demoSeedLoading" @click="demoSeedTrigger += 1">{{ demoSeedLoading ? 'Заполнение…' : 'Заполнить демо' }}</button>
-              <span v-if="authDevMode && demoSeedMessage" class="demo-seed-message" role="status">{{ demoSeedMessage }}</span>
               <span class="avatar">{{ currentInitials }}</span><span><b>{{ currentProfile.displayName }}</b><small>{{ currentProfile.position }}</small></span>
               <button v-if="isAdministrator" type="button" class="secondary" @click="openAdmin">Администрирование</button>
-              <button v-if="!authDevMode" type="button" class="secondary" @click="logout">Выйти</button>
+              <button type="button" class="secondary" @click="logout">Выйти</button>
             </div>
           </div>
         </header>
@@ -198,13 +129,8 @@ onBeforeUnmount(() => {
         <RequestDetails v-else-if="selectedRequestId" :request-id="selectedRequestId" :current-initials="currentInitials" :initial-warning="requestWarning" @loaded="selectedRequestTitle = $event" @updated="refreshRegistry" @close="closeRequest()" />
         <RequestRegistry
           :active="!showAdmin && !selectedRequestId"
-          :dev-user-id="devUserId"
           :refresh-trigger="registryRefreshTrigger"
-          :demo-seed-trigger="demoSeedTrigger"
-          @reset="showAdmin = false; closeRequest({ push: false })"
           @select-request="openRequest"
-          @demo-seed-loading="demoSeedLoading = $event"
-          @demo-seed-message="demoSeedMessage = $event"
         />
       </main>
     </template>

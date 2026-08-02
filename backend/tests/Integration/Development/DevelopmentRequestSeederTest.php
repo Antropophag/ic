@@ -4,19 +4,19 @@ declare(strict_types=1);
 
 namespace Tests\Integration\Development;
 
-use App\Infrastructure\Development\DemoRequestSeeder;
+use App\Infrastructure\Development\DevelopmentRequestSeeder;
 use App\Infrastructure\Document\DocumentStorage;
 use Tests\Integration\IntegrationTestCase;
 use yii\db\IntegrityException;
 
-final class DemoRequestSeederTest extends IntegrationTestCase
+final class DevelopmentRequestSeederTest extends IntegrationTestCase
 {
     private string $storageRoot;
 
     protected function setUp(): void
     {
         parent::setUp();
-        $this->storageRoot = sys_get_temp_dir() . '/ic-demo-seed-test-' . bin2hex(random_bytes(8));
+        $this->storageRoot = sys_get_temp_dir() . '/ic-development-seed-test-' . bin2hex(random_bytes(8));
         mkdir($this->storageRoot, 0700, true);
         foreach (['dev.user', 'dev.executor', 'dev.executor.naumov', 'dev.employee', 'dev.expert', 'dev.expert2', 'dev.security'] as $login) {
             if ($this->scalar('SELECT id FROM {{%users}} WHERE ad_login = :login', [':login' => $login]) === false) {
@@ -57,7 +57,7 @@ final class DemoRequestSeederTest extends IntegrationTestCase
     public function testSeedCreatesFullSyntheticRegistryAndCanResetIt(): void
     {
         $userCount = (int) $this->scalar('SELECT COUNT(*) FROM {{%users}}');
-        $seeder = new DemoRequestSeeder($this->db(), new DocumentStorage($this->storageRoot));
+        $seeder = new DevelopmentRequestSeeder($this->db(), new DocumentStorage($this->storageRoot));
 
         $first = $seeder->seed();
         self::assertSame(['requests' => 7, 'comments' => 13, 'documents' => 9], $first);
@@ -100,12 +100,12 @@ final class DemoRequestSeederTest extends IntegrationTestCase
 
         $this->expectException(\RuntimeException::class);
         $this->expectExceptionMessage("Run dev/seed first");
-        (new DemoRequestSeeder($this->db(), new DocumentStorage($this->storageRoot)))->seed();
+        (new DevelopmentRequestSeeder($this->db(), new DocumentStorage($this->storageRoot)))->seed();
     }
 
     public function testAttachmentIsRemovedWhenDatabaseInsertFails(): void
     {
-        $seeder = new DemoRequestSeeder($this->db(), new DocumentStorage($this->storageRoot));
+        $seeder = new DevelopmentRequestSeeder($this->db(), new DocumentStorage($this->storageRoot));
         $seeder->seed();
         $requestId = (int) $this->scalar('SELECT id FROM {{%requests}} WHERE number = 1002');
         $userId = (int) $this->scalar("SELECT id FROM {{%users}} WHERE ad_login = 'dev.employee'");

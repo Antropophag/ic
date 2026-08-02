@@ -3,8 +3,7 @@
 declare(strict_types=1);
 
 $common = require __DIR__ . '/common.php';
-
-return yii\helpers\ArrayHelper::merge($common, [
+$application = [
     'controllerNamespace' => 'App\\Http\\Controller',
     'components' => [
         'request' => [
@@ -18,12 +17,9 @@ return yii\helpers\ArrayHelper::merge($common, [
             'rules' => [
                 'GET health/live' => 'health/live',
                 'GET health/ready' => 'health/ready',
-                'GET health/logging' => 'health/logging',
                 'GET api/v1/auth/me' => 'auth/me',
-                'GET api/v1/auth/dev-users' => 'auth/dev-users',
                 'POST api/v1/auth/login' => 'auth/login',
                 'POST api/v1/auth/logout' => 'auth/logout',
-                'POST api/v1/dev/seed-requests' => 'dev/seed-requests',
                 'GET api/v1/requests' => 'request/index',
                 'GET api/v1/requests/<id:\\d+>' => 'request/view',
                 'POST api/v1/requests/<id:\\d+>/comments' => 'request/add-comment',
@@ -55,4 +51,8 @@ return yii\helpers\ArrayHelper::merge($common, [
             ],
         ],
     ],
-]);
+];
+$deploymentFile = '/app/deployment/web.php';
+$deployment = is_file($deploymentFile) ? require $deploymentFile : [];
+
+return yii\helpers\ArrayHelper::merge($common, $application, $deployment);

@@ -4,7 +4,8 @@ declare(strict_types=1);
 
 namespace App\Console;
 
-use App\Infrastructure\Development\DemoRequestSeeder;
+use App\Infrastructure\Development\DevelopmentRequestSeeder;
+use App\Infrastructure\Deployment\DatabasePurpose;
 use App\Infrastructure\Document\DocumentStorage;
 use Yii;
 use yii\console\Controller;
@@ -14,11 +15,9 @@ final class DevController extends Controller
 {
     /**
      * Основные шесть профилей закреплены за фиксированными id: на них ссылаются
-     * E2E. Фиксированный id не гарантирован на давно живущей
-     * демо-базе (см. actionSeed() ниже) — dev-переключатель пользователя во
-     * фронтенде поэтому резолвит актуальные id через
-     * AuthController::actionDevUsers(), которая читает ad_login отсюда же
-     * (public ради единого источника истины, без дублирования списка).
+     * E2E. Фиксированный id не гарантирован на давно живущей development-БД
+     * (см. actionSeed() ниже), поэтому переключатель резолвит актуальные id
+     * через DevController::actionUsers(), которая читает ad_login отсюда же.
      *
      * @var array<int, array{ad_login: string, display_name: string, email: string, position: string, department: string, roles: list<string>}>
      */
@@ -53,11 +52,16 @@ final class DevController extends Controller
             'email' => 'dev.admin@example.invalid', 'position' => 'Администратор портала',
             'department' => 'ИТ', 'roles' => ['employee', 'administrator'],
         ],
+        7 => [
+            'ad_login' => 'dev.laboratory_manager', 'display_name' => 'Ирина Лебедева',
+            'email' => 'dev.laboratory_manager@example.invalid', 'position' => 'Руководитель лаборатории',
+            'department' => 'Лаборатория', 'roles' => ['employee', 'laboratory_manager'],
+        ],
     ];
 
     /**
      * Остальные исполнители ИЦ по списку ТЗ (раздел 7.5), помимо Кашина С. И.
-     * Без фиксированного id: на персистентной демо-базе эти числа мог уже
+     * Без фиксированного id: на персистентной development-БД эти числа мог уже
      * занять реально созданный пользователь (например, технический профиль
      * из импорта Bitrix24), и upsert по id молча переписал бы его личность.
      * Идентифицируются уникальным ad_login, реальный id резолвится после записи.
@@ -95,7 +99,7 @@ final class DevController extends Controller
      * Второй тестовый эксперт — нужен только для проверки переназначения и
      * перехвата заявки между экспертами, в ТЗ 7.5 не входит. Без
      * фиксированного id по той же причине, что и ADDITIONAL_EXECUTORS: на
-     * персистентной демо-базе фиксированный id мог уже органически занять
+     * персистентной development-БД фиксированный id мог уже органически занять
      * другой пользователь.
      *
      * @var array<string, array{display_name: string, email: string, position: string, department: string, roles: list<string>}>
@@ -109,11 +113,19 @@ final class DevController extends Controller
 
     public function actionSeed(): int
     {
-        if (!in_array(YII_ENV, ['dev', 'test'], true)) {
-            $this->stderr("Development seed is disabled outside APP_ENV=dev/test.\n");
+        if (!$this->isDevelopmentDatabase()) {
             return ExitCode::UNSPECIFIED_ERROR;
         }
 
+        return $this->seedUsers();
+    }
+
+    /**
+     * Shared only with the physically mounted test reset command.
+     * Deployment controllers must validate their own database before calling it.
+     */
+    public function seedUsers(): int
+    {
         $allRoles = array_merge(
             array_column(self::CORE_USERS, 'roles'),
             array_column(self::ADDITIONAL_EXECUTORS, 'roles'),
@@ -140,7 +152,7 @@ final class DevController extends Controller
             // Фиксированный id безопасен только пока под ним либо ещё нет
             // строки, либо уже сидированный тем же ad_login профиль. Список
             // CORE_USERS со временем растёт (см. #84, где добавился
-            // dev.admin=6) — на давно живущей демо-базе этот id мог уже
+            // dev.admin=6) — на давно живущей development-БД этот id мог уже
             // раньше органически достаться ADDITIONAL_EXECUTORS/EXPERTS
             // через автоинкремент, когда CORE_USERS был короче. Отказ от
             // всего сида в этом случае оставлял бы dev.admin несозданным
@@ -182,13 +194,12 @@ final class DevController extends Controller
 
     public function actionSeedRequests(): int
     {
-        if (!in_array(YII_ENV, ['dev', 'test'], true)) {
-            $this->stderr("Development request seed is disabled outside APP_ENV=dev/test.\n");
+        if (!$this->isDevelopmentDatabase()) {
             return ExitCode::UNSPECIFIED_ERROR;
         }
 
         try {
-            $result = (new DemoRequestSeeder(
+            $result = (new DevelopmentRequestSeeder(
                 Yii::$app->db,
                 new DocumentStorage(getenv('DOCUMENT_STORAGE_PATH') ?: '/app/storage/documents'),
             ))->seed();
@@ -198,10 +209,24 @@ final class DevController extends Controller
         }
 
         $this->stdout(
-            "Demo registry reset: {$result['requests']} requests, "
+            "Development registry reset: {$result['requests']} requests, "
             . "{$result['comments']} comments, {$result['documents']} documents.\n",
         );
         return ExitCode::OK;
+    }
+
+    private function isDevelopmentDatabase(): bool
+    {
+        $database = Yii::$app->db->createCommand('SELECT DATABASE()')->queryScalar();
+        if (!is_string($database) || !DatabasePurpose::isDevelopment($database)) {
+            $actual = is_string($database) && $database !== '' ? $database : '(unknown)';
+            $this->stderr(
+                "Refusing development seed: connected database '{$actual}' must end with _dev.\n",
+            );
+            return false;
+        }
+
+        return true;
     }
 
     /**

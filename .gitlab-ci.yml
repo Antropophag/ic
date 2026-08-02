@@ -1,36 +1,13 @@
-stages:
-  - test
-  - package
+stages: [test]
 
 workflow:
   rules:
     - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
     - if: '$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH'
 
-frontend:
+check:
   stage: test
-  image: node:22.23.0-alpine3.23
-  script:
-    - npm --prefix frontend ci --no-audit --no-fund
-    - npm --prefix frontend run lint
-    - npm --prefix frontend run audit
-    - npm --prefix frontend run build
-    - npm --prefix frontend run coverage
-
-backend-unit:
-  stage: test
-  image: composer:2.8.10
-  script:
-    - cd backend
-    - composer install --no-interaction --no-progress
-    - composer lint
-    - composer analyse
-    - composer audit
-    - composer test
-
-backend-coverage:
-  stage: test
-  image: docker:29.0.0-cli
+  image: node:22.23.0-bookworm
   services:
     - name: docker:29.0.0-dind
       command: ["--tls=false"]
@@ -38,14 +15,26 @@ backend-coverage:
     DOCKER_HOST: tcp://docker:2375
     DOCKER_TLS_CERTDIR: ""
   before_script:
-    - apk add --no-cache python3
-  script:
-    - mkdir -p backend/build/coverage
-    - docker build --file docker/coverage.Dockerfile --tag shlz-test-registry-coverage .
-    - docker run --rm --volume "$CI_PROJECT_DIR/backend/build/coverage:/app/build/coverage" shlz-test-registry-coverage
-    - python3 scripts/check_coverage.py backend/build/coverage/clover.xml --minimum 90
+    - apt-get update
+    - apt-get install -y --no-install-recommends curl docker.io docker-compose-v2 make python3-pip sudo
+    - sh scripts/install-ci-linters.sh
+  script: [make check]
 
-production-like-e2e:
+coverage:
+  stage: test
+  image: node:22.23.0-bookworm
+  services:
+    - name: docker:29.0.0-dind
+      command: ["--tls=false"]
+  variables:
+    DOCKER_HOST: tcp://docker:2375
+    DOCKER_TLS_CERTDIR: ""
+  before_script:
+    - apt-get update
+    - apt-get install -y --no-install-recommends docker.io make python3
+  script: [make coverage]
+
+e2e:
   stage: test
   image: mcr.microsoft.com/playwright:v1.62.0-noble
   services:
@@ -59,77 +48,40 @@ production-like-e2e:
     MAILPIT_BASE_URL: http://docker:18025
   before_script:
     - apt-get update
-    - apt-get install -y --no-install-recommends docker.io docker-compose-v2
-  script:
-    - make test-env-up
-    - make test-env-reset
-    - npm --prefix frontend ci --no-audit --no-fund
-    - npm --prefix frontend run e2e
-    - make runtime-contracts
+    - apt-get install -y --no-install-recommends docker.io docker-compose-v2 make
+  script: [make e2e]
   after_script:
-    - docker compose -f compose.test.yaml down --volumes
+    - make _test-down
   artifacts:
     when: on_failure
-    paths:
-      - frontend/playwright-report/
+    paths: [frontend/playwright-report/]
 
-documentation:
+podman:
   stage: test
-  image: python:3.13.5-alpine3.22
-  script:
-    - python3 -m py_compile scripts/gen_schema_diagram.py
-    - git diff --check
-
-repository-quality:
-  stage: test
-  image: node:22.23.0-bookworm
-  variables:
-    ACTIONLINT_VERSION: "1.7.7"
-    ACTIONLINT_SHA256: "023070a287cd8cccd71515fedc843f1985bf96c436b7effaecce67290e7e0757"
-    HADOLINT_VERSION: "2.12.0"
-    HADOLINT_SHA256: "56de6d5e5ec427e17b74fa48d51271c7fc0d61244bf5c90e828aab8362d55010"
-    SHFMT_VERSION: "3.10.0"
-    SHFMT_SHA256: "1f57a384d59542f8fac5f503da1f3ea44242f46dff969569e80b524d64b71dbc"
+  image: mcr.microsoft.com/playwright:v1.62.0-noble
   before_script:
     - apt-get update
-    - apt-get install -y --no-install-recommends curl python3-pip shellcheck
-    - pip3 install --break-system-packages "yamllint==1.37.1"
-    - npm --prefix frontend ci --no-audit --no-fund
-    - shfmt_bin="shfmt_v${SHFMT_VERSION}_linux_amd64"
-    - curl -sSfL "https://github.com/mvdan/sh/releases/download/v${SHFMT_VERSION}/${shfmt_bin}" -o "${shfmt_bin}"
-    - echo "${SHFMT_SHA256}  ${shfmt_bin}" | sha256sum -c -
-    - install -m 0755 "${shfmt_bin}" /usr/local/bin/shfmt
-    - curl -sSfL "https://github.com/hadolint/hadolint/releases/download/v${HADOLINT_VERSION}/hadolint-Linux-x86_64" -o hadolint
-    - echo "${HADOLINT_SHA256}  hadolint" | sha256sum -c -
-    - install -m 0755 hadolint /usr/local/bin/hadolint
-    - actionlint_archive="actionlint_${ACTIONLINT_VERSION}_linux_amd64.tar.gz"
-    - curl -sSfL "https://github.com/rhysd/actionlint/releases/download/v${ACTIONLINT_VERSION}/${actionlint_archive}" -o "${actionlint_archive}"
-    - echo "${ACTIONLINT_SHA256}  ${actionlint_archive}" | sha256sum -c -
-    - tar -xzf "${actionlint_archive}" actionlint
-    - install -m 0755 actionlint /usr/local/bin/actionlint
-  script:
-    - make repo-quality
-
-demo-bundle:
-  stage: package
-  image: docker:29.0.0-cli
-  services:
-    - name: docker:29.0.0-dind
-      command: ["--tls=false"]
+    - apt-get install -y --no-install-recommends make podman podman-compose
   variables:
-    DOCKER_HOST: tcp://docker:2375
-    DOCKER_TLS_CERTDIR: ""
-  script:
-    - sh scripts/build-demo-bundle.sh dist-demo
+    COMPOSE: podman-compose --in-pod false
+    CONTAINER_ENGINE: podman
+  script: [make e2e]
+  after_script:
+    - make _test-down
   artifacts:
-    name: "shlz-demo-${CI_COMMIT_SHORT_SHA}"
-    paths:
-      - dist-demo/
-    expire_in: 14 days
-  rules:
-    - if: '$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH'
-      when: manual
-    - if: '$CI_COMMIT_TAG'
+    when: on_failure
+    paths: [frontend/playwright-report/]
 
-# После появления integration-контура этот job поднимет MariaDB, применит
-# миграции и включит `make schema-diagram-check` как обязательный quality gate.
+analyze:
+  stage: test
+  image: semgrep/semgrep
+  script:
+    - semgrep scan --config auto --error backend/src frontend/src
+
+secrets:
+  stage: test
+  image:
+    name: zricethezav/gitleaks:v8.24.2
+    entrypoint: [""]
+  script:
+    - gitleaks detect --source . --no-banner

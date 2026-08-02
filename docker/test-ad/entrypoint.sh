@@ -5,19 +5,22 @@ realm=IC.TEST
 domain=IC
 admin_password='TestPassword1!'
 state=/var/lib/samba/private/sam.ldb
+smb_config=/var/lib/samba/test-smb.conf
+krb5_config=/var/lib/samba/test-krb5.conf
 
-if [ ! -f "$state" ]; then
+if [ ! -f "$state" ] || [ ! -f "$smb_config" ] || [ ! -f "$krb5_config" ]; then
+  find /var/lib/samba -mindepth 1 -delete
   rm -f /etc/samba/smb.conf
   samba-tool domain provision --server-role=dc --use-rfc2307 \
     --realm="$realm" --domain="$domain" --adminpass="$admin_password" \
     --dns-backend=SAMBA_INTERNAL
   sed -i '/^\[global\]/a\\tldap server require strong auth = no' /etc/samba/smb.conf
-  cp /etc/samba/smb.conf /var/lib/samba/test-smb.conf
-  cp /var/lib/samba/private/krb5.conf /var/lib/samba/test-krb5.conf
+  cp /etc/samba/smb.conf "$smb_config"
+  cp /var/lib/samba/private/krb5.conf "$krb5_config"
 fi
 
-cp /var/lib/samba/test-smb.conf /etc/samba/smb.conf
-cp /var/lib/samba/test-krb5.conf /etc/krb5.conf
+cp "$smb_config" /etc/samba/smb.conf
+cp "$krb5_config" /etc/krb5.conf
 
 samba --foreground --no-process-group &
 samba_pid=$!

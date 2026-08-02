@@ -17,12 +17,9 @@ final class CurrentUser
 
     public function id(Request $request): int
     {
-        // Интерактивный dev-заголовок и скрытая test identity разделены
-        // типом приложения. Production игнорирует оба без feature flags.
-        if (YII_ENV === 'dev' || YII_ENV === 'test') {
-            $header = YII_ENV === 'dev'
-                ? $request->headers->get('X-Dev-User-ID')
-                : $request->headers->get('X-Test-User-ID');
+        $identityHeader = Yii::$app->params['identityHeader'] ?? null;
+        if (is_string($identityHeader) && $identityHeader !== '') {
+            $header = $request->headers->get($identityHeader);
             $id = filter_var($header, FILTER_VALIDATE_INT);
             if ($id !== false && $id > 0 && $this->isActive($id)) {
                 return $id;

@@ -12,7 +12,6 @@ use App\Infrastructure\Identity\UserAdministrationRepository;
 use Yii;
 use yii\rest\Controller;
 use yii\web\ForbiddenHttpException;
-use yii\web\NotFoundHttpException;
 use yii\web\ServerErrorHttpException;
 
 final class HealthController extends Controller
@@ -34,9 +33,6 @@ final class HealthController extends Controller
     /** @return array{status: 'ok'} */
     public function actionLogging(): array
     {
-        if (YII_ENV !== 'dev') {
-            throw new NotFoundHttpException();
-        }
         $actorId = (new CurrentUser(Yii::$app->db))->id(Yii::$app->request);
         $repository = new UserAdministrationRepository(Yii::$app->db);
         try {

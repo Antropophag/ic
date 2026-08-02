@@ -1,7 +1,8 @@
 #!/bin/sh
 set -eu
 cd "$(CDPATH='' cd -- "$(dirname -- "$0")/.." && pwd)"
-compose='docker compose -f compose.test.yaml'
+: "${COMPOSE:?COMPOSE must be provided by Makefile}"
+compose="$COMPOSE --env-file .env.test -f compose.test.yaml"
 action=${1:-}
 
 wait_url() {
@@ -29,6 +30,7 @@ up)
   $compose config --quiet
   $compose up -d --build
   assert_health "${TEST_BASE_URL:-http://localhost:18080}/health/live" ok
+  assert_health "${TEST_BASE_URL:-http://localhost:18080}/health/ready" ready
   wait_url "${MAILPIT_BASE_URL:-http://localhost:18025}/api/v1/info"
   ;;
 reset)

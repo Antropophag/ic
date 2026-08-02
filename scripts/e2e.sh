@@ -2,6 +2,7 @@
 set -eu
 project_root=$(CDPATH='' cd -- "$(dirname -- "$0")/.." && pwd)
 cd "$project_root"
+: "${COMPOSE:?COMPOSE must be provided by Makefile}"
 cleanup() {
   cd "$project_root"
   sh scripts/test-env.sh down
@@ -10,6 +11,9 @@ trap cleanup EXIT
 trap 'exit 130' INT
 trap 'exit 143' TERM
 sh scripts/test-env.sh up
+sh scripts/test-env.sh reset
+$COMPOSE --env-file .env.test -f compose.test.yaml exec -T backend \
+  vendor/bin/phpunit -c phpunit.integration.xml --colors=always
 sh scripts/test-env.sh reset
 npm --prefix frontend ci --no-audit --no-fund
 cd frontend
