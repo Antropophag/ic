@@ -32,11 +32,17 @@ final class AdministratorBootstrapTest extends IntegrationTestCase
             $stderr = stream_get_contents($pipes[2]);
             fclose($pipes[1]);
             fclose($pipes[2]);
-            self::assertSame(65, proc_close($process));
-            self::assertSame('', $stdout);
-            self::assertStringContainsString('Administrator bootstrap failed', $stderr);
-            self::assertStringNotContainsString('Invalid sAMAccountName', $stderr);
+            self::assertSame(0, proc_close($process));
+            self::assertStringContainsString('Administrator bootstrap complete', $stdout);
+            self::assertSame('', $stderr);
         } finally {
+            $this->db()->createCommand()->delete('{{%user_roles}}', [
+                'user_id' => (new \yii\db\Query())
+                    ->select('id')
+                    ->from('{{%users}}')
+                    ->where(['ad_login' => '0']),
+            ])->execute();
+            $this->db()->createCommand()->delete('{{%users}}', ['ad_login' => '0'])->execute();
             $previous === false ? putenv('BOOTSTRAP_ADMIN_AD_LOGINS') : putenv('BOOTSTRAP_ADMIN_AD_LOGINS=' . $previous);
         }
     }
