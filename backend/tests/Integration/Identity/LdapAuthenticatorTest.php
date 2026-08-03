@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Tests\Integration\Identity;
 
 use App\Infrastructure\Identity\AccountDisabled;
+use App\Infrastructure\Identity\AdministratorBootstrap;
 use App\Infrastructure\Identity\AuthenticationDenied;
 use App\Infrastructure\Identity\LdapAuthenticator;
 use App\Infrastructure\Ldap\LdapProfile;
@@ -112,5 +113,38 @@ final class LdapAuthenticatorTest extends IntegrationTestCase
             [':login' => $login],
         );
         self::assertSame(1, (int) $userCount);
+    }
+
+    public function testBootstrapPlaceholderIsEnrichedByLoginWithoutLosingAdministratorRoles(): void
+    {
+        $login = 'bootstrap.ldap';
+        (new AdministratorBootstrap($this->db()))->bootstrap([$login]);
+
+        $ldap = new FakeLdapClient(new LdapProfile(
+            $login,
+            'Bootstrap Administrator',
+            'bootstrap@example.invalid',
+            'Infrastructure',
+            'Administrator',
+        ));
+        $result = (new LdapAuthenticator($this->db(), $ldap))
+            ->authenticate($login, 'correct-password');
+
+        $profile = $this->db()->createCommand(
+            'SELECT display_name, email, department, position FROM {{%users}} WHERE id = :id',
+            [':id' => $result['id']],
+        )->queryOne();
+        self::assertSame('Bootstrap Administrator', $profile['display_name']);
+        self::assertSame('bootstrap@example.invalid', $profile['email']);
+        self::assertSame('Infrastructure', $profile['department']);
+        self::assertSame('Administrator', $profile['position']);
+
+        $roles = $this->db()->createCommand(
+            'SELECT r.code FROM {{%user_roles}} ur '
+            . 'JOIN {{%roles}} r ON r.id = ur.role_id '
+            . 'WHERE ur.user_id = :user_id ORDER BY r.code',
+            [':user_id' => $result['id']],
+        )->queryColumn();
+        self::assertSame(['administrator', 'employee'], $roles);
     }
 }

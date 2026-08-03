@@ -56,7 +56,8 @@ final class RequestControllerTest extends TestCase
                 ],
             ],
         ]);
-        $application->request->setBodyParams($body);
+        $application->request->headers->set('Content-Type', 'application/json');
+        $application->request->setRawBody(json_encode((object) $body, JSON_THROW_ON_ERROR));
 
         return new RequestController('request', $application);
     }

@@ -40,8 +40,6 @@ use App\Infrastructure\Document\OpinionPdfRenderer;
 use App\Infrastructure\Request\RequestQuery;
 use App\Infrastructure\Request\RequestRepository;
 use Yii;
-use yii\base\Model;
-use yii\rest\Controller;
 use yii\web\Response;
 use yii\web\ConflictHttpException;
 use yii\web\ForbiddenHttpException;
@@ -49,7 +47,7 @@ use yii\web\NotFoundHttpException;
 use yii\web\ServerErrorHttpException;
 use yii\web\UploadedFile;
 
-final class RequestController extends Controller
+final class RequestController extends ApiController
 {
     public function behaviors(): array
     {
@@ -758,18 +756,6 @@ final class RequestController extends Controller
                 $category,
             );
         }
-    }
-
-    /** @return array{errors: array<string, list<string>>}|null */
-    private function bodyValidationErrors(Model $input): ?array
-    {
-        $input->load(Yii::$app->request->bodyParams, '');
-        if ($input->validate()) {
-            return null;
-        }
-
-        Yii::$app->response->statusCode = 422;
-        return ['errors' => $input->getErrors()];
     }
 
     private function currentUserId(): int

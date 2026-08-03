@@ -10,6 +10,19 @@
 Обычная авторизация использует `POST /api/v1/auth/login` с LDAP login/password
 и серверную session cookie.
 
+POST-маршруты, принимающие DTO в JSON, требуют непустое тело в формате JSON
+object с `Content-Type: application/json` (параметр `charset` допускается):
+
+- отсутствующий или другой `Content-Type` возвращает `415`;
+- пустое или некорректное JSON-тело возвращает `400`;
+- JSON array, scalar и `null` возвращают `400`;
+- `{}` проходит разбор JSON object и передаётся в DTO validation;
+- корректный JSON object, не прошедший валидацию DTO, сохраняет прежний ответ
+  `422` в формате `{"errors": {...}}`.
+
+Маршруты без DTO body, включая logout и отзыв роли, этого тела не требуют.
+Загрузка документов и отчётов использует `multipart/form-data`.
+
 Development deployment дополнительно монтирует маршруты:
 
 - `GET /api/v1/dev/users` — безопасный список активных seeded users;
