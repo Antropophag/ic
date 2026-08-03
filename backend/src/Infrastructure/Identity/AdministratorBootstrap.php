@@ -43,11 +43,18 @@ final class AdministratorBootstrap
     private function isRetryableConcurrencyError(\Throwable $error): bool
     {
         if ($error instanceof IntegrityException) {
-            return true;
+            $sqlState = (string) ($error->errorInfo[0] ?? '');
+            $driverCode = (int) ($error->errorInfo[1] ?? 0);
+            return $sqlState === '23000' && $driverCode === 1062;
         }
 
-        return $error instanceof \yii\db\Exception
-            && in_array((string) ($error->errorInfo[0] ?? ''), ['40001', '1213'], true);
+        if (!$error instanceof \yii\db\Exception) {
+            return false;
+        }
+
+        $sqlState = (string) ($error->errorInfo[0] ?? '');
+        $driverCode = (int) ($error->errorInfo[1] ?? 0);
+        return $sqlState === '40001' || in_array($driverCode, [1205, 1213], true);
     }
 
     /**

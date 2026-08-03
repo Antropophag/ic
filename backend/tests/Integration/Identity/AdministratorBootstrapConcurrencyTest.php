@@ -25,6 +25,7 @@ final class AdministratorBootstrapConcurrencyTest extends TestCase
         self::assertIsString($startFile);
         self::assertIsString($resultFiles[0]);
         self::assertIsString($resultFiles[1]);
+        self::assertTrue(unlink($startFile));
 
         $worker = <<<'PHP'
             $root = getcwd();
@@ -41,7 +42,12 @@ final class AdministratorBootstrapConcurrencyTest extends TestCase
                 'password' => getenv('DB_PASSWORD') ?: '',
                 'charset' => 'utf8mb4',
             ]);
+            $deadline = microtime(true) + 30.0;
             while (!file_exists($argv[1])) {
+                if (microtime(true) >= $deadline) {
+                    file_put_contents($argv[2], json_encode(['error' => 'start barrier timeout']));
+                    exit(1);
+                }
                 usleep(1000);
             }
             try {
@@ -56,20 +62,29 @@ final class AdministratorBootstrapConcurrencyTest extends TestCase
             PHP;
 
         $processes = [];
+        $pipeSets = [];
         try {
             foreach ($resultFiles as $resultFile) {
-                $processes[] = proc_open(
+                $pipes = [];
+                $process = proc_open(
                     [PHP_BINARY, '-r', $worker, $startFile, $resultFile, $login],
                     [1 => ['pipe', 'w'], 2 => ['pipe', 'w']],
                     $pipes,
                     dirname(__DIR__, 3),
                 );
+                self::assertIsResource($process);
+                $processes[] = $process;
+                $pipeSets[] = $pipes;
             }
             touch($startFile);
 
-            foreach ($processes as $process) {
-                self::assertIsResource($process);
-                self::assertSame(0, proc_close($process), implode('', array_map(
+            foreach ($processes as $index => $process) {
+                $output = '';
+                foreach ($pipeSets[$index] as $pipe) {
+                    $output .= (string) stream_get_contents($pipe);
+                    fclose($pipe);
+                }
+                self::assertSame(0, proc_close($process), $output . implode('', array_map(
                     static fn (string $file): string => (string) file_get_contents($file),
                     $resultFiles,
                 )));
@@ -84,6 +99,7 @@ final class AdministratorBootstrapConcurrencyTest extends TestCase
                 'SELECT COUNT(*) FROM {{%user_roles}} ur JOIN {{%users}} u ON u.id = ur.user_id WHERE u.ad_login = :login',
                 [':login' => $login],
             )->queryScalar());
+            $verification->close();
         } finally {
             foreach ($processes as $process) {
                 if (is_resource($process)) {
@@ -100,6 +116,7 @@ final class AdministratorBootstrapConcurrencyTest extends TestCase
                 $cleanup->createCommand()->delete('{{%user_roles}}', ['user_id' => $userId])->execute();
                 $cleanup->createCommand()->delete('{{%users}}', ['id' => $userId])->execute();
             }
+            $cleanup->close();
             @unlink($startFile);
             foreach ($resultFiles as $resultFile) {
                 @unlink($resultFile);

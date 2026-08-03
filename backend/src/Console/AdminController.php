@@ -13,7 +13,8 @@ final class AdminController extends Controller
 {
     public function actionBootstrap(): int
     {
-        $configured = trim((string) (getenv('BOOTSTRAP_ADMIN_AD_LOGINS') ?: ''));
+        $rawConfigured = getenv('BOOTSTRAP_ADMIN_AD_LOGINS');
+        $configured = trim($rawConfigured === false ? '' : $rawConfigured);
         if ($configured === '') {
             $this->stdout("No bootstrap administrators configured.\n");
             return ExitCode::OK;
@@ -25,7 +26,8 @@ final class AdminController extends Controller
         try {
             $result = (new AdministratorBootstrap(Yii::$app->db))->bootstrap($adLogins);
         } catch (\InvalidArgumentException | \RuntimeException $error) {
-            $this->stderr("Administrator bootstrap failed: {$error->getMessage()}\n");
+            Yii::error($error, 'admin.bootstrap');
+            $this->stderr("Administrator bootstrap failed; see application logs for details.\n");
             return ExitCode::DATAERR;
         }
 

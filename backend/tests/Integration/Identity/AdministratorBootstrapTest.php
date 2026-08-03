@@ -9,6 +9,32 @@ use Tests\Integration\IntegrationTestCase;
 
 final class AdministratorBootstrapTest extends IntegrationTestCase
 {
+    public function testConsoleBootstrapDoesNotTreatZeroAsEmptyConfiguration(): void
+    {
+        if (!function_exists('proc_open')) {
+            self::markTestSkipped('proc_open is required for the console contract test.');
+        }
+
+        $pipes = [];
+        $process = proc_open(
+            [PHP_BINARY, 'yii', 'admin/bootstrap'],
+            [1 => ['pipe', 'w'], 2 => ['pipe', 'w']],
+            $pipes,
+            dirname(__DIR__, 3),
+            array_merge($_ENV, ['BOOTSTRAP_ADMIN_AD_LOGINS' => '0']),
+        );
+        self::assertIsResource($process);
+
+        $stdout = stream_get_contents($pipes[1]);
+        $stderr = stream_get_contents($pipes[2]);
+        fclose($pipes[1]);
+        fclose($pipes[2]);
+        self::assertSame(65, proc_close($process));
+        self::assertSame('', $stdout);
+        self::assertStringContainsString('Administrator bootstrap failed', $stderr);
+        self::assertStringNotContainsString('Invalid sAMAccountName', $stderr);
+    }
+
     public function testCreatesAdministratorsAndIsIdempotent(): void
     {
         $bootstrap = new AdministratorBootstrap($this->db());
