@@ -28,12 +28,16 @@ assert_health() {
 case "$action" in
 up)
   $compose config >/dev/null
-  $compose up -d --build
-  assert_health "${TEST_BASE_URL:-http://localhost:18080}/health/live" ok
+  # Start the database and application image before the migration/reset step.
+  # The scheduler is deliberately started afterwards: its long-lived loop
+  # expects the outbox table to exist and must not race the first migration.
+  $compose up -d --build mariadb ad mailpit backend
   wait_url "${MAILPIT_BASE_URL:-http://localhost:18025}/api/v1/info"
   ;;
 reset)
   $compose run --rm backend php yii test/reset
+  $compose up -d frontend scheduler
+  assert_health "${TEST_BASE_URL:-http://localhost:18080}/health/live" ok
   assert_health "${TEST_BASE_URL:-http://localhost:18080}/health/ready" ready
   ;;
 down) $compose down --remove-orphans ;;
