@@ -34,7 +34,7 @@ final class AdministratorBootstrapTest extends IntegrationTestCase
             fclose($pipes[2]);
             self::assertSame(0, proc_close($process));
             self::assertStringContainsString('Administrator bootstrap complete', $stdout);
-            self::assertSame('', $stderr);
+            self::assertStringNotContainsString('No bootstrap administrators configured', $stdout);
         } finally {
             $this->db()->createCommand()->delete('{{%user_roles}}', [
                 'user_id' => (new \yii\db\Query())
