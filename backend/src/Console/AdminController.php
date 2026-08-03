@@ -15,27 +15,28 @@ final class AdminController extends Controller
     {
         $rawConfigured = getenv('BOOTSTRAP_ADMIN_AD_LOGINS');
         $configured = trim($rawConfigured === false ? '' : $rawConfigured);
-        if ($configured === '') {
-            $this->stderr("Первичная настройка администраторов пропущена: логины не настроены.\n");
-            return ExitCode::OK;
-        }
-
         /** @var list<string> $adLogins */
-        $adLogins = explode(',', $configured);
-        if (array_filter($adLogins, static fn (string $login): bool => trim($login) !== '') === []) {
-            $this->stderr("Первичная настройка администраторов пропущена: логины не настроены.\n");
-            return ExitCode::OK;
-        }
+        $adLogins = $configured === '' ? [] : explode(',', $configured);
 
         try {
             $result = (new AdministratorBootstrap(Yii::$app->db))->bootstrap($adLogins);
         } catch (\Throwable $error) {
             Yii::error($this->failureDiagnostic($error), 'admin.bootstrap');
-            $this->stderr(
-                "Первичная настройка администраторов завершилась с ошибкой; "
-                . "подробности см. в журналах приложения.\n",
-            );
+            $message = $error instanceof \RuntimeException
+                && $error->getMessage() === 'No active local administrator exists; configure BOOTSTRAP_ADMIN_AD_LOGINS.'
+                ? "Не найден активный локальный администратор; настройте BOOTSTRAP_ADMIN_AD_LOGINS.\n"
+                : "Первичная настройка администраторов завершилась с ошибкой; "
+                    . "подробности см. в журналах приложения.\n";
+            $this->stderr($message);
             return ExitCode::DATAERR;
+        }
+
+        if ($adLogins === []) {
+            $this->stderr(
+                "Первичная настройка администраторов пропущена: "
+                . "активный локальный администратор уже существует.\n",
+            );
+            return ExitCode::OK;
         }
 
         $this->stdout(sprintf(

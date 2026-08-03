@@ -31,6 +31,18 @@ final class AdministratorBootstrap
         try {
             $adLogins = $this->normalize($adLogins);
             if ($adLogins === []) {
+                $hasActiveAdministrator = $this->db->createCommand(
+                    'SELECT 1 FROM {{%users}} u '
+                    . 'JOIN {{%user_roles}} ur ON ur.user_id = u.id '
+                    . 'JOIN {{%roles}} r ON r.id = ur.role_id '
+                    . "WHERE u.is_active = 1 AND r.code = 'administrator' LIMIT 1",
+                )->queryScalar() !== false;
+                if (!$hasActiveAdministrator) {
+                    throw new \RuntimeException(
+                        'No active local administrator exists; configure BOOTSTRAP_ADMIN_AD_LOGINS.',
+                    );
+                }
+
                 return ['usersCreated' => 0, 'rolesAssigned' => 0];
             }
 
@@ -161,17 +173,6 @@ final class AdministratorBootstrap
     {
         $normalized = [];
         $trimmed = array_map(static fn (string $adLogin): string => trim($adLogin), $adLogins);
-        $hasConfiguredLogin = false;
-        foreach ($trimmed as $adLogin) {
-            if ($adLogin !== '') {
-                $hasConfiguredLogin = true;
-                break;
-            }
-        }
-
-        if (!$hasConfiguredLogin) {
-            return [];
-        }
 
         foreach ($trimmed as $index => $adLogin) {
             if ($adLogin === '') {

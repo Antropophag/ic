@@ -92,19 +92,82 @@ final class AdministratorBootstrapTest extends IntegrationTestCase
         });
     }
 
-    public function testConsoleTreatsListOfEmptyElementsAsSuccessfulSkip(): void
+    #[DataProvider('emptyListConfigurationProvider')]
+    public function testConsoleRejectsEmptyListElements(string $configured): void
     {
-        $this->withBootstrapEnv(' , , ', function (): void {
+        $this->withBootstrapEnv($configured, function () use ($configured): void {
             ['exitCode' => $exitCode, 'stdout' => $stdout, 'stderr' => $stderr] =
                 $this->runBootstrapCommand();
-            self::assertSame(0, $exitCode);
+            self::assertSame(65, $exitCode);
             self::assertSame('', $stdout);
-            self::assertStringContainsString('Первичная настройка администраторов пропущена', $stderr);
+            self::assertStringContainsString('завершилась с ошибкой', $stderr);
+            self::assertStringNotContainsString($configured, $stdout . $stderr);
+            self::assertStringNotContainsString('SELECT ', $stdout . $stderr);
         });
+    }
+
+    /** @return iterable<string, array{string}> */
+    public static function emptyListConfigurationProvider(): iterable
+    {
+        yield 'comma' => [','];
+        yield 'spaced comma' => [' , '];
+        yield 'multiple empty elements' => [' , , '];
+        yield 'trailing empty element' => ['admin,'];
+        yield 'leading empty element' => [',admin'];
+        yield 'middle empty element' => ['admin,,other'];
+    }
+
+    public function testEmptyConfigurationFailsWithoutActiveAdministrator(): void
+    {
+        $this->disableAllActiveAdministrators();
+
+        $this->expectException(\RuntimeException::class);
+        $this->expectExceptionMessage('No active local administrator exists');
+        (new AdministratorBootstrap($this->db()))->bootstrap([]);
+    }
+
+    public function testEmptyConfigurationSucceedsWithActiveAdministrator(): void
+    {
+        $userId = $this->createUser('existing.active.admin', 'Existing active administrator');
+        $this->grantRole($userId, 'administrator');
+
+        self::assertSame(
+            ['usersCreated' => 0, 'rolesAssigned' => 0],
+            (new AdministratorBootstrap($this->db()))->bootstrap([]),
+        );
+    }
+
+    public function testEmptyConfigurationFailsWithOnlyDisabledAdministrator(): void
+    {
+        $this->disableAllActiveAdministrators();
+        $userId = $this->createUser(
+            'existing.disabled.admin',
+            'Existing disabled administrator',
+            isActive: false,
+        );
+        $this->grantRole($userId, 'administrator');
+
+        $this->expectException(\RuntimeException::class);
+        $this->expectExceptionMessage('No active local administrator exists');
+        (new AdministratorBootstrap($this->db()))->bootstrap([]);
+    }
+
+    public function testEmptyConfigurationSucceedsAfterConfiguredBootstrap(): void
+    {
+        $bootstrap = new AdministratorBootstrap($this->db());
+        self::assertSame(
+            ['usersCreated' => 1, 'rolesAssigned' => 2],
+            $bootstrap->bootstrap(['first.deployment.admin']),
+        );
+        self::assertSame(
+            ['usersCreated' => 0, 'rolesAssigned' => 0],
+            $bootstrap->bootstrap([]),
+        );
     }
 
     public function testCreatesAdministratorsAndIsIdempotent(): void
     {
+        $this->disableAllActiveAdministrators();
         $bootstrap = new AdministratorBootstrap($this->db());
 
         $first = $bootstrap->bootstrap([' Bootstrap.Admin.One ', 'bootstrap.admin.two', 'bootstrap.admin.one']);
@@ -337,5 +400,17 @@ final class AdministratorBootstrapTest extends IntegrationTestCase
                 ? putenv('BOOTSTRAP_ADMIN_AD_LOGINS')
                 : putenv('BOOTSTRAP_ADMIN_AD_LOGINS=' . $previous);
         }
+    }
+
+    private function disableAllActiveAdministrators(): void
+    {
+        $this->db()->createCommand(
+            'UPDATE {{%users}} SET is_active = 0 WHERE id IN ('
+            . 'SELECT administrator.user_id FROM ('
+            . 'SELECT ur.user_id FROM {{%user_roles}} ur '
+            . 'JOIN {{%roles}} r ON r.id = ur.role_id '
+            . "WHERE r.code = 'administrator'"
+            . ') administrator)',
+        )->execute();
     }
 }
