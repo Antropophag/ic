@@ -56,6 +56,14 @@ final class AdminController extends Controller
             );
         }
 
+        if ($error instanceof \InvalidArgumentException || $error instanceof \RuntimeException) {
+            return sprintf(
+                'Administrator bootstrap failed (%s): %s',
+                $error::class,
+                $error->getMessage(),
+            );
+        }
+
         return sprintf('Administrator bootstrap failed (%s).', $error::class);
     }
 }
