@@ -5,6 +5,8 @@ cd "$(CDPATH='' cd -- "$(dirname -- "$0")/.." && pwd)"
 : "${CONTAINER_ENGINE:?CONTAINER_ENGINE must be provided by Makefile}"
 compose="$COMPOSE --env-file .env.test -f compose.test.yaml"
 action=${1:-}
+test_base=${TEST_BASE_URL:-http://localhost:${TEST_FRONTEND_PORT:-18080}}
+mailpit_base=${MAILPIT_BASE_URL:-http://localhost:${TEST_MAILPIT_PORT:-18025}}
 
 wait_url() {
   url=$1
@@ -63,12 +65,12 @@ up)
   $compose up -d --no-build mariadb
   $compose up -d --no-build ad
   $compose up -d --no-build mailpit
-  wait_url "${MAILPIT_BASE_URL:-http://localhost:18025}/api/v1/info"
+  wait_url "$mailpit_base/api/v1/info"
   $compose up -d --no-build --force-recreate backend
   "$0" reset
   $compose up -d --no-build --force-recreate frontend scheduler
-  assert_health "${TEST_BASE_URL:-http://localhost:18080}/health/live" ok
-  assert_health "${TEST_BASE_URL:-http://localhost:18080}/health/ready" ready
+  assert_health "$test_base/health/live" ok
+  assert_health "$test_base/health/ready" ready
   ;;
 reset)
   service_running backend || {
@@ -85,7 +87,19 @@ reset)
     restart_frontend=1
     $compose stop frontend
   fi
+  set +e
   $compose run --rm backend php yii test/reset
+  reset_status=$?
+  set -e
+  if [ "$reset_status" -ne 0 ]; then
+    if [ "$restart_frontend" -eq 1 ]; then
+      $compose up -d --no-build --force-recreate frontend || true
+    fi
+    if [ "$restart_scheduler" -eq 1 ]; then
+      $compose up -d --no-build --force-recreate scheduler || true
+    fi
+    exit "$reset_status"
+  fi
   if [ "$restart_frontend" -eq 1 ]; then
     $compose up -d --no-build --force-recreate frontend
   fi
@@ -93,8 +107,8 @@ reset)
     $compose up -d --no-build --force-recreate scheduler
   fi
   if [ "$restart_frontend" -eq 1 ]; then
-    assert_health "${TEST_BASE_URL:-http://localhost:18080}/health/live" ok
-    assert_health "${TEST_BASE_URL:-http://localhost:18080}/health/ready" ready
+    assert_health "$test_base/health/live" ok
+    assert_health "$test_base/health/ready" ready
   fi
   ;;
 down) $compose down --remove-orphans ;;

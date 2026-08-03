@@ -3,8 +3,8 @@ set -eu
 cd "$(CDPATH='' cd -- "$(dirname -- "$0")/.." && pwd)"
 : "${COMPOSE:?COMPOSE must be provided by Makefile}"
 compose="$COMPOSE --env-file .env.test -f compose.test.yaml"
-base=${TEST_BASE_URL:-http://localhost:18080}
-mailpit=${MAILPIT_BASE_URL:-http://localhost:18025}
+base=${TEST_BASE_URL:-http://localhost:${TEST_FRONTEND_PORT:-18080}}
+mailpit=${MAILPIT_BASE_URL:-http://localhost:${TEST_MAILPIT_PORT:-18025}}
 cookie_jar=$(mktemp)
 
 curl_with_timeout() {
