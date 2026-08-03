@@ -13,12 +13,11 @@ use App\Domain\Identity\UserAdministrationTargetNotFound;
 use App\Infrastructure\Identity\CurrentUser;
 use App\Infrastructure\Identity\UserAdministrationRepository;
 use Yii;
-use yii\rest\Controller;
 use yii\web\ConflictHttpException;
 use yii\web\ForbiddenHttpException;
 use yii\web\NotFoundHttpException;
 
-final class AdminController extends Controller
+final class AdminController extends ApiController
 {
     public function behaviors(): array
     {
@@ -55,10 +54,8 @@ final class AdminController extends Controller
         $actorId = $this->authorize();
 
         $input = new CreateUserInput();
-        $input->load(Yii::$app->request->bodyParams, '');
-        if (!$input->validate()) {
-            Yii::$app->response->statusCode = 422;
-            return ['errors' => $input->getErrors()];
+        if (($errors = $this->bodyValidationErrors($input)) !== null) {
+            return $errors;
         }
 
         $displayName = trim((string) $input->displayName);
@@ -86,10 +83,8 @@ final class AdminController extends Controller
         $actorId = $this->authorize();
 
         $input = new AssignRoleInput();
-        $input->load(Yii::$app->request->bodyParams, '');
-        if (!$input->validate()) {
-            Yii::$app->response->statusCode = 422;
-            return ['errors' => $input->getErrors()];
+        if (($errors = $this->bodyValidationErrors($input)) !== null) {
+            return $errors;
         }
 
         try {
