@@ -15,24 +15,30 @@ final class AdministratorBootstrapTest extends IntegrationTestCase
             self::markTestSkipped('proc_open is required for the console contract test.');
         }
 
+        $previous = getenv('BOOTSTRAP_ADMIN_AD_LOGINS');
+        putenv('BOOTSTRAP_ADMIN_AD_LOGINS=0');
         $pipes = [];
-        $process = proc_open(
-            [PHP_BINARY, 'yii', 'admin/bootstrap'],
-            [1 => ['pipe', 'w'], 2 => ['pipe', 'w']],
-            $pipes,
-            dirname(__DIR__, 3),
-            array_merge($_ENV, ['BOOTSTRAP_ADMIN_AD_LOGINS' => '0']),
-        );
-        self::assertIsResource($process);
+        try {
+            $root = dirname(__DIR__, 3);
+            $process = proc_open(
+                [PHP_BINARY, $root . '/yii', 'admin/bootstrap'],
+                [1 => ['pipe', 'w'], 2 => ['pipe', 'w']],
+                $pipes,
+                $root,
+            );
+            self::assertIsResource($process);
 
-        $stdout = stream_get_contents($pipes[1]);
-        $stderr = stream_get_contents($pipes[2]);
-        fclose($pipes[1]);
-        fclose($pipes[2]);
-        self::assertSame(65, proc_close($process));
-        self::assertSame('', $stdout);
-        self::assertStringContainsString('Administrator bootstrap failed', $stderr);
-        self::assertStringNotContainsString('Invalid sAMAccountName', $stderr);
+            $stdout = stream_get_contents($pipes[1]);
+            $stderr = stream_get_contents($pipes[2]);
+            fclose($pipes[1]);
+            fclose($pipes[2]);
+            self::assertSame(65, proc_close($process));
+            self::assertSame('', $stdout);
+            self::assertStringContainsString('Administrator bootstrap failed', $stderr);
+            self::assertStringNotContainsString('Invalid sAMAccountName', $stderr);
+        } finally {
+            $previous === false ? putenv('BOOTSTRAP_ADMIN_AD_LOGINS') : putenv('BOOTSTRAP_ADMIN_AD_LOGINS=' . $previous);
+        }
     }
 
     public function testCreatesAdministratorsAndIsIdempotent(): void
