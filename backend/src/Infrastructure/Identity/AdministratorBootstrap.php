@@ -31,9 +31,23 @@ final class AdministratorBootstrap
         // committed.
         try {
             return $this->bootstrapOnce($adLogins);
-        } catch (IntegrityException) {
+        } catch (\Throwable $error) {
+            if (!$this->isRetryableConcurrencyError($error)) {
+                throw $error;
+            }
+
             return $this->bootstrapOnce($adLogins);
         }
+    }
+
+    private function isRetryableConcurrencyError(\Throwable $error): bool
+    {
+        if ($error instanceof IntegrityException) {
+            return true;
+        }
+
+        return $error instanceof \yii\db\Exception
+            && in_array((string) ($error->errorInfo[0] ?? ''), ['40001', '1213'], true);
     }
 
     /**
