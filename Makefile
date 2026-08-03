@@ -36,13 +36,10 @@ dev: doctor
 
 up: doctor
 	@test -f .env || { echo "Скопируйте .env.example в .env и заполните production-настройки." >&2; exit 2; }
-	$(COMPOSE) --env-file .env -f compose.yaml up -d --build
-	@attempt=1; until $(COMPOSE) --env-file .env -f compose.yaml run --rm backend php yii migrate/up --interactive=0; do \
-		if [ $$attempt -ge 30 ]; then echo "MariaDB не стала доступна за 60 секунд." >&2; exit 1; fi; \
-		echo "Ожидание готовности MariaDB (попытка $$attempt/30)..." >&2; \
-		sleep 2; attempt=$$((attempt + 1)); \
-	done
+	$(COMPOSE) --env-file .env -f compose.yaml up -d --build mariadb backend
+	$(COMPOSE) --env-file .env -f compose.yaml run --rm backend php yii migrate/up --interactive=0
 	$(COMPOSE) --env-file .env -f compose.yaml run --rm backend php yii admin/bootstrap
+	$(COMPOSE) --env-file .env -f compose.yaml up -d frontend scheduler
 
 down: doctor
 	@test -f .env.dev || { echo "Для make down нужен .env.dev (make init)." >&2; exit 2; }

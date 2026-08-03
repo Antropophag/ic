@@ -10,6 +10,9 @@ use yii\db\IntegrityException;
 
 final class AdministratorBootstrap
 {
+    private const MAX_ATTEMPTS = 3;
+    private const RETRY_DELAY_MICROSECONDS = 50_000;
+
     public function __construct(private readonly Connection $db)
     {
     }
@@ -20,23 +23,38 @@ final class AdministratorBootstrap
      */
     public function bootstrap(array $adLogins): array
     {
-        $adLogins = $this->normalize($adLogins);
-        if ($adLogins === []) {
-            return ['usersCreated' => 0, 'rolesAssigned' => 0];
-        }
+        $enableLogging = $this->db->enableLogging;
+        $enableProfiling = $this->db->enableProfiling;
+        $this->db->enableLogging = false;
+        $this->db->enableProfiling = false;
 
-        // SELECT ... FOR UPDATE cannot lock a row that does not exist. If a
-        // concurrent first login or deployment inserts the same user/role,
-        // retry the complete idempotent operation after that transaction has
-        // committed.
         try {
-            return $this->bootstrapOnce($adLogins);
-        } catch (\Throwable $error) {
-            if (!$this->isRetryableConcurrencyError($error)) {
-                throw $error;
+            $adLogins = $this->normalize($adLogins);
+            if ($adLogins === []) {
+                return ['usersCreated' => 0, 'rolesAssigned' => 0];
             }
 
-            return $this->bootstrapOnce($adLogins);
+            // SELECT ... FOR UPDATE cannot lock a row that does not exist. If
+            // a concurrent first login or deployment inserts the same user or
+            // role, retry the complete idempotent operation after that
+            // transaction has committed.
+            for ($attempt = 1; true; ++$attempt) {
+                try {
+                    return $this->bootstrapOnce($adLogins);
+                } catch (\Throwable $error) {
+                    if (
+                        $attempt >= self::MAX_ATTEMPTS
+                        || !$this->isRetryableConcurrencyError($error)
+                    ) {
+                        throw $error;
+                    }
+
+                    usleep(self::RETRY_DELAY_MICROSECONDS);
+                }
+            }
+        } finally {
+            $this->db->enableLogging = $enableLogging;
+            $this->db->enableProfiling = $enableProfiling;
         }
     }
 
@@ -63,7 +81,6 @@ final class AdministratorBootstrap
      */
     private function bootstrapOnce(array $adLogins): array
     {
-
         $roleRows = $this->db->createCommand(
             "SELECT id, code FROM {{%roles}} WHERE code IN ('employee', 'administrator')",
         )->queryAll();
@@ -78,7 +95,7 @@ final class AdministratorBootstrap
             $rolesAssigned = 0;
             $now = Clock::now();
 
-            foreach ($adLogins as $adLogin) {
+            foreach ($adLogins as $index => $adLogin) {
                 $user = $this->db->createCommand(
                     'SELECT id, is_active FROM {{%users}} WHERE ad_login = :ad_login FOR UPDATE',
                     [':ad_login' => $adLogin],
@@ -99,7 +116,10 @@ final class AdministratorBootstrap
                 } else {
                     if (!(bool) $user['is_active']) {
                         throw new \RuntimeException(
-                            "Bootstrap administrator '{$adLogin}' is locally disabled; refusing to reactivate it.",
+                            sprintf(
+                                'Bootstrap administrator at position %d is locally disabled; refusing to reactivate it.',
+                                $index + 1,
+                            ),
                         );
                     }
                     $userId = (int) $user['id'];
@@ -140,13 +160,31 @@ final class AdministratorBootstrap
     private function normalize(array $adLogins): array
     {
         $normalized = [];
-        foreach ($adLogins as $adLogin) {
-            $adLogin = strtolower(trim($adLogin));
-            if ($adLogin === '') {
-                continue;
+        $trimmed = array_map(static fn (string $adLogin): string => trim($adLogin), $adLogins);
+        $hasConfiguredLogin = false;
+        foreach ($trimmed as $adLogin) {
+            if ($adLogin !== '') {
+                $hasConfiguredLogin = true;
+                break;
             }
+        }
+
+        if (!$hasConfiguredLogin) {
+            return [];
+        }
+
+        foreach ($trimmed as $index => $adLogin) {
+            if ($adLogin === '') {
+                throw new \InvalidArgumentException(
+                    sprintf('Invalid empty AD login at position %d.', $index + 1),
+                );
+            }
+
+            $adLogin = strtolower($adLogin);
             if (strlen($adLogin) > 128 || preg_match('/^[a-z0-9._-]+$/', $adLogin) !== 1) {
-                throw new \InvalidArgumentException("Invalid sAMAccountName '{$adLogin}'.");
+                throw new \InvalidArgumentException(
+                    sprintf('Invalid sAMAccountName at position %d.', $index + 1),
+                );
             }
             $normalized[$adLogin] = true;
         }

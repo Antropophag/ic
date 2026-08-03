@@ -16,7 +16,12 @@ final class AdministratorBootstrapConcurrencyTest extends TestCase
             self::markTestSkipped('proc_open is required for the concurrency contract test.');
         }
 
-        $login = 'bootstrap.concurrent.' . bin2hex(random_bytes(4));
+        $suffix = bin2hex(random_bytes(4));
+        $sharedLogin = 'bootstrap.concurrent.shared.' . $suffix;
+        $loginLists = [
+            [$sharedLogin, 'bootstrap.concurrent.first.' . $suffix],
+            [$sharedLogin, 'bootstrap.concurrent.second.' . $suffix],
+        ];
         $startFile = tempnam(sys_get_temp_dir(), 'bootstrap-start-');
         $resultFiles = [
             tempnam(sys_get_temp_dir(), 'bootstrap-result-'),
@@ -52,7 +57,7 @@ final class AdministratorBootstrapConcurrencyTest extends TestCase
             }
             try {
                 $result = (new \App\Infrastructure\Identity\AdministratorBootstrap($connection))
-                    ->bootstrap([$argv[3]]);
+                    ->bootstrap(json_decode($argv[3], true, flags: JSON_THROW_ON_ERROR));
                 file_put_contents($argv[2], json_encode(['result' => $result], JSON_THROW_ON_ERROR));
                 exit(0);
             } catch (\Throwable $error) {
@@ -64,10 +69,17 @@ final class AdministratorBootstrapConcurrencyTest extends TestCase
         $processes = [];
         $pipeSets = [];
         try {
-            foreach ($resultFiles as $resultFile) {
+            foreach ($resultFiles as $index => $resultFile) {
                 $pipes = [];
                 $process = proc_open(
-                    [PHP_BINARY, '-r', $worker, $startFile, $resultFile, $login],
+                    [
+                        PHP_BINARY,
+                        '-r',
+                        $worker,
+                        $startFile,
+                        $resultFile,
+                        json_encode($loginLists[$index], JSON_THROW_ON_ERROR),
+                    ],
                     [1 => ['pipe', 'w'], 2 => ['pipe', 'w']],
                     $pipes,
                     dirname(__DIR__, 3),
@@ -91,13 +103,23 @@ final class AdministratorBootstrapConcurrencyTest extends TestCase
             }
 
             $verification = $this->connection();
-            self::assertSame(1, (int) $verification->createCommand(
-                'SELECT COUNT(*) FROM {{%users}} WHERE ad_login = :login',
-                [':login' => $login],
+            self::assertSame(3, (int) $verification->createCommand(
+                'SELECT COUNT(*) FROM {{%users}} WHERE ad_login IN (:shared, :first, :second)',
+                [
+                    ':shared' => $loginLists[0][0],
+                    ':first' => $loginLists[0][1],
+                    ':second' => $loginLists[1][1],
+                ],
             )->queryScalar());
-            self::assertSame(2, (int) $verification->createCommand(
-                'SELECT COUNT(*) FROM {{%user_roles}} ur JOIN {{%users}} u ON u.id = ur.user_id WHERE u.ad_login = :login',
-                [':login' => $login],
+            self::assertSame(6, (int) $verification->createCommand(
+                'SELECT COUNT(*) FROM {{%user_roles}} ur '
+                . 'JOIN {{%users}} u ON u.id = ur.user_id '
+                . 'WHERE u.ad_login IN (:shared, :first, :second)',
+                [
+                    ':shared' => $loginLists[0][0],
+                    ':first' => $loginLists[0][1],
+                    ':second' => $loginLists[1][1],
+                ],
             )->queryScalar());
             $verification->close();
         } finally {
@@ -108,11 +130,15 @@ final class AdministratorBootstrapConcurrencyTest extends TestCase
                 }
             }
             $cleanup = $this->connection();
-            $userId = $cleanup->createCommand(
-                'SELECT id FROM {{%users}} WHERE ad_login = :login',
-                [':login' => $login],
-            )->queryScalar();
-            if ($userId !== false) {
+            $userIds = $cleanup->createCommand(
+                'SELECT id FROM {{%users}} WHERE ad_login IN (:shared, :first, :second)',
+                [
+                    ':shared' => $loginLists[0][0],
+                    ':first' => $loginLists[0][1],
+                    ':second' => $loginLists[1][1],
+                ],
+            )->queryColumn();
+            foreach ($userIds as $userId) {
                 $cleanup->createCommand()->delete('{{%user_roles}}', ['user_id' => $userId])->execute();
                 $cleanup->createCommand()->delete('{{%users}}', ['id' => $userId])->execute();
             }

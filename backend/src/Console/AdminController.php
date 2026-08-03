@@ -16,17 +16,21 @@ final class AdminController extends Controller
         $rawConfigured = getenv('BOOTSTRAP_ADMIN_AD_LOGINS');
         $configured = trim($rawConfigured === false ? '' : $rawConfigured);
         if ($configured === '') {
-            $this->stdout("No bootstrap administrators configured.\n");
+            $this->stderr("Administrator bootstrap skipped: no logins configured.\n");
             return ExitCode::OK;
         }
 
         /** @var list<string> $adLogins */
-        $adLogins = preg_split('/[\s,]+/', $configured, -1, PREG_SPLIT_NO_EMPTY) ?: [];
+        $adLogins = explode(',', $configured);
+        if (array_filter($adLogins, static fn (string $login): bool => trim($login) !== '') === []) {
+            $this->stderr("Administrator bootstrap skipped: no logins configured.\n");
+            return ExitCode::OK;
+        }
 
         try {
             $result = (new AdministratorBootstrap(Yii::$app->db))->bootstrap($adLogins);
-        } catch (\InvalidArgumentException | \RuntimeException $error) {
-            Yii::error($error, 'admin.bootstrap');
+        } catch (\Throwable $error) {
+            Yii::error($this->failureDiagnostic($error), 'admin.bootstrap');
             $this->stderr("Administrator bootstrap failed; see application logs for details.\n");
             return ExitCode::DATAERR;
         }
@@ -37,5 +41,21 @@ final class AdminController extends Controller
             $result['rolesAssigned'],
         ));
         return ExitCode::OK;
+    }
+
+    private function failureDiagnostic(\Throwable $error): string
+    {
+        if ($error instanceof \yii\db\Exception) {
+            $sqlState = (string) ($error->errorInfo[0] ?? 'unknown');
+            $driverCode = (string) ($error->errorInfo[1] ?? 'unknown');
+            return sprintf(
+                'Administrator bootstrap failed (%s, SQLSTATE %s, driver code %s).',
+                $error::class,
+                $sqlState,
+                $driverCode,
+            );
+        }
+
+        return sprintf('Administrator bootstrap failed (%s).', $error::class);
     }
 }
