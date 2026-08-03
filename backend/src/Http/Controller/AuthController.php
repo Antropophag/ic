@@ -12,10 +12,9 @@ use App\Infrastructure\Identity\LdapAuthenticator;
 use App\Infrastructure\Ldap\LdapConnectionException;
 use App\Infrastructure\Ldap\NativeLdapClient;
 use Yii;
-use yii\rest\Controller;
 use yii\web\ServerErrorHttpException;
 
-final class AuthController extends Controller
+final class AuthController extends ApiController
 {
     public function behaviors(): array
     {
@@ -58,10 +57,8 @@ final class AuthController extends Controller
     public function actionLogin(): array
     {
         $input = new LoginInput();
-        $input->load(Yii::$app->request->bodyParams, '');
-        if (!$input->validate()) {
-            Yii::$app->response->statusCode = 422;
-            return ['errors' => $input->getErrors()];
+        if (($errors = $this->bodyValidationErrors($input)) !== null) {
+            return $errors;
         }
 
         try {
