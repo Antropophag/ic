@@ -15,6 +15,14 @@ docker compose --env-file .env -f compose.yaml logs
 docker compose --env-file .env -f compose.yaml down
 ```
 
+`make up` после запуска контейнеров применяет миграции и выполняет
+`php yii admin/bootstrap`. Команда обеспечивает роли `employee` и
+`administrator` для пользователей из `BOOTSTRAP_ADMIN_AD_LOGINS`, не хранит
+пароли и не меняет LDAP-аутентификацию. Операция идемпотентна и add-only:
+удаление логина из конфигурации не отзывает роль, а отключённый локальный
+профиль не включается автоматически. При запуске Compose без Make эквивалентные
+команды миграции и bootstrap необходимо выполнить явно.
+
 Docker Compose и Podman Compose равноправны. Makefile определяет доступную
 реализацию и экспортирует `COMPOSE`/`CONTAINER_ENGINE` в scripts. Публичные
 `make logs` и `make down` однозначно относятся к development; production-like

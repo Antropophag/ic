@@ -37,6 +37,8 @@ dev: doctor
 up: doctor
 	@test -f .env || { echo "Скопируйте .env.example в .env и заполните production-настройки." >&2; exit 2; }
 	$(COMPOSE) --env-file .env -f compose.yaml up -d --build
+	$(COMPOSE) --env-file .env -f compose.yaml run --rm backend php yii migrate/up --interactive=0
+	$(COMPOSE) --env-file .env -f compose.yaml run --rm backend php yii admin/bootstrap
 
 down: doctor
 	@test -f .env.dev || { echo "Для make down нужен .env.dev (make init)." >&2; exit 2; }
