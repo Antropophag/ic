@@ -35,10 +35,10 @@ Bootstrap не выполняет LDAP bind/search и не создаёт AD acc
 `assigned_by = NULL`, что означает deployment-оператор без authenticated actor.
 Перед записью проверяется наличие production-ролей `employee` и
 `administrator`, создаваемых миграциями; bootstrap не создаёт определения
-ролей. Параллельный конфликт вставки или deadlock повторяет всю идемпотентную
-операцию не более трёх раз с задержкой 50 мс между попытками. Уникальность обеспечивают
-case-insensitive индекс `users.ad_login`, индекс `roles.code` и первичный ключ
-`user_roles(user_id, role_id)`.
+ролей. При параллельном конфликте вставки или deadlock вся идемпотентная операция
+выполняется до трёх попыток (не более двух повторов) с задержкой 50 мс между
+повторами. Уникальность обеспечивают case-insensitive индекс `users.ad_login`,
+индекс `roles.code` и первичный ключ `user_roles(user_id, role_id)`.
 
 Ручной повтор:
 

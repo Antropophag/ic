@@ -16,14 +16,14 @@ final class AdminController extends Controller
         $rawConfigured = getenv('BOOTSTRAP_ADMIN_AD_LOGINS');
         $configured = trim($rawConfigured === false ? '' : $rawConfigured);
         if ($configured === '') {
-            $this->stderr("Administrator bootstrap skipped: no logins configured.\n");
+            $this->stderr("Первичная настройка администраторов пропущена: логины не настроены.\n");
             return ExitCode::OK;
         }
 
         /** @var list<string> $adLogins */
         $adLogins = explode(',', $configured);
         if (array_filter($adLogins, static fn (string $login): bool => trim($login) !== '') === []) {
-            $this->stderr("Administrator bootstrap skipped: no logins configured.\n");
+            $this->stderr("Первичная настройка администраторов пропущена: логины не настроены.\n");
             return ExitCode::OK;
         }
 
@@ -31,12 +31,16 @@ final class AdminController extends Controller
             $result = (new AdministratorBootstrap(Yii::$app->db))->bootstrap($adLogins);
         } catch (\Throwable $error) {
             Yii::error($this->failureDiagnostic($error), 'admin.bootstrap');
-            $this->stderr("Administrator bootstrap failed; see application logs for details.\n");
+            $this->stderr(
+                "Первичная настройка администраторов завершилась с ошибкой; "
+                . "подробности см. в журналах приложения.\n",
+            );
             return ExitCode::DATAERR;
         }
 
         $this->stdout(sprintf(
-            "Administrator bootstrap complete: %d user(s) created, %d role(s) assigned.\n",
+            "Первичная настройка администраторов завершена: "
+            . "создано пользователей — %d, назначено ролей — %d.\n",
             $result['usersCreated'],
             $result['rolesAssigned'],
         ));

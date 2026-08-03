@@ -12,147 +12,95 @@ final class AdministratorBootstrapTest extends IntegrationTestCase
 {
     public function testConsoleBootstrapDoesNotTreatZeroAsEmptyConfiguration(): void
     {
-        if (!function_exists('proc_open')) {
-            self::markTestSkipped('proc_open is required for the console contract test.');
-        }
-
-        $previous = getenv('BOOTSTRAP_ADMIN_AD_LOGINS');
-        putenv('BOOTSTRAP_ADMIN_AD_LOGINS=0');
-        try {
-            ['exitCode' => $exitCode, 'stdout' => $stdout, 'stderr' => $stderr] =
-                $this->runBootstrapCommand();
-            self::assertSame(0, $exitCode);
-            self::assertStringContainsString('Administrator bootstrap complete', $stdout);
-            self::assertStringNotContainsString('Administrator bootstrap failed', $stderr);
-        } finally {
-            $this->db()->createCommand()->delete('{{%user_roles}}', [
-                'user_id' => (new \yii\db\Query())
-                    ->select('id')
-                    ->from('{{%users}}')
-                    ->where(['ad_login' => '0']),
-            ])->execute();
-            $this->db()->createCommand()->delete('{{%users}}', ['ad_login' => '0'])->execute();
-            $previous === false ? putenv('BOOTSTRAP_ADMIN_AD_LOGINS') : putenv('BOOTSTRAP_ADMIN_AD_LOGINS=' . $previous);
-        }
+        $this->withBootstrapEnv('0', function (): void {
+            try {
+                ['exitCode' => $exitCode, 'stdout' => $stdout, 'stderr' => $stderr] =
+                    $this->runBootstrapCommand();
+                self::assertSame(0, $exitCode);
+                self::assertStringContainsString('Первичная настройка администраторов завершена', $stdout);
+                self::assertStringNotContainsString('завершилась с ошибкой', $stderr);
+            } finally {
+                $this->db()->createCommand()->delete('{{%user_roles}}', [
+                    'user_id' => (new \yii\db\Query())
+                        ->select('id')
+                        ->from('{{%users}}')
+                        ->where(['ad_login' => '0']),
+                ])->execute();
+                $this->db()->createCommand()->delete('{{%users}}', ['ad_login' => '0'])->execute();
+            }
+        });
     }
 
     public function testConsoleRejectsNonCanonicalSeparatorWithoutLeakingConfiguredValue(): void
     {
-        if (!function_exists('proc_open')) {
-            self::markTestSkipped('proc_open is required for the console contract test.');
-        }
-
         $configured = 'sensitive.login another.login';
-        $previous = getenv('BOOTSTRAP_ADMIN_AD_LOGINS');
-        putenv('BOOTSTRAP_ADMIN_AD_LOGINS=' . $configured);
-        try {
+        $this->withBootstrapEnv($configured, function () use ($configured): void {
             ['exitCode' => $exitCode, 'stdout' => $stdout, 'stderr' => $stderr] =
                 $this->runBootstrapCommand();
             self::assertSame(65, $exitCode);
-            self::assertStringContainsString('Administrator bootstrap failed', $stderr);
+            self::assertStringContainsString('Первичная настройка администраторов завершилась с ошибкой', $stderr);
             self::assertStringNotContainsString($configured, $stdout . $stderr);
             self::assertStringNotContainsString('Stack trace:', $stderr);
             self::assertSame(0, (int) $this->scalar(
                 "SELECT COUNT(*) FROM {{%users}} WHERE ad_login IN ('sensitive.login', 'another.login')",
             ));
-        } finally {
-            $previous === false
-                ? putenv('BOOTSTRAP_ADMIN_AD_LOGINS')
-                : putenv('BOOTSTRAP_ADMIN_AD_LOGINS=' . $previous);
-        }
+        });
     }
 
     public function testConsoleSuccessDoesNotLeakConfiguredLogin(): void
     {
-        if (!function_exists('proc_open')) {
-            self::markTestSkipped('proc_open is required for the console contract test.');
-        }
-
         $login = 'sensitive.bootstrap.login';
-        $previous = getenv('BOOTSTRAP_ADMIN_AD_LOGINS');
-        putenv('BOOTSTRAP_ADMIN_AD_LOGINS=' . $login);
-        try {
-            ['exitCode' => $exitCode, 'stdout' => $stdout, 'stderr' => $stderr] =
-                $this->runBootstrapCommand();
-            self::assertSame(0, $exitCode);
-            self::assertStringContainsString('Administrator bootstrap complete', $stdout);
-            self::assertStringNotContainsString($login, $stdout . $stderr);
-        } finally {
-            $userId = $this->scalar(
-                'SELECT id FROM {{%users}} WHERE ad_login = :ad_login',
-                [':ad_login' => $login],
-            );
-            if ($userId !== false) {
-                $this->db()->createCommand()->delete('{{%user_roles}}', ['user_id' => $userId])->execute();
-                $this->db()->createCommand()->delete('{{%users}}', ['id' => $userId])->execute();
+        $this->withBootstrapEnv($login, function () use ($login): void {
+            try {
+                ['exitCode' => $exitCode, 'stdout' => $stdout, 'stderr' => $stderr] =
+                    $this->runBootstrapCommand();
+                self::assertSame(0, $exitCode);
+                self::assertStringContainsString('Первичная настройка администраторов завершена', $stdout);
+                self::assertStringNotContainsString($login, $stdout . $stderr);
+            } finally {
+                $userId = $this->scalar(
+                    'SELECT id FROM {{%users}} WHERE ad_login = :ad_login',
+                    [':ad_login' => $login],
+                );
+                if ($userId !== false) {
+                    $this->db()->createCommand()->delete('{{%user_roles}}', ['user_id' => $userId])->execute();
+                    $this->db()->createCommand()->delete('{{%users}}', ['id' => $userId])->execute();
+                }
             }
-            $previous === false
-                ? putenv('BOOTSTRAP_ADMIN_AD_LOGINS')
-                : putenv('BOOTSTRAP_ADMIN_AD_LOGINS=' . $previous);
-        }
+        });
     }
 
     public function testConsoleTreatsMissingConfigurationAsSuccessfulSkip(): void
     {
-        if (!function_exists('proc_open')) {
-            self::markTestSkipped('proc_open is required for the console contract test.');
-        }
-
-        $previous = getenv('BOOTSTRAP_ADMIN_AD_LOGINS');
-        putenv('BOOTSTRAP_ADMIN_AD_LOGINS');
-        try {
+        $this->withBootstrapEnv(null, function (): void {
             ['exitCode' => $exitCode, 'stdout' => $stdout, 'stderr' => $stderr] =
                 $this->runBootstrapCommand();
             self::assertSame(0, $exitCode);
             self::assertSame('', $stdout);
-            self::assertStringContainsString('Administrator bootstrap skipped', $stderr);
-        } finally {
-            $previous === false
-                ? putenv('BOOTSTRAP_ADMIN_AD_LOGINS')
-                : putenv('BOOTSTRAP_ADMIN_AD_LOGINS=' . $previous);
-        }
+            self::assertStringContainsString('Первичная настройка администраторов пропущена', $stderr);
+        });
     }
 
     public function testConsoleTreatsWhitespaceOnlyConfigurationAsSuccessfulSkip(): void
     {
-        if (!function_exists('proc_open')) {
-            self::markTestSkipped('proc_open is required for the console contract test.');
-        }
-
-        $previous = getenv('BOOTSTRAP_ADMIN_AD_LOGINS');
-        putenv('BOOTSTRAP_ADMIN_AD_LOGINS=   ');
-        try {
+        $this->withBootstrapEnv('   ', function (): void {
             ['exitCode' => $exitCode, 'stdout' => $stdout, 'stderr' => $stderr] =
                 $this->runBootstrapCommand();
             self::assertSame(0, $exitCode);
             self::assertSame('', $stdout);
-            self::assertStringContainsString('Administrator bootstrap skipped', $stderr);
-        } finally {
-            $previous === false
-                ? putenv('BOOTSTRAP_ADMIN_AD_LOGINS')
-                : putenv('BOOTSTRAP_ADMIN_AD_LOGINS=' . $previous);
-        }
+            self::assertStringContainsString('Первичная настройка администраторов пропущена', $stderr);
+        });
     }
 
     public function testConsoleTreatsListOfEmptyElementsAsSuccessfulSkip(): void
     {
-        if (!function_exists('proc_open')) {
-            self::markTestSkipped('proc_open is required for the console contract test.');
-        }
-
-        $previous = getenv('BOOTSTRAP_ADMIN_AD_LOGINS');
-        putenv('BOOTSTRAP_ADMIN_AD_LOGINS= , , ');
-        try {
+        $this->withBootstrapEnv(' , , ', function (): void {
             ['exitCode' => $exitCode, 'stdout' => $stdout, 'stderr' => $stderr] =
                 $this->runBootstrapCommand();
             self::assertSame(0, $exitCode);
             self::assertSame('', $stdout);
-            self::assertStringContainsString('Administrator bootstrap skipped', $stderr);
-        } finally {
-            $previous === false
-                ? putenv('BOOTSTRAP_ADMIN_AD_LOGINS')
-                : putenv('BOOTSTRAP_ADMIN_AD_LOGINS=' . $previous);
-        }
+            self::assertStringContainsString('Первичная настройка администраторов пропущена', $stderr);
+        });
     }
 
     public function testCreatesAdministratorsAndIsIdempotent(): void
@@ -368,5 +316,26 @@ final class AdministratorBootstrapTest extends IntegrationTestCase
             'stdout' => $stdout,
             'stderr' => $stderr,
         ];
+    }
+
+    /** @param callable(): void $assertions */
+    private function withBootstrapEnv(?string $value, callable $assertions): void
+    {
+        if (!function_exists('proc_open')) {
+            self::markTestSkipped('proc_open is required for the console contract test.');
+        }
+
+        $previous = getenv('BOOTSTRAP_ADMIN_AD_LOGINS');
+        $value === null
+            ? putenv('BOOTSTRAP_ADMIN_AD_LOGINS')
+            : putenv('BOOTSTRAP_ADMIN_AD_LOGINS=' . $value);
+
+        try {
+            $assertions();
+        } finally {
+            $previous === false
+                ? putenv('BOOTSTRAP_ADMIN_AD_LOGINS')
+                : putenv('BOOTSTRAP_ADMIN_AD_LOGINS=' . $previous);
+        }
     }
 }

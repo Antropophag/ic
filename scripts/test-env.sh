@@ -36,7 +36,7 @@ up)
   ;;
 reset)
   $compose run --rm backend php yii test/reset
-  $compose up -d frontend scheduler
+  $compose up -d --build frontend scheduler
   assert_health "${TEST_BASE_URL:-http://localhost:18080}/health/live" ok
   assert_health "${TEST_BASE_URL:-http://localhost:18080}/health/ready" ready
   ;;
