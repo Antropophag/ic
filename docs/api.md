@@ -10,6 +10,15 @@
 Обычная авторизация использует `POST /api/v1/auth/login` с LDAP login/password
 и серверную session cookie.
 
+Все POST-запросы этих контроллеров принимают непустой JSON object с
+`Content-Type: application/json` (параметр `charset` допускается):
+
+- отсутствующий или другой `Content-Type` возвращает `415`;
+- пустое или некорректное JSON-тело возвращает `400`;
+- JSON array, scalar и `null` возвращают `400`;
+- корректный JSON object, не прошедший валидацию DTO, сохраняет прежний ответ
+  `422` в формате `{"errors": {...}}`.
+
 Development deployment дополнительно монтирует маршруты:
 
 - `GET /api/v1/dev/users` — безопасный список активных seeded users;

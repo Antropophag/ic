@@ -17,7 +17,7 @@ abstract class ApiController extends Controller
     protected function bodyValidationErrors(Model $input): ?array
     {
         $request = Yii::$app->request;
-        $contentType = strtolower(trim(explode(';', $request->contentType, 2)[0]));
+        $contentType = strtolower(trim(explode(';', $request->contentType ?? '', 2)[0]));
         if ($contentType !== 'application/json') {
             throw new UnsupportedMediaTypeHttpException('Content-Type must be application/json.');
         }
