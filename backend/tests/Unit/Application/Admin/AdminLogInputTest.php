@@ -53,6 +53,16 @@ final class AdminLogInputTest extends TestCase
         self::assertTrue($input->validate());
     }
 
+    public function testNotificationProblematicAcceptsAndPreservesIntegerStrings(): void
+    {
+        foreach (['1', '0'] as $value) {
+            $input = new ListNotificationsInput(['problematic' => $value]);
+
+            self::assertTrue($input->validate());
+            self::assertSame($value, $input->problematic);
+        }
+    }
+
     public function testNotificationInputRejectsInvalidEnumsDatesAndCursor(): void
     {
         $input = new ListNotificationsInput();

@@ -357,6 +357,22 @@ it('lists read-only admin logs with shared safe query serialization', async () =
   expect(fetchMock).toHaveBeenNthCalledWith(2, '/api/v1/admin/notifications?status=failed&requestId=42', expect.any(Object))
 })
 
+it('serializes admin boolean query values as backend-compatible integers', async () => {
+  const response = () => new Response(JSON.stringify({ items: [] }), { status: 200 })
+  const fetchMock = vi.fn().mockImplementation(response)
+  vi.stubGlobal('fetch', fetchMock)
+
+  await adminApi.notifications({ problematic: true })
+  await adminApi.notifications({ problematic: false })
+  await adminApi.notifications()
+  await adminApi.notifications({ problematic: '' })
+
+  expect(fetchMock).toHaveBeenNthCalledWith(1, '/api/v1/admin/notifications?problematic=1', expect.any(Object))
+  expect(fetchMock).toHaveBeenNthCalledWith(2, '/api/v1/admin/notifications?problematic=0', expect.any(Object))
+  expect(fetchMock).toHaveBeenNthCalledWith(3, '/api/v1/admin/notifications', expect.any(Object))
+  expect(fetchMock).toHaveBeenNthCalledWith(4, '/api/v1/admin/notifications', expect.any(Object))
+})
+
 it('omits unsupported admin query values', async () => {
   const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({ items: [] }), { status: 200 }))
   vi.stubGlobal('fetch', fetchMock)

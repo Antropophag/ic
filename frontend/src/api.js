@@ -169,7 +169,8 @@ export const adminApi = {
 function queryString(params = {}) {
   const query = new URLSearchParams()
   Object.entries(params).forEach(([key, value]) => {
-    if (['string', 'number', 'boolean'].includes(typeof value) && value !== '') query.set(key, String(value))
+    if (typeof value === 'boolean') query.set(key, value ? '1' : '0')
+    else if (['string', 'number'].includes(typeof value) && value !== '') query.set(key, String(value))
   })
   const serialized = query.toString()
   return serialized ? `?${serialized}` : ''
