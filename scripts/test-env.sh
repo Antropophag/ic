@@ -5,8 +5,6 @@ cd "$(CDPATH='' cd -- "$(dirname -- "$0")/.." && pwd)"
 : "${CONTAINER_ENGINE:?CONTAINER_ENGINE must be provided by Makefile}"
 compose="$COMPOSE --env-file .env.test -f compose.test.yaml"
 action=${1:-}
-test_base=${TEST_BASE_URL:-http://localhost:${TEST_FRONTEND_PORT:-18080}}
-mailpit_base=${MAILPIT_BASE_URL:-http://localhost:${TEST_MAILPIT_PORT:-18025}}
 
 wait_url() {
   url=$1
@@ -29,7 +27,9 @@ assert_health() {
 }
 
 service_running() {
-  $compose ps "$1" 2>/dev/null | grep -Eiq 'running|Up'
+  container_id=$($compose ps -q "$1" 2>/dev/null)
+  [ -n "$container_id" ] &&
+    [ "$($CONTAINER_ENGINE inspect --format '{{.State.Running}}' "$container_id" 2>/dev/null)" = true ]
 }
 
 require_image() {
@@ -65,12 +65,12 @@ up)
   $compose up -d --no-build mariadb
   $compose up -d --no-build ad
   $compose up -d --no-build mailpit
-  wait_url "$mailpit_base/api/v1/info"
+  wait_url "${MAILPIT_BASE_URL:-http://localhost:18025}/api/v1/info"
   $compose up -d --no-build --force-recreate backend
   "$0" reset
   $compose up -d --no-build --force-recreate frontend scheduler
-  assert_health "$test_base/health/live" ok
-  assert_health "$test_base/health/ready" ready
+  assert_health "${TEST_BASE_URL:-http://localhost:18080}/health/live" ok
+  assert_health "${TEST_BASE_URL:-http://localhost:18080}/health/ready" ready
   ;;
 reset)
   service_running backend || {
@@ -107,8 +107,8 @@ reset)
     $compose up -d --no-build --force-recreate scheduler
   fi
   if [ "$restart_frontend" -eq 1 ]; then
-    assert_health "$test_base/health/live" ok
-    assert_health "$test_base/health/ready" ready
+    assert_health "${TEST_BASE_URL:-http://localhost:18080}/health/live" ok
+    assert_health "${TEST_BASE_URL:-http://localhost:18080}/health/ready" ready
   fi
   ;;
 down) $compose down --remove-orphans ;;

@@ -31,8 +31,8 @@ if [ -n "${CI:-}" ]; then
 else
   npm exec -- playwright install chromium
 fi
-E2E_BASE_URL="${TEST_BASE_URL:-http://localhost:${TEST_FRONTEND_PORT:-18080}}" \
-  MAILPIT_BASE_URL="${MAILPIT_BASE_URL:-http://localhost:${TEST_MAILPIT_PORT:-18025}}" \
+E2E_BASE_URL="${TEST_BASE_URL:-http://localhost:18080}" \
+  MAILPIT_BASE_URL="${MAILPIT_BASE_URL:-http://localhost:18025}" \
   TEST_AD_LOGIN="${TEST_AD_LOGIN:-initiator}" \
   TEST_AD_PASSWORD="${TEST_AD_PASSWORD:-TestPassword1!}" npm run e2e
 cd "$project_root"

@@ -120,8 +120,7 @@ ACL. В этом случае обе команды передаются с `sud
 
 Сервисы: `frontend`, `backend`, `scheduler`, MariaDB 11.4, Samba AD и Mailpit.
 Портал доступен на `http://localhost:18080`, Mailpit —
-`http://localhost:18025`; test-порты можно переопределить через
-`TEST_FRONTEND_PORT` и `TEST_MAILPIT_PORT`. Все backend Integration тесты исполняются внутри
+`http://localhost:18025`. Все backend Integration тесты исполняются внутри
 этого же `backend`, после тех же миграций и seed, что используются Playwright.
 
 Домен AD: `IC.TEST`, пароль тестовых учётных записей:
