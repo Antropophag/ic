@@ -152,12 +152,48 @@ describe('standalone development tools', () => {
     expect(browser.location.reload).not.toHaveBeenCalled()
   })
 
-  it('starts after DOMContentLoaded and reports an unavailable endpoint', async () => {
+  it('renders the switcher after DOMContentLoaded when the document is loading', async () => {
+    const fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ items: [{ id: 1, displayName: 'Manager', position: 'IC', roles: ['ic_manager'] }] }),
+    })
+    const browser = browserWindow(fetch)
+    browser.localStorage.setItem('ic.dev.userId', '1')
+    const body = element('body')
+    const document = { readyState: 'loading', body, createElement: (tag) => element(tag) }
+
+    startDevelopmentTools(browser, document)
+
+    expect(fetch).not.toHaveBeenCalled()
+    expect(browser.addEventListener).toHaveBeenCalledWith('DOMContentLoaded', expect.any(Function), { once: true })
+    browser.addEventListener.mock.calls[0][1]()
+    await vi.waitFor(() => expect(body.children).toHaveLength(1))
+    expect(fetch).toHaveBeenCalledOnce()
+  })
+
+  it.each(['interactive', 'complete'])('renders the switcher immediately when readyState is %s', async (readyState) => {
+    const fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ items: [{ id: 1, displayName: 'Manager', position: 'IC', roles: ['ic_manager'] }] }),
+    })
+    const browser = browserWindow(fetch)
+    browser.localStorage.setItem('ic.dev.userId', '1')
+    const body = element('body')
+    const document = { readyState, body, createElement: (tag) => element(tag) }
+
+    startDevelopmentTools(browser, document)
+
+    await vi.waitFor(() => expect(body.children).toHaveLength(1))
+    expect(fetch).toHaveBeenCalledOnce()
+    expect(browser.addEventListener).not.toHaveBeenCalled()
+  })
+
+  it('reports an unavailable endpoint after DOMContentLoaded', async () => {
     const browser = browserWindow(vi.fn().mockResolvedValue({ ok: false, status: 503 }))
     const error = vi.spyOn(console, 'error').mockImplementation(() => {})
-    startDevelopmentTools(browser, { body: element('body'), createElement: (tag) => element(tag) })
+    startDevelopmentTools(browser, { readyState: 'loading', body: element('body'), createElement: (tag) => element(tag) })
 
-    expect(browser.addEventListener).toHaveBeenCalledWith('DOMContentLoaded', expect.any(Function))
+    expect(browser.addEventListener).toHaveBeenCalledWith('DOMContentLoaded', expect.any(Function), { once: true })
     browser.addEventListener.mock.calls[0][1]()
     await vi.waitFor(() => expect(error).toHaveBeenCalledWith(
       'Development tools failed:',

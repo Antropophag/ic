@@ -23,7 +23,7 @@ describe('application bootstrap', () => {
   it('installs development identity before the first application request', async () => {
     const originalFetch = vi.fn().mockResolvedValue({ ok: true })
     const browser = browserWindow(originalFetch)
-    const document = {}
+    const document = { readyState: 'loading' }
 
     await bootstrapApplication({
       loadDevelopmentTools: developmentToolsLoader(
@@ -36,6 +36,6 @@ describe('application bootstrap', () => {
 
     expect(originalFetch).toHaveBeenCalledOnce()
     expect(originalFetch.mock.calls[0][1].headers.get('X-Dev-User-ID')).toBe('7')
-    expect(browser.addEventListener).toHaveBeenCalledWith('DOMContentLoaded', expect.any(Function))
+    expect(browser.addEventListener).toHaveBeenCalledWith('DOMContentLoaded', expect.any(Function), { once: true })
   })
 })
