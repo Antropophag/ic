@@ -59,9 +59,22 @@ describe('standalone development tools', () => {
     const headers = originalFetch.mock.calls[0][1].headers
     expect(headers.get('X-Dev-User-ID')).toBe('7')
 
+    await browser.fetch('http://localhost:8080/api/v1/auth/me')
+    expect(originalFetch.mock.calls[1][1].headers.get('X-Dev-User-ID')).toBe('7')
+
     await browser.fetch('https://example.invalid/api/v1/requests')
-    expect(originalFetch.mock.calls[1][1].headers.get('X-Dev-User-ID')).toBeNull()
+    expect(originalFetch.mock.calls[2][1].headers.get('X-Dev-User-ID')).toBeNull()
     expect(selectedUserId(browser)).toBe('7')
+  })
+
+  it('does not add an identity header without a selected user', async () => {
+    const originalFetch = vi.fn().mockResolvedValue({ ok: true })
+    const browser = browserWindow(originalFetch)
+    installIdentityFetch(browser)
+
+    await browser.fetch('/api/v1/auth/me')
+
+    expect(originalFetch.mock.calls[0][1].headers.get('X-Dev-User-ID')).toBeNull()
   })
 
   it('renders only safe display fields and switches identity after reload', () => {

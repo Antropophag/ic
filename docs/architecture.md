@@ -19,9 +19,10 @@ Production не получает ни одного из этих файлов.
 исполнителей/экспертов. Изменяющие транзакционные операции, аудит и постановка
 уведомлений в outbox остаются в `RequestRepository`.
 
-Development identity — обычная запись `users` и ролей в MariaDB. Отдельный
-dev script получает безопасный список (`id`, отображаемое имя, должность),
-сохраняет выбор в браузере и добавляет настроенный deployment-ом header.
+Development identity — обычная запись `users` и ролей в MariaDB. Development
+bootstrap до запуска Vue устанавливает fetch interceptor; dev-модуль получает
+безопасный список (`id`, отображаемое имя, должность), сохраняет выбор в браузере
+и добавляет настроенный deployment-ом header.
 
 Notification scheduler не является микросервисом: это долгоживущая Yii CLI
 команда из того же образа backend. Семантика SMTP — at-least-once; outbox lease

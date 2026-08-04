@@ -76,15 +76,12 @@ Playwright artifacts находятся в `frontend/playwright-report`.
 
 ## Frontend test contour
 
-До инфраструктурного рефакторинга Vitest выполнял 101 тест. Удалены ровно 12
-тестов вместе с двумя больше не существующими production-модулями:
+Vitest проверяет production-модули и физически отдельный development contour.
 
-| Удалённый файл | Тестов | Что защищал | Текущее покрытие |
-|---|---:|---|---|
-| `src/devUsers.test.js` | 7 | встроенный в Vue выбор dev identity | 4 теста физически отдельного `dev/dev-tools.js` плюс development runtime contract |
-| `src/demoSeed.test.js` | 5 | destructive demo seed UI | demo deployment и функция удалены, заменяемого production-поведения нет |
+| Файлы | Что защищают | Дополнительный runtime contract |
+|---|---|---|
+| `dev/dev-tools.test.js`, `src/bootstrap.test.js` | dev identity interceptor, same-origin header и его установка до первого application request | dev-код присутствует только в development image и отсутствует в production image |
+| `src/*.test.js` | API client, реестр, deep links, guards и диалоги | production build и Playwright-сценарии |
 
-Production Vitest-набор сохранил 89 тестов. Standalone development tools
-добавляют ещё 4, поэтому `npm test`/`make check` выполняют 93 теста: загрузка
-безопасного списка, отказ endpoint, same-origin identity header,
-`localStorage`, отображение ролей и переключение после reload.
+Удалённый destructive demo seed UI не имеет заменяемого production-поведения;
+development seed проверяется отдельным deployment contract.
