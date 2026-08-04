@@ -7,7 +7,7 @@ reject_tracked() {
   description=$1
   pattern=$2
   shift 2
-  if matches=$(git grep --untracked -n -E "$pattern" -- "$@" 2>/dev/null); then
+  if matches=$(git grep -n -E "$pattern" -- "$@" 2>/dev/null); then
     echo "$description:" >&2
     printf '%s\n' "$matches" >&2
     return 1
@@ -40,10 +40,12 @@ for compose_file in compose.yaml compose.dev.yaml compose.test.yaml; do
 done
 
 # Regression-test both common `compose port` output formats.
+# shellcheck source=scripts/compose-metadata.sh
 . scripts/compose-metadata.sh
 compose=fake_compose
 fake_compose() {
   printf '%s\n' "$FAKE_COMPOSE_BINDING"
+  return "${FAKE_COMPOSE_STATUS:-0}"
 }
 FAKE_COMPOSE_BINDING=0.0.0.0:18026
 [ "$(compose_published_port mailpit 8025)" = 18026 ]
@@ -52,6 +54,14 @@ FAKE_COMPOSE_BINDING='[::]:18026'
 COMPOSE_PUBLISHED_HOST=docker
 export COMPOSE_PUBLISHED_HOST
 [ "$(compose_http_url mailpit 8025)" = http://docker:18026 ]
+FAKE_COMPOSE_BINDING=''
+FAKE_COMPOSE_STATUS=1
+set +e
+failed_url=$(compose_http_url mailpit 8025 2>/dev/null)
+failed_status=$?
+set -e
+[ "$failed_status" -ne 0 ]
+[ -z "$failed_url" ]
 
 grep -q 'MAILPIT_BASE_URL must be provided' frontend/e2e/notifications.e2e.js
 

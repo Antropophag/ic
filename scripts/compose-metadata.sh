@@ -22,5 +22,6 @@ compose_http_url() {
   service=$1
   container_port=$2
   published_host=${COMPOSE_PUBLISHED_HOST:-localhost}
-  printf 'http://%s:%s\n' "$published_host" "$(compose_published_port "$service" "$container_port")"
+  published_port=$(compose_published_port "$service" "$container_port") || return
+  printf 'http://%s:%s\n' "$published_host" "$published_port"
 }
