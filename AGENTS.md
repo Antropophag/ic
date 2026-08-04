@@ -48,12 +48,15 @@
 - Restate the objective as observable outcomes.
 - Extract explicit requirements, constraints, exclusions, and acceptance signals.
 - Inspect repository-level instructions before inspecting implementation files.
-- Locate relevant entry points, dependencies, tests, configuration, and documentation.
+- Read `README.md` before implementation when it exists.
+- Read task-relevant documentation under `docs/` when applicable.
+- Locate relevant entry points, dependencies, tests, and configuration.
 - Trace the current behavior through the smallest necessary execution path.
 - Before designing a solution, inspect similar implementations.
 - Identify the existing repository pattern and understand why it was implemented that way.
 - Do not introduce a new implementation style unless existing patterns are insufficient.
-- Check the working tree before editing and preserve unrelated changes.
+- Check the current branch and `git status` before editing.
+- Preserve unrelated local modifications and never overwrite user work.
 - Resolve unknowns from repository evidence before asking the user.
 - Ask one focused question only when no safe, reversible assumption exists.
 - Define the intended scope and name adjacent areas that must remain unchanged.
@@ -127,6 +130,8 @@
 - Ask the user when alternatives change product behavior, data shape, or public contracts.
 - Proceed with a documented assumption when the choice is reversible and low risk.
 - Stop before destructive, irreversible, or externally visible actions lacking authorization.
+- Never perform destructive Git operations without explicit user authorization.
+- Never switch branches, merge, rebase, or push without explicit user authorization.
 - Do not modify unrelated files to make validation appear clean.
 - Do not weaken tests, checks, or safeguards to force a passing result.
 - Treat secrets, personal data, and credentials as non-displayable and non-committable.
