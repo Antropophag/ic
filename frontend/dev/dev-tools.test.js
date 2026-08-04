@@ -6,29 +6,13 @@ import {
   selectedUserId,
   startDevelopmentTools,
 } from './dev-tools'
+import { createDevToolsBrowserEnvironment } from '../test/browserEnvironment'
 
-function browserWindow(fetch = vi.fn()) {
-  const values = new Map()
+function browserEnvironment(fetch = vi.fn(), readyState = 'complete') {
+  const reload = vi.fn()
   return {
-    fetch,
-    addEventListener: vi.fn(),
-    location: { href: 'http://localhost:8080/requests', origin: 'http://localhost:8080', reload: vi.fn() },
-    localStorage: {
-      getItem: (key) => values.get(key) ?? null,
-      setItem: (key, value) => values.set(key, value),
-    },
-  }
-}
-
-function element(tag) {
-  return {
-    tag,
-    children: [],
-    style: {},
-    listeners: {},
-    setAttribute: vi.fn(),
-    append(child) { this.children.push(child) },
-    addEventListener(name, listener) { this.listeners[name] = listener },
+    ...createDevToolsBrowserEnvironment({ fetch, readyState, reload }),
+    reload,
   }
 }
 
@@ -51,7 +35,7 @@ describe('standalone development tools', () => {
 
   it('persists a valid selection and adds it only to same-origin API requests', async () => {
     const originalFetch = vi.fn().mockResolvedValue({ ok: true })
-    const browser = browserWindow(originalFetch)
+    const { browserWindow: browser } = browserEnvironment(originalFetch)
     browser.localStorage.setItem('ic.dev.userId', '7')
     installIdentityFetch(browser)
 
@@ -75,7 +59,7 @@ describe('standalone development tools', () => {
 
   it('does not add an identity header without a selected user', async () => {
     const originalFetch = vi.fn().mockResolvedValue({ ok: true })
-    const browser = browserWindow(originalFetch)
+    const { browserWindow: browser } = browserEnvironment(originalFetch)
     installIdentityFetch(browser)
 
     await browser.fetch('/api/v1/auth/me')
@@ -86,7 +70,7 @@ describe('standalone development tools', () => {
   it('supports string inputs when Request is unavailable', async () => {
     vi.stubGlobal('Request', undefined)
     const originalFetch = vi.fn().mockResolvedValue({ ok: true })
-    const browser = browserWindow(originalFetch)
+    const { browserWindow: browser } = browserEnvironment(originalFetch)
     browser.localStorage.setItem('ic.dev.userId', '7')
 
     try {
@@ -100,10 +84,8 @@ describe('standalone development tools', () => {
   })
 
   it('renders only safe display fields and switches identity after reload', () => {
-    const browser = browserWindow()
+    const { browserWindow: browser, document, reload } = browserEnvironment()
     browser.localStorage.setItem('ic.dev.userId', '1')
-    const body = element('body')
-    const document = { body, createElement: (tag) => element(tag) }
     renderUserSwitcher(browser, document, [{
       id: 1,
       displayName: 'Manager',
@@ -117,39 +99,37 @@ describe('standalone development tools', () => {
       roles: ['employee', 'ic_executor'],
     }])
 
-    const select = body.children[0].children[0].children[0]
+    const select = document.body.children[0].children[0].children[0]
     expect(select.children.map((option) => option.textContent)).toEqual([
       'Manager — IC [employee, administrator]',
       'Executor — Lab [employee, ic_executor]',
     ])
-    expect(JSON.stringify(body)).not.toContain('must-not-render@example.invalid')
+    expect(JSON.stringify(document.body)).not.toContain('must-not-render@example.invalid')
 
     select.value = '2'
-    select.listeners.change()
+    select.dispatchEvent(new Event('change'))
     expect(selectedUserId(browser)).toBe('2')
-    expect(browser.location.reload).toHaveBeenCalledOnce()
+    expect(reload).toHaveBeenCalledOnce()
   })
 
   it('replaces an invalid persisted selection with the first available user', () => {
-    const browser = browserWindow()
+    const { browserWindow: browser, document, reload } = browserEnvironment()
     browser.localStorage.setItem('ic.dev.userId', '999')
-    const body = element('body')
-    renderUserSwitcher(browser, { body, createElement: (tag) => element(tag) }, [
+    renderUserSwitcher(browser, document, [
       { id: 1, displayName: 'Manager', position: 'IC', roles: ['ic_manager'] },
     ])
 
     expect(selectedUserId(browser)).toBe('1')
-    expect(browser.location.reload).toHaveBeenCalledOnce()
-    expect(body.children).toEqual([])
+    expect(reload).toHaveBeenCalledOnce()
+    expect(document.body.children).toEqual([])
   })
 
   it('does not render a switcher for an empty user list', () => {
-    const browser = browserWindow()
-    const body = element('body')
-    renderUserSwitcher(browser, { body, createElement: (tag) => element(tag) }, [])
+    const { browserWindow: browser, document, reload } = browserEnvironment()
+    renderUserSwitcher(browser, document, [])
 
-    expect(body.children).toEqual([])
-    expect(browser.location.reload).not.toHaveBeenCalled()
+    expect(document.body.children).toEqual([])
+    expect(reload).not.toHaveBeenCalled()
   })
 
   it('renders the switcher after DOMContentLoaded when the document is loading', async () => {
@@ -157,17 +137,15 @@ describe('standalone development tools', () => {
       ok: true,
       json: async () => ({ items: [{ id: 1, displayName: 'Manager', position: 'IC', roles: ['ic_manager'] }] }),
     })
-    const browser = browserWindow(fetch)
+    const { browserWindow: browser, document, dispatchDOMContentLoaded } = browserEnvironment(fetch, 'loading')
     browser.localStorage.setItem('ic.dev.userId', '1')
-    const body = element('body')
-    const document = { readyState: 'loading', body, createElement: (tag) => element(tag) }
 
     startDevelopmentTools(browser, document)
 
     expect(fetch).not.toHaveBeenCalled()
-    expect(browser.addEventListener).toHaveBeenCalledWith('DOMContentLoaded', expect.any(Function), { once: true })
-    browser.addEventListener.mock.calls[0][1]()
-    await vi.waitFor(() => expect(body.children).toHaveLength(1))
+    dispatchDOMContentLoaded()
+    await vi.waitFor(() => expect(document.body.children).toHaveLength(1))
+    dispatchDOMContentLoaded()
     expect(fetch).toHaveBeenCalledOnce()
   })
 
@@ -176,25 +154,24 @@ describe('standalone development tools', () => {
       ok: true,
       json: async () => ({ items: [{ id: 1, displayName: 'Manager', position: 'IC', roles: ['ic_manager'] }] }),
     })
-    const browser = browserWindow(fetch)
+    const { browserWindow: browser, document } = browserEnvironment(fetch, readyState)
     browser.localStorage.setItem('ic.dev.userId', '1')
-    const body = element('body')
-    const document = { readyState, body, createElement: (tag) => element(tag) }
 
     startDevelopmentTools(browser, document)
 
-    await vi.waitFor(() => expect(body.children).toHaveLength(1))
+    await vi.waitFor(() => expect(document.body.children).toHaveLength(1))
     expect(fetch).toHaveBeenCalledOnce()
-    expect(browser.addEventListener).not.toHaveBeenCalled()
   })
 
   it('reports an unavailable endpoint after DOMContentLoaded', async () => {
-    const browser = browserWindow(vi.fn().mockResolvedValue({ ok: false, status: 503 }))
+    const { browserWindow: browser, document, dispatchDOMContentLoaded } = browserEnvironment(
+      vi.fn().mockResolvedValue({ ok: false, status: 503 }),
+      'loading',
+    )
     const error = vi.spyOn(console, 'error').mockImplementation(() => {})
-    startDevelopmentTools(browser, { readyState: 'loading', body: element('body'), createElement: (tag) => element(tag) })
+    startDevelopmentTools(browser, document)
 
-    expect(browser.addEventListener).toHaveBeenCalledWith('DOMContentLoaded', expect.any(Function), { once: true })
-    browser.addEventListener.mock.calls[0][1]()
+    dispatchDOMContentLoaded()
     await vi.waitFor(() => expect(error).toHaveBeenCalledWith(
       'Development tools failed:',
       expect.objectContaining({ message: 'Development users are unavailable (503)' }),
