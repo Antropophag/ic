@@ -10,11 +10,11 @@
 
 ```sh
 make init
-make dev
+make dev-up
 ```
 
 `make init` создаёт `.env.dev` из безопасного шаблона и подключает Git hooks.
-`make dev` собирает стек, применяет миграции, идемпотентно создаёт обычные
+`make dev-up` собирает стек, применяет миграции, идемпотентно создаёт обычные
 записи пользователей и выводит URL `http://localhost:8080`. Development-БД
 обязана оканчиваться на `_dev`: seed проверяет фактически подключённую БД до
 любой записи и отказывается работать с production/test именами.
@@ -28,11 +28,11 @@ development target-ом образа `frontend`; production bundle не соде
 
 ## Окружения
 
-| Deployment | Compose | Конфигурация | Назначение |
-|---|---|---|---|
-| production-like | `compose.yaml` | `.env` из `.env.example` | эксплуатация и локальная проверка production-сборки |
-| development | `compose.yaml` + `compose.dev.yaml` | `.env.dev` | разработка, seed и физически подключённые dev-tools |
-| test | `compose.test.yaml` | `.env.test` | единый стенд Integration, Playwright, LDAP, SMTP и runtime contracts |
+| Deployment | Compose | Конфигурация | Compose project | Назначение |
+|---|---|---|---|---|
+| production-like | `compose.yaml` | `.env` из `.env.example` | `shlz-test-registry` | эксплуатация и локальная проверка production-сборки |
+| development | `compose.yaml` + `compose.dev.yaml` | `.env.dev` | `shlz-test-registry-dev` | разработка, seed и физически подключённые dev-tools |
+| test | `compose.test.yaml` | `.env.test` | `ic-test` | единый стенд Integration, Playwright, LDAP, SMTP и runtime contracts |
 
 Приложение не выбирает режим через специальный runtime-флаг. Различия задаёт deployment:
 образом, Compose-файлом, env-конфигурацией внешних сервисов и смонтированными
@@ -67,10 +67,18 @@ bootstrap, и только после их успеха запускаются f
 make help
 make doctor
 make init
-make dev
+
+Production-like:
 make up
 make down
 make logs
+
+Development:
+make dev-up
+make dev-down
+make dev-logs
+
+Quality:
 make check
 make test
 make e2e
@@ -85,11 +93,18 @@ make schema-diagram
   deployment, backend Integration, Playwright, LDAP, SMTP, MariaDB reconnect и
   graceful shutdown scheduler.
 - `make coverage` — только backend/frontend coverage.
-- `make down` и `make logs` всегда управляют development deployment
-  (`compose.yaml + compose.dev.yaml + .env.dev`). Production-like deployment
-  запускается явно через `make up`; для его остановки используйте
-  `docker compose --env-file .env -f compose.yaml down` (либо эквивалентную
-  переданную Compose-команду).
+- `make up`, `make down` и `make logs` всегда управляют только production-like
+  deployment (`compose.yaml`, `.env`, project `shlz-test-registry`).
+- `make dev-up`, `make dev-down` и `make dev-logs` всегда управляют только
+  development deployment (`compose.yaml + compose.dev.yaml`, `.env.dev`,
+  project `shlz-test-registry-dev`).
+
+После изменения `.env` повторите `make up`, после изменения `.env.dev` —
+`make dev-up`: команды пересоздают контейнеры и передают им актуальное
+environment. Простой restart уже созданного контейнера env-файл не перечитывает.
+Production-like и development изолированы Compose project names, но по
+умолчанию публикуют один порт `8080`, поэтому для одновременного запуска одному
+из них нужно задать другой `FRONTEND_PORT` в соответствующем env-файле.
 
 Внутренние стадии build, start, reset и teardown test-стенда не являются
 публичными Make-командами. Reset требует уже собранный и поднятый deployment и
@@ -100,7 +115,9 @@ make schema-diagram
 Пока стенд поднят, reset можно повторять без пересборки:
 
 ```sh
-COMPOSE="docker compose" CONTAINER_ENGINE=docker sh scripts/test-env.sh reset
+COMPOSE="docker compose" CONTAINER_ENGINE=docker \
+  TEST_PROJECT=ic-test TEST_ENV_FILE=.env.test \
+  sh scripts/test-env.sh reset
 ```
 
 Для Podman scripts получают выбранные команды через `COMPOSE` и
@@ -116,11 +133,15 @@ COMPOSE="podman-compose --in-pod false" CONTAINER_ENGINE=podman make e2e
 требует rootful Podman: rootless provision не может установить необходимые
 ACL. В этом случае обе команды передаются с `sudo`.
 
+Test deployment управляется только через `make e2e`; production-like и
+development targets не вызывают его внутренние build/start/reset/teardown
+стадии.
+
 ## Test deployment
 
 Сервисы: `frontend`, `backend`, `scheduler`, MariaDB 11.4, Samba AD и Mailpit.
 Портал доступен на `http://localhost:18080`, Mailpit —
-`http://localhost:18025`. Все backend Integration тесты исполняются внутри
+`http://localhost:18026`. Все backend Integration тесты исполняются внутри
 этого же `backend`, после тех же миграций и seed, что используются Playwright.
 
 Домен AD: `IC.TEST`, пароль тестовых учётных записей:
