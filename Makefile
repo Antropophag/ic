@@ -2,23 +2,40 @@
 
 COMPOSE ?= $(shell if docker compose version >/dev/null 2>&1; then printf 'docker compose'; elif command -v podman-compose >/dev/null 2>&1; then printf 'podman-compose'; elif podman compose version >/dev/null 2>&1; then printf 'podman compose'; fi)
 CONTAINER_ENGINE ?= $(if $(findstring podman,$(COMPOSE)),podman,docker)
-export COMPOSE CONTAINER_ENGINE
+PROD_PROJECT := shlz-test-registry
+DEV_PROJECT := shlz-test-registry-dev
+TEST_PROJECT := ic-test
+PROD_ENV_FILE := .env
+DEV_ENV_FILE := .env.dev
+TEST_ENV_FILE := .env.test
+PROD_COMPOSE := $(COMPOSE) -p $(PROD_PROJECT) --env-file $(PROD_ENV_FILE) -f compose.yaml
+DEV_COMPOSE := $(COMPOSE) -p $(DEV_PROJECT) --env-file $(DEV_ENV_FILE) -f compose.yaml -f compose.dev.yaml
+export COMPOSE CONTAINER_ENGINE PROD_PROJECT DEV_PROJECT TEST_PROJECT DEV_ENV_FILE TEST_ENV_FILE
 
-.PHONY: help doctor init dev up down logs check test e2e coverage schema-diagram \
+.PHONY: help doctor init up down logs dev-up dev-down dev-logs check test e2e coverage schema-diagram \
 	_check-backend _check-frontend _check-repository _dev-contract _test-up _test-reset _test-down
 
 help:
+	@echo "make help            Показать эту справку"
 	@echo "make doctor          Проверить локальные инструменты"
 	@echo "make init            Создать .env.dev и подключить Git hooks"
-	@echo "make dev             Поднять и подготовить development"
-	@echo "make up              Поднять production-like deployment из .env"
-	@echo "make down            Остановить development deployment из .env.dev"
-	@echo "make logs            Показать логи development deployment"
-	@echo "make check           Линтеры, анализ, unit, Vitest и production build"
-	@echo "make test            Полная проверка: check + единый test deployment"
-	@echo "make e2e             Integration, Playwright и runtime contracts"
-	@echo "make coverage        Только отчёты покрытия"
-	@echo "make schema-diagram  Обновить ER-диаграмму"
+	@echo ""
+	@echo "Production-like:"
+	@echo "  make up            Поднять deployment из .env"
+	@echo "  make down          Остановить deployment из .env"
+	@echo "  make logs          Показать логи deployment"
+	@echo ""
+	@echo "Development:"
+	@echo "  make dev-up        Поднять и подготовить deployment из .env.dev"
+	@echo "  make dev-down      Остановить deployment из .env.dev"
+	@echo "  make dev-logs      Показать логи deployment"
+	@echo ""
+	@echo "Quality:"
+	@echo "  make check         Линтеры, анализ, unit, Vitest и production build"
+	@echo "  make test          Полная проверка: check + единый test deployment"
+	@echo "  make e2e           Integration, Playwright и runtime contracts"
+	@echo "  make coverage      Только отчёты покрытия"
+	@echo "  make schema-diagram Обновить ER-диаграмму"
 
 doctor:
 	@test -n "$(COMPOSE)" || { echo "Нужен Docker Compose или Podman Compose." >&2; exit 1; }
@@ -31,23 +48,31 @@ init: doctor
 	@test -f .env.dev || { cp .env.dev.example .env.dev; echo "Создан .env.dev"; }
 	sh scripts/install-git-hooks.sh
 
-dev: doctor
-	sh scripts/dev.sh
-
 up: doctor
-	@test -f .env || { echo "Скопируйте .env.example в .env и заполните production-настройки." >&2; exit 2; }
-	$(COMPOSE) --env-file .env -f compose.yaml up -d --build mariadb backend
-	$(COMPOSE) --env-file .env -f compose.yaml run --rm backend php yii migrate/up --interactive=0
-	$(COMPOSE) --env-file .env -f compose.yaml run --rm backend php yii admin/bootstrap
-	$(COMPOSE) --env-file .env -f compose.yaml up -d frontend scheduler
+	@test -f $(PROD_ENV_FILE) || { echo "Скопируйте .env.example в .env и заполните production-настройки." >&2; exit 2; }
+	COMPOSE_ENV_FILE=$(PROD_ENV_FILE) $(PROD_COMPOSE) up -d --build --force-recreate mariadb backend
+	COMPOSE_ENV_FILE=$(PROD_ENV_FILE) $(PROD_COMPOSE) run --rm backend php yii migrate/up --interactive=0
+	COMPOSE_ENV_FILE=$(PROD_ENV_FILE) $(PROD_COMPOSE) run --rm backend php yii admin/bootstrap
+	COMPOSE_ENV_FILE=$(PROD_ENV_FILE) $(PROD_COMPOSE) up -d --force-recreate frontend scheduler
 
 down: doctor
-	@test -f .env.dev || { echo "Для make down нужен .env.dev (make init)." >&2; exit 2; }
-	COMPOSE_ENV_FILE=.env.dev $(COMPOSE) --env-file .env.dev -f compose.yaml -f compose.dev.yaml down --remove-orphans
+	@test -f $(PROD_ENV_FILE) || { echo "Для make down нужен .env." >&2; exit 2; }
+	$(PROD_COMPOSE) down --remove-orphans
 
 logs: doctor
-	@test -f .env.dev || { echo "Для make logs нужен .env.dev (make init)." >&2; exit 2; }
-	COMPOSE_ENV_FILE=.env.dev $(COMPOSE) --env-file .env.dev -f compose.yaml -f compose.dev.yaml logs --tail=200
+	@test -f $(PROD_ENV_FILE) || { echo "Для make logs нужен .env." >&2; exit 2; }
+	$(PROD_COMPOSE) logs --tail=200
+
+dev-up: doctor
+	sh scripts/dev.sh
+
+dev-down: doctor
+	@test -f $(DEV_ENV_FILE) || { echo "Для make dev-down нужен .env.dev (make init)." >&2; exit 2; }
+	COMPOSE_ENV_FILE=$(DEV_ENV_FILE) $(DEV_COMPOSE) down --remove-orphans
+
+dev-logs: doctor
+	@test -f $(DEV_ENV_FILE) || { echo "Для make dev-logs нужен .env.dev (make init)." >&2; exit 2; }
+	COMPOSE_ENV_FILE=$(DEV_ENV_FILE) $(DEV_COMPOSE) logs --tail=200
 
 check: doctor _check-frontend _check-backend _check-repository
 	git diff --check

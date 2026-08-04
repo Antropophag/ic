@@ -11,8 +11,8 @@ Production Compose содержит четыре сервиса: `frontend`, `ba
 cp .env.example .env
 make doctor
 make up
-docker compose --env-file .env -f compose.yaml logs
-docker compose --env-file .env -f compose.yaml down
+make logs
+make down
 ```
 
 `make up` при каждом запуске поднимает MariaDB и backend, применяет миграции,
@@ -50,7 +50,7 @@ Bootstrap не выполняет LDAP bind/search и не создаёт AD acc
 Ручной повтор:
 
 ```sh
-docker compose --env-file .env -f compose.yaml exec backend php yii admin/bootstrap
+docker compose -p shlz-test-registry --env-file .env -f compose.yaml exec backend php yii admin/bootstrap
 ```
 
 Прямой `docker compose up -d` не выполняет миграции и bootstrap. Для production
@@ -59,16 +59,37 @@ deployment требуется `make up`; при прямом Compose-запус�
 
 Docker Compose и Podman Compose равноправны. Makefile определяет доступную
 реализацию и экспортирует `COMPOSE`/`CONTAINER_ENGINE` в scripts. Публичные
-`make logs` и `make down` однозначно относятся к development; production-like
-deployment управляется явной Compose-командой выше.
+`make up`, `make down` и `make logs` однозначно относятся к production-like
+deployment (`compose.yaml`, `.env`, project `shlz-test-registry`). Development
+управляется отдельными `make dev-up`, `make dev-down` и `make dev-logs`
+(`compose.yaml + compose.dev.yaml`, `.env.dev`, project
+`shlz-test-registry-dev`). Test использует только `compose.test.yaml`,
+`.env.test` и project `ic-test` через `make e2e`.
+
+После изменения `.env` нужно снова выполнить `make up`, а после изменения
+`.env.dev` — `make dev-up`: соответствующие контейнеры будут пересозданы с
+новым environment. Обычный restart контейнера env-файл не перечитывает.
+Разные project names исключают управление чужими контейнерами и orphan
+warnings между окружениями. По умолчанию production-like и development оба
+публикуют порт `8080`; для их одновременного запуска одному deployment нужен
+другой `FRONTEND_PORT` в его env-файле.
+
+Test deployment разделяет build, start, reset и teardown. `make e2e` ровно один
+раз собирает актуальные backend/frontend images с layer cache и затем запускает
+Compose только с `--no-build`. Scheduler использует тот же image, что backend.
+Reset работает только внутри уже поднятого test deployment: очищает БД,
+применяет migrations, seed, очищает Mailpit и test storage, не выполняя Docker,
+Composer или npm build. Teardown удаляет test containers, network и volumes,
+но сохраняет images и caches. Кастомный Samba AD fixture собирается вместе с
+первым build только при отсутствии локального image и далее не пересобирается.
 
 Scheduler запускает `php yii notification/work`, использует тот же backend
 image и завершается по SIGTERM с grace period 15 секунд. Разовая ручная
 обработка:
 
 ```sh
-docker compose --env-file .env -f compose.yaml exec backend php yii notification/send
-sudo podman-compose --in-pod false --env-file .env -f compose.yaml exec backend php yii notification/send
+docker compose -p shlz-test-registry --env-file .env -f compose.yaml exec backend php yii notification/send
+sudo podman-compose --in-pod false -p shlz-test-registry --env-file .env -f compose.yaml exec backend php yii notification/send
 ```
 
 Готовность: `/health/ready`; liveness: `/health/live`. Документы хранятся в

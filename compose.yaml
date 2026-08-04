@@ -1,5 +1,3 @@
-name: shlz-test-registry
-
 services:
   frontend:
     build:

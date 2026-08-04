@@ -10,7 +10,7 @@
 ## Безопасная разведка
 
 ```bash
-docker compose exec backend php yii bitrix/inspect --max-pages=1
+docker compose -p shlz-test-registry --env-file .env -f compose.yaml exec backend php yii bitrix/inspect --max-pages=1
 ```
 
 Команда выводит только количество записей, статусы и число вложений. Названия,
@@ -29,13 +29,13 @@ docker compose exec backend php yii bitrix/inspect --max-pages=1
 Команда импорта по умолчанию выполняет dry-run и не меняет БД:
 
 ```bash
-docker compose exec backend php yii bitrix/import --max-pages=1
+docker compose -p shlz-test-registry --env-file .env -f compose.yaml exec backend php yii bitrix/import --max-pages=1
 ```
 
 Запись включается только явным параметром:
 
 ```bash
-docker compose exec backend php yii bitrix/import --max-pages=1 --apply=1
+docker compose -p shlz-test-registry --env-file .env -f compose.yaml exec backend php yii bitrix/import --max-pages=1 --apply=1
 ```
 
 Значение должно быть ровно `1`. Любое другое значение, кроме безопасного `0`,
