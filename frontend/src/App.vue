@@ -69,6 +69,16 @@ function openAdmin() {
   closeRequest({ push: false })
 }
 
+function openAdminRequest(requestId) {
+  const id = Number(requestId)
+  if (!Number.isInteger(id) || id <= 0) return
+  selectedRequestId.value = id
+  selectedRequestTitle.value = null
+  requestWarning.value = ''
+  showAdmin.value = false
+  setRequestInUrl(selectedRequestId.value, { push: true })
+}
+
 function refreshRegistry() {
   registryRefreshTrigger.value += 1
 }
@@ -125,7 +135,7 @@ onBeforeUnmount(() => {
             </div>
           </div>
         </header>
-        <AdminPanel v-if="showAdmin" @close="showAdmin = false" />
+        <AdminPanel v-if="showAdmin" @close="showAdmin = false" @open-request="openAdminRequest" />
         <RequestDetails v-else-if="selectedRequestId" :request-id="selectedRequestId" :current-initials="currentInitials" :initial-warning="requestWarning" @loaded="selectedRequestTitle = $event" @updated="refreshRegistry" @close="closeRequest()" />
         <RequestRegistry
           :active="!showAdmin && !selectedRequestId"
