@@ -7,12 +7,15 @@ export function selectedUserId(browserWindow) {
 
 export function installIdentityFetch(browserWindow) {
   const originalFetch = browserWindow.fetch.bind(browserWindow)
+  const RequestCtor = browserWindow.Request ?? globalThis.Request
   browserWindow.fetch = (input, init = {}) => {
-    const url = typeof input === 'string' ? input : input.url
-    const sameOrigin = new URL(url, browserWindow.location.href).origin === browserWindow.location.origin
-    const headers = new Headers(init.headers || (input instanceof Request ? input.headers : undefined))
+    const isRequest = Boolean(RequestCtor) && input instanceof RequestCtor
+    const url = isRequest ? input.url : input
+    const parsedUrl = new URL(url, browserWindow.location.href)
+    const sameOriginApi = parsedUrl.origin === browserWindow.location.origin && parsedUrl.pathname.startsWith('/api/')
+    const headers = new Headers(init.headers || (isRequest ? input.headers : undefined))
     const userId = selectedUserId(browserWindow)
-    if (sameOrigin && url.startsWith('/api/') && userId) {
+    if (sameOriginApi && userId) {
       headers.set('X-Dev-User-ID', userId)
     }
     return originalFetch(input, {...init, headers})
@@ -67,8 +70,4 @@ export function startDevelopmentTools(browserWindow, document) {
       .then((result) => renderUserSwitcher(browserWindow, document, result.items))
       .catch((error) => console.error('Development tools failed:', error))
   })
-}
-
-if (typeof window !== 'undefined' && typeof document !== 'undefined') {
-  startDevelopmentTools(window, document)
 }

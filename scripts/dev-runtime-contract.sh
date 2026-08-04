@@ -13,8 +13,11 @@ base=$(compose_http_url frontend 8080)
 
 curl -fsS "$base/health/live" | grep -q '"status":"ok"'
 curl -fsS "$base/health/ready" | grep -q '"status":"ready"'
-curl -fsS "$base/" | grep -q '<script type="module" src="/dev-tools.js"></script>'
-curl -fsS "$base/dev-tools.js" | grep -q 'X-Dev-User-ID'
+index_html=$(curl -fsS "$base/")
+if printf '%s' "$index_html" | grep -q '/dev-tools.js'; then
+  echo "Development frontend must initialize dev-tools through the application bootstrap" >&2
+  exit 1
+fi
 
 users=$(curl -fsS "$base/api/v1/dev/users")
 printf '%s' "$users" | node -e '
