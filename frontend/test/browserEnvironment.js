@@ -32,6 +32,8 @@ class TestElement extends EventTarget {
 }
 
 export function createDevToolsBrowserEnvironment({ fetch, readyState = 'complete', reload = () => {} } = {}) {
+  if (typeof fetch !== 'function') throw new TypeError('fetch must be a function')
+
   const events = new EventTarget()
   let currentReadyState = readyState
   const document = {
