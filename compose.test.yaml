@@ -1,7 +1,6 @@
-name: shlz-test-registry-test
-
 services:
   frontend:
+    image: shlz-test-registry-test-frontend
     build:
       context: .
       dockerfile: docker/frontend.Dockerfile
@@ -11,11 +10,12 @@ services:
       backend: {condition: service_started}
 
   backend:
+    image: shlz-test-registry-test-backend
     build:
       context: .
       dockerfile: docker/backend.Dockerfile
       target: test
-    env_file: .env.test
+    env_file: ${TEST_ENV_FILE:-.env.test}
     depends_on:
       mariadb: {condition: service_healthy}
       ad: {condition: service_healthy}
@@ -28,11 +28,12 @@ services:
       - ./deployment/test/console.php:/app/deployment/console.php:ro
 
   scheduler:
+    image: shlz-test-registry-test-backend
     build:
       context: .
       dockerfile: docker/backend.Dockerfile
       target: test
-    env_file: .env.test
+    env_file: ${TEST_ENV_FILE:-.env.test}
     depends_on:
       mariadb: {condition: service_healthy}
       mailpit: {condition: service_healthy}
@@ -65,7 +66,7 @@ services:
     environment:
       MP_SMTP_AUTH_ACCEPT_ANY: "1"
       MP_SMTP_AUTH_ALLOW_INSECURE: "1"
-    ports: ["18025:8025"]
+    ports: ["${MAILPIT_PORT}:8025"]
     healthcheck:
       test: ["CMD", "/mailpit", "readyz"]
       interval: 2s
@@ -73,6 +74,7 @@ services:
       retries: 20
 
   ad:
+    image: shlz-test-registry-test-ad
     build:
       context: .
       dockerfile: docker/test-ad.Dockerfile

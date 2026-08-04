@@ -3,23 +3,37 @@ set -eu
 project_root=$(CDPATH='' cd -- "$(dirname -- "$0")/.." && pwd)
 cd "$project_root"
 : "${COMPOSE:?COMPOSE must be provided by Makefile}"
+: "${TEST_PROJECT:?TEST_PROJECT must be provided by Makefile}"
+: "${TEST_ENV_FILE:?TEST_ENV_FILE must be provided by Makefile}"
+compose="$COMPOSE -p $TEST_PROJECT --env-file $TEST_ENV_FILE -f compose.test.yaml"
+. scripts/compose-metadata.sh
 cleanup() {
   status=$?
   cd "$project_root"
   if [ "$status" -ne 0 ]; then
-    echo "Test deployment failed; container status and recent logs follow." >&2
-    $COMPOSE --env-file .env.test -f compose.test.yaml ps >&2 || true
-    $COMPOSE --env-file .env.test -f compose.test.yaml logs --tail=200 >&2 || true
+    echo "Test deployment failed; saving container status and recent logs." >&2
+    diagnostics=frontend/playwright-report/deployment
+    mkdir -p "$diagnostics"
+    $compose ps >"$diagnostics/ps.txt" 2>&1 || true
+    $compose logs --tail=200 >"$diagnostics/logs.txt" 2>&1 || true
   fi
-  sh scripts/test-env.sh down || true
+  sh scripts/test-env.sh destroy || true
   return "$status"
 }
 trap cleanup EXIT
 trap 'exit 130' INT
 trap 'exit 143' TERM
+sh scripts/test-env.sh build
 sh scripts/test-env.sh up
-sh scripts/test-env.sh reset
-$COMPOSE --env-file .env.test -f compose.test.yaml exec -T backend \
+if [ -z "${TEST_BASE_URL:-}" ]; then
+  TEST_BASE_URL=$(compose_http_url frontend 8080)
+  export TEST_BASE_URL
+fi
+if [ -z "${MAILPIT_BASE_URL:-}" ]; then
+  MAILPIT_BASE_URL=$(compose_http_url mailpit 8025)
+  export MAILPIT_BASE_URL
+fi
+$compose exec -T backend \
   vendor/bin/phpunit -c phpunit.integration.xml --colors=always
 sh scripts/test-env.sh reset
 npm --prefix frontend ci --no-audit --no-fund
@@ -29,8 +43,8 @@ if [ -n "${CI:-}" ]; then
 else
   npm exec -- playwright install chromium
 fi
-E2E_BASE_URL="${TEST_BASE_URL:-http://localhost:18080}" \
-  MAILPIT_BASE_URL="${MAILPIT_BASE_URL:-http://localhost:18025}" \
+E2E_BASE_URL="$TEST_BASE_URL" \
+  MAILPIT_BASE_URL="$MAILPIT_BASE_URL" \
   TEST_AD_LOGIN="${TEST_AD_LOGIN:-initiator}" \
   TEST_AD_PASSWORD="${TEST_AD_PASSWORD:-TestPassword1!}" npm run e2e
 cd "$project_root"

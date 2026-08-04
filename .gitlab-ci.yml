@@ -43,9 +43,7 @@ e2e:
   variables:
     DOCKER_HOST: tcp://docker:2375
     DOCKER_TLS_CERTDIR: ""
-    E2E_BASE_URL: http://docker:18080
-    TEST_BASE_URL: http://docker:18080
-    MAILPIT_BASE_URL: http://docker:18025
+    COMPOSE_PUBLISHED_HOST: docker
   before_script:
     - apt-get update
     - apt-get install -y --no-install-recommends docker.io docker-compose-v2 make

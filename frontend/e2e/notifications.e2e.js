@@ -1,6 +1,7 @@
 import { expect, test } from '@playwright/test'
 
-const mailpit = process.env.MAILPIT_BASE_URL || 'http://localhost:18025'
+const mailpit = process.env.MAILPIT_BASE_URL
+if (!mailpit) throw new Error('MAILPIT_BASE_URL must be provided by scripts/e2e.sh')
 
 async function findMessages(marker) {
   const result = await fetch(`${mailpit}/api/v1/messages`).then(value => value.json())
