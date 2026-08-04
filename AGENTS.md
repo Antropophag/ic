@@ -9,9 +9,14 @@
 - Surface uncertainty, risk, and incomplete verification without hiding them.
 - Leave the repository in a coherent, reviewable, and maintainable state.
 
+## Instruction Hierarchy
+
+- Use this document as the default engineering workflow for AI coding agents.
+- Apply repository-specific documentation as the source of project-specific rules.
+- Let canonical engineering standards, such as `docs/engineering-standards.md`, override this document for Definition of Done, architecture, coding conventions, testing, security, release process, and Git workflow.
+
 ## Engineering Principles
 
-- Read before editing.
 - Treat existing behavior, tests, documentation, and interfaces as constraints.
 - Minimize the changed surface while completing the full requirement.
 - Make assumptions explicit when evidence cannot resolve them.
@@ -170,14 +175,9 @@
 
 ## Definition of Done
 
-- All explicit requirements are implemented.
-- Relevant automated checks pass on the final revision.
-- New or changed behavior has proportionate test coverage.
-- Compatibility and error behavior are verified or explicitly changed by requirement.
-- The diff contains no unrelated modifications or temporary artifacts.
-- Documentation and configuration are updated where behavior requires them.
-- Remaining uncertainty and unexecuted validation are disclosed.
-- A reviewer can evaluate the change without reconstructing hidden decisions.
+- Satisfy the canonical Definition of Done in the repository engineering standards before declaring completion.
+- Do not treat this document's workflow, acceptance criteria, or checklists as substitutes for repository standards.
+- Use this document's workflow and acceptance criteria as the default only when the repository defines no canonical Definition of Done.
 
 ## Anti-patterns
 
