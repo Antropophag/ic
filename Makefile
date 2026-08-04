@@ -52,6 +52,7 @@ up: doctor
 	@test -f $(PROD_ENV_FILE) || { echo "Скопируйте .env.example в .env и заполните production-настройки." >&2; exit 2; }
 	COMPOSE_ENV_FILE=$(PROD_ENV_FILE) $(PROD_COMPOSE) up -d --build --force-recreate mariadb backend
 	COMPOSE_ENV_FILE=$(PROD_ENV_FILE) $(PROD_COMPOSE) run --rm backend php yii migrate/up --interactive=0
+	COMPOSE_ENV_FILE=$(PROD_ENV_FILE) $(PROD_COMPOSE) run --rm backend php yii admin/provision-break-glass
 	COMPOSE_ENV_FILE=$(PROD_ENV_FILE) $(PROD_COMPOSE) run --rm backend php yii admin/bootstrap
 	COMPOSE_ENV_FILE=$(PROD_ENV_FILE) $(PROD_COMPOSE) up -d --force-recreate frontend scheduler
 

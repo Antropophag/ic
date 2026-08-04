@@ -5,6 +5,8 @@ declare(strict_types=1);
 namespace App\Console;
 
 use App\Infrastructure\Deployment\DatabasePurpose;
+use App\Infrastructure\Identity\BreakGlassConfiguration;
+use App\Infrastructure\Identity\BreakGlassIdentityProvisioner;
 use Yii;
 use yii\helpers\FileHelper;
 use yii\console\Controller;
@@ -30,7 +32,16 @@ final class TestController extends Controller
             return ExitCode::UNSPECIFIED_ERROR;
         }
 
-        return (new DevController('dev-seeder', $this->module))->seedUsers();
+        $seedResult = (new DevController('dev-seeder', $this->module))->seedUsers();
+        if ($seedResult !== ExitCode::OK) {
+            return $seedResult;
+        }
+
+        (new BreakGlassIdentityProvisioner(
+            Yii::$app->db,
+            BreakGlassConfiguration::fromEnvironment(),
+        ))->provision();
+        return ExitCode::OK;
     }
 
     public function actionSeed(): int

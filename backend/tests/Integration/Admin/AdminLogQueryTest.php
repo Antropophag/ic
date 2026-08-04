@@ -57,6 +57,36 @@ final class AdminLogQueryTest extends IntegrationTestCase
         self::assertSame('denied', $page['items'][0]['result']);
     }
 
+    public function testBreakGlassAuditUsesSafePresentation(): void
+    {
+        $actor = $this->createUser('audit.break.glass', 'Emergency Administrator');
+        $this->db()->createCommand()->insert('{{%audit_events}}', [
+            'event_type' => 'authentication.break_glass_denied',
+            'entity_type' => 'user',
+            'entity_id' => $actor,
+            'actor_id' => $actor,
+            'rule_id' => 'AUTH-006',
+            'payload_json' => [
+                'authentication_type' => 'break_glass',
+                'ip' => '192.0.2.30',
+                'user_agent' => 'Safe browser',
+                'reason' => 'invalid_credentials',
+                'password' => 'must-not-be-presented',
+            ],
+            'created_at' => '2026-08-04 10:00:00.000000',
+        ])->execute();
+
+        $page = (new AuditQuery($this->db()))->findPage($this->auditFilters([
+            'eventType' => 'authentication.break_glass_denied',
+        ]));
+
+        self::assertSame('Аварийный вход отклонён', $page['items'][0]['title']);
+        self::assertSame('denied', $page['items'][0]['result']);
+        self::assertSame('AUTH-006', $page['items'][0]['ruleId']);
+        self::assertSame('invalid_credentials', $page['items'][0]['details']['reason']);
+        self::assertArrayNotHasKey('password', $page['items'][0]['details']);
+    }
+
     public function testSentAfterRetryIsNormalAndNotProblematic(): void
     {
         $actor = $this->createUser('notify.sent', 'Notify Sent');

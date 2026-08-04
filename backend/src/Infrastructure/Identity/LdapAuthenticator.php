@@ -21,8 +21,15 @@ final class LdapAuthenticator
     /** @return array{id: int, displayName: string} */
     public function authenticate(string $login, string $password): array
     {
+        if (hash_equals(BreakGlassAuthenticator::TECHNICAL_LOGIN, $login)) {
+            throw new AuthenticationDenied();
+        }
+
         $profile = $this->ldap->authenticate($login, $password);
         if ($profile === null) {
+            throw new AuthenticationDenied();
+        }
+        if (hash_equals(BreakGlassAuthenticator::TECHNICAL_LOGIN, $profile->login)) {
             throw new AuthenticationDenied();
         }
 

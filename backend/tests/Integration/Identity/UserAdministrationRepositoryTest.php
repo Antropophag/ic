@@ -7,6 +7,7 @@ namespace Tests\Integration\Identity;
 use App\Domain\Identity\DuplicateAdLogin;
 use App\Domain\Identity\UserAdministrationTargetNotFound;
 use App\Infrastructure\Identity\LdapAuthenticator;
+use App\Infrastructure\Identity\BreakGlassAuthenticator;
 use App\Infrastructure\Identity\UserAdministrationRepository;
 use App\Infrastructure\Ldap\LdapProfile;
 use Tests\Integration\IntegrationTestCase;
@@ -42,6 +43,42 @@ final class UserAdministrationRepositoryTest extends IntegrationTestCase
 
         $this->expectException(DuplicateAdLogin::class);
         $repository->createPlaceholder('existing.login', 'Кто-то ещё', $admin);
+    }
+
+    public function testReservedTechnicalIdentityCannotBeCreatedOrHaveRolesManaged(): void
+    {
+        $admin = $this->createUser('dev.admin.reserved', 'Тестовый администратор');
+        $repository = new UserAdministrationRepository($this->db());
+
+        try {
+            $repository->createPlaceholder(
+                BreakGlassAuthenticator::TECHNICAL_LOGIN,
+                'Collision',
+                $admin,
+            );
+            self::fail('Expected the reserved login to be rejected.');
+        } catch (DuplicateAdLogin) {
+        }
+
+        $technicalId = $this->createUser(
+            BreakGlassAuthenticator::TECHNICAL_LOGIN,
+            'Аварийный администратор',
+        );
+        $roleId = (int) $this->scalar("SELECT id FROM {{%roles}} WHERE code = 'employee'");
+        $deniedOperations = 0;
+        try {
+            $repository->assignRole($technicalId, $roleId, $admin);
+            self::fail('Expected assignRole to reject the technical identity.');
+        } catch (UserAdministrationTargetNotFound) {
+            ++$deniedOperations;
+        }
+        try {
+            $repository->revokeRole($technicalId, $roleId, $admin);
+            self::fail('Expected revokeRole to reject the technical identity.');
+        } catch (UserAdministrationTargetNotFound) {
+            ++$deniedOperations;
+        }
+        self::assertSame(2, $deniedOperations);
     }
 
     public function testAssignRoleGrantsRoleAndWritesAudit(): void

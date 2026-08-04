@@ -7,7 +7,7 @@ backend-уровень — Integration с настоящей MariaDB; брауз
 | Уровень | Что защищает | Команда |
 |---|---|---|
 | PHPUnit Unit | чистые workflow, policy, mapper, шаблоны | `make check` |
-| PHPUnit Integration | SQL, транзакции, документы, outbox, LDAP adapter | `make e2e` |
+| PHPUnit Integration | SQL, транзакции, документы, outbox, LDAP и break-glass auth | `make e2e` |
 | Vitest | frontend-логика и API client | `make check` |
 | Playwright | вход и критические маршруты через реальный `frontend` | `make e2e` |
 | Runtime contracts | LDAP/SMTP/MariaDB/scheduler recovery | `make e2e` |
