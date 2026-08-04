@@ -216,6 +216,7 @@ test('администратор читает журналы действий и
   const initiator = await apiFor(baseURL, 3)
   const manager = await apiFor(baseURL, 1)
   const admin = await apiFor(baseURL, 6)
+  try {
   const created = await expectOk(await initiator.post('/api/v1/requests', { data: {
     productName: marker,
     manufacturer: 'Тестовый производитель',
@@ -253,5 +254,7 @@ test('администратор читает журналы действий и
   await expect(page.getByText('SECRET BODY')).toHaveCount(0)
   await page.getByRole('button', { name: new RegExp(`Заявка №`) }).first().click()
   await expect(page.locator('.object-title', { hasText: marker })).toBeVisible()
-  await Promise.all([initiator.dispose(), manager.dispose(), admin.dispose()])
+  } finally {
+    await Promise.allSettled([initiator.dispose(), manager.dispose(), admin.dispose()])
+  }
 })

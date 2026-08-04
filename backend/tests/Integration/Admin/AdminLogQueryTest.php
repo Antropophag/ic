@@ -6,6 +6,7 @@ namespace Tests\Integration\Admin;
 
 use App\Infrastructure\Admin\AuditQuery;
 use App\Infrastructure\Admin\NotificationQuery;
+use InvalidArgumentException;
 use Tests\Integration\IntegrationTestCase;
 
 final class AdminLogQueryTest extends IntegrationTestCase
@@ -43,6 +44,47 @@ final class AdminLogQueryTest extends IntegrationTestCase
         self::assertSame('Ошибка SMTP', $page['items'][0]['lastError']);
         self::assertArrayNotHasKey('body', $page['items'][0]);
         self::assertSame('stale', $page['items'][1]['health']);
+    }
+
+    public function testUnknownDeniedSuffixIsDeniedAndIncludedByFilter(): void
+    {
+        $actor = $this->createUser('audit.denied', 'Audit Denied');
+        $requestId = $this->request($actor);
+        $this->audit($actor, $requestId, 'request.future_action_denied', '2026-08-04 10:00:00.000000', []);
+
+        $page = (new AuditQuery($this->db()))->findPage($this->auditFilters(['result' => 'denied']));
+
+        self::assertSame('denied', $page['items'][0]['result']);
+    }
+
+    public function testSentAfterRetryIsNormalAndNotProblematic(): void
+    {
+        $actor = $this->createUser('notify.sent', 'Notify Sent');
+        $requestId = $this->request($actor);
+        $this->notification($requestId, 'sent', 2, '2026-08-04 10:00:00.000000', 'previous SMTP error');
+        $query = new NotificationQuery($this->db());
+
+        $all = $query->findPage($this->notificationFilters());
+        $problematic = $query->findPage($this->notificationFilters(['problematic' => '1']));
+
+        self::assertSame('normal', $all['items'][0]['health']);
+        self::assertFalse($all['items'][0]['isRetrying']);
+        self::assertSame([], $problematic['items']);
+    }
+
+    public function testRejectsSemanticallyInvalidCursors(): void
+    {
+        $cursor = rtrim(strtr(base64_encode(json_encode(['at' => 'not-a-date', 'id' => 0], JSON_THROW_ON_ERROR)), '+/', '-_'), '=');
+
+        foreach ([new AuditQuery($this->db()), new NotificationQuery($this->db())] as $query) {
+            try {
+                $filters = $query instanceof AuditQuery ? $this->auditFilters(['cursor' => $cursor]) : $this->notificationFilters(['cursor' => $cursor]);
+                $query->findPage($filters);
+                self::fail('Invalid cursor must be rejected');
+            } catch (InvalidArgumentException $error) {
+                self::assertSame('Invalid cursor', $error->getMessage());
+            }
+        }
     }
 
     /**

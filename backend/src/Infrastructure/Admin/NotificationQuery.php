@@ -50,7 +50,7 @@ final class NotificationQuery
             $params[':dateTo'] = $filters['dateTo'] . ' 00:00:00.000000';
         }
         if ($filters['problematic'] === '1' || $filters['problematic'] === 1 || $filters['problematic'] === true) {
-            $where[] = "(n.status = 'failed' OR n.attempts > 1 "
+            $where[] = "(n.status = 'failed' OR (n.status IN ('pending', 'sending') AND n.attempts > 1) "
                 . "OR (n.status = 'sending' AND n.next_attempt_at <= :now) "
                 . "OR (n.status = 'pending' AND n.next_attempt_at <= DATE_SUB(:now, INTERVAL 300 SECOND)))";
             $params[':now'] = gmdate('Y-m-d H:i:s.u');
@@ -86,11 +86,15 @@ final class NotificationQuery
     {
         $status = (string) $row['status'];
         $attempts = (int) $row['attempts'];
-        $due = strtotime((string) $row['next_attempt_at']) <= time();
-        $pendingStale = $status === 'pending' && strtotime((string) $row['next_attempt_at']) <= time() - 300;
+        $now = new \DateTimeImmutable('now', new \DateTimeZone('UTC'));
+        $nextAttempt = new \DateTimeImmutable((string) $row['next_attempt_at'], new \DateTimeZone('UTC'));
+        $due = $nextAttempt <= $now;
+        $pendingStale = $status === 'pending' && $nextAttempt <= $now->modify('-300 seconds');
         $health = $status === 'failed'
             ? 'failed'
-            : (($status === 'sending' && $due) || $pendingStale ? 'stale' : ($attempts > 1 ? 'retrying' : 'normal'));
+            : (($status === 'sending' && $due) || $pendingStale
+                ? 'stale'
+                : (in_array($status, ['pending', 'sending'], true) && $attempts > 1 ? 'retrying' : 'normal'));
         return ['id' => (int) $row['id'], 'requestId' => (int) $row['request_id'], 'requestLabel' => 'Заявка №' . $row['request_number'],
             'eventType' => (string) $row['event_type'], 'eventTitle' => self::TITLES[$row['event_type']] ?? 'Системное уведомление',
             'recipient' => ['email' => (string) $row['recipient_email'], 'name' => (string) $row['recipient_name']],
@@ -114,7 +118,10 @@ final class NotificationQuery
     {
         $decoded = base64_decode(strtr($cursor, '-_', '+/'), true);
         $data = $decoded === false ? null : json_decode($decoded, true);
-        if (!is_array($data) || !isset($data['at'], $data['id']) || !is_string($data['at']) || !is_int($data['id'])) {
+        if (
+            !is_array($data) || !isset($data['at'], $data['id']) || !is_string($data['at']) || !is_int($data['id'])
+            || !$this->validTimestamp($data['at']) || $data['id'] < 1
+        ) {
             throw new InvalidArgumentException('Invalid cursor');
         }
         return [$data['at'], $data['id']];
@@ -126,5 +133,10 @@ final class NotificationQuery
     private function iso(string $value): string
     {
         return str_replace(' ', 'T', $value) . 'Z';
+    }
+    private function validTimestamp(string $value): bool
+    {
+        $date = \DateTimeImmutable::createFromFormat('!Y-m-d H:i:s.u', $value, new \DateTimeZone('UTC'));
+        return $date !== false && $date->format('Y-m-d H:i:s.u') === $value;
     }
 }

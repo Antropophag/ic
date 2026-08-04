@@ -346,7 +346,8 @@ it('lists admin users and roles', async () => {
 })
 
 it('lists read-only admin logs with shared safe query serialization', async () => {
-  const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({ items: [] }), { status: 200 }))
+  const response = () => new Response(JSON.stringify({ items: [] }), { status: 200 })
+  const fetchMock = vi.fn().mockImplementation(response)
   vi.stubGlobal('fetch', fetchMock)
 
   await adminApi.auditEvents({ actorId: 7, result: 'denied', cursor: 'abc', empty: '' })
@@ -354,6 +355,15 @@ it('lists read-only admin logs with shared safe query serialization', async () =
 
   expect(fetchMock).toHaveBeenNthCalledWith(1, '/api/v1/admin/audit-events?actorId=7&result=denied&cursor=abc', expect.any(Object))
   expect(fetchMock).toHaveBeenNthCalledWith(2, '/api/v1/admin/notifications?status=failed&requestId=42', expect.any(Object))
+})
+
+it('omits unsupported admin query values', async () => {
+  const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({ items: [] }), { status: 200 }))
+  vi.stubGlobal('fetch', fetchMock)
+
+  await adminApi.auditEvents({ actorId: 7, object: { secret: true }, array: ['denied'] })
+
+  expect(fetchMock).toHaveBeenCalledWith('/api/v1/admin/audit-events?actorId=7', expect.any(Object))
 })
 
 it('creates a pre-provisioned admin user as JSON', async () => {

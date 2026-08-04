@@ -70,7 +70,9 @@ function openAdmin() {
 }
 
 function openAdminRequest(requestId) {
-  selectedRequestId.value = Number(requestId)
+  const id = Number(requestId)
+  if (!Number.isInteger(id) || id <= 0) return
+  selectedRequestId.value = id
   selectedRequestTitle.value = null
   requestWarning.value = ''
   showAdmin.value = false

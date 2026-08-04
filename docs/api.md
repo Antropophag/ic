@@ -46,7 +46,7 @@ Playwright тестами.
 умолчанию 50 и не может превышать 100.
 
 `GET /api/v1/admin/audit-events` принимает `actorId`, `eventType`,
-`entityType`, `entityId`, `requestId`, `result=all|success|denied`,
+`entityType`, `entityId`, `requestId`, `result=all|denied`,
 `dateFrom`, `dateTo`, `limit`, `cursor`. Даты имеют формат `YYYY-MM-DD`.
 Элемент содержит raw `eventType`, title, actor, entity, ruleId, result и
 whitelist `details`. Полный `payload_json` не выдаётся. Причины, тексты,

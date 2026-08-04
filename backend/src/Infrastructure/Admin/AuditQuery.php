@@ -94,7 +94,8 @@ final class AuditQuery
             foreach (self::DENIED as $i => $type) {
                 $params[':denied' . $i] = $type;
             }
-            $where[] = 'a.event_type ' . ($filters['result'] === 'denied' ? '' : 'NOT ') . "IN ($marks)";
+            $where[] = "(a.event_type IN ($marks) OR a.event_type LIKE :deniedSuffix)";
+            $params[':deniedSuffix'] = '%\\_denied';
         }
         if ($filters['cursor'] !== null) {
             [$createdAt, $id] = $this->decodeCursor($filters['cursor']);
@@ -146,7 +147,7 @@ final class AuditQuery
         };
         $title = self::TITLES[$type] ?? 'Системное событие';
         return ['id' => (int) $row['id'], 'createdAt' => $this->iso((string) $row['created_at']), 'eventType' => $type,
-            'title' => $title, 'description' => (string) $row['actor_name'] . ': ' . $title, 'result' => in_array($type, self::DENIED, true) ? 'denied' : 'success',
+            'title' => $title, 'description' => (string) $row['actor_name'] . ': ' . $title, 'result' => $this->isDenied($type) ? 'denied' : 'success',
             'ruleId' => (string) $row['rule_id'], 'actor' => ['id' => (int) $row['actor_id'], 'displayName' => (string) $row['actor_name'], 'adLogin' => (string) $row['ad_login']],
             'entity' => ['type' => $entityType, 'id' => $entityId, 'label' => $label, 'requestId' => $entityType === 'request' ? $entityId : null], 'details' => $safe];
     }
@@ -156,7 +157,10 @@ final class AuditQuery
     {
         $decoded = base64_decode(strtr($cursor, '-_', '+/'), true);
         $data = $decoded === false ? null : json_decode($decoded, true);
-        if (!is_array($data) || !isset($data['at'], $data['id']) || !is_string($data['at']) || !is_int($data['id'])) {
+        if (
+            !is_array($data) || !isset($data['at'], $data['id']) || !is_string($data['at']) || !is_int($data['id'])
+            || !$this->validTimestamp($data['at']) || $data['id'] < 1
+        ) {
             throw new InvalidArgumentException('Invalid cursor');
         }
         return [$data['at'], $data['id']];
@@ -168,5 +172,14 @@ final class AuditQuery
     private function iso(string $value): string
     {
         return str_replace(' ', 'T', $value) . 'Z';
+    }
+    private function isDenied(string $type): bool
+    {
+        return in_array($type, self::DENIED, true) || str_ends_with($type, '_denied');
+    }
+    private function validTimestamp(string $value): bool
+    {
+        $date = \DateTimeImmutable::createFromFormat('!Y-m-d H:i:s.u', $value, new \DateTimeZone('UTC'));
+        return $date !== false && $date->format('Y-m-d H:i:s.u') === $value;
     }
 }

@@ -24,7 +24,7 @@ final class ListAuditEventsInput extends Model
         return [
             [['actorId', 'entityId', 'requestId'], 'integer', 'min' => 1, 'skipOnEmpty' => true],
             [['eventType', 'entityType'], 'string', 'max' => 64, 'skipOnEmpty' => true],
-            ['result', 'in', 'range' => ['all', 'success', 'denied']],
+            ['result', 'in', 'range' => ['all', 'denied']],
             [['dateFrom', 'dateTo'], 'date', 'format' => 'php:Y-m-d', 'skipOnEmpty' => true],
             ['limit', 'integer', 'min' => 1, 'max' => 100],
             ['cursor', 'string', 'max' => 256, 'skipOnEmpty' => true],
