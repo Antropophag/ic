@@ -3,7 +3,10 @@ set -eu
 cd "$(CDPATH='' cd -- "$(dirname -- "$0")/.." && pwd)"
 : "${COMPOSE:?COMPOSE must be provided by Makefile}"
 : "${CONTAINER_ENGINE:?CONTAINER_ENGINE must be provided by Makefile}"
-compose="$COMPOSE --env-file .env.test -f compose.test.yaml"
+: "${TEST_PROJECT:?TEST_PROJECT must be provided by Makefile}"
+: "${TEST_ENV_FILE:?TEST_ENV_FILE must be provided by Makefile}"
+compose="$COMPOSE -p $TEST_PROJECT --env-file $TEST_ENV_FILE -f compose.test.yaml"
+. scripts/compose-metadata.sh
 action=${1:-}
 
 wait_url() {
@@ -17,6 +20,22 @@ wait_url() {
     }
     sleep 1
   done
+}
+
+mailpit_base_url() {
+  if [ -n "${MAILPIT_BASE_URL:-}" ]; then
+    printf '%s\n' "$MAILPIT_BASE_URL"
+    return
+  fi
+  compose_http_url mailpit 8025
+}
+
+test_base_url() {
+  if [ -n "${TEST_BASE_URL:-}" ]; then
+    printf '%s\n' "$TEST_BASE_URL"
+    return
+  fi
+  compose_http_url frontend 8080
 }
 
 assert_health() {
@@ -70,12 +89,12 @@ up)
   $compose up -d --no-build mariadb
   $compose up -d --no-build ad
   $compose up -d --no-build mailpit
-  wait_url "${MAILPIT_BASE_URL:-http://localhost:18025}/api/v1/info"
+  wait_url "$(mailpit_base_url)/api/v1/info"
   $compose up -d --no-build --force-recreate backend
   "$0" reset
   $compose up -d --no-build --force-recreate frontend scheduler
-  assert_health "${TEST_BASE_URL:-http://localhost:18080}/health/live" ok
-  assert_health "${TEST_BASE_URL:-http://localhost:18080}/health/ready" ready
+  assert_health "$(test_base_url)/health/live" ok
+  assert_health "$(test_base_url)/health/ready" ready
   ;;
 reset)
   service_running backend || {
@@ -112,8 +131,8 @@ reset)
     $compose up -d --no-build --force-recreate scheduler
   fi
   if [ "$restart_frontend" -eq 1 ]; then
-    assert_health "${TEST_BASE_URL:-http://localhost:18080}/health/live" ok
-    assert_health "${TEST_BASE_URL:-http://localhost:18080}/health/ready" ready
+    assert_health "$(test_base_url)/health/live" ok
+    assert_health "$(test_base_url)/health/ready" ready
   fi
   ;;
 down) $compose down --remove-orphans ;;

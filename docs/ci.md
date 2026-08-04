@@ -17,6 +17,10 @@ report вместе с container status и последними логами с�
 Обе CI-системы выполняют один и тот же `make e2e`; hosted Docker/BuildKit cache
 между запусками отдельно не настраивается.
 
+Публичные URL test deployment вычисляются через `compose port`. GitLab DinD
+задаёт только `COMPOSE_PUBLISHED_HOST=docker`; номера опубликованных портов не
+дублируются в CI-конфигурации.
+
 Podman Compose поддерживается Makefile и scripts для локального или
 эксплуатационного запуска, но отдельный CI job не выполняется: он дублировал
 полный production-like suite без дополнительного покрытия приложения.
