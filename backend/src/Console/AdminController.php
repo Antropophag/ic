@@ -5,12 +5,41 @@ declare(strict_types=1);
 namespace App\Console;
 
 use App\Infrastructure\Identity\AdministratorBootstrap;
+use App\Infrastructure\Identity\BreakGlassConfiguration;
+use App\Infrastructure\Identity\BreakGlassIdentityProvisioner;
 use Yii;
 use yii\console\Controller;
 use yii\console\ExitCode;
 
 final class AdminController extends Controller
 {
+    public function actionProvisionBreakGlass(): int
+    {
+        try {
+            $result = (new BreakGlassIdentityProvisioner(
+                Yii::$app->db,
+                BreakGlassConfiguration::fromEnvironment(),
+            ))->provision();
+        } catch (\Throwable $error) {
+            Yii::error($this->failureDiagnostic($error, 'Break-glass provisioning'), 'admin.break_glass');
+            $this->stderr("Подготовка аварийной учётной записи завершилась с ошибкой.\n");
+            return ExitCode::DATAERR;
+        }
+
+        if (!$result['enabled']) {
+            $this->stdout("Аварийный вход выключен; подготовка identity не требуется.\n");
+            return ExitCode::OK;
+        }
+
+        $this->stdout(sprintf(
+            "Аварийная учётная запись подготовлена: создана — %s, роль назначена — %s, лишних ролей удалено — %d.\n",
+            $result['userCreated'] ? 'да' : 'нет',
+            $result['roleAssigned'] ? 'да' : 'нет',
+            $result['rolesRemoved'],
+        ));
+        return ExitCode::OK;
+    }
+
     public function actionBootstrap(): int
     {
         $rawConfigured = getenv('BOOTSTRAP_ADMIN_AD_LOGINS');
@@ -48,13 +77,13 @@ final class AdminController extends Controller
         return ExitCode::OK;
     }
 
-    private function failureDiagnostic(\Throwable $error): string
+    private function failureDiagnostic(\Throwable $error, string $operation = 'Administrator bootstrap'): string
     {
         if ($error instanceof \yii\db\Exception) {
             $sqlState = (string) ($error->errorInfo[0] ?? 'unknown');
             $driverCode = (string) ($error->errorInfo[1] ?? 'unknown');
             return sprintf(
-                'Administrator bootstrap failed (%s, SQLSTATE %s, driver code %s).',
+                $operation . ' failed (%s, SQLSTATE %s, driver code %s).',
                 $error::class,
                 $sqlState,
                 $driverCode,
@@ -63,12 +92,12 @@ final class AdminController extends Controller
 
         if ($error instanceof \InvalidArgumentException || $error instanceof \RuntimeException) {
             return sprintf(
-                'Administrator bootstrap failed (%s): %s',
+                $operation . ' failed (%s): %s',
                 $error::class,
                 $error->getMessage(),
             );
         }
 
-        return sprintf('Administrator bootstrap failed (%s).', $error::class);
+        return sprintf($operation . ' failed (%s).', $error::class);
     }
 }

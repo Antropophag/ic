@@ -16,6 +16,7 @@ final class AuditQuery
         'request.reject_denied', 'request.withdraw_denied', 'request.document_download_rejected',
         'request.report_upload_rejected', 'request.report_deletion_rejected',
         'request.opinion_publish_rejected',
+        'authentication.break_glass_denied', 'authentication.break_glass_configuration_error',
     ];
 
     private const TITLES = [
@@ -42,6 +43,9 @@ final class AuditQuery
         'request.opinion_publish_rejected' => 'Публикация заключения отклонена',
         'request.imported' => 'Заявка импортирована', 'user.pre_provisioned' => 'Пользователь создан заранее',
         'user.role_assigned' => 'Роль назначена', 'user.role_revoked' => 'Роль отозвана',
+        'authentication.break_glass_succeeded' => 'Аварийный вход выполнен',
+        'authentication.break_glass_denied' => 'Аварийный вход отклонён',
+        'authentication.break_glass_configuration_error' => 'Ошибка конфигурации аварийного входа',
     ];
 
     private const SAFE_DETAILS = [
@@ -57,6 +61,9 @@ final class AuditQuery
         'request.document_downloaded' => ['version_id'], 'request.document_download_rejected' => ['version_id', 'outcome'],
         'request.imported' => ['legacyId'], 'user.pre_provisioned' => ['ad_login', 'display_name'],
         'user.role_assigned' => ['role_id'], 'user.role_revoked' => ['role_id'],
+        'authentication.break_glass_succeeded' => ['authentication_type', 'ip', 'user_agent'],
+        'authentication.break_glass_denied' => ['authentication_type', 'ip', 'user_agent', 'reason'],
+        'authentication.break_glass_configuration_error' => ['authentication_type', 'ip', 'user_agent', 'reason'],
     ];
 
     public function __construct(private readonly Connection $db)

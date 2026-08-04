@@ -7,7 +7,9 @@ namespace Tests\Integration\Identity;
 use App\Infrastructure\Identity\AccountDisabled;
 use App\Infrastructure\Identity\AdministratorBootstrap;
 use App\Infrastructure\Identity\AuthenticationDenied;
+use App\Infrastructure\Identity\BreakGlassAuthenticator;
 use App\Infrastructure\Identity\LdapAuthenticator;
+use App\Infrastructure\Ldap\LdapClient;
 use App\Infrastructure\Ldap\LdapProfile;
 use Tests\Integration\IntegrationTestCase;
 
@@ -146,5 +148,50 @@ final class LdapAuthenticatorTest extends IntegrationTestCase
             [':user_id' => $result['id']],
         )->queryColumn();
         self::assertSame(['administrator', 'employee'], $roles);
+    }
+
+    public function testReservedTechnicalLoginIsRejectedBeforeLdapCall(): void
+    {
+        $ldap = new FakeLdapClient(null);
+
+        $this->expectException(AuthenticationDenied::class);
+        try {
+            (new LdapAuthenticator($this->db(), $ldap))->authenticate(
+                BreakGlassAuthenticator::TECHNICAL_LOGIN,
+                'password',
+            );
+        } finally {
+            self::assertSame([], $ldap->calls);
+        }
+    }
+
+    public function testReservedTechnicalProfileReturnedByLdapCannotBeSynchronized(): void
+    {
+        $ldap = new class implements LdapClient {
+            public function authenticate(string $login, string $password): LdapProfile
+            {
+                return new LdapProfile(
+                    BreakGlassAuthenticator::TECHNICAL_LOGIN,
+                    'LDAP collision',
+                    null,
+                    null,
+                    null,
+                );
+            }
+        };
+        $before = (int) $this->scalar(
+            'SELECT COUNT(*) FROM {{%users}} WHERE ad_login = :login',
+            [':login' => BreakGlassAuthenticator::TECHNICAL_LOGIN],
+        );
+
+        $this->expectException(AuthenticationDenied::class);
+        try {
+            (new LdapAuthenticator($this->db(), $ldap))->authenticate('ordinary.user', 'password');
+        } finally {
+            self::assertSame($before, (int) $this->scalar(
+                'SELECT COUNT(*) FROM {{%users}} WHERE ad_login = :login',
+                [':login' => BreakGlassAuthenticator::TECHNICAL_LOGIN],
+            ));
+        }
     }
 }

@@ -24,6 +24,18 @@ bootstrap до запуска Vue устанавливает fetch interceptor; 
 безопасный список (`id`, отображаемое имя, должность), сохраняет выбор в браузере
 и добавляет настроенный deployment-ом header.
 
+Break-glass identity — отдельная стабильная техническая запись `users` с
+единственной штатной ролью `administrator`; при включённой конфигурации
+deployment provisioner создаёт её после migrations и обычного seed/bootstrap,
+не сохраняя пароль или его hash. При выключенной конфигурации provisioner не
+обращается к данным identity.
+Перед LDAP-маршрутом типизированная конфигурация сравнивает введённый
+логин с единственным настроенным emergency login. Точное совпадение направляется
+в изолированный `BreakGlassAuthenticator`, остальные значения — без fallback в
+существующий `LdapAuthenticator`. Оба успешных пути используют общую session
+логику `AuthController`, а активность identity проверяется `CurrentUser` на
+каждом запросе.
+
 Notification scheduler не является микросервисом: это долгоживущая Yii CLI
 команда из того же образа backend. Семантика SMTP — at-least-once; outbox lease
 не делает внешний SMTP идемпотентным.

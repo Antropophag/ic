@@ -7,8 +7,11 @@ namespace App\Http\Controller;
 use App\Application\Identity\LoginInput;
 use App\Infrastructure\Identity\AccountDisabled;
 use App\Infrastructure\Identity\AuthenticationDenied;
+use App\Infrastructure\Identity\BreakGlassAuthenticator;
+use App\Infrastructure\Identity\BreakGlassConfiguration;
 use App\Infrastructure\Identity\CurrentUser;
 use App\Infrastructure\Identity\LdapAuthenticator;
+use App\Infrastructure\Identity\LoginAuthenticator;
 use App\Infrastructure\Ldap\LdapConnectionException;
 use App\Infrastructure\Ldap\NativeLdapClient;
 use Yii;
@@ -62,10 +65,17 @@ final class AuthController extends ApiController
         }
 
         try {
-            $result = $this->authenticator()->authenticate((string) $input->login, (string) $input->password);
-        } catch (AuthenticationDenied $error) {
+            $result = $this->authenticator()->authenticate(
+                (string) $input->login,
+                (string) $input->password,
+                (string) Yii::$app->request->remoteIP,
+                (string) Yii::$app->request->userAgent,
+            );
+        } catch (AuthenticationDenied) {
             Yii::$app->response->statusCode = 401;
-            return ['errors' => ['login' => ['Неверный логин или пароль.']], 'ruleId' => $error->ruleId];
+            // Credential failures use one external contract regardless of
+            // whether LDAP or break-glass handled the submitted login.
+            return ['errors' => ['login' => ['Неверный логин или пароль.']], 'ruleId' => 'AUTH-001'];
         } catch (AccountDisabled $error) {
             Yii::$app->response->statusCode = 403;
             return ['errors' => ['login' => ['Учётная запись отключена в портале.']], 'ruleId' => $error->ruleId];
@@ -112,7 +122,7 @@ final class AuthController extends ApiController
         ];
     }
 
-    private function authenticator(): LdapAuthenticator
+    private function authenticator(): LoginAuthenticator
     {
         $useTls = strtolower((string) (getenv('LDAP_USE_TLS') ?: 'false')) === 'true';
         $client = new NativeLdapClient(
@@ -123,7 +133,10 @@ final class AuthController extends ApiController
             $useTls,
         );
 
-        return new LdapAuthenticator(Yii::$app->db, $client);
+        return new LoginAuthenticator(
+            new BreakGlassAuthenticator(Yii::$app->db, BreakGlassConfiguration::fromEnvironment()),
+            new LdapAuthenticator(Yii::$app->db, $client),
+        );
     }
 
     private function requiredEnv(string $name): string

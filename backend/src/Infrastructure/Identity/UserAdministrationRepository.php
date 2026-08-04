@@ -73,6 +73,10 @@ final class UserAdministrationRepository
      */
     public function createPlaceholder(string $adLogin, string $displayName, int $actorId): array
     {
+        if (hash_equals(BreakGlassAuthenticator::TECHNICAL_LOGIN, $adLogin)) {
+            throw new DuplicateAdLogin($adLogin);
+        }
+
         $now = Clock::now();
         $transaction = $this->db->beginTransaction();
         try {
@@ -137,7 +141,7 @@ final class UserAdministrationRepository
     /** @return list<array<string, mixed>> */
     public function assignRole(int $userId, int $roleId, int $actorId): array
     {
-        $this->assertUserExists($userId);
+        $this->assertUserIsManageable($userId);
         $role = $this->db->createCommand(
             'SELECT id FROM {{%roles}} WHERE id = :id',
             [':id' => $roleId],
@@ -184,7 +188,7 @@ final class UserAdministrationRepository
     /** @return list<array<string, mixed>> */
     public function revokeRole(int $userId, int $roleId, int $actorId): array
     {
-        $this->assertUserExists($userId);
+        $this->assertUserIsManageable($userId);
         $deleted = $this->db->createCommand()->delete(
             '{{%user_roles}}',
             ['user_id' => $userId, 'role_id' => $roleId],
@@ -219,13 +223,13 @@ final class UserAdministrationRepository
         )));
     }
 
-    private function assertUserExists(int $userId): void
+    private function assertUserIsManageable(int $userId): void
     {
-        $exists = $this->db->createCommand(
-            'SELECT 1 FROM {{%users}} WHERE id = :id',
+        $login = $this->db->createCommand(
+            'SELECT ad_login FROM {{%users}} WHERE id = :id',
             [':id' => $userId],
-        )->queryScalar() !== false;
-        if (!$exists) {
+        )->queryScalar();
+        if ($login === false || hash_equals(BreakGlassAuthenticator::TECHNICAL_LOGIN, (string) $login)) {
             throw new UserAdministrationTargetNotFound('User not found');
         }
     }

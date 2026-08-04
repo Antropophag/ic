@@ -16,8 +16,9 @@ make down
 ```
 
 `make up` при каждом запуске поднимает MariaDB и backend, применяет миграции,
-выполняет `php yii admin/bootstrap` и только после их успешного завершения
-поднимает frontend и scheduler. Ошибка миграции или bootstrap останавливает
+выполняет `php yii admin/bootstrap`, затем идемпотентный
+`php yii admin/provision-break-glass` и только после их успешного завершения
+поднимает frontend и scheduler. Ошибка migration или bootstrap останавливает
 Make с ненулевым кодом; уже поднятые MariaDB/backend остаются доступны для
 диагностики. Команда обеспечивает роли `employee` и
 `administrator` для пользователей из `BOOTSTRAP_ADMIN_AD_LOGINS`, не хранит
@@ -56,6 +57,87 @@ docker compose -p shlz-test-registry --env-file .env -f compose.yaml exec backen
 Прямой `docker compose up -d` не выполняет миграции и bootstrap. Для production
 deployment требуется `make up`; при прямом Compose-запуске эквивалентные команды
 нужно выполнить явно до запуска frontend и scheduler.
+
+## Аварийный break-glass вход
+
+Break-glass предназначен только для восстановления административного доступа
+при недоступности LDAP/AD. Он не заменяет LDAP, не является повседневной
+административной учётной записью и никогда не включается автоматически после
+ошибки каталога. Введённый логин должен в точности, включая регистр, совпасть с
+`BREAK_GLASS_LOGIN`; любой другой логин обрабатывается только LDAP.
+Зарезервированное внутреннее значение `__break_glass__` запрещено использовать
+как `BREAK_GLASS_LOGIN` и никогда не передаётся LDAP.
+
+При включённой конфигурации deployment-команда `admin/provision-break-glass`
+идемпотентно создаёт одну стабильную техническую identity `__break_glass__`
+после обычного bootstrap и оставляет ей только существующую роль
+`administrator`. При пустых обоих значениях команда успешно завершается без
+создания или изменения identity. Пароля и password hash в таблице `users` нет.
+Аутентификация включена только когда одновременно заданы:
+
+```dotenv
+BREAK_GLASS_LOGIN=emergency.admin
+BREAK_GLASS_PASSWORD_HASH='$2y$...'
+```
+
+Одинарные кавычки обязательны для значения в Compose env-файле: они сохраняют
+символы `$` внутри password hash без interpolation. Не используйте двойные
+кавычки и не подставляйте открытый пароль. Пустые оба значения выключают вход;
+неполная конфигурация или строка, не распознанная `password_verify()`, приводит
+к fail-closed отказу и security-событию.
+
+### Генерация и передача секрета
+
+Создайте длинный уникальный пароль на доверенной административной машине и не
+передавайте его через аргументы процесса или shell history. Следующая команда
+считывает пароль без отображения, передаёт его PHP через stdin и печатает только
+hash, совместимый с `password_verify()`:
+
+```sh
+read -r -s -p 'Break-glass password: ' break_glass_secret
+printf '\n'
+break_glass_hash=$(printf '%s' "$break_glass_secret" |
+  docker run --rm -i php:8.3-cli php -r \
+    '$p = stream_get_contents(STDIN); echo password_hash($p, PASSWORD_DEFAULT), PHP_EOL;')
+unset break_glass_secret
+printf '%s\n' "$break_glass_hash"
+unset break_glass_hash
+```
+
+Поместите результат в одинарных кавычках в защищённую/masked переменную
+deployment либо в локальный `.env`, недоступный из Git. Открытый пароль передайте
+ответственным лицам по отдельному одобренному защищённому каналу; рекомендуется
+dual control и хранение в корпоративном secrets vault с журналом доступа.
+
+### Включение, проверка, отключение и ротация
+
+1. Выполните штатный `make up`: он применит migrations и подготовит техническую
+   identity после обычного administrator bootstrap.
+2. Задайте уникальный `BREAK_GLASS_LOGIN` и password hash в `.env`.
+3. Повторите `make up`, чтобы backend получил новое environment. Обычный restart
+   уже созданного контейнера env-файл не перечитывает.
+4. В согласованное окно откройте обычную форму входа и войдите настроенным
+   логином. Проверьте доступ к административной панели и событие
+   `authentication.break_glass_succeeded` в «Журнале действий».
+5. Завершите сессию. После аварийного использования немедленно сгенерируйте
+   новый пароль/hash, обновите защищённую переменную и снова выполните `make up`.
+6. Для отключения очистите обе переменные и пересоздайте backend через
+   `make up`. Это блокирует новые входы, но уже выданная штатная session живёт
+   до logout/истечения либо отключения технической identity. Не удаляйте
+   техническую строку напрямую из БД.
+
+Пять попыток с неверным паролем с одного IP за 15 минут временно блокируют
+дальнейшую локальную проверку для этого IP; отклонённые во время блокировки
+запросы не продлевают окно, а внешняя ошибка остаётся общей. Состояние хранится
+в общей БД и действует для всех backend-процессов и контейнеров. Приложение
+использует `REMOTE_ADDR`, переданный штатным nginx, и не доверяет произвольному
+`X-Forwarded-For`. События
+`authentication.break_glass_succeeded`, `authentication.break_glass_denied` и
+`authentication.break_glass_configuration_error` находятся в read-only журнале
+администратора. Они содержат техническую identity, время, IP, нормализованный
+User-Agent и безопасный классификатор причины, но не пароль, hash или LDAP
+credentials. Успешное использование дополнительно записывается как security
+warning в container logs.
 
 Docker Compose и Podman Compose равноправны. Makefile определяет доступную
 реализацию и экспортирует `COMPOSE`/`CONTAINER_ENGINE` в scripts. Публичные

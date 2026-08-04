@@ -19,6 +19,7 @@ $compose config >/dev/null
 $compose up -d --build --force-recreate
 $compose run --rm backend php yii migrate/up --interactive=0
 $compose run --rm backend php yii dev/seed
+$compose run --rm backend php yii admin/provision-break-glass
 
 frontend_url=$(compose_http_url frontend 8080)
 echo "Development: $frontend_url"
