@@ -6,7 +6,7 @@ GitHub Actions и GitLab CI используют Makefile как источни�
 |---|---|---|---|
 | lint, static analysis, Unit, Vitest, build | `check` | `check` | `make check` |
 | coverage thresholds | `coverage` | `coverage` | `make coverage` |
-| Docker production-like suite | `e2e` | `e2e` | `make e2e` |
+| Docker test deployment suite | `e2e` | `e2e` | `make e2e` |
 | Semgrep | `analyze` | `analyze` | `semgrep scan` |
 | secrets | `secrets` | `secrets` | Gitleaks |
 
@@ -23,4 +23,4 @@ report вместе с container status и последними логами с�
 
 Podman Compose поддерживается Makefile и scripts для локального или
 эксплуатационного запуска, но отдельный CI job не выполняется: он дублировал
-полный production-like suite без дополнительного покрытия приложения.
+полный test deployment suite без дополнительного покрытия приложения.

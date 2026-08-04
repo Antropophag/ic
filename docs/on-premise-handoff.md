@@ -69,7 +69,7 @@ lock-файлы. Для изолированной среды формирует
 
 ## Конфигурация и секреты
 
-- в Git хранится только `.env.example`;
+- в Git хранится только `.env.example`, рабочая production-конфигурация — `.env.prod`;
 - LDAP, MariaDB, SMTP и ключи приложения задаются protected/masked variables GitLab;
 - отдельные значения используются для test и production;
 - файлы приложения неизменны между средами;

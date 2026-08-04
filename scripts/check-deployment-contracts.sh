@@ -47,6 +47,35 @@ for compose_file in compose.yaml compose.dev.yaml compose.test.yaml; do
   fi
 done
 
+grep -q '^PROD_PROJECT := ic-prod$' Makefile
+grep -q '^DEV_PROJECT := ic-dev$' Makefile
+grep -q '^TEST_PROJECT := ic-test$' Makefile
+grep -q '^PROD_ENV_FILE := .env.prod$' Makefile
+grep -q '^DEV_ENV_FILE := .env.dev$' Makefile
+grep -q '^TEST_ENV_FILE := .env.test$' Makefile
+grep -q '^prod-up: doctor$' Makefile
+grep -q '^dev-reset: doctor$' Makefile
+grep -q '^prod-reset: doctor$' Makefile
+grep -q '^env-status: doctor$' Makefile
+# shellcheck disable=SC2016 # These are literal Make/Compose contract strings.
+grep -Fq '$(PROD_COMPOSE) build backend scheduler frontend' Makefile
+# shellcheck disable=SC2016 # These are literal Make/Compose contract strings.
+grep -Fq '$(PROD_COMPOSE) up -d --no-build --force-recreate frontend scheduler' Makefile
+# shellcheck disable=SC2016 # This is a literal Compose interpolation contract.
+[ "$(grep -Fc 'env_file: ${COMPOSE_ENV_FILE:?COMPOSE_ENV_FILE must select .env.dev or .env.prod}' compose.yaml)" -eq 2 ]
+[ "$(grep -c 'env_file: .env.test' compose.test.yaml)" -eq 2 ]
+# shellcheck disable=SC2016 # This is a literal shell contract string.
+grep -q 'export COMPOSE_ENV_FILE="$DEV_ENV_FILE"' scripts/dev.sh
+# shellcheck disable=SC2016 # This is a literal Make contract string.
+grep -q 'COMPOSE_ENV_FILE=$(PROD_ENV_FILE) $(PROD_COMPOSE)' Makefile
+
+set +e
+ambiguous_output=$(make --no-print-directory up 2>&1)
+ambiguous_status=$?
+set -e
+[ "$ambiguous_status" -eq 2 ]
+printf '%s' "$ambiguous_output" | grep -q 'make dev-up или make prod-up'
+
 # Regression-test both common `compose port` output formats.
 # shellcheck source=scripts/compose-metadata.sh
 . scripts/compose-metadata.sh

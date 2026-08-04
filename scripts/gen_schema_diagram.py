@@ -2,6 +2,8 @@
 """Generate docs/data-model.md ER diagram from the migrated MariaDB schema."""
 
 import argparse
+import os
+import shlex
 import subprocess
 import sys
 from pathlib import Path
@@ -27,8 +29,11 @@ ORDER BY c.TABLE_NAME, c.ORDINAL_POSITION
 
 def read_schema():
     """Read the database through its own client, using credentials inside the container."""
+    compose_command = os.environ.get("SCHEMA_COMPOSE_COMMAND")
+    if not compose_command:
+        sys.exit("SCHEMA_COMPOSE_COMMAND must select an explicit deployment")
     command = [
-        "docker", "compose", "exec", "-T", "mariadb", "sh", "-lc",
+        *shlex.split(compose_command), "exec", "-T", "mariadb", "sh", "-lc",
         'mariadb --batch --skip-column-names '
         '--user="$MARIADB_USER" --password="$MARIADB_PASSWORD" '
         '"$MARIADB_DATABASE"',
