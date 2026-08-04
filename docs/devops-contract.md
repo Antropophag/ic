@@ -62,6 +62,15 @@ Docker Compose и Podman Compose равноправны. Makefile определ
 `make logs` и `make down` однозначно относятся к development; production-like
 deployment управляется явной Compose-командой выше.
 
+Test deployment разделяет build, start, reset и teardown. `make e2e` ровно один
+раз собирает актуальные backend/frontend images с layer cache и затем запускает
+Compose только с `--no-build`. Scheduler использует тот же image, что backend.
+Reset работает только внутри уже поднятого test deployment: очищает БД,
+применяет migrations, seed, очищает Mailpit и test storage, не выполняя Docker,
+Composer или npm build. Teardown удаляет test containers, network и volumes,
+но сохраняет images и caches. Кастомный Samba AD fixture собирается вместе с
+первым build только при отсутствии локального image и далее не пересобирается.
+
 Scheduler запускает `php yii notification/work`, использует тот же backend
 image и завершается по SIGTERM с grace period 15 секунд. Разовая ручная
 обработка:

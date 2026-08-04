@@ -81,8 +81,9 @@ make schema-diagram
 - `make check` — lint, PHPStan, unit, Vitest, dependency audit, production build
   и проверки репозитория без полного стенда.
 - `make test` — `check`, затем весь единый test deployment.
-- `make e2e` — reset test deployment, backend Integration, Playwright, LDAP,
-  SMTP, MariaDB reconnect и graceful shutdown scheduler.
+- `make e2e` — однократная сборка application images, запуск и reset test
+  deployment, backend Integration, Playwright, LDAP, SMTP, MariaDB reconnect и
+  graceful shutdown scheduler.
 - `make coverage` — только backend/frontend coverage.
 - `make down` и `make logs` всегда управляют development deployment
   (`compose.yaml + compose.dev.yaml + .env.dev`). Production-like deployment
@@ -90,11 +91,16 @@ make schema-diagram
   `docker compose --env-file .env -f compose.yaml down` (либо эквивалентную
   переданную Compose-команду).
 
-Внутренние операции подъёма и reset test-стенда не являются публичными
-Make-командами. При сбое `make e2e` логи доступны через:
+Внутренние стадии build, start, reset и teardown test-стенда не являются
+публичными Make-командами. Reset требует уже собранный и поднятый deployment и
+никогда не собирает images или dependencies. При сбое `make e2e` состояние и
+логи контейнеров сохраняются в `frontend/playwright-report/deployment`, после
+чего containers, network и test volumes удаляются.
+
+Пока стенд поднят, reset можно повторять без пересборки:
 
 ```sh
-COMPOSE="docker compose" sh scripts/test-env.sh logs
+COMPOSE="docker compose" CONTAINER_ENGINE=docker sh scripts/test-env.sh reset
 ```
 
 Для Podman scripts получают выбранные команды через `COMPOSE` и
