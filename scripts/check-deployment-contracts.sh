@@ -7,10 +7,18 @@ reject_tracked() {
   description=$1
   pattern=$2
   shift 2
-  if matches=$(git grep -n -E "$pattern" -- "$@" 2>/dev/null); then
+  set +e
+  matches=$(git grep -n -E "$pattern" -- "$@")
+  grep_status=$?
+  set -e
+  if [ "$grep_status" -eq 0 ]; then
     echo "$description:" >&2
     printf '%s\n' "$matches" >&2
     return 1
+  fi
+  if [ "$grep_status" -ne 1 ]; then
+    echo "Cannot check deployment contract: $description" >&2
+    return "$grep_status"
   fi
 }
 
