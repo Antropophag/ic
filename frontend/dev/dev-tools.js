@@ -65,9 +65,14 @@ export function renderUserSwitcher(browserWindow, document, users) {
 
 export function startDevelopmentTools(browserWindow, document) {
   const originalFetch = installIdentityFetch(browserWindow)
-  browserWindow.addEventListener('DOMContentLoaded', () => {
+  const loadSwitcher = () => {
     loadUsers(originalFetch)
       .then((result) => renderUserSwitcher(browserWindow, document, result.items))
       .catch((error) => console.error('Development tools failed:', error))
-  })
+  }
+  if (document.readyState === 'loading') {
+    browserWindow.addEventListener('DOMContentLoaded', loadSwitcher, { once: true })
+  } else {
+    loadSwitcher()
+  }
 }
