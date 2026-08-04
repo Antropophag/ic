@@ -12,7 +12,7 @@
 ## Instruction Hierarchy
 
 - Use this document as the default engineering workflow for AI coding agents.
-- Apply repository-specific documentation as the source of project-specific rules.
+- Treat repository-specific documentation as authoritative for project-specific rules.
 - Let canonical engineering standards, such as `docs/engineering-standards.md`, override this document for Definition of Done, architecture, coding conventions, testing, security, release process, and Git workflow.
 
 ## Engineering Principles
@@ -134,9 +134,9 @@
 - Preserve behavior when the requirement is ambiguous and compatibility is plausible.
 - Ask the user when alternatives change product behavior, data shape, or public contracts.
 - Proceed with a documented assumption when the choice is reversible and low risk.
-- Stop before destructive, irreversible, or externally visible actions lacking authorization.
-- Never perform destructive Git operations without explicit user authorization.
-- Never switch branches, merge, rebase, or push without explicit user authorization.
+- Require explicit user authorization for potentially destructive or externally visible operations unless the task or execution environment clearly delegates them.
+- Follow repository-defined branch creation, naming, pull request, and protected-branch rules; create or switch to a topic branch when required and avoid direct work on protected branches when prohibited.
+- Never merge, rebase, force-push, delete branches, or push changes unless explicitly authorized by the user or delegated by the task or execution environment.
 - Do not modify unrelated files to make validation appear clean.
 - Do not weaken tests, checks, or safeguards to force a passing result.
 - Treat secrets, personal data, and credentials as non-displayable and non-committable.
