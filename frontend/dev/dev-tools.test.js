@@ -83,6 +83,22 @@ describe('standalone development tools', () => {
     expect(originalFetch.mock.calls[0][1].headers.get('X-Dev-User-ID')).toBeNull()
   })
 
+  it('supports string inputs when Request is unavailable', async () => {
+    vi.stubGlobal('Request', undefined)
+    const originalFetch = vi.fn().mockResolvedValue({ ok: true })
+    const browser = browserWindow(originalFetch)
+    browser.localStorage.setItem('ic.dev.userId', '7')
+
+    try {
+      installIdentityFetch(browser)
+      await browser.fetch('/api/v1/auth/me')
+    } finally {
+      vi.unstubAllGlobals()
+    }
+
+    expect(originalFetch.mock.calls[0][1].headers.get('X-Dev-User-ID')).toBe('7')
+  })
+
   it('renders only safe display fields and switches identity after reload', () => {
     const browser = browserWindow()
     browser.localStorage.setItem('ic.dev.userId', '1')

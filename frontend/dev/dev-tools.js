@@ -7,11 +7,13 @@ export function selectedUserId(browserWindow) {
 
 export function installIdentityFetch(browserWindow) {
   const originalFetch = browserWindow.fetch.bind(browserWindow)
+  const RequestCtor = browserWindow.Request ?? globalThis.Request
   browserWindow.fetch = (input, init = {}) => {
-    const url = input instanceof Request ? input.url : input
+    const isRequest = Boolean(RequestCtor) && input instanceof RequestCtor
+    const url = isRequest ? input.url : input
     const parsedUrl = new URL(url, browserWindow.location.href)
     const sameOriginApi = parsedUrl.origin === browserWindow.location.origin && parsedUrl.pathname.startsWith('/api/')
-    const headers = new Headers(init.headers || (input instanceof Request ? input.headers : undefined))
+    const headers = new Headers(init.headers || (isRequest ? input.headers : undefined))
     const userId = selectedUserId(browserWindow)
     if (sameOriginApi && userId) {
       headers.set('X-Dev-User-ID', userId)
