@@ -62,8 +62,14 @@ describe('standalone development tools', () => {
     await browser.fetch('http://localhost:8080/api/v1/auth/me')
     expect(originalFetch.mock.calls[1][1].headers.get('X-Dev-User-ID')).toBe('7')
 
+    await browser.fetch(new URL('/api/v1/auth/me', browser.location.href))
+    expect(originalFetch.mock.calls[2][1].headers.get('X-Dev-User-ID')).toBe('7')
+
     await browser.fetch('https://example.invalid/api/v1/requests')
-    expect(originalFetch.mock.calls[2][1].headers.get('X-Dev-User-ID')).toBeNull()
+    expect(originalFetch.mock.calls[3][1].headers.get('X-Dev-User-ID')).toBeNull()
+
+    await browser.fetch(new URL('/api/v1/requests', 'https://example.invalid'))
+    expect(originalFetch.mock.calls[4][1].headers.get('X-Dev-User-ID')).toBeNull()
     expect(selectedUserId(browser)).toBe('7')
   })
 

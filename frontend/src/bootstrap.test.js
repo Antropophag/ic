@@ -1,11 +1,11 @@
 import { describe, expect, it, vi } from 'vitest'
-import { installIdentityFetch } from '../dev/dev-tools'
-import { bootstrapApplication } from './bootstrap'
+import { bootstrapApplication, developmentToolsLoader } from './bootstrap'
 
 function browserWindow(fetch) {
   const values = new Map([['ic.dev.userId', '7']])
   return {
     fetch,
+    addEventListener: vi.fn(),
     location: { href: 'http://localhost:8080/', origin: 'http://localhost:8080' },
     localStorage: { getItem: (key) => values.get(key) ?? null },
   }
@@ -23,13 +23,19 @@ describe('application bootstrap', () => {
   it('installs development identity before the first application request', async () => {
     const originalFetch = vi.fn().mockResolvedValue({ ok: true })
     const browser = browserWindow(originalFetch)
+    const document = {}
 
     await bootstrapApplication({
-      loadDevelopmentTools: async () => installIdentityFetch(browser),
+      loadDevelopmentTools: developmentToolsLoader(
+        browser,
+        document,
+        () => import('../dev/dev-tools'),
+      ),
       startApplication: () => browser.fetch('/api/v1/auth/me'),
     })
 
     expect(originalFetch).toHaveBeenCalledOnce()
     expect(originalFetch.mock.calls[0][1].headers.get('X-Dev-User-ID')).toBe('7')
+    expect(browser.addEventListener).toHaveBeenCalledWith('DOMContentLoaded', expect.any(Function))
   })
 })

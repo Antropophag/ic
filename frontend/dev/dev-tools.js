@@ -8,7 +8,7 @@ export function selectedUserId(browserWindow) {
 export function installIdentityFetch(browserWindow) {
   const originalFetch = browserWindow.fetch.bind(browserWindow)
   browserWindow.fetch = (input, init = {}) => {
-    const url = typeof input === 'string' ? input : input.url
+    const url = input instanceof Request ? input.url : input
     const parsedUrl = new URL(url, browserWindow.location.href)
     const sameOriginApi = parsedUrl.origin === browserWindow.location.origin && parsedUrl.pathname.startsWith('/api/')
     const headers = new Headers(init.headers || (input instanceof Request ? input.headers : undefined))
@@ -68,8 +68,4 @@ export function startDevelopmentTools(browserWindow, document) {
       .then((result) => renderUserSwitcher(browserWindow, document, result.items))
       .catch((error) => console.error('Development tools failed:', error))
   })
-}
-
-if (typeof window !== 'undefined' && typeof document !== 'undefined') {
-  startDevelopmentTools(window, document)
 }
