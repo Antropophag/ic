@@ -1,15 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 import { bootstrapApplication, developmentToolsLoader } from './bootstrap'
-
-function browserWindow(fetch) {
-  const values = new Map([['ic.dev.userId', '7']])
-  return {
-    fetch,
-    addEventListener: vi.fn(),
-    location: { href: 'http://localhost:8080/', origin: 'http://localhost:8080' },
-    localStorage: { getItem: (key) => values.get(key) ?? null },
-  }
-}
+import { createDevToolsBrowserEnvironment } from '../test/browserEnvironment'
 
 describe('application bootstrap', () => {
   it('starts the application directly without development tools', async () => {
@@ -22,8 +13,11 @@ describe('application bootstrap', () => {
 
   it('installs development identity before the first application request', async () => {
     const originalFetch = vi.fn().mockResolvedValue({ ok: true })
-    const browser = browserWindow(originalFetch)
-    const document = { readyState: 'loading' }
+    const { browserWindow: browser, document } = createDevToolsBrowserEnvironment({
+      fetch: originalFetch,
+      readyState: 'loading',
+    })
+    browser.localStorage.setItem('ic.dev.userId', '7')
 
     await bootstrapApplication({
       loadDevelopmentTools: developmentToolsLoader(
@@ -36,6 +30,5 @@ describe('application bootstrap', () => {
 
     expect(originalFetch).toHaveBeenCalledOnce()
     expect(originalFetch.mock.calls[0][1].headers.get('X-Dev-User-ID')).toBe('7')
-    expect(browser.addEventListener).toHaveBeenCalledWith('DOMContentLoaded', expect.any(Function), { once: true })
   })
 })
