@@ -27,9 +27,14 @@ assert_health() {
 }
 
 service_running() {
-  container_id=$($compose ps -q "$1" 2>/dev/null)
-  [ -n "$container_id" ] &&
-    [ "$($CONTAINER_ENGINE inspect --format '{{.State.Running}}' "$container_id" 2>/dev/null)" = true ]
+  container_ids=$($compose ps -q "$1" 2>/dev/null)
+  [ -n "$container_ids" ] || return 1
+  for container_id in $container_ids; do
+    if [ "$($CONTAINER_ENGINE inspect --format '{{.State.Running}}' "$container_id" 2>/dev/null)" = true ]; then
+      return 0
+    fi
+  done
+  return 1
 }
 
 require_image() {
