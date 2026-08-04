@@ -15,6 +15,7 @@ actionlint .github/workflows/*.yml
 hadolint docker/*.Dockerfile
 shellcheck scripts/*.sh
 shfmt -d scripts/*.sh
+sh scripts/check-deployment-contracts.sh
 if command -v yamllint >/dev/null 2>&1; then
   yamllint -c .yamllint.yml .
 elif command -v uvx >/dev/null 2>&1; then

@@ -28,7 +28,8 @@ Playwright
 Integration не создаёт отдельную MariaDB или специальную Docker network.
 Reset выполняет миграции с нуля, очищает test storage и Mailpit, затем
 идемпотентно загружает пользователей. Защита reset основана на имени БД с
-`_test` и точном test storage path.
+`_test` и точном test storage path. Reset не собирает images и не устанавливает
+Composer/npm dependencies; без запущенного backend он завершается ошибкой.
 
 Test identity физически подключён файлом `deployment/test/web.php`. В обычном
 и development deployment заголовок `X-Test-User-ID` не настроен. Dev API,
@@ -52,10 +53,13 @@ console fragment — только `dev/seed`.
 make test
 ```
 
-Порядок: быстрые проверки, Compose validation, сборка test deployment,
-readiness/liveness через внешний `frontend`, reset, backend Integration,
-Playwright и затем разрушающие runtime contracts. Стенд останавливается даже
-при ошибке. `make e2e` выполняет ту же production-like часть без `check`.
+Порядок `make e2e`: один build backend/frontend images, последовательный запуск
+MariaDB, Samba AD, Mailpit и backend, reset до запуска frontend/scheduler,
+health checks, backend Integration, повторный reset, Playwright и затем
+разрушающие runtime contracts. При повторном reset frontend и scheduler
+останавливаются на время замены схемы и возвращаются в рабочее состояние.
+При любом исходе teardown удаляет containers, network и test volumes, но
+сохраняет images, dependency caches и Playwright diagnostics.
 
 Runtime contracts проверяют реальный LDAP bind и группы, восстановление LDAP,
 SMTP failure/recovery, reconnect scheduler после рестарта MariaDB и SIGTERM.

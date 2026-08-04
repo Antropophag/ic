@@ -4,6 +4,12 @@
 **/dist
 backend/vendor
 backend/runtime
+backend/build
+frontend/coverage
+frontend/playwright-report
+frontend/test-results
+docs
+scripts
 prototype
 *.bundle
 *.tar

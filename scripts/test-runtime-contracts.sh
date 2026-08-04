@@ -2,9 +2,13 @@
 set -eu
 cd "$(CDPATH='' cd -- "$(dirname -- "$0")/.." && pwd)"
 : "${COMPOSE:?COMPOSE must be provided by Makefile}"
-compose="$COMPOSE --env-file .env.test -f compose.test.yaml"
-base=${TEST_BASE_URL:-http://localhost:18080}
-mailpit=${MAILPIT_BASE_URL:-http://localhost:18025}
+: "${TEST_PROJECT:?TEST_PROJECT must be provided by Makefile}"
+: "${TEST_ENV_FILE:?TEST_ENV_FILE must be provided by Makefile}"
+compose="$COMPOSE -p $TEST_PROJECT --env-file $TEST_ENV_FILE -f compose.test.yaml"
+: "${TEST_BASE_URL:?TEST_BASE_URL must be provided by e2e.sh}"
+base=$TEST_BASE_URL
+: "${MAILPIT_BASE_URL:?MAILPIT_BASE_URL must be provided by e2e.sh}"
+mailpit=$MAILPIT_BASE_URL
 cookie_jar=$(mktemp)
 
 curl_with_timeout() {

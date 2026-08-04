@@ -3,10 +3,13 @@
 set -eu
 cd "$(CDPATH='' cd -- "$(dirname -- "$0")/.." && pwd)"
 : "${COMPOSE:?COMPOSE must be provided by Makefile}"
+: "${DEV_PROJECT:?DEV_PROJECT must be provided by Makefile}"
+: "${DEV_ENV_FILE:?DEV_ENV_FILE must be provided by Makefile}"
 
-export COMPOSE_ENV_FILE=.env.dev
-compose="$COMPOSE --env-file .env.dev -f compose.yaml -f compose.dev.yaml"
-base="http://localhost:${FRONTEND_PORT:-8080}"
+export COMPOSE_ENV_FILE="$DEV_ENV_FILE"
+compose="$COMPOSE -p $DEV_PROJECT --env-file $DEV_ENV_FILE -f compose.yaml -f compose.dev.yaml"
+. scripts/compose-metadata.sh
+base=$(compose_http_url frontend 8080)
 
 curl -fsS "$base/health/live" | grep -q '"status":"ok"'
 curl -fsS "$base/health/ready" | grep -q '"status":"ready"'
