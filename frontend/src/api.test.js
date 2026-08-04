@@ -345,6 +345,17 @@ it('lists admin users and roles', async () => {
   expect(fetchMock).toHaveBeenCalledWith('/api/v1/admin/roles', expect.any(Object))
 })
 
+it('lists read-only admin logs with shared safe query serialization', async () => {
+  const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({ items: [] }), { status: 200 }))
+  vi.stubGlobal('fetch', fetchMock)
+
+  await adminApi.auditEvents({ actorId: 7, result: 'denied', cursor: 'abc', empty: '' })
+  await adminApi.notifications({ status: 'failed', requestId: 42 })
+
+  expect(fetchMock).toHaveBeenNthCalledWith(1, '/api/v1/admin/audit-events?actorId=7&result=denied&cursor=abc', expect.any(Object))
+  expect(fetchMock).toHaveBeenNthCalledWith(2, '/api/v1/admin/notifications?status=failed&requestId=42', expect.any(Object))
+})
+
 it('creates a pre-provisioned admin user as JSON', async () => {
   const fetchMock = vi.fn().mockResolvedValue(new Response('{}', { status: 201 }))
   vi.stubGlobal('fetch', fetchMock)

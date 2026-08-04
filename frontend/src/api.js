@@ -149,6 +149,8 @@ export const authApi = {
 export const adminApi = {
   users: () => request('/api/v1/admin/users'),
   roles: () => request('/api/v1/admin/roles'),
+  auditEvents: params => request(`/api/v1/admin/audit-events${queryString(params)}`),
+  notifications: params => request(`/api/v1/admin/notifications${queryString(params)}`),
   createUser: adLogin => request('/api/v1/admin/users', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -162,4 +164,13 @@ export const adminApi = {
   revokeRole: (userId, roleId) => request(`/api/v1/admin/users/${userId}/roles/${roleId}/revoke`, {
     method: 'POST',
   }),
+}
+
+function queryString(params = {}) {
+  const query = new URLSearchParams()
+  Object.entries(params).forEach(([key, value]) => {
+    if (value !== null && value !== undefined && value !== '') query.set(key, String(value))
+  })
+  const serialized = query.toString()
+  return serialized ? `?${serialized}` : ''
 }

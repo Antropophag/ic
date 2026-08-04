@@ -46,6 +46,8 @@ $application = [
                 'GET api/v1/admin/users' => 'admin/users',
                 'POST api/v1/admin/users' => 'admin/create-user',
                 'GET api/v1/admin/roles' => 'admin/roles',
+                'GET api/v1/admin/audit-events' => 'admin/audit-events',
+                'GET api/v1/admin/notifications' => 'admin/notifications',
                 'POST api/v1/admin/users/<userId:\\d+>/roles' => 'admin/assign-role',
                 'POST api/v1/admin/users/<userId:\\d+>/roles/<roleId:\\d+>/revoke' => 'admin/revoke-role',
             ],

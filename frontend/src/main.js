@@ -4,5 +4,6 @@ import '@fontsource/fira-sans/cyrillic-500.css'
 import '@fontsource/fira-sans/cyrillic-600.css'
 import App from './App.vue'
 import './styles.css'
+import './admin.css'
 
 createApp(App).mount('#app')
