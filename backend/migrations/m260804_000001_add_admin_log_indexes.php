@@ -22,12 +22,12 @@ final class m260804_000001_add_admin_log_indexes extends Migration
         $this->dropIndex('idx_notification_status_created_id', '{{%notification_outbox}}');
         // InnoDB may replace the implicit FK-supporting index with the new composite one.
         // Restore a narrow supporting index before removing that composite; the FK itself is untouched.
-        $this->execute('CREATE INDEX IF NOT EXISTS `fk_notification_request` ON {{%notification_outbox}} (`request_id`)');
+        $this->execute('CREATE INDEX IF NOT EXISTS `idx_notification_request_fk` ON {{%notification_outbox}} (`request_id`)');
         $this->dropIndex('idx_notification_request_created_id', '{{%notification_outbox}}');
         $this->dropIndex('idx_notification_created_id', '{{%notification_outbox}}');
         $this->dropIndex('idx_audit_entity_created_id', '{{%audit_events}}');
         $this->createIndex('idx_audit_entity', '{{%audit_events}}', ['entity_type', 'entity_id', 'created_at']);
-        $this->execute('CREATE INDEX IF NOT EXISTS `fk_audit_actor` ON {{%audit_events}} (`actor_id`)');
+        $this->execute('CREATE INDEX IF NOT EXISTS `idx_audit_actor_fk` ON {{%audit_events}} (`actor_id`)');
         $this->dropIndex('idx_audit_actor_created_id', '{{%audit_events}}');
         $this->dropIndex('idx_audit_created_id', '{{%audit_events}}');
     }
