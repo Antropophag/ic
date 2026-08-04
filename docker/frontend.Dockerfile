@@ -16,7 +16,15 @@ EXPOSE 8080
 
 FROM frontend-runtime AS production
 COPY --from=frontend-production-build /build/dist /srv/frontend
-RUN ! grep -R -E -q 'X-Dev-User-ID|/api/v1/dev/users' /srv/frontend
+RUN grep -R -E -q 'X-Dev-User-ID|/api/v1/dev/users' /srv/frontend; status=$?; \
+    if [ "$status" -eq 0 ]; then \
+        echo 'Development identity code found in production frontend' >&2; \
+        exit 1; \
+    fi; \
+    if [ "$status" -ne 1 ]; then \
+        echo "Failed to inspect production frontend (grep status $status)" >&2; \
+        exit "$status"; \
+    fi
 
 FROM frontend-runtime AS development
 COPY --from=frontend-development-build /build/dist /srv/frontend
