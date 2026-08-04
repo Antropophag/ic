@@ -21,6 +21,12 @@ erDiagram
         longtext payload_json
         datetime(6) created_at
     }
+    break_glass_rate_limits {
+        varchar(67) scope_key PK
+        int(11)_unsigned failure_count
+        datetime(6) window_started_at
+        datetime(6) updated_at
+    }
     document_download_links {
         bigint(20)_unsigned id PK
         bigint(20)_unsigned document_version_id FK "-> request_document_versions.id"

@@ -122,6 +122,18 @@ final class BreakGlassAuthenticatorTest extends IntegrationTestCase
         }
     }
 
+    public function testInvalidConfigurationDoesNotAuditUnrelatedLdapLogin(): void
+    {
+        $ldap = new FakeLdapClient(new LdapProfile('ivanov', 'Иван Иванов', null, null, null));
+        $authenticator = $this->loginAuthenticator(
+            new BreakGlassConfiguration(self::LOGIN, 'invalid-hash'),
+            $ldap,
+        );
+
+        self::assertArrayHasKey('id', $authenticator->authenticate('ivanov', 'ldap-password', self::IP, self::USER_AGENT));
+        self::assertSame(0, $this->breakGlassEventCount());
+    }
+
     public function testInternalTechnicalLoginCanNeverReachLdap(): void
     {
         $ldap = new FakeLdapClient(new LdapProfile(
@@ -268,17 +280,40 @@ final class BreakGlassAuthenticatorTest extends IntegrationTestCase
             } catch (AuthenticationDenied) {
             }
         }
-        $this->db()->createCommand()->update(
-            '{{%audit_events}}',
-            ['created_at' => '2000-01-01 00:00:00.000000'],
-            "event_type = 'authentication.break_glass_denied' "
-            . "AND JSON_UNQUOTE(JSON_EXTRACT(payload_json, '$.reason')) = 'invalid_credentials'",
-        )->execute();
+        $this->db()->createCommand()->update('{{%break_glass_rate_limits}}', [
+            'window_started_at' => '2000-01-01 00:00:00.000000',
+            'updated_at' => '2000-01-01 00:00:00.000000',
+        ])->execute();
 
         self::assertArrayHasKey(
             'id',
             $authenticator->authenticate(self::LOGIN, self::PASSWORD, self::IP, self::USER_AGENT),
         );
+    }
+
+    public function testFailuresFromDifferentIpsTriggerGlobalRateLimit(): void
+    {
+        $authenticator = $this->loginAuthenticator($this->validConfiguration(), new FakeLdapClient(null));
+        for ($attempt = 0; $attempt < 20; ++$attempt) {
+            try {
+                $authenticator->authenticate(
+                    self::LOGIN,
+                    'wrong',
+                    '198.51.100.' . ($attempt + 1),
+                    self::USER_AGENT,
+                );
+            } catch (AuthenticationDenied) {
+            }
+        }
+
+        $this->expectException(AuthenticationDenied::class);
+        try {
+            $authenticator->authenticate(self::LOGIN, self::PASSWORD, '203.0.113.1', self::USER_AGENT);
+        } finally {
+            self::assertSame('rate_limited', $this->payload(
+                $this->auditEvent('authentication.break_glass_denied'),
+            )['reason']);
+        }
     }
 
     private function validConfiguration(): BreakGlassConfiguration

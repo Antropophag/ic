@@ -8,8 +8,8 @@ use yii\base\Model;
 
 final class LoginInput extends Model
 {
-    public ?string $login = null;
-    public ?string $password = null;
+    public mixed $login = null;
+    public mixed $password = null;
 
     public function rules(): array
     {

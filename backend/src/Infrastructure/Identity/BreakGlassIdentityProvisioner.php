@@ -44,15 +44,15 @@ final class BreakGlassIdentityProvisioner
     /** @return array{enabled: true, userCreated: bool, roleAssigned: bool, rolesRemoved: int} */
     private function provisionOnce(): array
     {
-        $roleId = $this->db->createCommand(
-            "SELECT id FROM {{%roles}} WHERE code = 'administrator'",
-        )->queryScalar();
-        if ($roleId === false) {
-            throw new \RuntimeException('Administrator role is missing; apply access migrations first.');
-        }
-
         $transaction = $this->db->beginTransaction();
         try {
+            $roleId = $this->db->createCommand(
+                "SELECT id FROM {{%roles}} WHERE code = 'administrator' FOR UPDATE",
+            )->queryScalar();
+            if ($roleId === false) {
+                throw new \RuntimeException('Administrator role is missing; apply access migrations first.');
+            }
+
             $user = $this->db->createCommand(
                 'SELECT id, display_name, position FROM {{%users}} WHERE ad_login = :login FOR UPDATE',
                 [':login' => BreakGlassAuthenticator::TECHNICAL_LOGIN],

@@ -95,6 +95,19 @@ final class JsonBodyContractTest extends IntegrationTestCase
         (new AdminController('admin', Yii::$app))->actionCreateUser();
     }
 
+    public function testLoginRejectsNonStringCredentialsWithValidationResponse(): void
+    {
+        $this->createApplication('{"login":[1],"password":{"value":1}}', 'application/json');
+
+        self::assertSame([
+            'errors' => [
+                'login' => ['Login must be a string.'],
+                'password' => ['Password must be a string.'],
+            ],
+        ], (new AuthController('auth', Yii::$app))->actionLogin());
+        self::assertSame(422, Yii::$app->response->statusCode);
+    }
+
     /** @return iterable<string, array{string, array<string, list<string>>}> */
     public static function controllerProvider(): iterable
     {

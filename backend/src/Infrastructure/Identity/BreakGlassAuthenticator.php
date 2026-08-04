@@ -12,6 +12,7 @@ final class BreakGlassAuthenticator
 {
     public const TECHNICAL_LOGIN = '__break_glass__';
     private const MAX_FAILURES_PER_IP = 5;
+    private const MAX_FAILURES_GLOBAL = 20;
     private const FAILURE_WINDOW_MINUTES = 15;
 
     public function __construct(
@@ -82,10 +83,11 @@ final class BreakGlassAuthenticator
                 );
                 $this->recordDenied($identity['id'], $ip, $userAgent, 'configuration');
                 $denied = true;
-            } elseif ($this->failureCount($identity['id'], $ip) >= self::MAX_FAILURES_PER_IP) {
+            } elseif ($this->isRateLimited($ip)) {
                 $this->recordDenied($identity['id'], $ip, $userAgent, 'rate_limited');
                 $denied = true;
             } elseif (!$this->configuration->verify($password)) {
+                $this->recordFailure($ip);
                 $this->recordDenied($identity['id'], $ip, $userAgent, 'invalid_credentials');
                 $denied = true;
             } else {
@@ -143,18 +145,65 @@ final class BreakGlassAuthenticator
         ];
     }
 
-    private function failureCount(int $identityId, string $ip): int
+    private function isRateLimited(string $ip): bool
     {
-        $now = new \DateTimeImmutable(Clock::now(), new \DateTimeZone('UTC'));
-        $cutoff = $now->modify('-' . self::FAILURE_WINDOW_MINUTES . ' minutes')->format('Y-m-d H:i:s.u');
+        return $this->failureCount('global') >= self::MAX_FAILURES_GLOBAL
+            || $this->failureCount($this->ipScope($ip)) >= self::MAX_FAILURES_PER_IP;
+    }
 
-        return (int) $this->db->createCommand(
-            "SELECT COUNT(*) FROM {{%audit_events}} WHERE event_type = 'authentication.break_glass_denied' "
-            . "AND actor_id = :actor_id AND created_at >= :cutoff "
-            . "AND JSON_UNQUOTE(JSON_EXTRACT(payload_json, '$.ip')) = :ip "
-            . "AND JSON_UNQUOTE(JSON_EXTRACT(payload_json, '$.reason')) = 'invalid_credentials'",
-            [':actor_id' => $identityId, ':cutoff' => $cutoff, ':ip' => $ip],
-        )->queryScalar();
+    private function failureCount(string $scopeKey): int
+    {
+        $row = $this->db->createCommand(
+            'SELECT failure_count, window_started_at FROM {{%break_glass_rate_limits}} '
+            . 'WHERE scope_key = :scope_key FOR UPDATE',
+            [':scope_key' => $scopeKey],
+        )->queryOne();
+        if ($row === false || (string) $row['window_started_at'] < $this->windowCutoff()) {
+            return 0;
+        }
+        return (int) $row['failure_count'];
+    }
+
+    private function recordFailure(string $ip): void
+    {
+        $now = Clock::now();
+        foreach (['global', $this->ipScope($ip)] as $scopeKey) {
+            $count = $this->failureCount($scopeKey);
+            if ($count === 0) {
+                $this->db->createCommand()->upsert('{{%break_glass_rate_limits}}', [
+                    'scope_key' => $scopeKey,
+                    'failure_count' => 1,
+                    'window_started_at' => $now,
+                    'updated_at' => $now,
+                ], [
+                    'failure_count' => 1,
+                    'window_started_at' => $now,
+                    'updated_at' => $now,
+                ])->execute();
+                continue;
+            }
+            $this->db->createCommand()->update('{{%break_glass_rate_limits}}', [
+                'failure_count' => $count + 1,
+                'updated_at' => $now,
+            ], ['scope_key' => $scopeKey])->execute();
+        }
+        $this->db->createCommand()->delete(
+            '{{%break_glass_rate_limits}}',
+            '[[scope_key]] <> :global AND [[updated_at]] < :cutoff',
+            [':global' => 'global', ':cutoff' => $this->windowCutoff()],
+        )->execute();
+    }
+
+    private function ipScope(string $ip): string
+    {
+        return 'ip:' . hash('sha256', $ip);
+    }
+
+    private function windowCutoff(): string
+    {
+        return (new \DateTimeImmutable(Clock::now(), new \DateTimeZone('UTC')))
+            ->modify('-' . self::FAILURE_WINDOW_MINUTES . ' minutes')
+            ->format('Y-m-d H:i:s.u');
     }
 
     private function recordDenied(int $identityId, string $ip, string $userAgent, string $reason): void

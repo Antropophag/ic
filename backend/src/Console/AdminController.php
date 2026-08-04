@@ -27,7 +27,7 @@ final class AdminController extends Controller
         }
 
         if (!$result['enabled']) {
-            $this->stdout("Аварийный вход выключен; подготовка identity не требуется.\n");
+            $this->stdout("Аварийный вход выключен; подготовка учётной записи не требуется.\n");
             return ExitCode::OK;
         }
 

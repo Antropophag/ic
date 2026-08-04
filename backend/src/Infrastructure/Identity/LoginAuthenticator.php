@@ -19,11 +19,12 @@ final readonly class LoginAuthenticator
         string $ip,
         string $userAgent,
     ): array {
-        $this->breakGlass->reportInvalidConfiguration($ip, $userAgent);
         if ($this->breakGlass->handles($login)) {
+            $this->breakGlass->reportInvalidConfiguration($ip, $userAgent);
             return $this->breakGlass->authenticate($login, $password, $ip, $userAgent);
         }
         if (hash_equals(BreakGlassAuthenticator::TECHNICAL_LOGIN, $login)) {
+            $this->breakGlass->reportInvalidConfiguration($ip, $userAgent);
             throw new AuthenticationDenied('AUTH-006');
         }
 
