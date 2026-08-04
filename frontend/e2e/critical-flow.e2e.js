@@ -213,10 +213,14 @@ test('администратор управляет ролями и возвра
 
 test('администратор читает журналы действий и уведомлений и открывает связанную заявку', async ({ page, baseURL }) => {
   const marker = `E2E-admin-logs-${Date.now()}`
-  const initiator = await apiFor(baseURL, 3)
-  const manager = await apiFor(baseURL, 1)
-  const admin = await apiFor(baseURL, 6)
+  const contexts = []
   try {
+    const initiator = await apiFor(baseURL, 3)
+    contexts.push(initiator)
+    const manager = await apiFor(baseURL, 1)
+    contexts.push(manager)
+    const admin = await apiFor(baseURL, 6)
+    contexts.push(admin)
   const created = await expectOk(await initiator.post('/api/v1/requests', { data: {
     productName: marker,
     manufacturer: 'Тестовый производитель',
@@ -243,7 +247,7 @@ test('администратор читает журналы действий и
   await page.getByRole('cell', { name: 'Назначен исполнитель' }).first().click()
   await expect(page.getByText('request.executor_assigned')).toBeVisible()
   await page.getByRole('button', { name: 'Закрыть' }).click()
-  await page.getByRole('button', { name: new RegExp(`Заявка №`) }).first().click()
+  await page.getByRole('button', { name: new RegExp(`Заявка №`) }).first().press('Enter')
   await expect(page.locator('.object-title', { hasText: marker })).toBeVisible()
   await page.getByRole('button', { name: 'Администрирование' }).click()
   await page.getByRole('tab', { name: 'Уведомления' }).click()
@@ -252,9 +256,9 @@ test('администратор читает журналы действий и
   await page.getByRole('button', { name: 'Применить' }).click()
   await expect(page.locator('.admin-log-table .badge', { hasText: statusLabel }).first()).toBeVisible()
   await expect(page.getByText('SECRET BODY')).toHaveCount(0)
-  await page.getByRole('button', { name: new RegExp(`Заявка №`) }).first().click()
+  await page.getByRole('button', { name: new RegExp(`Заявка №`) }).first().press('Enter')
   await expect(page.locator('.object-title', { hasText: marker })).toBeVisible()
   } finally {
-    await Promise.allSettled([initiator.dispose(), manager.dispose(), admin.dispose()])
+    await Promise.allSettled(contexts.map(context => context.dispose()))
   }
 })
