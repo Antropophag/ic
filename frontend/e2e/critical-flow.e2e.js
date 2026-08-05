@@ -111,6 +111,35 @@ test('комментарий, оставленный при создании з�
   await expect(page.getByText(comment)).toBeVisible()
 })
 
+test('черновик новой заявки восстанавливается и удаляется после создания', async ({ page }) => {
+  const marker = `E2E-draft-${Date.now()}`
+  await useTestIdentity(page, 3)
+  await page.goto('/')
+  await page.getByRole('button', { name: '＋ Новая заявка' }).click()
+  await page.getByPlaceholder('Введите наименование продукции').fill(marker)
+  await page.getByPlaceholder('Наименование производителя').fill('Черновой производитель')
+  await page.getByPlaceholder('Наименование поставщика').fill('Черновой поставщик')
+  await page.getByPlaceholder('Опишите метод или программу испытаний').fill('Проверка восстановления')
+
+  await expect.poll(() => page.evaluate(key => localStorage.getItem(key), 'ic.application-create-draft.v1.3'))
+    .toContain(marker)
+  await page.reload()
+  await page.getByRole('button', { name: '＋ Новая заявка' }).click()
+  await expect(page.getByRole('status')).toHaveText('Черновик заявки восстановлен.')
+  await expect(page.getByPlaceholder('Введите наименование продукции')).toHaveValue(marker)
+  await expect(page.getByPlaceholder('Наименование производителя')).toHaveValue('Черновой производитель')
+  await expect(page.getByPlaceholder('Наименование поставщика')).toHaveValue('Черновой поставщик')
+  await page.getByRole('button', { name: 'Создать заявку' }).click()
+
+  await expect(page.getByRole('heading', { name: /^Заявка №\d+ от \d{1,2}\.\d{1,2}\.\d{4}$/ })).toBeVisible()
+  await expect.poll(() => page.evaluate(key => localStorage.getItem(key), 'ic.application-create-draft.v1.3'))
+    .toBeNull()
+  await page.getByTitle('На главную').click()
+  await page.getByRole('button', { name: '＋ Новая заявка' }).click()
+  await expect(page.getByPlaceholder('Введите наименование продукции')).toHaveValue('')
+  await expect(page.getByRole('status')).toHaveCount(0)
+})
+
 test('реестр показывает индикаторы последнего комментария и отчёта', async ({ page, baseURL }) => {
   const marker = `E2E-indicators-${Date.now()}`
   const initiator = await apiFor(baseURL, 3)

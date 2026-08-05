@@ -8,6 +8,7 @@ import {
   watch,
 } from "vue";
 import { requestApi } from "../api";
+import { createApplicationDraftForm } from "../applicationDraftForm";
 import { createConfirmDialog } from "../confirmDialog";
 import { triggerBlobDownload } from "../download";
 import { createLatestRequestGuard } from "../latestRequestGuard";
@@ -20,6 +21,7 @@ import {
 
 const props = defineProps({
   active: { type: Boolean, default: true },
+  currentUserId: { type: Number, required: true },
   refreshTrigger: { type: Number, default: 0 },
 });
 const emit = defineEmits([
@@ -43,7 +45,9 @@ const registryError = ref("");
 const showCreate = ref(false);
 const createLoading = ref(false);
 const createError = ref("");
+const createNotice = ref("");
 const draftFiles = ref([]);
+const draftFileInput = ref(null);
 const lastCommentModal = ref(null);
 const draft = reactive({
   productName: "",
@@ -57,9 +61,16 @@ const registryGuard = createLatestRequestGuard();
 const downloadGuard = createLatestRequestGuard();
 const createRequestGuard = createLatestRequestGuard();
 const confirmDialog = createConfirmDialog();
+const draftForm = createApplicationDraftForm({
+  userId: props.currentUserId,
+  draft,
+  files: () => draftFiles.value,
+  notify: message => { createNotice.value = message; },
+});
 let searchTimer = null;
 
-function resetCreateForm() {
+function resetCreateForm({ removeStored = false } = {}) {
+  if (removeStored) draftForm.remove();
   Object.assign(draft, {
     productName: "",
     manufacturer: "",
@@ -69,7 +80,28 @@ function resetCreateForm() {
     comment: "",
   });
   draftFiles.value = [];
+  if (draftFileInput.value) draftFileInput.value.value = "";
   createError.value = "";
+  createNotice.value = "";
+  draftForm.enableSaving();
+}
+
+function hasCreateFormData() {
+  return draft.productName !== ""
+    || draft.manufacturer !== ""
+    || draft.supplier !== ""
+    || draft.sampleQuantity !== 1
+    || draft.testMethod !== ""
+    || draft.comment !== ""
+    || draftFiles.value.length > 0;
+}
+
+async function clearCreateDraft() {
+  if (hasCreateFormData() && !(await confirmDialog.ask(
+    "Очистить заполненные поля и сохранённый черновик?",
+    { confirmLabel: "Очистить" },
+  ))) return;
+  resetCreateForm({ removeStored: true });
 }
 
 const tabs = computed(() => [
@@ -134,6 +166,8 @@ watch(query, () => {
   window.clearTimeout(searchTimer);
   searchTimer = window.setTimeout(reloadFirstPage, 300);
 });
+watch(draft, draftForm.scheduleSave, { deep: true, flush: "sync" });
+watch(draftFiles, draftForm.scheduleSave, { flush: "sync" });
 watch(
   () => props.refreshTrigger,
   () => {
@@ -188,6 +222,7 @@ async function createRequest() {
     return;
   }
   if (!isCurrent()) return;
+  draftForm.remove();
   const failedFiles = [];
   for (const file of draftFiles.value) {
     try {
@@ -246,9 +281,15 @@ defineExpose({
     showCreate.value = true;
   },
 });
-onMounted(loadRequests);
+onMounted(() => {
+  draftForm.restore();
+  window.addEventListener("pagehide", draftForm.flushSave);
+  loadRequests();
+});
 onBeforeUnmount(() => {
   window.clearTimeout(searchTimer);
+  window.removeEventListener("pagehide", draftForm.flushSave);
+  draftForm.dispose();
   registryGuard.invalidate();
   downloadGuard.invalidate();
   createRequestGuard.invalidate();
@@ -431,6 +472,7 @@ onBeforeUnmount(() => {
         <label>Наименование и тип *<input
           v-model="draft.productName"
           required
+          maxlength="500"
           placeholder="Введите наименование продукции"
         /></label><label>Количество образцов *<input
           v-model.number="draft.sampleQuantity"
@@ -440,18 +482,22 @@ onBeforeUnmount(() => {
         /></label><label>Производитель *<input
           v-model="draft.manufacturer"
           required
+          maxlength="500"
           placeholder="Наименование производителя"
         /></label><label>Поставщик *<input
           v-model="draft.supplier"
           required
+          maxlength="500"
           placeholder="Наименование поставщика"
         /></label><label class="wide">Метод испытаний *<textarea
           v-model="draft.testMethod"
           required
+          maxlength="10000"
           placeholder="Опишите метод или программу испытаний"
         ></textarea></label><label class="wide">Сопроводительная документация
           <div class="dropzone">
             <input
+              ref="draftFileInput"
               type="file"
               multiple
               accept=".pdf,.png,.jpg,.jpeg,.docx,.xlsx"
@@ -467,8 +513,16 @@ onBeforeUnmount(() => {
         ></textarea>
         </label>
       </div>
+      <p v-if="createNotice" class="form-notice" role="status">{{ createNotice }}</p>
       <p v-if="createError" class="form-error">{{ createError }}</p>
       <div class="modal-actions">
+        <button
+          type="button"
+          class="secondary clear-draft"
+          :disabled="createLoading"
+          @click="clearCreateDraft"
+        >
+          Очистить черновик</button>
         <button
           type="button"
           class="secondary"
