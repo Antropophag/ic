@@ -29,13 +29,15 @@ COMPOSE_ENV_FILE=.env.prod docker compose -p ic-prod --env-file .env.prod -f com
 Команда импорта по умолчанию выполняет dry-run и не меняет БД:
 
 ```bash
-COMPOSE_ENV_FILE=.env.prod docker compose -p ic-prod --env-file .env.prod -f compose.yaml exec backend php yii bitrix/import --max-pages=1
+COMPOSE_ENV_FILE=.env.dev docker compose -p ic-dev --env-file .env.dev \
+  -f compose.yaml -f compose.dev.yaml exec backend php yii bitrix/import --max-pages=1
 ```
 
 Запись включается только явным параметром:
 
 ```bash
-COMPOSE_ENV_FILE=.env.prod docker compose -p ic-prod --env-file .env.prod -f compose.yaml exec backend php yii bitrix/import --max-pages=1 --apply=1
+COMPOSE_ENV_FILE=.env.dev docker compose -p ic-dev --env-file .env.dev \
+  -f compose.yaml -f compose.dev.yaml exec backend php yii bitrix/import --max-pages=1 --apply=1
 ```
 
 Значение должно быть ровно `1`. Любое другое значение, кроме безопасного `0`,

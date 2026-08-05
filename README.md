@@ -32,7 +32,7 @@ make dev-logs
 make env-status
 ```
 
-## Production
+## Промышленная эксплуатация
 
 Production использует только project `ic-prod`, `compose.yaml` и `.env.prod`.
 

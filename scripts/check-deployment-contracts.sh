@@ -63,16 +63,18 @@ grep -Fq '$(PROD_COMPOSE) build backend scheduler frontend' Makefile
 grep -Fq '$(PROD_COMPOSE) up -d --no-build --force-recreate frontend scheduler' Makefile
 # shellcheck disable=SC2016 # This is a literal Compose interpolation contract.
 [ "$(grep -Fc 'env_file: ${COMPOSE_ENV_FILE:?COMPOSE_ENV_FILE must select .env.dev or .env.prod}' compose.yaml)" -eq 2 ]
-[ "$(grep -c 'env_file: .env.test' compose.test.yaml)" -eq 2 ]
+# shellcheck disable=SC2016 # This is a literal Compose interpolation contract.
+[ "$(grep -Fc 'env_file: ${TEST_ENV_FILE:?TEST_ENV_FILE must select the test environment}' compose.test.yaml)" -eq 2 ]
 # shellcheck disable=SC2016 # This is a literal shell contract string.
 grep -q 'export COMPOSE_ENV_FILE="$DEV_ENV_FILE"' scripts/dev.sh
 # shellcheck disable=SC2016 # This is a literal Make contract string.
 grep -q 'COMPOSE_ENV_FILE=$(PROD_ENV_FILE) $(PROD_COMPOSE)' Makefile
 
-set +e
-ambiguous_output=$(make --no-print-directory up 2>&1)
-ambiguous_status=$?
-set -e
+if ambiguous_output=$(make --no-print-directory up 2>&1); then
+  ambiguous_status=0
+else
+  ambiguous_status=$?
+fi
 [ "$ambiguous_status" -eq 2 ]
 printf '%s' "$ambiguous_output" | grep -q 'make dev-up или make prod-up'
 

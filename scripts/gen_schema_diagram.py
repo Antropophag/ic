@@ -31,7 +31,7 @@ def read_schema():
     """Read the database through its own client, using credentials inside the container."""
     compose_command = os.environ.get("SCHEMA_COMPOSE_COMMAND")
     if not compose_command:
-        sys.exit("SCHEMA_COMPOSE_COMMAND must select an explicit deployment")
+        sys.exit("SCHEMA_COMPOSE_COMMAND должен явно выбирать deployment")
     command = [
         *shlex.split(compose_command), "exec", "-T", "mariadb", "sh", "-lc",
         'mariadb --batch --skip-column-names '

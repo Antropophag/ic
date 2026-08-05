@@ -19,7 +19,7 @@ migrations, seed и break-glass provisioning. `dev-down` удаляет containe
 network, сохраняя named volumes. `dev-reset` явно удаляет volumes project
 `ic-dev`, после чего выполняет полный `dev-up`.
 
-## Production
+## Промышленная эксплуатация
 
 Production Compose содержит `frontend`, `backend`, `scheduler` и `mariadb`.
 `frontend` принимает HTTP, раздаёт production bundle и проксирует `/api` и
@@ -229,7 +229,7 @@ projects `shlz-test-registry` и `shlz-test-registry-dev` можно верну�
      -f compose.yaml -f compose.dev.yaml down
    ```
 
-2. Production: сделайте штатный backup MariaDB и отдельный backup volume
+2. Для production сделайте штатный backup MariaDB и отдельный backup volume
    `shlz-test-registry_document-data`. Создайте `.env.prod`, выполните
    `make prod-up`, затем восстановите DB и документы в
    `ic-prod_mariadb-data`/`ic-prod_document-data`. Не копируйте живой datadir.
