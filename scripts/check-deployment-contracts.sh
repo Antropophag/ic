@@ -103,7 +103,7 @@ grep -Fq "compose config --quiet" scripts/environment.sh
 [ "$(grep -Fc 'env_file: ${COMPOSE_ENV_FILE:?COMPOSE_ENV_FILE must select .env.dev or .env.prod}' compose.yaml)" -eq 2 ]
 # shellcheck disable=SC2016 # This is a literal Compose interpolation contract.
 [ "$(grep -Fc 'env_file: ${TEST_ENV_FILE:?TEST_ENV_FILE must select the test environment}' compose.test.yaml)" -eq 2 ]
-grep -Fq "exec make -C \"\$repository_root\" dev-up" scripts/dev.sh
+grep -Fq "exec make --no-print-directory -C \"\$repository_root\" dev-up" scripts/dev.sh
 grep -Fq 'http://127.0.0.1:8080/health/ready' compose.yaml
 
 if ambiguous_output=$(make --no-print-directory up 2>&1); then

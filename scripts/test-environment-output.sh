@@ -34,7 +34,10 @@ case " $* " in
     echo "compose warning retained" >&2
   fi
   ;;
-*" ps -q mariadb "*) echo mariadb-id ;;
+*" ps -q mariadb "*)
+  [ "${MOCK_PS_WARNING:-0}" -ne 1 ] || echo "compose ps warning retained" >&2
+  echo mariadb-id
+  ;;
 *" ps -q backend "*) echo backend-id ;;
 *" ps -q frontend "*)
   echo frontend-id
@@ -86,6 +89,10 @@ if printf '%s' "$warning_output" | grep -q 'verbose successful technical output'
   echo "Successful technical output leaked with a warning" >&2
   exit 1
 fi
+
+ps_warning_output=$(MOCK_PS_WARNING=1 NO_COLOR=1 run_environment status 2>&1)
+printf '%s' "$ps_warning_output" | grep -q 'compose ps warning retained'
+printf '%s' "$ps_warning_output" | grep -q 'mariadb.*healthy'
 
 set +e
 unhealthy_output=$(MOCK_FRONTEND_STATE=unhealthy NO_COLOR=1 run_environment up 2>&1)

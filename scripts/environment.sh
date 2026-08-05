@@ -90,11 +90,16 @@ run_quiet() {
 
 container_state() {
   service=$1
-  if container_output=$(compose ps -q "$service" 2>&1); then
-    container_ids=$container_output
+  : >"$output_file"
+  if container_ids=$(compose ps -q "$service" 2>"$output_file"); then
+    if grep -Eiq 'warning|warn:|deprecated' "$output_file"; then
+      grep -Ei 'warning|warn:|deprecated' "$output_file" >&2
+    fi
+    : >"$output_file"
   else
     command_status=$?
-    printf '%s\n' "$container_output" >&2
+    cat "$output_file" >&2
+    : >"$output_file"
     return "$command_status"
   fi
   [ -n "$container_ids" ] || {
