@@ -270,12 +270,11 @@ components:
           type: string
           minLength: 1
         user:
-          nullable: true
-          allOf:
-            - $ref: '#/components/schemas/UserProfile'
+          $ref: '#/components/schemas/UserProfile'
       additionalProperties: false
     UserProfile:
       type: object
+      nullable: true
       required: [id, displayName, email, department, position, roles]
       properties:
         id:

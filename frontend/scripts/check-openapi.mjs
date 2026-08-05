@@ -8,9 +8,13 @@ const repositoryRoot = path.resolve(frontendRoot, '..')
 const specificationPath = path.join(repositoryRoot, 'openapi', 'openapi.yaml')
 const uiPath = path.join(repositoryRoot, 'openapi', 'swagger-ui', 'index.html')
 
-const api = await SwaggerParser.validate(specificationPath)
-const ui = await fs.readFile(uiPath, 'utf8')
 const source = await fs.readFile(specificationPath, 'utf8')
+if (/\$ref\s*:\s*['"]?https?:\/\//i.test(source)) {
+  throw new Error('Remote OpenAPI references are forbidden; validation must remain offline')
+}
+
+const api = await SwaggerParser.validate(specificationPath, { resolve: { http: false } })
+const ui = await fs.readFile(uiPath, 'utf8')
 
 function assert(condition, message) {
   if (!condition) throw new Error(message)
@@ -46,6 +50,7 @@ for (const status of ['400', '401', '404', '409', '415', '422']) {
 }
 assert(api.components?.securitySchemes?.cookieSession?.in === 'cookie', 'Session auth must be cookie-based')
 assert(api.components?.securitySchemes?.csrfToken?.name === 'X-CSRF-Token', 'The actual CSRF header is required')
+assert(api.components?.schemas?.UserProfile?.nullable === true, 'The auth/me user profile must allow null')
 assert(ui.includes("url: '/api/openapi.yaml'"), 'Swagger UI must use the local specification')
 assert(ui.includes('supportedSubmitMethods: []'), 'Swagger Try it out must remain disabled')
 assert(!/https?:\/\//i.test(ui), 'Swagger UI must not load assets or contracts from the network')

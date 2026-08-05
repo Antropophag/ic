@@ -103,12 +103,25 @@ set -e
 [ -z "$failed_url" ]
 
 grep -q 'MAILPIT_BASE_URL must be provided' frontend/e2e/notifications.e2e.js
+grep -Fq 'COPY frontend/package*.json frontend/.npmrc ./' docker/frontend.Dockerfile
 
-# Production and development images must contain the reviewed contract and
-# local Swagger UI assets; Nginx must serve them before the /api FastCGI rule.
-[ "$(grep -Fc 'COPY openapi/openapi.yaml /srv/frontend/api/openapi.yaml' docker/frontend.Dockerfile)" -eq 2 ]
-[ "$(grep -Fc 'COPY openapi/swagger-ui/index.html /srv/frontend/api/docs/index.html' docker/frontend.Dockerfile)" -eq 2 ]
-grep -Fq 'node_modules/swagger-ui-dist/swagger-ui-bundle.js' docker/frontend.Dockerfile
+# Production и development images должны содержать проверенный контракт и
+# локальные Swagger UI assets; каждый stage проверяется независимо.
+stage_has_copy() {
+  stage=$1
+  copy_instruction=$2
+  awk -v stage="$stage" -v copy_instruction="$copy_instruction" '
+    $1 == "FROM" { active = ($NF == stage); next }
+    active && index($0, copy_instruction) { found = 1 }
+    END { exit found ? 0 : 1 }
+  ' docker/frontend.Dockerfile
+}
+for stage in production development; do
+  stage_has_copy "$stage" 'COPY openapi/openapi.yaml /srv/frontend/api/openapi.yaml'
+  stage_has_copy "$stage" 'COPY openapi/swagger-ui/index.html /srv/frontend/api/docs/index.html'
+  stage_has_copy "$stage" 'node_modules/swagger-ui-dist/swagger-ui-bundle.js'
+  stage_has_copy "$stage" 'node_modules/swagger-ui-dist/swagger-ui.css'
+done
 grep -Fq 'location = /api/openapi.yaml' docker/nginx/default.conf
 grep -Fq 'location ^~ /api/docs/' docker/nginx/default.conf
 

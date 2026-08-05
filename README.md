@@ -73,8 +73,8 @@ make e2e
 make coverage
 ```
 
-- `make check` — lint, PHPStan, Unit, Vitest, dependency audit, production build
-  и repository contracts;
+- `make check` — lint, OpenAPI, PHPStan, Unit, Vitest, dependency audit,
+  production build и repository contracts;
 - `make e2e` — build test images, clean migrations/seed, Integration,
   Playwright, LDAP/SMTP/MariaDB recovery и SIGTERM scheduler, затем полное
   удаление test containers/network/volumes;

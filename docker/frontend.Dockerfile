@@ -1,6 +1,6 @@
 FROM docker.io/library/node:22.23.0-alpine3.23 AS frontend-source
 WORKDIR /build
-COPY frontend/package*.json ./
+COPY frontend/package*.json frontend/.npmrc ./
 RUN npm ci --no-audit --no-fund
 COPY frontend/ ./
 
