@@ -32,8 +32,20 @@ final class IdempotencyStoreConcurrencyTest extends TestCase
         self::assertFalse($result['secondOperationStarted']);
     }
 
-    /** @return array{0: array<string, mixed>, 1: array<string, mixed>, operationCount: int, secondOperationStarted: bool} */
-    private function runConcurrent(string $firstHash, string $secondHash): array
+    public function testSimultaneousSamePayloadClaimsDoNotExposeDatabaseErrors(): void
+    {
+        $result = $this->runConcurrent(hash('sha256', 'same'), hash('sha256', 'same'), false);
+
+        self::assertSame(['ok', 'ok'], array_column($result, 'outcome'));
+        $replayed = array_column($result, 'replayed');
+        sort($replayed);
+        self::assertSame([false, true], $replayed);
+        self::assertSame(1, $result['operationCount']);
+        self::assertSame(1, $result['operationsStarted']);
+    }
+
+    /** @return array{0: array<string, mixed>, 1: array<string, mixed>, operationCount: int, operationsStarted: int, secondOperationStarted: bool} */
+    private function runConcurrent(string $firstHash, string $secondHash, bool $stageSecond = true): array
     {
         if (!function_exists('proc_open')) {
             self::markTestSkipped('proc_open is required for the concurrency contract test.');
@@ -73,8 +85,10 @@ final class IdempotencyStoreConcurrencyTest extends TestCase
                 1_000_000,
                 $pipes[0],
             );
-            touch($startFile);
-            $this->waitForFile($firstEntered);
+            if ($stageSecond) {
+                touch($startFile);
+                $this->waitForFile($firstEntered);
+            }
             $processes[1] = $this->startWorker(
                 $actorId,
                 $key,
@@ -86,6 +100,9 @@ final class IdempotencyStoreConcurrencyTest extends TestCase
                 0,
                 $pipes[1],
             );
+            if (!$stageSecond) {
+                touch($startFile);
+            }
             foreach ($processes as $index => $process) {
                 $output = '';
                 foreach ($pipes[$index] as $pipe) {
@@ -106,6 +123,7 @@ final class IdempotencyStoreConcurrencyTest extends TestCase
                 $results[0],
                 $results[1],
                 'operationCount' => $operationCount,
+                'operationsStarted' => (int) file_exists($firstEntered) + (int) file_exists($secondEntered),
                 'secondOperationStarted' => file_exists($secondEntered),
             ];
         } finally {

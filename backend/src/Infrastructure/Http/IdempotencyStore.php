@@ -15,6 +15,7 @@ final class IdempotencyStore
     public const MAX_RESPONSE_BYTES = 65_535;
     private const RETENTION = '+24 hours';
     private const CLEANUP_CHANCE = 100;
+    private const LOCK_TIMEOUT_SECONDS = 30;
 
     public function __construct(private readonly Connection $db)
     {
@@ -37,9 +38,19 @@ final class IdempotencyStore
         if (random_int(1, self::CLEANUP_CHANCE) === 1) {
             $this->cleanupExpired();
         }
-        $transaction = $this->db->beginTransaction();
+        $lockName = hash('sha256', implode("\0", [(string) $actorId, $method, $route, $key]));
+        $lockAcquired = (int) $this->db->createCommand(
+            'SELECT GET_LOCK(:name, :timeout)',
+            [':name' => $lockName, ':timeout' => self::LOCK_TIMEOUT_SECONDS],
+        )->queryScalar() === 1;
+        if (!$lockAcquired) {
+            throw new IdempotencyConflict('Предыдущий запрос с этим Idempotency-Key ещё выполняется.');
+        }
+
+        $transaction = null;
         $recordId = null;
         try {
+            $transaction = $this->db->beginTransaction();
             $now = Clock::now();
             $keyHash = hash('sha256', $key);
             try {
@@ -114,20 +125,22 @@ final class IdempotencyStore
             $transaction->commit();
             return ['body' => $body, 'statusCode' => $code, 'location' => $responseLocation, 'replayed' => false];
         } catch (HttpException $error) {
-            if ($error->statusCode < 500 && $transaction->isActive && $recordId !== null) {
+            if ($error->statusCode < 500 && $transaction?->isActive && $recordId !== null) {
                 $this->db->createCommand()->delete('{{%idempotency_requests}}', ['id' => $recordId])->execute();
                 $transaction->commit();
                 throw $error;
             }
-            if ($transaction->isActive) {
+            if ($transaction?->isActive) {
                 $transaction->rollBack();
             }
             throw $error;
         } catch (\Throwable $error) {
-            if ($transaction->isActive) {
+            if ($transaction?->isActive) {
                 $transaction->rollBack();
             }
             throw $error;
+        } finally {
+            $this->db->createCommand('SELECT RELEASE_LOCK(:name)', [':name' => $lockName])->queryScalar();
         }
     }
 

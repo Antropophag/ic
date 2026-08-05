@@ -22,9 +22,11 @@ Production не получает ни одного из этих файлов.
 Перед production POST-командами заявок и администрирования `ApiController`
 создаёт внешнюю транзакционную границу идемпотентности в MariaDB. Вложенные
 транзакции repository работают через savepoint, поэтому доменное изменение,
-audit/outbox и сохранённый HTTP-ответ фиксируются атомарно. Уникальная область
-`actor + method + path + key hash` сериализует параллельные повторы; fingerprint
-не позволяет использовать ключ для другого payload. Это инфраструктурный слой:
+audit/outbox и сохранённый HTTP-ответ фиксируются атомарно. До транзакции
+connection-level lock MariaDB по SHA-256 области `actor + method + path + key`
+сериализует полностью одновременные claim; unique index той же области остаётся
+окончательной защитой, в том числе при смешанном rollout версий. Fingerprint не
+позволяет использовать ключ для другого payload. Это инфраструктурный слой:
 domain policies, optimistic locking и repository API не знают об HTTP-ключах.
 
 До открытия outer transaction backend canonicalizes JSON либо form fields и
@@ -37,8 +39,9 @@ streaming-хеширует временные upload-файлы. Внутри т
 
 Expired cleanup использует `idx_idempotency_expiry`, запускается вероятностно и
 ограничен 100 строками. Unique index `actor_id + http_method + route + key_hash`
-сериализует одинаковые ключи; ожидающий запрос после commit либо replay-ит
-результат, либо получает `409` при другом fingerprint. Если первая транзакция
+страхует сериализацию одинаковых ключей; ожидающий запрос после commit либо
+replay-ит результат, либо получает `409` при другом fingerprint. Ожидание lock
+ограничено 30 секундами, после чего возвращается безопасный `409`. Если первая транзакция
 откатывается, её claim исчезает и ожидающий retry может стать новой попыткой.
 Контролируемый `4xx` после отката repository savepoint удаляет claim, но
 фиксирует намеренный denied audit; неожиданный exception и любой `5xx`
