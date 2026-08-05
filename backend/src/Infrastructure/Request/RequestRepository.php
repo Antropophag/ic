@@ -136,10 +136,16 @@ final class RequestRepository
     {
         $transaction = $this->db->beginTransaction();
         try {
+            // Lock the membership row so a concurrent role revoke cannot pass the authorization check
+            // and commit before the protected mutation finishes.
+            $administratorRoleId = $this->db->createCommand(
+                'SELECT ur.role_id FROM {{%user_roles}} ur '
+                . 'JOIN {{%roles}} role ON role.id = ur.role_id '
+                . "WHERE ur.user_id = :actor_id AND role.code = 'administrator' FOR UPDATE",
+                [':actor_id' => $actorId],
+            )->queryScalar();
             $row = $this->db->createCommand(
-                'SELECT r.department_name, r.department_external_id, r.lock_version, actor.is_active, '
-                . "EXISTS(SELECT 1 FROM {{%user_roles}} ur JOIN {{%roles}} role ON role.id = ur.role_id "
-                . "WHERE ur.user_id = actor.id AND role.code = 'administrator') AS is_admin "
+                'SELECT r.department_name, r.department_external_id, r.lock_version, actor.is_active '
                 . 'FROM {{%requests}} r JOIN {{%users}} actor ON actor.id = :actor_id '
                 . 'WHERE r.id = :request_id FOR UPDATE',
                 [':request_id' => $requestId, ':actor_id' => $actorId],
@@ -147,7 +153,7 @@ final class RequestRepository
             if ($row === false) {
                 throw new RequestNotFound('Request not found');
             }
-            if (!(bool) $row['is_active'] || !(bool) $row['is_admin']) {
+            if (!(bool) $row['is_active'] || $administratorRoleId === false) {
                 throw new RequestDepartmentChangeDenied('Изменять подразделение заявки может только активный администратор.');
             }
             if ((int) $row['lock_version'] !== $expectedLockVersion) {

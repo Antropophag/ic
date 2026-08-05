@@ -141,9 +141,12 @@ async function changeDepartment() {
     emit('updated')
   } catch (error) {
     if (!departmentRequestGuard.isCurrent(token, selected.value?.backendId)) return
-    departmentError.value = error.status === 409
-      ? 'Заявка уже изменена. Обновите карточку и повторите действие.'
-      : error.payload?.errors?.department?.[0] || error.message || 'Не удалось изменить подразделение.'
+    if (error.status === 409) {
+      showDepartmentModal.value = false
+      await recoverConflict(requestId, 'Заявка уже изменена.')
+      return
+    }
+    departmentError.value = error.payload?.errors?.department?.[0] || error.message || 'Не удалось изменить подразделение.'
   } finally {
     if (departmentRequestGuard.isCurrent(token, selected.value?.backendId)) departmentLoading.value = false
   }

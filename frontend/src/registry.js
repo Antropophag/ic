@@ -98,6 +98,7 @@ export function withoutStaleActions(item) {
     canReject: false,
     canWithdraw: false,
     canDeleteReport: false,
+    canEditDepartment: false,
   }
 }
 

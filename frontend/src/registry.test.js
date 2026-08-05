@@ -105,6 +105,7 @@ it('disables every version-sensitive action before conflict recovery', () => {
     canReject: true,
     canWithdraw: true,
     canDeleteReport: true,
+    canEditDepartment: true,
   })).toMatchObject({
     canAssignExecutor: false,
     canClaimExpert: false,
@@ -116,6 +117,7 @@ it('disables every version-sensitive action before conflict recovery', () => {
     canReject: false,
     canWithdraw: false,
     canDeleteReport: false,
+    canEditDepartment: false,
   })
 })
 

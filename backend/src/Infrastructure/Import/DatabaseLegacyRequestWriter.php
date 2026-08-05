@@ -44,7 +44,9 @@ final class DatabaseLegacyRequestWriter implements LegacyRequestWriter
                 'initiator_id' => $initiatorId,
                 'department_name' => $request->department !== '' ? $request->department : null,
                 'department_external_id' => $request->departmentExternalId,
-                'department_source' => $request->department !== '' ? 'bitrix24' : 'unknown',
+                'department_source' => $request->department !== '' || $request->departmentExternalId !== null
+                    ? 'bitrix24'
+                    : 'unknown',
                 'status' => $request->status->value,
                 'product_name' => $request->productName,
                 'manufacturer' => $request->manufacturer,
