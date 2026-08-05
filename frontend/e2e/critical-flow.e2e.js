@@ -11,7 +11,7 @@ async function apiFor(baseURL, userId) {
   const storageState = await bootstrap.storageState()
   await bootstrap.dispose()
 
-  return playwrightRequest.newContext({
+  const context = await playwrightRequest.newContext({
     baseURL,
     storageState,
     extraHTTPHeaders: {
@@ -19,6 +19,14 @@ async function apiFor(baseURL, userId) {
       'X-CSRF-Token': csrfToken,
     },
   })
+  return {
+    get: (...args) => context.get(...args),
+    post: (path, options = {}) => context.post(path, {
+      ...options,
+      headers: { ...options.headers, 'Idempotency-Key': crypto.randomUUID() },
+    }),
+    dispose: () => context.dispose(),
+  }
 }
 
 async function expectOk(response) {

@@ -24,7 +24,7 @@ test('новая заявка доставляет письма через на�
   expect(me.ok(), await me.text()).toBe(true)
   const { csrfToken } = await me.json()
   const response = await request.post('/api/v1/requests', {
-    headers: { 'X-Test-User-ID': '3', 'X-CSRF-Token': csrfToken },
+    headers: { 'X-Test-User-ID': '3', 'X-CSRF-Token': csrfToken, 'Idempotency-Key': crypto.randomUUID() },
     data: {
       productName: marker,
       manufacturer: 'E2E',

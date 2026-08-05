@@ -42,6 +42,19 @@ erDiagram
         bigint(20)_unsigned document_version_id FK "-> request_document_versions.id"
         datetime(6) created_at
     }
+    idempotency_requests {
+        bigint(20)_unsigned id PK
+        bigint(20)_unsigned actor_id FK "-> users.id"
+        varchar(8) http_method
+        varchar(255) route
+        char(64) key_hash
+        char(64) request_hash
+        smallint(6)_unsigned status_code
+        text response_json
+        varchar(2048) location
+        datetime(6) created_at
+        datetime(6) expires_at
+    }
     migration {
         varchar(180) version PK
         int(11) apply_time
@@ -172,6 +185,7 @@ erDiagram
     requests ||--o{ expert_opinions : "request_id"
     users ||--o{ expert_opinions : "expert_id"
     request_document_versions ||--o{ expert_opinions : "document_version_id"
+    users ||--o{ idempotency_requests : "actor_id"
     requests ||--o{ notification_outbox : "request_id"
     users ||--o{ requests : "initiator_id"
     requests ||--o{ request_assignments : "request_id"

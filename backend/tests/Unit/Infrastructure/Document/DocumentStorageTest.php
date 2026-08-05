@@ -64,6 +64,86 @@ final class DocumentStorageTest extends TestCase
         }
     }
 
+    public function testTrackedWriteIsDeletedWhenOuterTransactionRollsBack(): void
+    {
+        $source = tempnam(sys_get_temp_dir(), 'ic-source-');
+        self::assertIsString($source);
+        file_put_contents($source, 'document');
+        $storage = new DocumentStorage($this->root);
+        $checkpoint = DocumentStorage::writeCheckpoint();
+
+        $key = $storage->store($source);
+        DocumentStorage::rollbackWritesSince($checkpoint);
+
+        self::assertFileDoesNotExist($storage->path($key));
+        unlink($source);
+    }
+
+    public function testTrackedWriteRemainsAfterOuterTransactionCommits(): void
+    {
+        $source = tempnam(sys_get_temp_dir(), 'ic-source-');
+        self::assertIsString($source);
+        file_put_contents($source, 'document');
+        $storage = new DocumentStorage($this->root);
+        $checkpoint = DocumentStorage::writeCheckpoint();
+
+        $key = $storage->store($source);
+        DocumentStorage::discardWritesSince($checkpoint);
+
+        self::assertFileExists($storage->path($key));
+        unlink($source);
+    }
+
+    public function testInnerCommitKeepsWriteTrackedForOuterRollback(): void
+    {
+        $source = tempnam(sys_get_temp_dir(), 'ic-source-');
+        self::assertIsString($source);
+        file_put_contents($source, 'document');
+        $storage = new DocumentStorage($this->root);
+        $outer = DocumentStorage::writeCheckpoint();
+        $inner = DocumentStorage::writeCheckpoint();
+
+        $key = $storage->store($source);
+        DocumentStorage::discardWritesSince($inner);
+        DocumentStorage::rollbackWritesSince($outer);
+
+        self::assertFileDoesNotExist($storage->path($key));
+        unlink($source);
+    }
+
+    public function testRejectsClosingScopesOutOfOrderWithoutLosingTracking(): void
+    {
+        $outer = DocumentStorage::writeCheckpoint();
+        $inner = DocumentStorage::writeCheckpoint();
+
+        try {
+            DocumentStorage::discardWritesSince($outer);
+            self::fail('Out-of-order scope close must fail.');
+        } catch (\LogicException) {
+            // Expected: the failed close must leave both scopes usable.
+        } finally {
+            DocumentStorage::discardWritesSince($inner);
+            DocumentStorage::discardWritesSince($outer);
+        }
+
+        $source = tempnam(sys_get_temp_dir(), 'ic-source-');
+        self::assertIsString($source);
+        file_put_contents($source, 'document');
+        $storage = new DocumentStorage($this->root);
+        $next = DocumentStorage::writeCheckpoint();
+        try {
+            $key = $storage->store($source);
+        } finally {
+            try {
+                DocumentStorage::rollbackWritesSince($next);
+            } finally {
+                unlink($source);
+            }
+        }
+
+        self::assertFileDoesNotExist($storage->path($key));
+    }
+
     public function testWritableProbeCleansUpAfterItself(): void
     {
         mkdir($this->root, 0700, true);
