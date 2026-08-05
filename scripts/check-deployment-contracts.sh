@@ -83,22 +83,27 @@ for compose_file in compose.yaml compose.dev.yaml compose.test.yaml; do
     exit 1
   fi
 done
-grep -q '^prod-up: doctor$' Makefile
+grep -q '^prod-up: _doctor$' Makefile
+grep -q '^prod-restart: _doctor$' Makefile
+grep -q '^prod-status: _doctor$' Makefile
+grep -q '^dev-up: _doctor$' Makefile
+grep -q '^dev-restart: _doctor$' Makefile
+grep -q '^dev-status: _doctor$' Makefile
 grep -q '^dev-reset: doctor$' Makefile
 grep -q '^prod-reset: doctor$' Makefile
 grep -q '^env-status: doctor$' Makefile
-# shellcheck disable=SC2016 # These are literal Make/Compose contract strings.
-grep -Fq '$(PROD_COMPOSE) build backend scheduler frontend' Makefile
-# shellcheck disable=SC2016 # These are literal Make/Compose contract strings.
-grep -Fq '$(PROD_COMPOSE) up -d --no-build --force-recreate frontend scheduler' Makefile
+grep -Fq "sh scripts/environment.sh prod up" Makefile
+grep -Fq "sh scripts/environment.sh dev up" Makefile
+grep -Fq "compose build backend scheduler frontend" scripts/environment.sh
+grep -Fq "compose up -d --no-build --force-recreate frontend scheduler" scripts/environment.sh
+grep -Fq "compose logs --follow" scripts/environment.sh
+grep -Fq "SERVICE_READY_TIMEOUT" scripts/environment.sh
 # shellcheck disable=SC2016 # This is a literal Compose interpolation contract.
 [ "$(grep -Fc 'env_file: ${COMPOSE_ENV_FILE:?COMPOSE_ENV_FILE must select .env.dev or .env.prod}' compose.yaml)" -eq 2 ]
 # shellcheck disable=SC2016 # This is a literal Compose interpolation contract.
 [ "$(grep -Fc 'env_file: ${TEST_ENV_FILE:?TEST_ENV_FILE must select the test environment}' compose.test.yaml)" -eq 2 ]
-# shellcheck disable=SC2016 # This is a literal shell contract string.
-grep -q 'export COMPOSE_ENV_FILE="$DEV_ENV_FILE"' scripts/dev.sh
-# shellcheck disable=SC2016 # This is a literal Make contract string.
-grep -q 'COMPOSE_ENV_FILE=$(PROD_ENV_FILE) $(PROD_COMPOSE)' Makefile
+grep -Fq 'environment.sh" dev up' scripts/dev.sh
+grep -Fq 'http://127.0.0.1:8080/health/ready' compose.yaml
 
 if ambiguous_output=$(make --no-print-directory up 2>&1); then
   ambiguous_status=0
@@ -180,5 +185,7 @@ ln -s "$PWD/compose.test.yaml" "$compose_config_dir/compose.test.yaml"
 )
 cleanup_compose_config_dir
 trap - EXIT HUP INT TERM
+
+sh scripts/test-environment-output.sh
 
 echo "Deployment metadata contracts passed"

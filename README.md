@@ -7,7 +7,9 @@ read-only журнал действий и журнал доставки уве�
 
 ## Локальная разработка
 
-Нужны Git, Node.js 22 и Docker Compose либо Podman Compose.
+Нужны Git, Node.js 22 и Docker Compose либо Podman Compose. При использовании
+Docker требуются Compose 2.20.2+ и Engine 25.0+ (API 1.44+): frontend healthcheck
+использует `start_interval`.
 
 ```sh
 make init
@@ -37,8 +39,11 @@ Development-БД обязана оканчиваться на `_dev`: seed пр�
 
 ```sh
 make dev-down   # остановить, данные сохранить
+make dev-restart
+make dev-status
 make dev-reset  # удалить dev volumes, создать БД и seed заново
-make dev-logs
+make dev-logs                     # потоковые логи всех сервисов
+make dev-logs SERVICE=backend     # потоковые логи одного сервиса
 make env-status
 ```
 
@@ -69,9 +74,20 @@ provisioning. Данные в named volumes сохраняются.
 
 ```sh
 make prod-down  # остановить, данные сохранить
+make prod-restart
+make prod-status
 make prod-logs
+make prod-logs SERVICE=backend
 make prod-reset # с подтверждением удалить production volumes и поднять чистую БД
 ```
+
+Lifecycle-команды показывают компактный статус сервисов и опубликованные URL.
+Compose output полностью выводится при ошибке; timeout готовности дополнительно
+показывает последние логи проблемного сервиса. Цвет включается только в
+интерактивном терминале. Для отключения используйте `NO_COLOR=1`, для
+принудительного включения — `FORCE_COLOR=1`.
+Frontend healthcheck обращается через nginx к `/health/ready`, поэтому отражает
+готовность всего приложения: reverse proxy, backend, БД и document storage.
 
 Bootstrap создаёт локальные профили-заглушки для логинов из
 `BOOTSTRAP_ADMIN_AD_LOGINS` и назначает им `employee` и `administrator`.
@@ -152,11 +168,15 @@ make env-status
 
 make dev-up
 make dev-down
+make dev-restart
+make dev-status
 make dev-reset
 make dev-logs
 
 make prod-up
 make prod-down
+make prod-restart
+make prod-status
 make prod-reset
 make prod-logs
 

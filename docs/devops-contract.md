@@ -10,6 +10,9 @@ production. Test — внутренний одноразовый контур `m
 ```sh
 make init
 make dev-up
+make dev-status
+make dev-restart
+make dev-logs SERVICE=backend
 make env-status
 ```
 
@@ -30,9 +33,26 @@ Production Compose содержит `frontend`, `backend`, `scheduler` и `maria
 cp .env.example .env.prod
 # заполнить настройки
 make prod-up
+make prod-status
+make prod-restart
 make prod-logs
+make prod-logs SERVICE=backend
 make prod-down
 ```
+
+Lifecycle-команды выводят только этапы операции, readiness ключевых сервисов и
+пользовательские URL. Полный Compose output временно сохраняется и печатается
+при ошибке с исходным exit code. `dev-logs`/`prod-logs` остаются нативными
+потоковыми `compose logs --follow`; `SERVICE=backend` ограничивает вывод одним
+сервисом. Цвет отключается автоматически без TTY, при `TERM=dumb`, в CI и с
+`NO_COLOR=1`; `FORCE_COLOR=1` включает его явно. При timeout readiness команда
+показывает фактический статус, последние 50 строк логов и завершается ошибкой.
+MariaDB проверяется штатным database healthcheck. Frontend healthcheck обращается
+к `/health/ready` через nginx и тем самым проверяет reverse proxy, backend, БД и
+доступность document storage; backend и scheduler дополнительно должны оставаться
+в состоянии `running`. `healthcheck.start_interval` требует Docker Compose
+2.20.2+ и Docker Engine 25.0+ (API 1.44+); эквивалентный Podman provider должен
+поддерживать это поле Compose specification.
 
 `prod-up` сначала выполняет явный build backend, scheduler и frontend. Только
 после успешного build сервисы запускаются с `--no-build`: backend не может быть

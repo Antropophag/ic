@@ -12,8 +12,8 @@ PROD_COMPOSE := $(COMPOSE) -p $(PROD_PROJECT) --env-file $(PROD_ENV_FILE) -f com
 DEV_COMPOSE := $(COMPOSE) -p $(DEV_PROJECT) --env-file $(DEV_ENV_FILE) -f compose.yaml -f compose.dev.yaml
 export COMPOSE CONTAINER_ENGINE PROD_PROJECT DEV_PROJECT TEST_PROJECT PROD_ENV_FILE DEV_ENV_FILE TEST_ENV_FILE
 
-.PHONY: help doctor init up down logs dev-up dev-down dev-reset dev-logs \
-	prod-up prod-down prod-reset prod-logs env-status check e2e coverage schema-diagram \
+.PHONY: help doctor _doctor init up down logs dev-up dev-down dev-restart dev-status dev-reset dev-logs \
+	prod-up prod-down prod-restart prod-status prod-reset prod-logs env-status check e2e coverage schema-diagram \
 	openapi-validate _check-backend _check-frontend _check-repository _dev-contract _test-up _test-reset _test-down
 
 help:
@@ -24,12 +24,16 @@ help:
 	@echo "Промышленная эксплуатация:"
 	@echo "  make prod-up       Собрать и поднять deployment из .env.prod"
 	@echo "  make prod-down     Остановить deployment без удаления данных"
+	@echo "  make prod-restart  Перезапустить production deployment"
+	@echo "  make prod-status   Показать готовность production services"
 	@echo "  make prod-reset    Удалить production volumes и поднять чистый deployment"
 	@echo "  make prod-logs     Показать логи production deployment"
 	@echo ""
 	@echo "Разработка:"
 	@echo "  make dev-up        Поднять и подготовить deployment из .env.dev"
 	@echo "  make dev-down      Остановить deployment из .env.dev"
+	@echo "  make dev-restart   Перезапустить development deployment"
+	@echo "  make dev-status    Показать готовность development services"
 	@echo "  make dev-reset     Удалить dev volumes и поднять чистый deployment"
 	@echo "  make dev-logs      Показать логи deployment"
 	@echo "  make env-status    Показать активные локальные окружения без секретов"
@@ -41,10 +45,12 @@ help:
 	@echo "  make openapi-validate Проверить OpenAPI и локальные Swagger UI assets"
 	@echo "  make schema-diagram Обновить ER-диаграмму"
 
-doctor:
+_doctor:
 	@test -n "$(COMPOSE)" || { echo "Нужен Docker Compose или Podman Compose." >&2; exit 1; }
 	@command -v npm >/dev/null || { echo "Не найден npm." >&2; exit 1; }
 	@command -v python3 >/dev/null || { echo "Не найден python3." >&2; exit 1; }
+
+doctor: _doctor
 	@echo "Compose: $(COMPOSE)"
 	@$(COMPOSE) version
 
@@ -57,23 +63,20 @@ up down logs:
 	@echo "Используйте make dev-$@ или make prod-$@." >&2
 	@exit 2
 
-prod-up: doctor
-	@test -f $(PROD_ENV_FILE) || { echo "Скопируйте .env.example в .env.prod и заполните production-настройки." >&2; exit 2; }
-	COMPOSE_ENV_FILE=$(PROD_ENV_FILE) $(PROD_COMPOSE) config >/dev/null
-	COMPOSE_ENV_FILE=$(PROD_ENV_FILE) $(PROD_COMPOSE) build backend scheduler frontend
-	COMPOSE_ENV_FILE=$(PROD_ENV_FILE) $(PROD_COMPOSE) up -d --no-build --force-recreate mariadb backend
-	COMPOSE_ENV_FILE=$(PROD_ENV_FILE) $(PROD_COMPOSE) run --rm backend php yii migrate/up --interactive=0
-	COMPOSE_ENV_FILE=$(PROD_ENV_FILE) $(PROD_COMPOSE) run --rm backend php yii admin/provision-break-glass
-	COMPOSE_ENV_FILE=$(PROD_ENV_FILE) $(PROD_COMPOSE) run --rm backend php yii admin/bootstrap
-	COMPOSE_ENV_FILE=$(PROD_ENV_FILE) $(PROD_COMPOSE) up -d --no-build --force-recreate frontend scheduler
+prod-up: _doctor
+	@sh scripts/environment.sh prod up
 
-prod-down: doctor
-	@test -f $(PROD_ENV_FILE) || { echo "Для make prod-down нужен .env.prod." >&2; exit 2; }
-	COMPOSE_ENV_FILE=$(PROD_ENV_FILE) $(PROD_COMPOSE) down --remove-orphans
+prod-down: _doctor
+	@sh scripts/environment.sh prod down
 
-prod-logs: doctor
-	@test -f $(PROD_ENV_FILE) || { echo "Для make prod-logs нужен .env.prod." >&2; exit 2; }
-	COMPOSE_ENV_FILE=$(PROD_ENV_FILE) $(PROD_COMPOSE) logs --tail=200
+prod-restart: _doctor
+	@sh scripts/environment.sh prod restart
+
+prod-status: _doctor
+	@sh scripts/environment.sh prod status
+
+prod-logs: _doctor
+	@sh scripts/environment.sh prod logs
 
 prod-reset: doctor
 	@test -f $(PROD_ENV_FILE) || { echo "Для make prod-reset нужен .env.prod." >&2; exit 2; }
@@ -82,12 +85,17 @@ prod-reset: doctor
 	COMPOSE_ENV_FILE=$(PROD_ENV_FILE) $(PROD_COMPOSE) down --volumes --remove-orphans
 	$(MAKE) prod-up
 
-dev-up: doctor
-	sh scripts/dev.sh
+dev-up: _doctor
+	@sh scripts/environment.sh dev up
 
-dev-down: doctor
-	@test -f $(DEV_ENV_FILE) || { echo "Для make dev-down нужен .env.dev (make init)." >&2; exit 2; }
-	COMPOSE_ENV_FILE=$(DEV_ENV_FILE) $(DEV_COMPOSE) down --remove-orphans
+dev-down: _doctor
+	@sh scripts/environment.sh dev down
+
+dev-restart: _doctor
+	@sh scripts/environment.sh dev restart
+
+dev-status: _doctor
+	@sh scripts/environment.sh dev status
 
 dev-reset: doctor
 	@test -f $(DEV_ENV_FILE) || { echo "Для make dev-reset нужен .env.dev (make init)." >&2; exit 2; }
@@ -95,9 +103,8 @@ dev-reset: doctor
 	COMPOSE_ENV_FILE=$(DEV_ENV_FILE) $(DEV_COMPOSE) down --volumes --remove-orphans
 	$(MAKE) dev-up
 
-dev-logs: doctor
-	@test -f $(DEV_ENV_FILE) || { echo "Для make dev-logs нужен .env.dev (make init)." >&2; exit 2; }
-	COMPOSE_ENV_FILE=$(DEV_ENV_FILE) $(DEV_COMPOSE) logs --tail=200
+dev-logs: _doctor
+	@sh scripts/environment.sh dev logs
 
 env-status: doctor
 	sh scripts/env-status.sh
