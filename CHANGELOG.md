@@ -2,6 +2,9 @@
 
 ## Не выпущено
 
+- Production, development и test Compose deployments получили независимые
+  project names и параметризованные host ports; production и development теперь
+  можно запускать одновременно из одной рабочей копии.
 - Добавлен первый срез официального OpenAPI-контракта и локальный Swagger UI
   для просмотра API без внешнего CDN; автоматическая проверка входит в
   стандартный quality gate.

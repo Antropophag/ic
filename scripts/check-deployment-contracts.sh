@@ -53,6 +53,36 @@ grep -q '^TEST_PROJECT := ic-test$' Makefile
 grep -q '^PROD_ENV_FILE := .env.prod$' Makefile
 grep -q '^DEV_ENV_FILE := .env.dev$' Makefile
 grep -q '^TEST_ENV_FILE := .env.test$' Makefile
+grep -q '^COMPOSE_PROJECT_NAME=ic-prod$' .env.example
+grep -q '^COMPOSE_FILE=compose.yaml$' .env.example
+grep -q '^COMPOSE_ENV_FILE=.env.prod$' .env.example
+grep -q '^FRONTEND_PORT=8080$' .env.example
+grep -q '^COMPOSE_PROJECT_NAME=ic-dev$' .env.dev.example
+grep -q '^COMPOSE_FILE=compose.yaml:compose.dev.yaml$' .env.dev.example
+grep -q '^COMPOSE_ENV_FILE=.env.dev$' .env.dev.example
+grep -q '^FRONTEND_PORT=8081$' .env.dev.example
+grep -q '^COMPOSE_PROJECT_NAME=ic-test$' .env.test
+grep -q '^COMPOSE_FILE=compose.test.yaml$' .env.test
+grep -q '^TEST_ENV_FILE=.env.test$' .env.test
+grep -q '^FRONTEND_PORT=18080$' .env.test
+grep -Fq "\${FRONTEND_PORT:-18080}:8080" compose.test.yaml
+grep -Fq "\${MAILPIT_PORT:-18026}:8025" compose.test.yaml
+grep -Fq "\${FRONTEND_PORT:-8080}:8080" compose.yaml
+if grep -Eq '^[[:space:]]*container_name:' compose*.yaml; then
+  echo "Fixed container_name is forbidden in Compose files" >&2
+  exit 1
+fi
+for compose_file in compose.yaml compose.dev.yaml compose.test.yaml; do
+  if awk '
+    /^(networks|volumes):[[:space:]]*$/ { section = 1; next }
+    /^[^[:space:]#]/ { section = 0 }
+    section && /^[[:space:]]+name:/ { found = 1 }
+    END { exit found ? 0 : 1 }
+  ' "$compose_file"; then
+    echo "$compose_file must not assign explicit network or volume names" >&2
+    exit 1
+  fi
+done
 grep -q '^prod-up: doctor$' Makefile
 grep -q '^dev-reset: doctor$' Makefile
 grep -q '^prod-reset: doctor$' Makefile
@@ -124,5 +154,31 @@ for stage in production development; do
 done
 grep -Fq 'location = /api/openapi.yaml' docker/nginx/default.conf
 grep -Fq 'location ^~ /api/docs/' docker/nginx/default.conf
+
+# Validate the exact direct-Compose entry points without relying on local
+# untracked deployment env files or exposing their secrets.
+compose_config_dir=$(mktemp -d)
+compose_provider=${COMPOSE:-docker compose}
+cleanup_compose_config_dir() {
+  rm -rf "$compose_config_dir"
+}
+trap cleanup_compose_config_dir EXIT HUP INT TERM
+cp .env.example "$compose_config_dir/.env.prod"
+cp .env.dev.example "$compose_config_dir/.env.dev"
+cp .env.test "$compose_config_dir/.env.test"
+ln -s "$PWD/compose.yaml" "$compose_config_dir/compose.yaml"
+ln -s "$PWD/compose.dev.yaml" "$compose_config_dir/compose.dev.yaml"
+ln -s "$PWD/compose.test.yaml" "$compose_config_dir/compose.test.yaml"
+(
+  cd "$compose_config_dir"
+  # shellcheck disable=SC2086 # Compose provider command intentionally contains arguments.
+  $compose_provider --env-file .env.prod config --quiet
+  # shellcheck disable=SC2086 # Compose provider command intentionally contains arguments.
+  $compose_provider --env-file .env.dev config --quiet
+  # shellcheck disable=SC2086 # Compose provider command intentionally contains arguments.
+  $compose_provider --env-file .env.test config --quiet
+)
+cleanup_compose_config_dir
+trap - EXIT HUP INT TERM
 
 echo "Deployment metadata contracts passed"

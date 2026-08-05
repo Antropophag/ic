@@ -20,6 +20,16 @@ make dev-up
 frontend и backend, применяет миграции, выполняет идемпотентный seed и выводит
 URL портала. Повторный запуск сохраняет БД и документы.
 
+`.env.dev` задаёт `COMPOSE_PROJECT_NAME=ic-dev`, автоматически подключает
+development overlay через `COMPOSE_FILE` и публикует frontend на `8081`.
+Базовый Compose можно запустить напрямую:
+
+```sh
+docker compose --env-file .env.dev up -d
+```
+
+Для lifecycle с build, migrations и seed используйте `make dev-up`.
+
 Development-БД обязана оканчиваться на `_dev`: seed проверяет фактически
 подключённую БД до записи. Переключатель пользователя и dev API подключаются
 только development-сборкой и файлами `deployment/dev/*`; production bundle их
@@ -41,6 +51,15 @@ cp .env.example .env.prod
 # заполнить production-настройки и секреты
 make prod-up
 ```
+
+Подготовленный deployment можно запустить напрямую:
+
+```sh
+docker compose --env-file .env.prod up -d
+```
+
+Штатный `make prod-up` дополнительно гарантирует build, migrations и
+provisioning.
 
 `make prod-up` сначала явно собирает актуальные backend, scheduler и frontend,
 а затем запускает только эти собранные images. После `git pull` достаточно
@@ -104,10 +123,17 @@ project из одной рабочей папки.
 `make env-status` не выводит environment целиком или секреты. Он показывает
 активные локальные окружения, project name, Compose-файлы, имя БД, volumes и
 images. Если одновременно запущены development и production, будут показаны
-оба. Оба по умолчанию публикуют порт `8080`; для одновременной работы измените
-`FRONTEND_PORT` в одном из env-файлов.
+оба. Шаблоны публикуют production на `8080`, development на `8081`; любое
+значение можно переопределить через `FRONTEND_PORT`. Backend, MariaDB и
+scheduler доступны только во внутренней Compose network. Swagger UI использует
+тот же frontend port и отдельно не публикуется.
 
-## Переход со старых Compose project names
+## Миграция с предыдущих версий
+
+Если `.env.dev` или `.env.prod` созданы из старых шаблонов, перенесите в них
+Compose metadata из актуальных `.env.dev.example` или `.env.example`, не
+заменяя секреты. В development согласуйте `APP_PUBLIC_URL` с выбранным
+`FRONTEND_PORT`.
 
 Новые project names не подхватывают старые named volumes автоматически.
 Существующие production данные `shlz-test-registry_*` и development данные
@@ -149,8 +175,8 @@ COMPOSE="podman-compose --in-pod false" CONTAINER_ENGINE=podman make e2e
 
 OpenAPI-контракт проверяется offline командой `make openapi-validate`. В
 запущенном development deployment спецификация доступна по
-`http://localhost:8080/api/openapi.yaml`, Swagger UI — по
-`http://localhost:8080/api/docs/` (с учётом `FRONTEND_PORT`).
+`http://localhost:8081/api/openapi.yaml`, Swagger UI — по
+`http://localhost:8081/api/docs/` (с учётом `FRONTEND_PORT`).
 
 Полный test deployment с Samba AD требует rootful Podman. Подробности:
 [стратегия тестирования](docs/test-strategy.md), [API](docs/api.md),
