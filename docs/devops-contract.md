@@ -44,8 +44,9 @@ Lifecycle-команды выводят только этапы операции
 пользовательские URL. Полный Compose output временно сохраняется и печатается
 при ошибке с исходным exit code. `dev-logs`/`prod-logs` остаются нативными
 потоковыми `compose logs --follow`; `SERVICE=backend` ограничивает вывод одним
-сервисом. Цвет отключается автоматически без TTY, при `TERM=dumb`, в CI и с
-`NO_COLOR=1`; `FORCE_COLOR=1` включает его явно. При timeout readiness команда
+сервисом. `LOG_TAIL` задаёт неотрицательное число начальных строк либо `all` и
+по умолчанию равен `100`. Цвет отключается автоматически без TTY, при
+`TERM=dumb`, в CI и с `NO_COLOR=1`; `FORCE_COLOR=1` включает его явно. При timeout readiness команда
 показывает фактический статус, последние 50 строк логов и завершается ошибкой.
 MariaDB проверяется штатным database healthcheck. Frontend healthcheck обращается
 к `/health/ready` через nginx и тем самым проверяет reverse proxy, backend, БД и

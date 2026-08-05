@@ -36,7 +36,10 @@ case " $* " in
   ;;
 *" ps -q mariadb "*) echo mariadb-id ;;
 *" ps -q backend "*) echo backend-id ;;
-*" ps -q frontend "*) echo frontend-id ;;
+*" ps -q frontend "*)
+  echo frontend-id
+  [ "${MOCK_FRONTEND_REPLICAS:-1}" -eq 1 ] || echo frontend-id-2
+  ;;
 *" ps -q scheduler "*) echo scheduler-id ;;
 *" port frontend 8080 "*) echo 0.0.0.0:18081 ;;
 *" logs --tail=50 "*) echo "relevant service log" ;;
@@ -48,6 +51,7 @@ if [ "${1:-}" = inspect ]; then
   case "$last" in
   mariadb-id) echo healthy ;;
   frontend-id) echo "${MOCK_FRONTEND_STATE:-healthy}" ;;
+  frontend-id-2) echo "${MOCK_FRONTEND_REPLICA_STATE:-healthy}" ;;
   backend-id | scheduler-id) echo running ;;
   esac
 fi
@@ -102,7 +106,24 @@ timeout_output=$(MOCK_FRONTEND_STATE=starting SERVICE_READY_TIMEOUT=0 NO_COLOR=1
 timeout_status=$?
 set -e
 [ "$timeout_status" -ne 0 ]
-printf '%s' "$timeout_output" | grep -q 'frontend.*starting.*expected healthy'
+printf '%s' "$timeout_output" | grep -q 'frontend.*starting.*ожидалось: healthy'
+
+set +e
+SERVICE_READY_TIMEOUT=invalid NO_COLOR=1 run_environment up >/dev/null 2>&1
+invalid_timeout_status=$?
+replica_output=$(MOCK_FRONTEND_REPLICAS=2 MOCK_FRONTEND_REPLICA_STATE=unhealthy \
+  NO_COLOR=1 run_environment status 2>&1)
+replica_status=$?
+runtime_output=$(MOCK_FAIL_PATTERN='frontend-id' MOCK_FAIL_STATUS=48 \
+  NO_COLOR=1 run_environment up 2>&1)
+runtime_status=$?
+set -e
+[ "$invalid_timeout_status" -eq 2 ]
+[ "$replica_status" -ne 0 ]
+printf '%s' "$replica_output" | grep -q 'frontend.*unhealthy'
+[ "$runtime_status" -eq 48 ]
+printf '%s' "$runtime_output" | grep -q 'original runtime diagnostic'
+printf '%s' "$runtime_output" | grep -q 'relevant service log'
 
 color_output=$(FORCE_COLOR=1 run_environment status)
 printf '%s' "$color_output" | LC_ALL=C grep -q "$(printf '\033')"
@@ -142,11 +163,11 @@ set -e
 [ "$restart_failure_status" -eq 46 ]
 
 down_output=$(NO_COLOR=1 run_environment down)
-printf '%s' "$down_output" | grep -q 'Environment stopped'
+printf '%s' "$down_output" | grep -q 'Окружение остановлено'
 
 : >"$test_dir/record"
 restart_output=$(NO_COLOR=1 run_environment restart)
-[ "$(printf '%s' "$restart_output" | grep -c 'IC · Development')" -eq 1 ]
+[ "$(printf '%s' "$restart_output" | grep -c 'IC · Разработка')" -eq 1 ]
 grep -q 'down --remove-orphans' "$test_dir/record"
 grep -q 'up -d --build --force-recreate' "$test_dir/record"
 

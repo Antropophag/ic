@@ -98,11 +98,12 @@ grep -Fq "compose build backend scheduler frontend" scripts/environment.sh
 grep -Fq "compose up -d --no-build --force-recreate frontend scheduler" scripts/environment.sh
 grep -Fq "compose logs --follow" scripts/environment.sh
 grep -Fq "SERVICE_READY_TIMEOUT" scripts/environment.sh
+grep -Fq "compose config --quiet" scripts/environment.sh
 # shellcheck disable=SC2016 # This is a literal Compose interpolation contract.
 [ "$(grep -Fc 'env_file: ${COMPOSE_ENV_FILE:?COMPOSE_ENV_FILE must select .env.dev or .env.prod}' compose.yaml)" -eq 2 ]
 # shellcheck disable=SC2016 # This is a literal Compose interpolation contract.
 [ "$(grep -Fc 'env_file: ${TEST_ENV_FILE:?TEST_ENV_FILE must select the test environment}' compose.test.yaml)" -eq 2 ]
-grep -Fq 'environment.sh" dev up' scripts/dev.sh
+grep -Fq "exec make -C \"\$repository_root\" dev-up" scripts/dev.sh
 grep -Fq 'http://127.0.0.1:8080/health/ready' compose.yaml
 
 if ambiguous_output=$(make --no-print-directory up 2>&1); then

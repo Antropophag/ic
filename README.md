@@ -44,6 +44,7 @@ make dev-status
 make dev-reset  # удалить dev volumes, создать БД и seed заново
 make dev-logs                     # потоковые логи всех сервисов
 make dev-logs SERVICE=backend     # потоковые логи одного сервиса
+make dev-logs LOG_TAIL=all        # вся история вместо последних 100 строк
 make env-status
 ```
 
@@ -88,6 +89,8 @@ Compose output полностью выводится при ошибке; timeou
 принудительного включения — `FORCE_COLOR=1`.
 Frontend healthcheck обращается через nginx к `/health/ready`, поэтому отражает
 готовность всего приложения: reverse proxy, backend, БД и document storage.
+`LOG_TAIL` принимает неотрицательное число строк или `all`; значение по
+умолчанию — `100`.
 
 Bootstrap создаёт локальные профили-заглушки для логинов из
 `BOOTSTRAP_ADMIN_AD_LOGINS` и назначает им `employee` и `administrator`.
