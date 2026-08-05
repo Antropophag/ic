@@ -6,6 +6,10 @@ namespace App\Infrastructure\Document;
 
 final class DocumentStorage
 {
+    /** @var list<array{root: string, key: string}> */
+    private static array $trackedWrites = [];
+    private static int $trackingScopes = 0;
+
     public function __construct(private readonly string $root)
     {
     }
@@ -29,7 +33,31 @@ final class DocumentStorage
                 unlink($temporary);
             }
         }
+        if (self::$trackingScopes > 0) {
+            self::$trackedWrites[] = ['root' => $this->root, 'key' => $key];
+        }
         return $key;
+    }
+
+    public static function writeCheckpoint(): int
+    {
+        ++self::$trackingScopes;
+        return count(self::$trackedWrites);
+    }
+
+    public static function discardWritesSince(int $checkpoint): void
+    {
+        array_splice(self::$trackedWrites, $checkpoint);
+        --self::$trackingScopes;
+    }
+
+    public static function rollbackWritesSince(int $checkpoint): void
+    {
+        $writes = array_splice(self::$trackedWrites, $checkpoint);
+        foreach (array_reverse($writes) as $write) {
+            (new self($write['root']))->delete($write['key']);
+        }
+        --self::$trackingScopes;
     }
 
     public function assertWritable(): void

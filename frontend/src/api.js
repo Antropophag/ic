@@ -2,9 +2,14 @@
 // CSRF-токен. Токен приходит из ответа
 // /api/v1/auth/me или /auth/login и хранится здесь на время сессии SPA.
 let csrfToken = ''
+const mutationIntents = new Map()
+const MUTATION_INTENT_TTL_MS = 24 * 60 * 60 * 1000
+const MUTATION_INTENT_LIMIT = 100
 
 export function setCsrfToken(token) {
-  csrfToken = token || ''
+  const nextToken = token || ''
+  if (nextToken !== csrfToken) mutationIntents.clear()
+  csrfToken = nextToken
 }
 
 export function hasCsrfToken() {
@@ -16,6 +21,13 @@ function authHeaders() {
 }
 
 async function request(path, options = {}) {
+  if (options.method === 'POST' && path.startsWith('/api/v1/') && !path.startsWith('/api/v1/auth/')) {
+    return idempotentRequest(path, options)
+  }
+  return performRequest(path, options)
+}
+
+async function performRequest(path, options = {}) {
   const response = await fetch(path, {
     ...options,
     headers: { Accept: 'application/json', ...authHeaders(), ...options.headers },
@@ -28,6 +40,57 @@ async function request(path, options = {}) {
     throw error
   }
   return payload
+}
+
+function newIdempotencyKey() {
+  if (globalThis.crypto?.randomUUID) return globalThis.crypto.randomUUID()
+  return `intent-${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}-${Math.random().toString(36).slice(2)}`
+}
+
+function mutationSignature(path, body) {
+  if (typeof body === 'string') return `${path}\0${body}`
+  if (body instanceof FormData) {
+    const fields = []
+    for (const [name, value] of body.entries()) {
+      fields.push(typeof File !== 'undefined' && value instanceof File
+        ? `${name}:${value.name}:${value.size}:${value.type}:${value.lastModified}`
+        : `${name}:${value}`)
+    }
+    return `${path}\0${fields.join('\0')}`
+  }
+  return path
+}
+
+function pruneMutationIntents(now) {
+  for (const [signature, intent] of mutationIntents) {
+    if (now - intent.createdAt > MUTATION_INTENT_TTL_MS) mutationIntents.delete(signature)
+  }
+  while (mutationIntents.size >= MUTATION_INTENT_LIMIT) {
+    mutationIntents.delete(mutationIntents.keys().next().value)
+  }
+}
+
+function idempotentRequest(path, options) {
+  const signature = mutationSignature(path, options.body)
+  const existing = mutationIntents.get(signature)
+  if (existing?.promise) return existing.promise
+
+  const now = Date.now()
+  pruneMutationIntents(now)
+  const intent = existing || { key: newIdempotencyKey(), createdAt: now, promise: null }
+  intent.promise = performRequest(path, {
+    ...options,
+    headers: { ...options.headers, 'Idempotency-Key': intent.key },
+  }).then(payload => {
+    mutationIntents.delete(signature)
+    return payload
+  }).catch(error => {
+    intent.promise = null
+    mutationIntents.set(signature, intent)
+    throw error
+  })
+  mutationIntents.set(signature, intent)
+  return intent.promise
 }
 
 export const requestApi = {

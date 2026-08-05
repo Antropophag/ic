@@ -19,6 +19,11 @@ use yii\web\ServerErrorHttpException;
 
 final class AuthController extends ApiController
 {
+    protected function requiresIdempotency(): bool
+    {
+        return false;
+    }
+
     public function behaviors(): array
     {
         $behaviors = parent::behaviors();

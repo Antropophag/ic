@@ -17,6 +17,7 @@ async function apiFor(baseURL, userId) {
     extraHTTPHeaders: {
       'X-Test-User-ID': String(userId),
       'X-CSRF-Token': csrfToken,
+      'Idempotency-Key': crypto.randomUUID(),
     },
   })
 }

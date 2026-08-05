@@ -48,7 +48,61 @@ it('adds a comment as JSON', async () => {
   expect(fetchMock).toHaveBeenCalledWith('/api/v1/requests/7/comments', expect.objectContaining({
     method: 'POST',
     body: JSON.stringify({ body: 'Текст' }),
+    headers: expect.objectContaining({ 'Idempotency-Key': expect.any(String) }),
   }))
+})
+
+it('coalesces a double click into one POST with one idempotency key', async () => {
+  let resolveFetch
+  const fetchMock = vi.fn().mockImplementation(() => new Promise(resolve => { resolveFetch = resolve }))
+  vi.stubGlobal('fetch', fetchMock)
+
+  const first = requestApi.addComment(17, 'Один комментарий')
+  const second = requestApi.addComment(17, 'Один комментарий')
+  expect(fetchMock).toHaveBeenCalledTimes(1)
+  resolveFetch(new Response('{"id":1}', { status: 201 }))
+
+  await expect(Promise.all([first, second])).resolves.toEqual([{ id: 1 }, { id: 1 }])
+})
+
+it('reuses the idempotency key when retrying after a server error', async () => {
+  const fetchMock = vi.fn()
+    .mockResolvedValueOnce(new Response('{"message":"failed"}', { status: 500 }))
+    .mockResolvedValueOnce(new Response('{"id":2}', { status: 201 }))
+  vi.stubGlobal('fetch', fetchMock)
+
+  await expect(requestApi.addComment(18, 'Retry')).rejects.toMatchObject({ status: 500 })
+  await expect(requestApi.addComment(18, 'Retry')).resolves.toEqual({ id: 2 })
+
+  const firstKey = fetchMock.mock.calls[0][1].headers['Idempotency-Key']
+  const secondKey = fetchMock.mock.calls[1][1].headers['Idempotency-Key']
+  expect(firstKey).toBe(secondKey)
+})
+
+it('uses a new key for a new identical intent after success', async () => {
+  const fetchMock = vi.fn().mockResolvedValue(new Response('{"id":1}', { status: 201 }))
+  vi.stubGlobal('fetch', fetchMock)
+
+  await requestApi.addComment(19, 'Intent')
+  await requestApi.addComment(19, 'Intent')
+
+  expect(fetchMock.mock.calls[0][1].headers['Idempotency-Key'])
+    .not.toBe(fetchMock.mock.calls[1][1].headers['Idempotency-Key'])
+})
+
+it('does not carry a failed intent into another authenticated session', async () => {
+  const fetchMock = vi.fn()
+    .mockResolvedValueOnce(new Response('{"message":"failed"}', { status: 500 }))
+    .mockResolvedValueOnce(new Response('{"id":2}', { status: 201 }))
+  vi.stubGlobal('fetch', fetchMock)
+  setCsrfToken('first-session')
+
+  await expect(requestApi.addComment(20, 'Session intent')).rejects.toMatchObject({ status: 500 })
+  setCsrfToken('second-session')
+  await requestApi.addComment(20, 'Session intent')
+
+  expect(fetchMock.mock.calls[0][1].headers['Idempotency-Key'])
+    .not.toBe(fetchMock.mock.calls[1][1].headers['Idempotency-Key'])
 })
 
 it('loads an older comment page by cursor', async () => {

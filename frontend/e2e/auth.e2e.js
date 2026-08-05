@@ -5,7 +5,7 @@ const password = process.env.TEST_AD_PASSWORD
 
 test('изменяющий запрос без CSRF-токена отклоняется в test-окружении', async ({ request }) => {
   const response = await request.post('/api/v1/requests', {
-    headers: { 'X-Test-User-ID': '3' },
+    headers: { 'X-Test-User-ID': '3', 'Idempotency-Key': crypto.randomUUID() },
     data: { productName: 'CSRF must reject' },
   })
 

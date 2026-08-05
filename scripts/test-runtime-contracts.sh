@@ -144,8 +144,10 @@ done
 create_request() {
   name=$1
   csrf=$(csrf_token)
+  idempotency_key="runtime-$(date +%s%N)-$$"
   curl_with_timeout -fsS -b "$cookie_jar" -c "$cookie_jar" -X POST \
-    -H 'X-Test-User-ID: 3' -H "X-CSRF-Token: $csrf" -H 'Content-Type: application/json' \
+    -H 'X-Test-User-ID: 3' -H "X-CSRF-Token: $csrf" -H "Idempotency-Key: $idempotency_key" \
+    -H 'Content-Type: application/json' \
     -d "{\"productName\":\"$name\",\"manufacturer\":\"Runtime\",\"supplier\":\"Runtime\",\"sampleQuantity\":1,\"testMethod\":\"Recovery\"}" \
     "$base/api/v1/requests"
 }

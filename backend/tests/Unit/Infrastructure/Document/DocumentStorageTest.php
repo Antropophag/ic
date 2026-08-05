@@ -64,6 +64,36 @@ final class DocumentStorageTest extends TestCase
         }
     }
 
+    public function testTrackedWriteIsDeletedWhenOuterTransactionRollsBack(): void
+    {
+        $source = tempnam(sys_get_temp_dir(), 'ic-source-');
+        self::assertIsString($source);
+        file_put_contents($source, 'document');
+        $storage = new DocumentStorage($this->root);
+        $checkpoint = DocumentStorage::writeCheckpoint();
+
+        $key = $storage->store($source);
+        DocumentStorage::rollbackWritesSince($checkpoint);
+
+        self::assertFileDoesNotExist($storage->path($key));
+        unlink($source);
+    }
+
+    public function testTrackedWriteRemainsAfterOuterTransactionCommits(): void
+    {
+        $source = tempnam(sys_get_temp_dir(), 'ic-source-');
+        self::assertIsString($source);
+        file_put_contents($source, 'document');
+        $storage = new DocumentStorage($this->root);
+        $checkpoint = DocumentStorage::writeCheckpoint();
+
+        $key = $storage->store($source);
+        DocumentStorage::discardWritesSince($checkpoint);
+
+        self::assertFileExists($storage->path($key));
+        unlink($source);
+    }
+
     public function testWritableProbeCleansUpAfterItself(): void
     {
         mkdir($this->root, 0700, true);
