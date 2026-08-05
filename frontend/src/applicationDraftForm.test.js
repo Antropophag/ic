@@ -104,7 +104,8 @@ describe('application create draft form lifecycle', () => {
     expect(loadApplicationDraft(3)).toBeNull()
   })
 
-  it('keeps autosaving other fields while quantity is temporarily invalid', () => {
+  it('keeps autosaving other fields with the last valid quantity while quantity is temporarily invalid', () => {
+    saveApplicationDraft(3, { ...defaults(), productName: 'До изменения', sampleQuantity: 7 }, false)
     const state = formFor(3)
     state.form.restore()
     state.draft.productName = 'Не потерять'
@@ -114,7 +115,23 @@ describe('application create draft form lifecycle', () => {
 
     expect(loadApplicationDraft(3).data).toMatchObject({
       productName: 'Не потерять',
-      sampleQuantity: 1,
+      sampleQuantity: 7,
+    })
+  })
+
+  it('remembers a valid quantity seen before the debounced save fires', () => {
+    const state = formFor(3)
+    state.form.restore()
+    state.draft.sampleQuantity = 9
+    state.form.scheduleSave()
+    state.draft.sampleQuantity = ''
+    state.draft.productName = 'Не потерять'
+    state.form.scheduleSave()
+    vi.runAllTimers()
+
+    expect(loadApplicationDraft(3).data).toMatchObject({
+      productName: 'Не потерять',
+      sampleQuantity: 9,
     })
   })
 

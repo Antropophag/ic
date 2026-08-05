@@ -169,15 +169,9 @@ describe('application draft storage', () => {
     expect(localStorage.setItem).not.toHaveBeenCalled()
   })
 
-  it.each([0, 1.5, ''])('saves other fields with a safe fallback for invalid quantity %s', sampleQuantity => {
+  it.each([0, 1.5, ''])('does not save an invalid quantity %s', sampleQuantity => {
     saveApplicationDraft(7, { ...data, productName: 'Сохранить остальные поля', sampleQuantity }, false)
-
-    const payload = JSON.parse(localStorage.setItem.mock.calls[0][1])
-    expect(payload.data).toEqual({
-      ...data,
-      productName: 'Сохранить остальные поля',
-      sampleQuantity: 1,
-    })
+    expect(localStorage.setItem).not.toHaveBeenCalled()
   })
 
   it.each(['getItem', 'setItem', 'removeItem'])('does not throw when %s fails', method => {

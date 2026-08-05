@@ -26,7 +26,7 @@ function safeRemove(key) {
   }
 }
 
-function sanitizedData(data, { fallbackInvalidQuantity = false } = {}) {
+function sanitizedData(data) {
   if (!data || typeof data !== 'object' || Array.isArray(data)) return null
 
   const result = {}
@@ -35,8 +35,8 @@ function sanitizedData(data, { fallbackInvalidQuantity = false } = {}) {
     result[field] = data[field]
   }
   const validQuantity = Number.isSafeInteger(data.sampleQuantity) && data.sampleQuantity >= 1
-  if (!validQuantity && !fallbackInvalidQuantity) return null
-  result.sampleQuantity = validQuantity ? data.sampleQuantity : 1
+  if (!validQuantity) return null
+  result.sampleQuantity = data.sampleQuantity
   return result
 }
 
@@ -86,7 +86,7 @@ export function loadApplicationDraft(userId) {
 
 export function saveApplicationDraft(userId, data, hadFiles) {
   if (!validUserId(userId)) return
-  const sanitized = sanitizedData(data, { fallbackInvalidQuantity: true })
+  const sanitized = sanitizedData(data)
   if (!sanitized) return
   if (isEmptyDraft(sanitized, hadFiles === true)) {
     safeRemove(storageKey(userId))
