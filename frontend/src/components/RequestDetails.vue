@@ -869,7 +869,7 @@ onBeforeUnmount(() => {
         </article>
 
         <article class="card feed">
-          <div class="section-title"><h3>Лента заявки <span>{{ feed.length }}</span></h3></div>
+          <div class="section-title"><h3>Лента заявки</h3></div>
           <form v-if="canSubmitComment(selected, detailLoading)" class="comment-input" @submit.prevent="addComment"><span class="avatar small">{{ currentInitials }}</span><input v-model="commentDraft" :disabled="commentLoading" maxlength="10000" placeholder="Оставьте комментарий…" /><button :disabled="commentLoading">➤</button></form>
           <p v-else class="placeholder-copy">На текущем этапе новые комментарии недоступны.</p>
           <p v-if="commentError" class="action-error">{{ commentError }}</p>
