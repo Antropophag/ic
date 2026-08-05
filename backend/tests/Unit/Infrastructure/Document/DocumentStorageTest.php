@@ -120,6 +120,8 @@ final class DocumentStorageTest extends TestCase
             DocumentStorage::discardWritesSince($outer);
             self::fail('Out-of-order scope close must fail.');
         } catch (\LogicException) {
+            // Expected: the failed close must leave both scopes usable.
+        } finally {
             DocumentStorage::discardWritesSince($inner);
             DocumentStorage::discardWritesSince($outer);
         }
@@ -129,11 +131,17 @@ final class DocumentStorageTest extends TestCase
         file_put_contents($source, 'document');
         $storage = new DocumentStorage($this->root);
         $next = DocumentStorage::writeCheckpoint();
-        $key = $storage->store($source);
-        DocumentStorage::rollbackWritesSince($next);
+        try {
+            $key = $storage->store($source);
+        } finally {
+            try {
+                DocumentStorage::rollbackWritesSince($next);
+            } finally {
+                unlink($source);
+            }
+        }
 
         self::assertFileDoesNotExist($storage->path($key));
-        unlink($source);
     }
 
     public function testWritableProbeCleansUpAfterItself(): void
