@@ -79,6 +79,9 @@ erDiagram
         bigint(20)_unsigned number
         varchar(128) legacy_id
         bigint(20)_unsigned initiator_id FK "-> users.id"
+        varchar(255) department_name
+        varchar(128) department_external_id
+        varchar(32) department_source
         varchar(32) status
         varchar(500) product_name
         varchar(500) manufacturer

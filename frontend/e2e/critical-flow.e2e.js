@@ -11,15 +11,22 @@ async function apiFor(baseURL, userId) {
   const storageState = await bootstrap.storageState()
   await bootstrap.dispose()
 
-  return playwrightRequest.newContext({
+  const context = await playwrightRequest.newContext({
     baseURL,
     storageState,
     extraHTTPHeaders: {
       'X-Test-User-ID': String(userId),
       'X-CSRF-Token': csrfToken,
-      'Idempotency-Key': crypto.randomUUID(),
     },
   })
+  return {
+    get: (...args) => context.get(...args),
+    post: (path, options = {}) => context.post(path, {
+      ...options,
+      headers: { ...options.headers, 'Idempotency-Key': crypto.randomUUID() },
+    }),
+    dispose: () => context.dispose(),
+  }
 }
 
 async function expectOk(response) {
@@ -246,6 +253,87 @@ test('администратор управляет ролями и возвра
   await expect(page.getByPlaceholder('Поиск по заявкам')).toBeVisible()
 
   expect(errors).toEqual([])
+})
+
+test('администратор исправляет историческое подразделение одной заявки', async ({ page, baseURL }) => {
+  const initiator = await apiFor(baseURL, 3)
+  try {
+    const first = await expectOk(await initiator.post('/api/v1/requests', { data: {
+      productName: `E2E-department-first-${Date.now()}`,
+      manufacturer: 'Тестовый производитель',
+      supplier: 'Тестовый поставщик',
+      sampleQuantity: 1,
+      testMethod: 'Проверка snapshot подразделения',
+    } }))
+    const second = await expectOk(await initiator.post('/api/v1/requests', { data: {
+      productName: `E2E-department-second-${Date.now()}`,
+      manufacturer: 'Тестовый производитель',
+      supplier: 'Тестовый поставщик',
+      sampleQuantity: 1,
+      testMethod: 'Проверка изоляции snapshot',
+    } }))
+
+    await useTestIdentity(page, 6)
+    await page.goto(`/?request=${first.id}`)
+    const departmentFact = page.locator('.object-band .fact').filter({ hasText: 'Подразделение' })
+    await expect(departmentFact.locator('b')).toHaveText('Тестовое подразделение')
+    await page.getByRole('button', { name: 'Изменить', exact: true }).click()
+    await page.getByLabel('Подразделение', { exact: true }).fill('Подразделение C')
+    await page.getByRole('button', { name: 'Сохранить', exact: true }).click()
+    await expect(departmentFact.locator('b')).toHaveText('Подразделение C')
+    await expect(page.getByText('изменил(а) подразделение заявки: Подразделение C', { exact: false })).toBeVisible()
+
+    const unchanged = await expectOk(await initiator.get(`/api/v1/requests/${second.id}`))
+    expect(unchanged.item.department).toBe('Тестовое подразделение')
+  } finally {
+    await initiator.dispose()
+  }
+})
+
+test('конфликт изменения подразделения обновляет карточку и отключает устаревшее действие', async ({ page, baseURL }) => {
+  const initiator = await apiFor(baseURL, 3)
+  const administrator = await apiFor(baseURL, 6)
+  try {
+    const created = await expectOk(await initiator.post('/api/v1/requests', { data: {
+      productName: `E2E-department-conflict-${Date.now()}`,
+      manufacturer: 'Тестовый производитель',
+      supplier: 'Тестовый поставщик',
+      sampleQuantity: 1,
+      testMethod: 'Проверка optimistic locking подразделения',
+    } }))
+
+    await useTestIdentity(page, 6)
+    await page.goto(`/?request=${created.id}`)
+    await page.getByRole('button', { name: 'Изменить', exact: true }).click()
+    await page.getByLabel('Подразделение', { exact: true }).fill('Устаревшее изменение')
+
+    await expectOk(await administrator.post(`/api/v1/requests/${created.id}/department`, {
+      data: { department: 'Параллельное изменение', lockVersion: created.lock_version },
+    }))
+
+    let releaseRefresh
+    const refreshReleased = new Promise(resolve => { releaseRefresh = resolve })
+    let refreshStarted
+    const refreshObserved = new Promise(resolve => { refreshStarted = resolve })
+    await page.route(`**/api/v1/requests/${created.id}`, async route => {
+      if (route.request().method() === 'GET') {
+        refreshStarted()
+        await refreshReleased
+      }
+      await route.continue({ headers: { ...route.request().headers(), 'X-Test-User-ID': '6' } })
+    })
+
+    await page.getByRole('button', { name: 'Сохранить', exact: true }).click()
+    await refreshObserved
+    await expect(page.getByRole('button', { name: 'Изменить', exact: true })).toHaveCount(0)
+    releaseRefresh()
+
+    await expect(page.getByText('Заявка уже изменена. Данные обновлены', { exact: false })).toBeVisible()
+    await expect(page.locator('.object-band .fact').filter({ hasText: 'Подразделение' }).locator('b'))
+      .toHaveText('Параллельное изменение')
+  } finally {
+    await Promise.all([initiator.dispose(), administrator.dispose()])
+  }
 })
 
 test('администратор читает журналы действий и уведомлений и открывает связанную заявку', async ({ page, baseURL }) => {

@@ -17,6 +17,7 @@ final class DatabaseLegacyRequestWriterTest extends IntegrationTestCase
         string $legacyId,
         string $creatorLegacyId = '1595',
         string $department = 'Лаборатория',
+        ?string $departmentExternalId = null,
     ): LegacyRequestData {
         return new LegacyRequestData(
             $legacyId,
@@ -32,6 +33,7 @@ final class DatabaseLegacyRequestWriterTest extends IntegrationTestCase
             $department,
             1,
             0,
+            $departmentExternalId,
         );
     }
 
@@ -50,6 +52,11 @@ final class DatabaseLegacyRequestWriterTest extends IntegrationTestCase
 
         $status = $this->scalar('SELECT status FROM {{%requests}} WHERE id = :id', [':id' => $requestId]);
         self::assertSame('completed', $status);
+        $snapshot = $this->db()->createCommand(
+            'SELECT department_name, department_source FROM {{%requests}} WHERE id = :id',
+            [':id' => $requestId],
+        )->queryOne();
+        self::assertSame(['department_name' => 'Лаборатория', 'department_source' => 'bitrix24'], $snapshot);
 
         $transitionCount = $this->scalar(
             "SELECT COUNT(*) FROM {{%request_transitions}} WHERE request_id = :id "
@@ -125,5 +132,25 @@ final class DatabaseLegacyRequestWriterTest extends IntegrationTestCase
             "SELECT department FROM {{%users}} WHERE ad_login = 'legacy.bitrix24.77003'",
         )->queryScalar();
         self::assertNull($department);
+        $snapshot = $this->db()->createCommand(
+            "SELECT department_name, department_source FROM {{%requests}} WHERE legacy_id = 'bitrix24:114:506'",
+        )->queryOne();
+        self::assertSame(['department_name' => null, 'department_source' => 'unknown'], $snapshot);
+    }
+
+    public function testExternalDepartmentIdKeepsBitrixSourceWithoutName(): void
+    {
+        $writer = new DatabaseLegacyRequestWriter($this->db());
+        $writer->write($this->request('bitrix24:114:507', '77004', '', 'BX-42'));
+
+        $snapshot = $this->db()->createCommand(
+            "SELECT department_name, department_external_id, department_source FROM {{%requests}} "
+            . "WHERE legacy_id = 'bitrix24:114:507'",
+        )->queryOne();
+        self::assertSame([
+            'department_name' => null,
+            'department_external_id' => 'BX-42',
+            'department_source' => 'bitrix24',
+        ], $snapshot);
     }
 }

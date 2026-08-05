@@ -14,6 +14,8 @@ use App\Domain\Request\ExpertAssignmentPolicy;
 use App\Domain\Request\RequestAction;
 use App\Domain\Request\RejectPolicy;
 use App\Domain\Request\RequestCreationPolicy;
+use App\Domain\Request\RequestDepartmentChangeDenied;
+use App\Domain\Request\RequestDepartmentMissing;
 use App\Domain\Request\RequestNotFound;
 use App\Domain\Request\RequestStatus;
 use App\Domain\Request\RequestWorkflow;
@@ -42,6 +44,13 @@ final class RequestRepository
                 $this->rolesFor($initiatorId),
                 $this->isActiveUser($initiatorId),
             );
+            $department = $this->db->createCommand(
+                'SELECT NULLIF(TRIM(department), \'\') FROM {{%users}} WHERE id = :id FOR UPDATE',
+                [':id' => $initiatorId],
+            )->queryScalar();
+            if ($department === false || $department === null) {
+                throw new RequestDepartmentMissing('В профиле пользователя не указано подразделение. Обратитесь к администратору.');
+            }
 
             // Отдельная строка-счётчик блокируется MariaDB и исключает выдачу
             // одинакового номера двумя параллельными запросами (REQ-002).
@@ -54,6 +63,8 @@ final class RequestRepository
             $this->db->createCommand()->insert('{{%requests}}', [
                 'number' => $number,
                 'initiator_id' => $initiatorId,
+                'department_name' => (string) $department,
+                'department_source' => 'current_profile',
                 'status' => RequestStatus::Registered->value,
                 'product_name' => $input->productName,
                 'manufacturer' => $input->manufacturer,
@@ -114,6 +125,66 @@ final class RequestRepository
             $transaction->commit();
 
             return $this->findOne($id);
+        } catch (\Throwable $error) {
+            $transaction->rollBack();
+            throw $error;
+        }
+    }
+
+    /** @return array<string, mixed> */
+    public function changeDepartment(int $requestId, string $department, int $expectedLockVersion, int $actorId): array
+    {
+        $transaction = $this->db->beginTransaction();
+        try {
+            // Lock the membership row so a concurrent role revoke cannot pass the authorization check
+            // and commit before the protected mutation finishes.
+            $administratorRoleId = $this->db->createCommand(
+                'SELECT ur.role_id FROM {{%user_roles}} ur '
+                . 'JOIN {{%roles}} role ON role.id = ur.role_id '
+                . "WHERE ur.user_id = :actor_id AND role.code = 'administrator' FOR UPDATE",
+                [':actor_id' => $actorId],
+            )->queryScalar();
+            $row = $this->db->createCommand(
+                'SELECT r.department_name, r.department_external_id, r.lock_version, actor.is_active '
+                . 'FROM {{%requests}} r JOIN {{%users}} actor ON actor.id = :actor_id '
+                . 'WHERE r.id = :request_id FOR UPDATE',
+                [':request_id' => $requestId, ':actor_id' => $actorId],
+            )->queryOne();
+            if ($row === false) {
+                throw new RequestNotFound('Request not found');
+            }
+            if (!(bool) $row['is_active'] || $administratorRoleId === false) {
+                throw new RequestDepartmentChangeDenied('Изменять подразделение заявки может только активный администратор.');
+            }
+            if ((int) $row['lock_version'] !== $expectedLockVersion) {
+                throw new ConcurrentRequestModification();
+            }
+            $department = trim($department);
+            $now = Clock::now();
+            $this->db->createCommand()->update('{{%requests}}', [
+                'department_name' => $department,
+                'department_external_id' => null,
+                'department_source' => 'manual',
+                'lock_version' => $expectedLockVersion + 1,
+                'updated_at' => $now,
+            ], ['id' => $requestId])->execute();
+            $this->db->createCommand()->insert('{{%audit_events}}', [
+                'event_type' => 'request.department_changed',
+                'entity_type' => 'request',
+                'entity_id' => $requestId,
+                'actor_id' => $actorId,
+                'rule_id' => 'REQ-011',
+                'payload_json' => [
+                    'old_department_name' => $row['department_name'],
+                    'new_department_name' => $department,
+                    'old_department_external_id' => $row['department_external_id'],
+                    'new_department_external_id' => null,
+                    'source' => 'manual',
+                ],
+                'created_at' => $now,
+            ])->execute();
+            $transaction->commit();
+            return $this->findOne($requestId);
         } catch (\Throwable $error) {
             $transaction->rollBack();
             throw $error;
@@ -1383,7 +1454,9 @@ final class RequestRepository
     private function findOne(int $id): array
     {
         return $this->db->createCommand(
-            'SELECT * FROM {{%requests}} WHERE id = :id',
+            'SELECT id, number, legacy_id, initiator_id, status, product_name, manufacturer, supplier, '
+            . 'sample_quantity, test_method, revision, lock_version, color, department_name AS department, '
+            . 'created_at, updated_at FROM {{%requests}} WHERE id = :id',
             [':id' => $id],
         )->queryOne();
     }
