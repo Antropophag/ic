@@ -139,6 +139,7 @@ onBeforeUnmount(() => {
         <RequestDetails v-else-if="selectedRequestId" :request-id="selectedRequestId" :current-initials="currentInitials" :initial-warning="requestWarning" @loaded="selectedRequestTitle = $event" @updated="refreshRegistry" @close="closeRequest()" />
         <RequestRegistry
           :active="!showAdmin && !selectedRequestId"
+          :current-user-id="authUser.id"
           :refresh-trigger="registryRefreshTrigger"
           @select-request="openRequest"
         />
