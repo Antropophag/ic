@@ -104,4 +104,12 @@ set -e
 
 grep -q 'MAILPIT_BASE_URL must be provided' frontend/e2e/notifications.e2e.js
 
+# Production and development images must contain the reviewed contract and
+# local Swagger UI assets; Nginx must serve them before the /api FastCGI rule.
+[ "$(grep -Fc 'COPY openapi/openapi.yaml /srv/frontend/api/openapi.yaml' docker/frontend.Dockerfile)" -eq 2 ]
+[ "$(grep -Fc 'COPY openapi/swagger-ui/index.html /srv/frontend/api/docs/index.html' docker/frontend.Dockerfile)" -eq 2 ]
+grep -Fq 'node_modules/swagger-ui-dist/swagger-ui-bundle.js' docker/frontend.Dockerfile
+grep -Fq 'location = /api/openapi.yaml' docker/nginx/default.conf
+grep -Fq 'location ^~ /api/docs/' docker/nginx/default.conf
+
 echo "Deployment metadata contracts passed"

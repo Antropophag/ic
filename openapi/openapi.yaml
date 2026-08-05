@@ -1,0 +1,418 @@
+openapi: 3.0.3
+info:
+  title: Реестр заявок на испытания API
+  version: 1.0.0
+  description: |
+    Машиночитаемый контракт HTTP API корпоративного реестра. На первом этапе
+    документируется репрезентативный вертикальный срез; отсутствие операции в
+    этом файле пока не означает отсутствие маршрута в приложении.
+
+    Бизнес-правила, процессы и эксплуатационные пояснения остаются в Markdown.
+    Формы HTTP-запросов, ответов, параметров и статусов постепенно переносятся
+    сюда как в официальный контракт.
+servers:
+  - url: /
+    description: Тот же origin, с которого открыт портал
+tags:
+  - name: Health
+  - name: Authentication
+  - name: Requests
+paths:
+  /health/live:
+    get:
+      tags: [Health]
+      summary: Проверить, что процесс backend отвечает
+      operationId: getLiveness
+      security: []
+      responses:
+        '200':
+          description: Backend работает
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Liveness'
+        '500':
+          $ref: '#/components/responses/ServerError'
+
+  /api/v1/auth/me:
+    get:
+      tags: [Authentication]
+      summary: Получить CSRF token и текущего пользователя
+      description: |
+        Маршрут доступен до входа и устанавливает CSRF cookie. Если действующей
+        сессии нет, `user` равен `null`; это не ошибка аутентификации.
+      operationId: getCurrentUser
+      security: []
+      responses:
+        '200':
+          description: CSRF token и состояние текущей сессии
+          headers:
+            Set-Cookie:
+              description: Session/CSRF cookies с атрибутами, заданными Yii/PHP
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CurrentUserResponse'
+        '500':
+          $ref: '#/components/responses/ServerError'
+
+  /api/v1/requests:
+    get:
+      tags: [Requests]
+      summary: Получить страницу заявок
+      operationId: listRequests
+      security:
+        - cookieSession: []
+      parameters:
+        - name: page
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            default: 1
+        - name: pageSize
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 10
+        - name: tab
+          in: query
+          schema:
+            type: string
+            enum: [active, all, mine]
+            default: active
+        - name: status
+          in: query
+          schema:
+            $ref: '#/components/schemas/RequestStatus'
+        - name: query
+          in: query
+          schema:
+            type: string
+            maxLength: 200
+            default: ''
+        - name: sort
+          in: query
+          schema:
+            type: string
+            enum: [asc, desc]
+            default: desc
+      responses:
+        '200':
+          description: Страница доступных текущему пользователю заявок
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RequestPage'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+        '500':
+          $ref: '#/components/responses/ServerError'
+
+  /api/v1/requests/{id}/comments:
+    post:
+      tags: [Requests]
+      summary: Добавить комментарий к заявке
+      description: |
+        Требует действующую session cookie, CSRF token из
+        `GET /api/v1/auth/me` и новый `Idempotency-Key`. Успешный повтор того же
+        намерения возвращает исходный ответ с `Idempotency-Replayed: true`.
+        Swagger UI показывает контракт, но выполнение запросов в нём отключено:
+        интерактивное управление session/CSRF создавало бы ложное ощущение
+        безопасного входа и не является частью первого этапа.
+      operationId: addRequestComment
+      security:
+        - cookieSession: []
+          csrfToken: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: Числовой идентификатор заявки
+          schema:
+            type: integer
+            minimum: 1
+        - name: Idempotency-Key
+          in: header
+          required: true
+          description: |
+            Уникальный ключ намерения на 24 часа. Допускаются 16–128 символов
+            `A-Z`, `a-z`, `0-9`, `.`, `_`, `:`, `-`; первый символ буквенно-цифровой.
+          schema:
+            type: string
+            minLength: 16
+            maxLength: 128
+            pattern: '^[A-Za-z0-9][A-Za-z0-9._:-]{15,127}$'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AddCommentInput'
+      responses:
+        '201':
+          description: Комментарий создан или воспроизведён
+          headers:
+            Idempotency-Replayed:
+              $ref: '#/components/headers/IdempotencyReplayed'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Comment'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '415':
+          $ref: '#/components/responses/UnsupportedMediaType'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+        '500':
+          $ref: '#/components/responses/ServerError'
+
+components:
+  securitySchemes:
+    cookieSession:
+      type: apiKey
+      in: cookie
+      name: PHPSESSID
+      description: |
+        Серверная PHP/Yii session cookie, выдаваемая после LDAP или break-glass
+        входа. Заголовки development/test identity не являются production API.
+    csrfToken:
+      type: apiKey
+      in: header
+      name: X-CSRF-Token
+      description: |
+        CSRF token возвращается полем `csrfToken` из `GET /api/v1/auth/me` и
+        должен соответствовать CSRF cookie. Это не bearer token и не заменяет
+        session cookie.
+
+  headers:
+    IdempotencyReplayed:
+      description: "`true`, если сохранённый успешный ответ был воспроизведён"
+      schema:
+        type: string
+        enum: ['true', 'false']
+
+  responses:
+    BadRequest:
+      description: Некорректное JSON-тело или не прошедший CSRF token
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/HttpError'
+    Unauthorized:
+      description: Действующая пользовательская сессия отсутствует
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/HttpError'
+    NotFound:
+      description: Заявка не найдена
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/HttpError'
+    Conflict:
+      description: |
+        Комментарий запрещён текущим состоянием заявки, ключ уже использован с
+        другим телом или одновременный запрос не завершился за 30 секунд
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/HttpError'
+    UnsupportedMediaType:
+      description: "`Content-Type` не равен `application/json`"
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/HttpError'
+    ValidationError:
+      description: Ошибка query/body validation или отсутствующий Idempotency-Key
+      content:
+        application/json:
+          schema:
+            oneOf:
+              - $ref: '#/components/schemas/ValidationErrors'
+              - $ref: '#/components/schemas/HttpError'
+    ServerError:
+      description: Внутренняя ошибка сервера
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/HttpError'
+
+  schemas:
+    Liveness:
+      type: object
+      required: [status]
+      properties:
+        status:
+          type: string
+          enum: [ok]
+      additionalProperties: false
+    CurrentUserResponse:
+      type: object
+      required: [csrfToken, user]
+      properties:
+        csrfToken:
+          type: string
+          minLength: 1
+        user:
+          nullable: true
+          allOf:
+            - $ref: '#/components/schemas/UserProfile'
+      additionalProperties: false
+    UserProfile:
+      type: object
+      required: [id, displayName, email, department, position, roles]
+      properties:
+        id:
+          type: integer
+        displayName:
+          type: string
+          nullable: true
+        email:
+          type: string
+          nullable: true
+        department:
+          type: string
+          nullable: true
+        position:
+          type: string
+          nullable: true
+        roles:
+          type: array
+          items:
+            type: string
+      additionalProperties: false
+    RequestStatus:
+      type: string
+      enum:
+        - registered
+        - in_progress
+        - suspended
+        - opinion_preparation
+        - security_review
+        - completed
+        - rejected
+        - withdrawn
+    RequestPage:
+      type: object
+      required: [items, total, page, pageSize, pageCount, counts]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/RequestSummary'
+        total:
+          type: integer
+          minimum: 0
+        page:
+          type: integer
+          minimum: 1
+        pageSize:
+          type: integer
+          minimum: 1
+          maximum: 100
+        pageCount:
+          type: integer
+          minimum: 1
+        counts:
+          $ref: '#/components/schemas/RequestCounts'
+      additionalProperties: false
+    RequestCounts:
+      type: object
+      required: [active, all, mine]
+      properties:
+        active:
+          type: integer
+          minimum: 0
+        all:
+          type: integer
+          minimum: 0
+        mine:
+          type: integer
+          minimum: 0
+      additionalProperties: false
+    RequestSummary:
+      description: |
+        Первая формализованная часть строки реестра. Дополнительные исторические
+        поля ответа пока не зафиксированы схемой и будут покрываться постепенно.
+      type: object
+      required: [id, number, status, product_name, lockVersion, department]
+      properties:
+        id:
+          type: integer
+        number:
+          type: integer
+        status:
+          $ref: '#/components/schemas/RequestStatus'
+        product_name:
+          type: string
+        lockVersion:
+          type: integer
+          minimum: 1
+        department:
+          type: string
+      additionalProperties: true
+    AddCommentInput:
+      type: object
+      required: [body]
+      properties:
+        body:
+          type: string
+          minLength: 1
+          maxLength: 10000
+      additionalProperties: false
+    Comment:
+      type: object
+      required: [id, body, createdAt, authorName]
+      properties:
+        id:
+          type: integer
+        body:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+        authorName:
+          type: string
+      additionalProperties: false
+    ValidationErrors:
+      type: object
+      required: [errors]
+      properties:
+        errors:
+          type: object
+          additionalProperties:
+            type: array
+            items:
+              type: string
+      additionalProperties: false
+    HttpError:
+      type: object
+      required: [name, message, code, status, type]
+      properties:
+        name:
+          type: string
+        message:
+          type: string
+        code:
+          type: integer
+        status:
+          type: integer
+        type:
+          type: string
+      additionalProperties: true

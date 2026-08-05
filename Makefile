@@ -14,7 +14,7 @@ export COMPOSE CONTAINER_ENGINE PROD_PROJECT DEV_PROJECT TEST_PROJECT PROD_ENV_F
 
 .PHONY: help doctor init up down logs dev-up dev-down dev-reset dev-logs \
 	prod-up prod-down prod-reset prod-logs env-status check e2e coverage schema-diagram \
-	_check-backend _check-frontend _check-repository _dev-contract _test-up _test-reset _test-down
+	openapi-validate _check-backend _check-frontend _check-repository _dev-contract _test-up _test-reset _test-down
 
 help:
 	@echo "make help            Показать эту справку"
@@ -38,6 +38,7 @@ help:
 	@echo "  make check         Линтеры, анализ, unit, Vitest и production build"
 	@echo "  make e2e           Integration, Playwright и runtime contracts"
 	@echo "  make coverage      Только отчёты покрытия"
+	@echo "  make openapi-validate Проверить OpenAPI и локальные Swagger UI assets"
 	@echo "  make schema-diagram Обновить ER-диаграмму"
 
 doctor:
@@ -115,12 +116,17 @@ coverage: doctor
 	npm --prefix frontend ci --no-audit --no-fund
 	npm --prefix frontend run coverage
 
+openapi-validate:
+	npm --prefix frontend ci --no-audit --no-fund
+	npm --prefix frontend run openapi:validate
+
 schema-diagram: doctor
 	@test -f $(DEV_ENV_FILE) || { echo "Для make schema-diagram нужен .env.dev (make init)." >&2; exit 2; }
 	COMPOSE_ENV_FILE=$(DEV_ENV_FILE) SCHEMA_COMPOSE_COMMAND='$(DEV_COMPOSE)' python3 scripts/gen_schema_diagram.py
 
 _check-frontend:
 	npm --prefix frontend ci --no-audit --no-fund
+	npm --prefix frontend run openapi:validate
 	npm --prefix frontend run lint
 	npm --prefix frontend run audit
 	npm --prefix frontend test

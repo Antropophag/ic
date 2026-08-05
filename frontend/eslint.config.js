@@ -9,7 +9,7 @@ export default [
   js.configs.recommended,
   ...pluginVue.configs['flat/recommended'],
   {
-    files: ['**/*.{js,vue}'],
+    files: ['**/*.{js,mjs,vue}'],
     languageOptions: {
       globals: {
         ...globals.browser,
