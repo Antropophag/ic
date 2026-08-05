@@ -4,7 +4,7 @@ GitHub Actions и GitLab CI используют Makefile как источни�
 
 | Логическая проверка | GitHub job | GitLab job | Команда |
 |---|---|---|---|
-| lint, static analysis, Unit, Vitest, build | `check` | `check` | `make check` |
+| lint, OpenAPI, static analysis, Unit, Vitest, build | `check` | `check` | `make check` |
 | coverage thresholds | `coverage` | `coverage` | `make coverage` |
 | Docker test deployment suite | `e2e` | `e2e` | `make e2e` |
 | Semgrep | `analyze` | `analyze` | `semgrep scan` |
@@ -24,3 +24,8 @@ report вместе с container status и последними логами с�
 Podman Compose поддерживается Makefile и scripts для локального или
 эксплуатационного запуска, но отдельный CI job не выполняется: он дублировал
 полный test deployment suite без дополнительного покрытия приложения.
+
+OpenAPI отдельно запускается командой `make openapi-validate` и также входит в
+`make check`. Проверка работает по lock-файлу без сетевых запросов: валидирует
+обязательные поля OpenAPI, разрешает `$ref` и проверяет инфраструктурный срез,
+security/idempotency и локальную конфигурацию Swagger UI.

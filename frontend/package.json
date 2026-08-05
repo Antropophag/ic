@@ -7,6 +7,7 @@
     "dev": "vite --host 0.0.0.0",
     "build": "vite build",
     "lint": "eslint . --max-warnings=0",
+    "openapi:validate": "node scripts/check-openapi.mjs",
     "audit": "npm audit --audit-level=high",
     "test": "vitest run",
     "coverage": "vitest run --coverage",
@@ -15,10 +16,12 @@
   "dependencies": {
     "@fontsource/fira-sans": "^5.3.0",
     "@vitejs/plugin-vue": "latest",
+    "swagger-ui-dist": "5.32.12",
     "vite": "latest",
     "vue": "latest"
   },
   "devDependencies": {
+    "@apidevtools/swagger-parser": "12.1.0",
     "@eslint/js": "10.0.1",
     "@playwright/test": "1.62.1",
     "@vitest/coverage-v8": "^4.1.10",

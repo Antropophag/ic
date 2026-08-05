@@ -73,8 +73,8 @@ make e2e
 make coverage
 ```
 
-- `make check` — lint, PHPStan, Unit, Vitest, dependency audit, production build
-  и repository contracts;
+- `make check` — lint, OpenAPI, PHPStan, Unit, Vitest, dependency audit,
+  production build и repository contracts;
 - `make e2e` — build test images, clean migrations/seed, Integration,
   Playwright, LDAP/SMTP/MariaDB recovery и SIGTERM scheduler, затем полное
   удаление test containers/network/volumes;
@@ -137,6 +137,7 @@ make prod-logs
 make check
 make e2e
 make coverage
+make openapi-validate
 make schema-diagram
 ```
 
@@ -145,6 +146,11 @@ make schema-diagram
 ```sh
 COMPOSE="podman-compose --in-pod false" CONTAINER_ENGINE=podman make e2e
 ```
+
+OpenAPI-контракт проверяется offline командой `make openapi-validate`. В
+запущенном development deployment спецификация доступна по
+`http://localhost:8080/api/openapi.yaml`, Swagger UI — по
+`http://localhost:8080/api/docs/` (с учётом `FRONTEND_PORT`).
 
 Полный test deployment с Samba AD требует rootful Podman. Подробности:
 [стратегия тестирования](docs/test-strategy.md), [API](docs/api.md),

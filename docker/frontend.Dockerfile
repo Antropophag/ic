@@ -1,6 +1,6 @@
 FROM docker.io/library/node:22.23.0-alpine3.23 AS frontend-source
 WORKDIR /build
-COPY frontend/package*.json ./
+COPY frontend/package*.json frontend/.npmrc ./
 RUN npm ci --no-audit --no-fund
 COPY frontend/ ./
 
@@ -16,6 +16,10 @@ EXPOSE 8080
 
 FROM frontend-runtime AS production
 COPY --from=frontend-production-build /build/dist /srv/frontend
+COPY --from=frontend-source /build/node_modules/swagger-ui-dist/swagger-ui.css /srv/frontend/api/docs/swagger-ui.css
+COPY --from=frontend-source /build/node_modules/swagger-ui-dist/swagger-ui-bundle.js /srv/frontend/api/docs/swagger-ui-bundle.js
+COPY openapi/swagger-ui/index.html /srv/frontend/api/docs/index.html
+COPY openapi/openapi.yaml /srv/frontend/api/openapi.yaml
 RUN grep -R -E -q 'X-Dev-User-ID|/api/v1/dev/users' /srv/frontend; status=$?; \
     if [ "$status" -eq 0 ]; then \
         echo 'Development identity code found in production frontend' >&2; \
@@ -28,5 +32,9 @@ RUN grep -R -E -q 'X-Dev-User-ID|/api/v1/dev/users' /srv/frontend; status=$?; \
 
 FROM frontend-runtime AS development
 COPY --from=frontend-development-build /build/dist /srv/frontend
+COPY --from=frontend-source /build/node_modules/swagger-ui-dist/swagger-ui.css /srv/frontend/api/docs/swagger-ui.css
+COPY --from=frontend-source /build/node_modules/swagger-ui-dist/swagger-ui-bundle.js /srv/frontend/api/docs/swagger-ui-bundle.js
+COPY openapi/swagger-ui/index.html /srv/frontend/api/docs/index.html
+COPY openapi/openapi.yaml /srv/frontend/api/openapi.yaml
 RUN grep -R -q 'X-Dev-User-ID' /srv/frontend/assets \
     && grep -R -q '/api/v1/dev/users' /srv/frontend/assets
