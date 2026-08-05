@@ -64,10 +64,11 @@ final class IdempotencyStoreConcurrencyTest extends TestCase
         $actorId = (int) $db->getLastInsertID();
         $key = str_repeat('p', 16);
         $startFile = tempnam(sys_get_temp_dir(), 'idem-start-');
+        $readyFiles = [tempnam(sys_get_temp_dir(), 'idem-ready-'), tempnam(sys_get_temp_dir(), 'idem-ready-')];
         $firstEntered = tempnam(sys_get_temp_dir(), 'idem-entered-');
         $secondEntered = tempnam(sys_get_temp_dir(), 'idem-entered-');
         $resultFiles = [tempnam(sys_get_temp_dir(), 'idem-result-'), tempnam(sys_get_temp_dir(), 'idem-result-')];
-        foreach ([$startFile, $firstEntered, $secondEntered, ...$resultFiles] as $file) {
+        foreach ([$startFile, ...$readyFiles, $firstEntered, $secondEntered, ...$resultFiles] as $file) {
             self::assertIsString($file);
             self::assertTrue(unlink($file));
         }
@@ -79,6 +80,7 @@ final class IdempotencyStoreConcurrencyTest extends TestCase
                 $key,
                 $firstHash,
                 'first',
+                $readyFiles[0],
                 $startFile,
                 $firstEntered,
                 $resultFiles[0],
@@ -86,6 +88,7 @@ final class IdempotencyStoreConcurrencyTest extends TestCase
                 $pipes[0],
             );
             if ($stageSecond) {
+                $this->waitForFile($readyFiles[0]);
                 touch($startFile);
                 $this->waitForFile($firstEntered);
             }
@@ -94,6 +97,7 @@ final class IdempotencyStoreConcurrencyTest extends TestCase
                 $key,
                 $secondHash,
                 'second',
+                $readyFiles[1],
                 $startFile,
                 $secondEntered,
                 $resultFiles[1],
@@ -101,6 +105,8 @@ final class IdempotencyStoreConcurrencyTest extends TestCase
                 $pipes[1],
             );
             if (!$stageSecond) {
+                $this->waitForFile($readyFiles[0]);
+                $this->waitForFile($readyFiles[1]);
                 touch($startFile);
             }
             foreach ($processes as $index => $process) {
@@ -136,7 +142,7 @@ final class IdempotencyStoreConcurrencyTest extends TestCase
             $db->createCommand()->delete('{{%audit_events}}', ['actor_id' => $actorId])->execute();
             $db->createCommand()->delete('{{%users}}', ['id' => $actorId])->execute();
             $db->close();
-            foreach ([$startFile, $firstEntered, $secondEntered, ...$resultFiles] as $file) {
+            foreach ([$startFile, ...$readyFiles, $firstEntered, $secondEntered, ...$resultFiles] as $file) {
                 @unlink($file);
             }
         }
@@ -148,6 +154,7 @@ final class IdempotencyStoreConcurrencyTest extends TestCase
         string $key,
         string $requestHash,
         string $label,
+        string $readyFile,
         string $startFile,
         string $enteredFile,
         string $resultFile,
@@ -161,19 +168,20 @@ final class IdempotencyStoreConcurrencyTest extends TestCase
                 'dsn' => sprintf('mysql:host=%s;port=%s;dbname=%s', getenv('DB_HOST') ?: '127.0.0.1', getenv('DB_PORT') ?: '3306', getenv('DB_NAME') ?: 'ic_test'),
                 'username' => getenv('DB_USER') ?: 'ic', 'password' => getenv('DB_PASSWORD') ?: '', 'charset' => 'utf8mb4',
             ]);
-            while (!file_exists($argv[5])) { usleep(1000); }
+            touch($argv[5]);
+            while (!file_exists($argv[6])) { usleep(1000); }
             $started = microtime(true);
             try {
                 $result = (new \App\Infrastructure\Http\IdempotencyStore($db))->execute(
                     (int) $argv[1], 'POST', 'api/v1/requests', $argv[2], $argv[3],
                     function () use ($db, $argv): array {
-                        touch($argv[6]);
+                        touch($argv[7]);
                         $db->createCommand()->insert('{{%audit_events}}', [
                             'event_type' => 'idempotency.concurrent.' . $argv[4], 'entity_type' => 'test',
                             'entity_id' => (int) $argv[1], 'actor_id' => (int) $argv[1], 'rule_id' => 'IDEM-001',
                             'payload_json' => '{}', 'created_at' => gmdate('Y-m-d H:i:s'),
                         ])->execute();
-                        usleep((int) $argv[8]);
+                        usleep((int) $argv[9]);
                         return ['winner' => $argv[4]];
                     },
                     static fn (): int => 201, static fn (): ?string => null,
@@ -184,11 +192,11 @@ final class IdempotencyStoreConcurrencyTest extends TestCase
             } catch (\Throwable $error) {
                 $output = ['outcome' => 'error', 'class' => $error::class, 'message' => $error->getMessage(), 'elapsed' => microtime(true) - $started];
             }
-            file_put_contents($argv[7], json_encode($output, JSON_THROW_ON_ERROR));
+            file_put_contents($argv[8], json_encode($output, JSON_THROW_ON_ERROR));
             PHP;
         $process = proc_open(
-            [PHP_BINARY, '-r', $worker, (string) $actorId, $key, $requestHash, $label, $startFile,
-                $enteredFile, $resultFile, (string) $sleepMicroseconds],
+            [PHP_BINARY, '-r', $worker, (string) $actorId, $key, $requestHash, $label, $readyFile,
+                $startFile, $enteredFile, $resultFile, (string) $sleepMicroseconds],
             [1 => ['pipe', 'w'], 2 => ['pipe', 'w']],
             $pipes,
             dirname(__DIR__, 3),
@@ -202,7 +210,7 @@ final class IdempotencyStoreConcurrencyTest extends TestCase
         $deadline = microtime(true) + 10.0;
         while (!file_exists($path)) {
             if (microtime(true) > $deadline) {
-                self::fail('First concurrent operation did not reach the barrier.');
+                self::fail('Concurrent worker did not reach the barrier.');
             }
             usleep(1_000);
         }
