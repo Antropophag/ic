@@ -57,7 +57,11 @@ abstract class ApiController extends Controller
             DocumentStorage::rollbackWritesSince($storageCheckpoint);
             throw $error;
         }
-        DocumentStorage::discardWritesSince($storageCheckpoint);
+        if ($result['statusCode'] >= 200 && $result['statusCode'] < 300) {
+            DocumentStorage::discardWritesSince($storageCheckpoint);
+        } else {
+            DocumentStorage::rollbackWritesSince($storageCheckpoint);
+        }
         Yii::$app->response->statusCode = $result['statusCode'];
         Yii::$app->response->headers->set('Idempotency-Replayed', $result['replayed'] ? 'true' : 'false');
         if ($result['location'] !== null) {

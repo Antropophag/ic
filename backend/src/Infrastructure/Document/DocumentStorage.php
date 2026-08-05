@@ -8,7 +8,9 @@ final class DocumentStorage
 {
     /** @var list<array{root: string, key: string}> */
     private static array $trackedWrites = [];
-    private static int $trackingScopes = 0;
+    /** @var list<array{token: int, start: int}> */
+    private static array $trackingScopes = [];
+    private static int $nextScopeToken = 0;
 
     public function __construct(private readonly string $root)
     {
@@ -33,7 +35,7 @@ final class DocumentStorage
                 unlink($temporary);
             }
         }
-        if (self::$trackingScopes > 0) {
+        if (self::$trackingScopes !== []) {
             self::$trackedWrites[] = ['root' => $this->root, 'key' => $key];
         }
         return $key;
@@ -41,23 +43,44 @@ final class DocumentStorage
 
     public static function writeCheckpoint(): int
     {
-        ++self::$trackingScopes;
-        return count(self::$trackedWrites);
+        $token = ++self::$nextScopeToken;
+        self::$trackingScopes[] = ['token' => $token, 'start' => count(self::$trackedWrites)];
+        return $token;
     }
 
     public static function discardWritesSince(int $checkpoint): void
     {
-        array_splice(self::$trackedWrites, $checkpoint);
-        --self::$trackingScopes;
+        $scope = self::closeScope($checkpoint);
+        if (self::$trackingScopes === []) {
+            array_splice(self::$trackedWrites, $scope['start']);
+        }
     }
 
     public static function rollbackWritesSince(int $checkpoint): void
     {
-        $writes = array_splice(self::$trackedWrites, $checkpoint);
+        $scope = self::closeScope($checkpoint);
+        $writes = array_splice(self::$trackedWrites, $scope['start']);
         foreach (array_reverse($writes) as $write) {
-            (new self($write['root']))->delete($write['key']);
+            try {
+                (new self($write['root']))->delete($write['key']);
+            } catch (\Throwable $deleteError) {
+                \Yii::error('Failed to compensate document write: ' . $deleteError->getMessage(), __METHOD__);
+            }
         }
-        --self::$trackingScopes;
+    }
+
+    /** @return array{token: int, start: int} */
+    private static function closeScope(int $checkpoint): array
+    {
+        $scope = array_pop(self::$trackingScopes);
+        if ($scope === null) {
+            throw new \LogicException('Document write scope is not open.');
+        }
+        if ($scope['token'] !== $checkpoint) {
+            self::$trackingScopes[] = $scope;
+            throw new \LogicException('Document write scopes must be closed in reverse order.');
+        }
+        return $scope;
     }
 
     public function assertWritable(): void

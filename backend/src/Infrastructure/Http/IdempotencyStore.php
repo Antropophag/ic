@@ -106,7 +106,15 @@ final class IdempotencyStore
             $body = $operation();
             $code = (int) $statusCode();
             if ($code < 200 || $code >= 300) {
-                $transaction->rollBack();
+                if ($code < 500) {
+                    // Repositories roll back their domain savepoints before a controller returns a
+                    // controlled 4xx. Commit only the intentional effects emitted afterwards, such
+                    // as a denied audit entry, while releasing the key for a corrected retry.
+                    $this->db->createCommand()->delete('{{%idempotency_requests}}', ['id' => $recordId])->execute();
+                    $transaction->commit();
+                } else {
+                    $transaction->rollBack();
+                }
                 return ['body' => $body, 'statusCode' => $code, 'location' => null, 'replayed' => false];
             }
             $responseJson = json_encode($body, JSON_THROW_ON_ERROR | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
@@ -140,7 +148,11 @@ final class IdempotencyStore
             }
             throw $error;
         } finally {
-            $this->db->createCommand('SELECT RELEASE_LOCK(:name)', [':name' => $lockName])->queryScalar();
+            try {
+                $this->db->createCommand('SELECT RELEASE_LOCK(:name)', [':name' => $lockName])->queryScalar();
+            } catch (\Throwable $releaseError) {
+                \Yii::warning('Failed to release idempotency lock: ' . $releaseError->getMessage(), __METHOD__);
+            }
         }
     }
 

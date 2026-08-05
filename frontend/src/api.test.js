@@ -105,6 +105,24 @@ it('does not carry a failed intent into another authenticated session', async ()
     .not.toBe(fetchMock.mock.calls[1][1].headers['Idempotency-Key'])
 })
 
+it('does not let a completed stale session intent replace the current pending intent', async () => {
+  const resolvers = []
+  const fetchMock = vi.fn().mockImplementation(() => new Promise(resolve => resolvers.push(resolve)))
+  vi.stubGlobal('fetch', fetchMock)
+  setCsrfToken('first-session')
+
+  const stale = requestApi.addComment(21, 'Session race')
+  setCsrfToken('second-session')
+  const current = requestApi.addComment(21, 'Session race')
+  resolvers[0](new Response('{"id":1}', { status: 201 }))
+  await stale
+
+  const coalesced = requestApi.addComment(21, 'Session race')
+  expect(fetchMock).toHaveBeenCalledTimes(2)
+  resolvers[1](new Response('{"id":2}', { status: 201 }))
+  await expect(Promise.all([current, coalesced])).resolves.toEqual([{ id: 2 }, { id: 2 }])
+})
+
 it('loads an older comment page by cursor', async () => {
   const payload = { items: [], hasMore: false, nextBeforeId: null }
   const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify(payload), { status: 200 }))
@@ -129,6 +147,22 @@ it('uploads a document as multipart data and downloads its bytes', async () => {
     body: expect.any(FormData),
   }))
   expect(fetchMock).toHaveBeenNthCalledWith(2, '/api/v1/document-versions/12/download', expect.any(Object))
+})
+
+it('does not coalesce different files that have identical metadata', async () => {
+  const fetchMock = vi.fn()
+    .mockResolvedValueOnce(new Response('{"id":1}', { status: 201 }))
+    .mockResolvedValueOnce(new Response('{"id":2}', { status: 201 }))
+  vi.stubGlobal('fetch', fetchMock)
+  const options = { type: 'application/pdf', lastModified: 123 }
+  const first = new File(['one'], 'same.pdf', options)
+  const second = new File(['two'], 'same.pdf', options)
+
+  await expect(Promise.all([
+    requestApi.uploadDocument(7, first),
+    requestApi.uploadDocument(7, second),
+  ])).resolves.toEqual([{ id: 1 }, { id: 2 }])
+  expect(fetchMock).toHaveBeenCalledTimes(2)
 })
 
 it('uploads a test report through the dedicated endpoint', async () => {

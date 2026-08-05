@@ -13,11 +13,13 @@ final class DocumentStorageTest extends TestCase
 
     protected function setUp(): void
     {
+        $this->resetWriteTracking();
         $this->root = sys_get_temp_dir() . '/ic-documents-' . bin2hex(random_bytes(6));
     }
 
     protected function tearDown(): void
     {
+        $this->resetWriteTracking();
         if (!is_dir($this->root)) {
             return;
         }
@@ -94,6 +96,39 @@ final class DocumentStorageTest extends TestCase
         unlink($source);
     }
 
+    public function testInnerCommitKeepsWriteTrackedForOuterRollback(): void
+    {
+        $source = tempnam(sys_get_temp_dir(), 'ic-source-');
+        self::assertIsString($source);
+        file_put_contents($source, 'document');
+        $storage = new DocumentStorage($this->root);
+        $outer = DocumentStorage::writeCheckpoint();
+        $inner = DocumentStorage::writeCheckpoint();
+
+        $key = $storage->store($source);
+        DocumentStorage::discardWritesSince($inner);
+        DocumentStorage::rollbackWritesSince($outer);
+
+        self::assertFileDoesNotExist($storage->path($key));
+        unlink($source);
+    }
+
+    public function testRejectsClosingScopesOutOfOrderWithoutLosingTracking(): void
+    {
+        $outer = DocumentStorage::writeCheckpoint();
+        $inner = DocumentStorage::writeCheckpoint();
+
+        try {
+            DocumentStorage::discardWritesSince($outer);
+            self::fail('Out-of-order scope close must fail.');
+        } catch (\LogicException) {
+            DocumentStorage::discardWritesSince($inner);
+            DocumentStorage::discardWritesSince($outer);
+            $reflection = new \ReflectionClass(DocumentStorage::class);
+            self::assertSame([], $reflection->getStaticPropertyValue('trackingScopes'));
+        }
+    }
+
     public function testWritableProbeCleansUpAfterItself(): void
     {
         mkdir($this->root, 0700, true);
@@ -120,5 +155,13 @@ final class DocumentStorageTest extends TestCase
             }
         }
         return $files;
+    }
+
+    private function resetWriteTracking(): void
+    {
+        $reflection = new \ReflectionClass(DocumentStorage::class);
+        $reflection->setStaticPropertyValue('trackedWrites', []);
+        $reflection->setStaticPropertyValue('trackingScopes', []);
+        $reflection->setStaticPropertyValue('nextScopeToken', 0);
     }
 }

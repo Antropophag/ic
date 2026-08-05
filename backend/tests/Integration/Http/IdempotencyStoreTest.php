@@ -263,6 +263,34 @@ final class IdempotencyStoreTest extends IntegrationTestCase
         }
     }
 
+    public function testReturnedClientErrorCommitsDeniedAuditButReleasesClaim(): void
+    {
+        $actorId = $this->createUser(uniqid('idem-', true), 'Idempotency actor');
+        $result = (new IdempotencyStore($this->db()))->execute(
+            $actorId,
+            'POST',
+            'api/v1/requests/report',
+            str_repeat('j', 16),
+            hash('sha256', 'returned-denial'),
+            function () use ($actorId): array {
+                $this->insertAudit($actorId, 'request.report_upload_denied');
+                return ['errors' => ['file' => ['invalid']]];
+            },
+            static fn (): int => 422,
+            static fn (): ?string => null,
+        );
+
+        self::assertSame(422, $result['statusCode']);
+        self::assertSame(1, (int) $this->scalar(
+            'SELECT COUNT(*) FROM {{%audit_events}} WHERE actor_id = :actor AND event_type = :type',
+            [':actor' => $actorId, ':type' => 'request.report_upload_denied'],
+        ));
+        self::assertSame(0, (int) $this->scalar(
+            'SELECT COUNT(*) FROM {{%idempotency_requests}} WHERE actor_id = :actor',
+            [':actor' => $actorId],
+        ));
+    }
+
     public function testServerErrorRollsBackAuditAndClaim(): void
     {
         $actorId = $this->createUser(uniqid('idem-', true), 'Idempotency actor');

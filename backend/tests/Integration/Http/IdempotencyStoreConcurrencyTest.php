@@ -169,7 +169,17 @@ final class IdempotencyStoreConcurrencyTest extends TestCase
                 'username' => getenv('DB_USER') ?: 'ic', 'password' => getenv('DB_PASSWORD') ?: '', 'charset' => 'utf8mb4',
             ]);
             touch($argv[5]);
-            while (!file_exists($argv[6])) { usleep(1000); }
+            $barrierDeadline = microtime(true) + 10.0;
+            while (!file_exists($argv[6])) {
+                if (microtime(true) > $barrierDeadline) {
+                    file_put_contents($argv[8], json_encode([
+                        'outcome' => 'error', 'class' => 'BarrierTimeout',
+                        'message' => 'Concurrent start barrier was not released.',
+                    ], JSON_THROW_ON_ERROR));
+                    exit(2);
+                }
+                usleep(1000);
+            }
             $started = microtime(true);
             try {
                 $result = (new \App\Infrastructure\Http\IdempotencyStore($db))->execute(

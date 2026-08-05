@@ -3,6 +3,8 @@
 // /api/v1/auth/me или /auth/login и хранится здесь на время сессии SPA.
 let csrfToken = ''
 const mutationIntents = new Map()
+const fileIds = new WeakMap()
+let nextFileId = 0
 const MUTATION_INTENT_TTL_MS = 24 * 60 * 60 * 1000
 const MUTATION_INTENT_LIMIT = 100
 
@@ -47,13 +49,22 @@ function newIdempotencyKey() {
   return `intent-${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}-${Math.random().toString(36).slice(2)}`
 }
 
+function fileIdentity(file) {
+  let id = fileIds.get(file)
+  if (!id) {
+    id = `file-${++nextFileId}`
+    fileIds.set(file, id)
+  }
+  return id
+}
+
 function mutationSignature(path, body) {
   if (typeof body === 'string') return `${path}\0${body}`
   if (body instanceof FormData) {
     const fields = []
     for (const [name, value] of body.entries()) {
       fields.push(typeof File !== 'undefined' && value instanceof File
-        ? `${name}:${value.name}:${value.size}:${value.type}:${value.lastModified}`
+        ? `${name}:${fileIdentity(value)}`
         : `${name}:${value}`)
     }
     return `${path}\0${fields.join('\0')}`
@@ -82,11 +93,13 @@ function idempotentRequest(path, options) {
     ...options,
     headers: { ...options.headers, 'Idempotency-Key': intent.key },
   }).then(payload => {
-    mutationIntents.delete(signature)
+    if (mutationIntents.get(signature) === intent) mutationIntents.delete(signature)
     return payload
   }).catch(error => {
-    intent.promise = null
-    mutationIntents.set(signature, intent)
+    if (mutationIntents.get(signature) === intent) {
+      intent.promise = null
+      mutationIntents.set(signature, intent)
+    }
     throw error
   })
   mutationIntents.set(signature, intent)
