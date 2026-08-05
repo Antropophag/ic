@@ -124,6 +124,11 @@ export const requestApi = {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ color, lockVersion }),
   }),
+  changeDepartment: (requestId, department, lockVersion) => request(`/api/v1/requests/${requestId}/department`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ department, lockVersion }),
+  }),
   reject: (requestId, lockVersion, reason) => request(`/api/v1/requests/${requestId}/reject`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },

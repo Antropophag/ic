@@ -50,6 +50,11 @@ final class DatabaseLegacyRequestWriterTest extends IntegrationTestCase
 
         $status = $this->scalar('SELECT status FROM {{%requests}} WHERE id = :id', [':id' => $requestId]);
         self::assertSame('completed', $status);
+        $snapshot = $this->db()->createCommand(
+            'SELECT department_name, department_source FROM {{%requests}} WHERE id = :id',
+            [':id' => $requestId],
+        )->queryOne();
+        self::assertSame(['department_name' => 'Лаборатория', 'department_source' => 'bitrix24'], $snapshot);
 
         $transitionCount = $this->scalar(
             "SELECT COUNT(*) FROM {{%request_transitions}} WHERE request_id = :id "
@@ -125,5 +130,9 @@ final class DatabaseLegacyRequestWriterTest extends IntegrationTestCase
             "SELECT department FROM {{%users}} WHERE ad_login = 'legacy.bitrix24.77003'",
         )->queryScalar();
         self::assertNull($department);
+        $snapshot = $this->db()->createCommand(
+            "SELECT department_name, department_source FROM {{%requests}} WHERE legacy_id = 'bitrix24:114:506'",
+        )->queryOne();
+        self::assertSame(['department_name' => null, 'department_source' => 'unknown'], $snapshot);
     }
 }

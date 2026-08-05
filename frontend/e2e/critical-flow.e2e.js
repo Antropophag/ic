@@ -247,6 +247,41 @@ test('администратор управляет ролями и возвра
   expect(errors).toEqual([])
 })
 
+test('администратор исправляет историческое подразделение одной заявки', async ({ page, baseURL }) => {
+  const initiator = await apiFor(baseURL, 3)
+  try {
+    const first = await expectOk(await initiator.post('/api/v1/requests', { data: {
+      productName: `E2E-department-first-${Date.now()}`,
+      manufacturer: 'Тестовый производитель',
+      supplier: 'Тестовый поставщик',
+      sampleQuantity: 1,
+      testMethod: 'Проверка snapshot подразделения',
+    } }))
+    const second = await expectOk(await initiator.post('/api/v1/requests', { data: {
+      productName: `E2E-department-second-${Date.now()}`,
+      manufacturer: 'Тестовый производитель',
+      supplier: 'Тестовый поставщик',
+      sampleQuantity: 1,
+      testMethod: 'Проверка изоляции snapshot',
+    } }))
+
+    await useTestIdentity(page, 6)
+    await page.goto(`/?request=${first.id}`)
+    const departmentFact = page.locator('.object-band .fact').filter({ hasText: 'Подразделение' })
+    await expect(departmentFact.locator('b')).toHaveText('Тестовое подразделение')
+    await page.getByRole('button', { name: 'Изменить', exact: true }).click()
+    await page.getByLabel('Подразделение', { exact: true }).fill('Подразделение C')
+    await page.getByRole('button', { name: 'Сохранить', exact: true }).click()
+    await expect(departmentFact.locator('b')).toHaveText('Подразделение C')
+    await expect(page.getByText('изменил(а) подразделение заявки: Подразделение C', { exact: false })).toBeVisible()
+
+    const unchanged = await expectOk(await initiator.get(`/api/v1/requests/${second.id}`))
+    expect(unchanged.item.department).toBe('Тестовое подразделение')
+  } finally {
+    await initiator.dispose()
+  }
+})
+
 test('администратор читает журналы действий и уведомлений и открывает связанную заявку', async ({ page, baseURL }) => {
   const marker = `E2E-admin-logs-${Date.now()}`
   const contexts = []

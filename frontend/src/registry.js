@@ -62,6 +62,7 @@ export function fromApi(item) {
     canPublishOpinion: Boolean(Number(item.can_publish_opinion)),
     canSecurityDecide: Boolean(Number(item.can_security_decide)),
     canSetColor: Boolean(Number(item.can_set_color)),
+    canEditDepartment: Boolean(Number(item.can_edit_department)),
     canReject: Boolean(Number(item.can_reject)),
     canWithdraw: Boolean(Number(item.can_withdraw)),
     color: REQUEST_COLORS.includes(item.color) ? item.color : 'white',
@@ -116,6 +117,7 @@ const HISTORY_LABELS = {
   security_return: 'вернул(а) заявку в работу',
   reject: 'отказал(а) в проведении испытаний',
   withdraw: 'отозвал(а) заявку',
+  change_department: 'изменил(а) подразделение заявки',
 }
 
 // Действия с явным адресатом (кого назначили) — для остальных targetName
@@ -128,7 +130,7 @@ export function historyFromApi(item) {
   // display_name хранится в именительном падеже и не склоняется программно
   // без риска грамматической ошибки — имя добавляется через двоеточие, тем
   // же приёмом, что и причина возврата СБ, а не согласованием окончаний.
-  const qualifier = item.reason || (ACTIONS_WITH_TARGET.has(item.action) ? item.targetName : '')
+  const qualifier = item.reason || (ACTIONS_WITH_TARGET.has(item.action) || item.action === 'change_department' ? item.targetName : '')
   return {
     type: 'milestone',
     id: `${item.kind}-${item.id}`,

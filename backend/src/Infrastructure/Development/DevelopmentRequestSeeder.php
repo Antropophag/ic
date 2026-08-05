@@ -134,6 +134,7 @@ final class DevelopmentRequestSeeder
         $created = $this->time($fixture['age']);
         $this->db->createCommand()->insert('{{%requests}}', [
             'number' => 1001 + $index, 'legacy_id' => null, 'initiator_id' => $users['employee'],
+            'department_name' => 'Тестовое подразделение', 'department_source' => 'current_profile',
             'status' => $fixture['status'], 'product_name' => $fixture['product'],
             'manufacturer' => $fixture['manufacturer'], 'supplier' => $fixture['supplier'],
             'sample_quantity' => $fixture['quantity'], 'test_method' => $fixture['method'],

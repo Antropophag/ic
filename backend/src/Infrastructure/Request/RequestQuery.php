@@ -40,7 +40,8 @@ final class RequestQuery
         if ($query !== '') {
             $where[] = "(LOCATE(:filter_query, LPAD(CAST(r.number AS CHAR), 6, '0')) > 0 "
                 . 'OR LOCATE(:filter_query, r.product_name) > 0 OR LOCATE(:filter_query, u.display_name) > 0 '
-                . 'OR LOCATE(:filter_query, u.department) > 0 OR LOCATE(:filter_query, r.supplier) > 0 '
+                . 'OR LOCATE(:filter_query, COALESCE(r.department_name, \'Подразделение не указано\')) > 0 '
+                . 'OR LOCATE(:filter_query, r.supplier) > 0 '
                 . 'OR LOCATE(:filter_query, executor.display_name) > 0)';
             $filterParams[':filter_query'] = $query;
         }
@@ -63,7 +64,7 @@ final class RequestQuery
         $items = $this->db->createCommand(
             'SELECT r.id, r.number, r.status, r.color, r.product_name, r.manufacturer, '
             . 'r.supplier, r.sample_quantity, r.test_method, r.lock_version AS lockVersion, r.created_at, '
-            . 'u.display_name AS initiator_name, u.department, '
+            . "u.display_name AS initiator_name, COALESCE(r.department_name, 'Подразделение не указано') AS department, "
             . 'executor.id AS executor_id, executor.display_name AS executor_name, '
             . 'expert.id AS expert_id, expert.display_name AS expert_name, '
             . '(SELECT sc.decision FROM {{%security_checks}} sc WHERE sc.request_id = r.id '
@@ -237,7 +238,12 @@ final class RequestQuery
         $item = $this->db->createCommand(
             'SELECT r.id, r.number, r.status, r.color, r.product_name, r.manufacturer, '
             . 'r.supplier, r.sample_quantity, r.test_method, r.lock_version AS lockVersion, '
-            . 'r.created_at, r.updated_at, u.display_name AS initiator_name, u.department, '
+            . "r.created_at, r.updated_at, u.display_name AS initiator_name, "
+            . "COALESCE(r.department_name, 'Подразделение не указано') AS department, "
+            . "(EXISTS(SELECT 1 FROM {{%users}} department_actor JOIN {{%user_roles}} department_ur "
+            . "ON department_ur.user_id = department_actor.id JOIN {{%roles}} department_role "
+            . "ON department_role.id = department_ur.role_id WHERE department_actor.id = :department_actor "
+            . "AND department_actor.is_active = 1 AND department_role.code = 'administrator')) AS can_edit_department, "
             . 'executor.id AS executor_id, executor.display_name AS executor_name, '
             . 'expert.id AS expert_id, expert.display_name AS expert_name, '
             . '(SELECT sc.decision FROM {{%security_checks}} sc WHERE sc.request_id = r.id '
@@ -324,6 +330,7 @@ final class RequestQuery
             [
                 ':request_id' => $requestId,
                 ':actor_id' => $actorId,
+                ':department_actor' => $actorId,
                 ':color_actor' => $actorId,
                 ':assign_actor' => $actorId,
                 ':expert_actor' => $actorId,
@@ -380,12 +387,14 @@ final class RequestQuery
             . "AND report_document.document_type = 'report' AND report_document.deleted_at IS NULL "
             . 'WHERE t.request_id = :transition_request_id '
             . 'UNION ALL '
-            . "SELECT a.id, 'assignment' AS kind, CASE a.event_type "
+            . "SELECT a.id, CASE WHEN a.event_type = 'request.department_changed' THEN 'audit' ELSE 'assignment' END AS kind, CASE a.event_type "
             . "WHEN 'request.executor_assigned' THEN 'assign_executor' "
             . "WHEN 'request.expert_claimed' THEN 'claim_expert' "
             . "WHEN 'request.expert_reassigned' THEN 'reassign_expert' "
-            . "ELSE 'delete_report' END AS action, NULL, NULL, "
-            . "a.rule_id, NULL, DATE_FORMAT(a.created_at, '%Y-%m-%dT%H:%i:%s.%fZ'), u.display_name, target_user.display_name, NULL, NULL "
+            . "WHEN 'request.department_changed' THEN 'change_department' ELSE 'delete_report' END AS action, NULL, NULL, "
+            . "a.rule_id, NULL, DATE_FORMAT(a.created_at, '%Y-%m-%dT%H:%i:%s.%fZ'), u.display_name, "
+            . "CASE WHEN a.event_type = 'request.department_changed' THEN JSON_UNQUOTE(JSON_EXTRACT(a.payload_json, '$.new_department_name')) "
+            . "ELSE target_user.display_name END, NULL, NULL "
             . 'FROM {{%audit_events}} a '
             . 'JOIN {{%users}} u ON u.id = a.actor_id '
             // assign_executor/claim_expert/reassign_expert пишут одинаковое
@@ -405,7 +414,7 @@ final class RequestQuery
             . 'LEFT JOIN {{%users}} target_user ON target_user.id = target_assignment.user_id '
             . "WHERE a.entity_type = 'request' AND a.entity_id = :audit_request_id "
             . "AND a.event_type IN ('request.executor_assigned', 'request.expert_claimed', "
-            . "'request.expert_reassigned', 'request.report_deleted') "
+            . "'request.expert_reassigned', 'request.report_deleted', 'request.department_changed') "
             . 'ORDER BY occurredAt DESC, kind DESC, id DESC',
             [
                 ':transition_request_id' => $requestId,

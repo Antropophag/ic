@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Http\Controller;
 
 use App\Application\Request\CreateRequestInput;
+use App\Application\Request\ChangeDepartmentInput;
 use App\Application\Request\ListRequestsInput;
 use App\Application\Request\AddCommentInput;
 use App\Application\Request\AssignExecutorInput;
@@ -23,6 +24,8 @@ use App\Domain\Request\ExpertAssignmentDenied;
 use App\Domain\Request\CommentDenied;
 use App\Domain\Request\RejectDenied;
 use App\Domain\Request\RequestCreationDenied;
+use App\Domain\Request\RequestDepartmentChangeDenied;
+use App\Domain\Request\RequestDepartmentMissing;
 use App\Domain\Request\RequestNotFound;
 use App\Domain\Request\ReportDenied;
 use App\Domain\Request\ReportDeletionDenied;
@@ -44,6 +47,7 @@ use yii\web\Response;
 use yii\web\ConflictHttpException;
 use yii\web\ForbiddenHttpException;
 use yii\web\NotFoundHttpException;
+use yii\web\UnprocessableEntityHttpException;
 use yii\web\ServerErrorHttpException;
 use yii\web\UploadedFile;
 
@@ -307,10 +311,35 @@ final class RequestController extends ApiController
         } catch (RequestCreationDenied $error) {
             $this->recordRejectedCreateSafely($actorId, $error->ruleId);
             throw new ForbiddenHttpException($error->getMessage());
+        } catch (RequestDepartmentMissing $error) {
+            throw new UnprocessableEntityHttpException($error->getMessage());
         }
         Yii::$app->response->statusCode = 201;
         Yii::$app->response->headers->set('Location', '/api/v1/requests/' . $request['id']);
         return $request;
+    }
+
+    /** @return array<string, mixed> */
+    public function actionChangeDepartment(int $id): array
+    {
+        $input = new ChangeDepartmentInput();
+        if (($errors = $this->bodyValidationErrors($input)) !== null) {
+            return $errors;
+        }
+        try {
+            return $this->repository()->changeDepartment(
+                $id,
+                (string) $input->department,
+                (int) $input->lockVersion,
+                $this->currentUserId(),
+            );
+        } catch (RequestNotFound $error) {
+            throw new NotFoundHttpException($error->getMessage());
+        } catch (RequestDepartmentChangeDenied $error) {
+            throw new ForbiddenHttpException($error->getMessage());
+        } catch (ConcurrentRequestModification $error) {
+            throw new ConflictHttpException($error->getMessage());
+        }
     }
 
     /** @return array<string, mixed> */

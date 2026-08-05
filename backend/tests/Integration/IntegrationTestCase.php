@@ -62,12 +62,14 @@ abstract class IntegrationTestCase extends TestCase
         string $displayName,
         ?string $email = null,
         bool $isActive = true,
+        ?string $department = 'Тестовое подразделение',
     ): int {
         $now = Clock::now();
         $this->db()->createCommand()->insert('{{%users}}', [
             'ad_login' => $adLogin,
             'display_name' => $displayName,
             'email' => $email ?? ($adLogin . '@example.invalid'),
+            'department' => $department,
             'is_active' => $isActive,
             'created_at' => $now,
             'updated_at' => $now,
