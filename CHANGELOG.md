@@ -2,6 +2,8 @@
 
 ## Не выпущено
 
+- Lifecycle-команды development и production получили компактный вывод,
+  readiness-проверки, статусы, restart и удобные потоковые логи по сервисам.
 - Production, development и test Compose deployments получили независимые
   project names и параметризованные host ports; production и development теперь
   можно запускать одновременно из одной рабочей копии.
