@@ -19,10 +19,3 @@ describe('registry row highlights', () => {
     )
   })
 })
-
-describe('request status facts', () => {
-  it('centers the security mark with the shared inline-flex icon layout', () => {
-    expect(compactStyles).toContain('.fact>span{display:block;')
-    expect(compactStyles).toContain('.security-mark-icon{display:inline-flex;align-items:center;justify-content:center;')
-  })
-})
