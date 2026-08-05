@@ -755,7 +755,7 @@ async function suspendOrResumeRequest(action) {
 
 
 function invalidateRequests() {
-  for (const guard of [detailRequestGuard, commentRequestGuard, commentsPageRequestGuard, documentRequestGuard, reportRequestGuard, opinionRequestGuard, securityRequestGuard, colorRequestGuard, rejectRequestGuard, withdrawRequestGuard, claimRequestGuard, reassignRequestGuard, deleteReportRequestGuard, suspendResumeRequestGuard, executorsRequestGuard, expertsRequestGuard, actionRequestGuard, downloadRequestGuard]) guard.invalidate()
+  for (const guard of [detailRequestGuard, commentRequestGuard, commentsPageRequestGuard, documentRequestGuard, reportRequestGuard, opinionRequestGuard, securityRequestGuard, colorRequestGuard, rejectRequestGuard, withdrawRequestGuard, claimRequestGuard, reassignRequestGuard, deleteReportRequestGuard, suspendResumeRequestGuard, executorsRequestGuard, expertsRequestGuard, actionRequestGuard, downloadRequestGuard, departmentRequestGuard]) guard.invalidate()
 }
 
 function resetRequestLocalState() {
@@ -763,6 +763,8 @@ function resetRequestLocalState() {
   commentDraft.value = ''
   opinionDraft.value = ''
   showOpinionModal.value = false
+  departmentDraft.value = ''
+  showDepartmentModal.value = false
   startHintRevealed.value = false
   executorChoice.value = ''
   expertChoice.value = ''
@@ -770,14 +772,14 @@ function resetRequestLocalState() {
   for (const error of [
     detailError, commentError, documentError, reportError, opinionError,
     securityError, colorError, rejectError, withdrawError, claimError,
-    reassignError, deleteReportError, suspendResumeError,
+    reassignError, deleteReportError, suspendResumeError, departmentError,
   ]) error.value = ''
 
   for (const loading of [
     actionLoading, detailLoading, commentLoading, olderCommentsLoading,
     documentLoading, reportLoading, opinionLoading, securityLoading,
     colorLoading, rejectLoading, withdrawLoading, claimLoading,
-    reassignLoading, deleteReportLoading, suspendResumeLoading,
+    reassignLoading, deleteReportLoading, suspendResumeLoading, departmentLoading,
   ]) loading.value = false
 }
 
