@@ -44,6 +44,9 @@ final class ChangeDepartmentInputTest extends TestCase
     /** @return iterable<string, array{mixed}> */
     public static function nonStringDepartments(): iterable
     {
+        yield 'null' => [null];
+        yield 'boolean' => [true];
+        yield 'integer' => [1];
         yield 'array' => [['Подразделение']];
         yield 'object' => [(object) ['name' => 'Подразделение']];
     }

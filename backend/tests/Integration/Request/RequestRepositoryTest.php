@@ -95,6 +95,44 @@ final class RequestRepositoryTest extends IntegrationTestCase
         );
     }
 
+    public function testDepartmentChangeConflictPreservesSnapshotAndDoesNotWriteAudit(): void
+    {
+        $initiator = $this->createUser('dev.it.department.conflict.owner', 'Инициатор');
+        $administrator = $this->createUser('dev.it.department.conflict.admin', 'Администратор');
+        $this->grantRole($administrator, 'administrator');
+        $request = $this->createRegisteredRequest($initiator, 'department-conflict');
+        $this->db()->createCommand()->update('{{%requests}}', [
+            'department_external_id' => 'bitrix:conflict',
+            'department_source' => 'bitrix24',
+        ], ['id' => $request['id']])->execute();
+
+        try {
+            (new RequestRepository($this->db()))->changeDepartment(
+                (int) $request['id'],
+                'Новое подразделение',
+                (int) $request['lock_version'] + 1,
+                $administrator,
+            );
+            self::fail('Expected stale department change to be rejected.');
+        } catch (ConcurrentRequestModification) {
+            // Expected optimistic-lock conflict.
+        }
+
+        $snapshot = $this->db()->createCommand(
+            'SELECT department_name, department_external_id, department_source FROM {{%requests}} WHERE id = :id',
+            [':id' => $request['id']],
+        )->queryOne();
+        self::assertSame([
+            'department_name' => 'Тестовое подразделение',
+            'department_external_id' => 'bitrix:conflict',
+            'department_source' => 'bitrix24',
+        ], $snapshot);
+        self::assertSame(0, (int) $this->scalar(
+            "SELECT COUNT(*) FROM {{%audit_events}} WHERE entity_id = :id AND event_type = 'request.department_changed'",
+            [':id' => $request['id']],
+        ));
+    }
+
     public function testRejectFailsOnStaleLockVersion(): void
     {
         $manager = $this->createUser('dev.it.manager1', 'Тестовый руководитель 1');

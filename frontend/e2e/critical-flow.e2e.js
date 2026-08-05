@@ -282,6 +282,52 @@ test('администратор исправляет историческое �
   }
 })
 
+test('конфликт изменения подразделения обновляет карточку и отключает устаревшее действие', async ({ page, baseURL }) => {
+  const initiator = await apiFor(baseURL, 3)
+  const administrator = await apiFor(baseURL, 6)
+  try {
+    const created = await expectOk(await initiator.post('/api/v1/requests', { data: {
+      productName: `E2E-department-conflict-${Date.now()}`,
+      manufacturer: 'Тестовый производитель',
+      supplier: 'Тестовый поставщик',
+      sampleQuantity: 1,
+      testMethod: 'Проверка optimistic locking подразделения',
+    } }))
+
+    await useTestIdentity(page, 6)
+    await page.goto(`/?request=${created.id}`)
+    await page.getByRole('button', { name: 'Изменить', exact: true }).click()
+    await page.getByLabel('Подразделение', { exact: true }).fill('Устаревшее изменение')
+
+    await expectOk(await administrator.post(`/api/v1/requests/${created.id}/department`, {
+      data: { department: 'Параллельное изменение', lockVersion: created.lock_version },
+    }))
+
+    let releaseRefresh
+    const refreshReleased = new Promise(resolve => { releaseRefresh = resolve })
+    let refreshStarted
+    const refreshObserved = new Promise(resolve => { refreshStarted = resolve })
+    await page.route(`**/api/v1/requests/${created.id}`, async route => {
+      if (route.request().method() === 'GET') {
+        refreshStarted()
+        await refreshReleased
+      }
+      await route.continue({ headers: { ...route.request().headers(), 'X-Test-User-ID': '6' } })
+    })
+
+    await page.getByRole('button', { name: 'Сохранить', exact: true }).click()
+    await refreshObserved
+    await expect(page.getByRole('button', { name: 'Изменить', exact: true })).toHaveCount(0)
+    releaseRefresh()
+
+    await expect(page.getByText('Заявка уже изменена. Данные обновлены', { exact: false })).toBeVisible()
+    await expect(page.locator('.object-band .fact').filter({ hasText: 'Подразделение' }).locator('b'))
+      .toHaveText('Параллельное изменение')
+  } finally {
+    await Promise.all([initiator.dispose(), administrator.dispose()])
+  }
+})
+
 test('администратор читает журналы действий и уведомлений и открывает связанную заявку', async ({ page, baseURL }) => {
   const marker = `E2E-admin-logs-${Date.now()}`
   const contexts = []
