@@ -75,6 +75,32 @@ describe('application create draft form lifecycle', () => {
     expect(loadApplicationDraft(3)).not.toHaveProperty('files')
   })
 
+  it('preserves the restored file marker while ordinary fields are edited', () => {
+    saveApplicationDraft(3, { ...defaults(), productName: 'С файлами' }, true)
+    const state = formFor(3)
+    state.form.restore()
+    state.draft.comment = 'Изменённый комментарий'
+    state.form.scheduleSave()
+    state.form.flushSave()
+
+    const reopened = formFor(3)
+    reopened.form.restore()
+    expect(reopened.notices).toEqual([
+      'Черновик заявки восстановлен. Файлы необходимо выбрать повторно.',
+    ])
+  })
+
+  it('clears the restored file marker after the user explicitly clears files', () => {
+    saveApplicationDraft(3, { ...defaults(), productName: 'С файлами' }, true)
+    const state = formFor(3)
+    state.form.restore()
+    state.draft.comment = 'Без файлов'
+    state.form.scheduleFilesSave()
+    state.form.flushSave()
+
+    expect(loadApplicationDraft(3).hadFiles).toBe(false)
+  })
+
   it('debounces rapid changes into one final save', () => {
     const state = formFor(3)
     state.form.restore()
@@ -139,7 +165,7 @@ describe('application create draft form lifecycle', () => {
     const file = new File(['binary content'], 'document.pdf', { type: 'application/pdf' })
     const state = formFor(3, { ...defaults(), productName: 'С документом' }, [file])
     state.form.restore()
-    state.form.scheduleSave()
+    state.form.scheduleFilesSave()
     vi.runAllTimers()
 
     const serialized = localStorage.setItem.mock.calls[0][1]
@@ -157,6 +183,7 @@ describe('application create draft form lifecycle', () => {
   })
 
   it('cancels a pending debounce after successful creation', () => {
+    window.clearTimeout = vi.fn()
     const state = formFor(3)
     state.form.restore()
     state.draft.productName = 'Не должен вернуться'

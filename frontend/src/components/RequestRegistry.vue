@@ -167,7 +167,7 @@ watch(query, () => {
   searchTimer = window.setTimeout(reloadFirstPage, 300);
 });
 watch(draft, draftForm.scheduleSave, { deep: true, flush: "sync" });
-watch(draftFiles, draftForm.scheduleSave, { flush: "sync" });
+watch(draftFiles, draftForm.scheduleFilesSave, { flush: "sync" });
 watch(
   () => props.refreshTrigger,
   () => {

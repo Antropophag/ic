@@ -11,6 +11,8 @@ export function createApplicationDraftForm({ userId, draft, files, notify }) {
   let active = true
   let restored = false
   let dirty = false
+  let saveGeneration = 0
+  let hadFiles = false
   let lastValidQuantity = Number.isSafeInteger(draft.sampleQuantity) && draft.sampleQuantity >= 1
     ? draft.sampleQuantity
     : 1
@@ -28,6 +30,7 @@ export function createApplicationDraftForm({ userId, draft, files, notify }) {
     if (saved) {
       Object.assign(draft, saved.data)
       lastValidQuantity = saved.data.sampleQuantity
+      hadFiles = saved.hadFiles
       notify(saved.hadFiles
         ? 'Черновик заявки восстановлен. Файлы необходимо выбрать повторно.'
         : 'Черновик заявки восстановлен.')
@@ -43,28 +46,37 @@ export function createApplicationDraftForm({ userId, draft, files, notify }) {
     }
     dirty = true
     window.clearTimeout(saveTimer)
+    const generation = ++saveGeneration
     saveTimer = window.setTimeout(() => {
       saveTimer = null
-      if (active) {
-        saveApplicationDraft(userId, dataForSave(), files().length > 0)
+      if (active && restored && generation === saveGeneration) {
+        saveApplicationDraft(userId, dataForSave(), hadFiles)
         dirty = false
       }
     }, APPLICATION_DRAFT_SAVE_DELAY_MS)
+  }
+
+  function scheduleFilesSave() {
+    hadFiles = files().length > 0
+    scheduleSave()
   }
 
   function flushSave() {
     if (!restored || !active || !dirty) return
     window.clearTimeout(saveTimer)
     saveTimer = null
-    saveApplicationDraft(userId, dataForSave(), files().length > 0)
+    saveGeneration += 1
+    saveApplicationDraft(userId, dataForSave(), hadFiles)
     dirty = false
   }
 
   function remove() {
     window.clearTimeout(saveTimer)
     saveTimer = null
+    saveGeneration += 1
     restored = false
     dirty = false
+    hadFiles = false
     removeApplicationDraft(userId)
   }
 
@@ -76,7 +88,16 @@ export function createApplicationDraftForm({ userId, draft, files, notify }) {
     active = false
     window.clearTimeout(saveTimer)
     saveTimer = null
+    saveGeneration += 1
   }
 
-  return { dispose, enableSaving, flushSave, remove, restore, scheduleSave }
+  return {
+    dispose,
+    enableSaving,
+    flushSave,
+    remove,
+    restore,
+    scheduleFilesSave,
+    scheduleSave,
+  }
 }
