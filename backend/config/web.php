@@ -41,6 +41,7 @@ $application = [
                 'POST api/v1/requests/<id:\\d+>/suspend' => 'request/suspend',
                 'POST api/v1/requests/<id:\\d+>/resume' => 'request/resume',
                 'POST api/v1/requests/<id:\\d+>/color' => 'request/set-color',
+                'POST api/v1/requests/<id:\\d+>/department' => 'request/change-department',
                 'POST api/v1/requests/<id:\\d+>/reject' => 'request/reject',
                 'POST api/v1/requests/<id:\\d+>/withdraw' => 'request/withdraw',
                 'GET api/v1/admin/users' => 'admin/users',

@@ -120,6 +120,18 @@ it('assigns an executor and starts a request with optimistic locking', async () 
   }))
 })
 
+it('changes a request department with optimistic locking', async () => {
+  const fetchMock = vi.fn().mockResolvedValue(new Response('{}', { status: 200 }))
+  vi.stubGlobal('fetch', fetchMock)
+
+  await requestApi.changeDepartment(7, 'Подразделение C', 3)
+
+  expect(fetchMock).toHaveBeenCalledWith('/api/v1/requests/7/department', expect.objectContaining({
+    method: 'POST',
+    body: JSON.stringify({ department: 'Подразделение C', lockVersion: 3 }),
+  }))
+})
+
 it('claims an expert opinion task with optimistic locking', async () => {
   const fetchMock = vi.fn().mockResolvedValueOnce(new Response('{}', { status: 200 }))
   vi.stubGlobal('fetch', fetchMock)

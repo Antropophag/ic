@@ -45,12 +45,14 @@ final class LegacyRequestMapper
         $testMethod = $this->string($details, 'testMethod');
         $creatorDisplayName = trim($this->string($creator, 'LAST_NAME') . ' ' . $this->string($creator, 'NAME'));
         $departmentName = $this->string($department, 'NAME');
+        $departmentExternalId = $this->string($department, 'ID');
         $this->assertMaximumLength($productName, 500, 'nameType');
         $this->assertMaximumLength($manufacturer, 500, 'manufacturer');
         $this->assertMaximumLength($supplier, 500, 'supplier');
         $this->assertMaximumLength($creatorLegacyId, 112, 'creator.ID');
         $this->assertMaximumLength($creatorDisplayName, 255, 'creator.displayName');
         $this->assertMaximumLength($departmentName, 255, 'department.NAME');
+        $this->assertMaximumLength($departmentExternalId, 128, 'department.ID');
         if (strlen($testMethod) > 65535) {
             throw new UnexpectedValueException('Legacy field testMethod exceeds the database limit.');
         }
@@ -72,6 +74,7 @@ final class LegacyRequestMapper
             $departmentName,
             $this->count($details, 'supportingDocFiles'),
             $this->count($details, 'reportFiles'),
+            $departmentExternalId !== '' ? $departmentExternalId : null,
         );
     }
 

@@ -23,6 +23,7 @@ final readonly class LegacyRequestData
         public string $department,
         public int $supportingDocumentCount,
         public int $reportCount,
+        public ?string $departmentExternalId = null,
     ) {
     }
 }

@@ -48,6 +48,24 @@ it('maps the API contract to a registry row', () => {
     canUploadReport: false,
     canPublishOpinion: false,
     canSecurityDecide: false,
+    canEditDepartment: false,
+  })
+})
+
+it('maps administrative department permission and its feed event', () => {
+  expect(fromApi({ ...registered, can_edit_department: 1 }).canEditDepartment).toBe(true)
+  expect(historyFromApi({
+    id: 8,
+    kind: 'audit',
+    action: 'change_department',
+    actorName: 'Администратор',
+    targetName: 'Подразделение C',
+    ruleId: 'REQ-011',
+    occurredAt: '2026-08-05T10:00:00Z',
+  })).toMatchObject({
+    actor: 'Администратор',
+    description: 'изменил(а) подразделение заявки: Подразделение C',
+    ruleId: 'REQ-011',
   })
 })
 
@@ -87,6 +105,7 @@ it('disables every version-sensitive action before conflict recovery', () => {
     canReject: true,
     canWithdraw: true,
     canDeleteReport: true,
+    canEditDepartment: true,
   })).toMatchObject({
     canAssignExecutor: false,
     canClaimExpert: false,
@@ -98,6 +117,7 @@ it('disables every version-sensitive action before conflict recovery', () => {
     canReject: false,
     canWithdraw: false,
     canDeleteReport: false,
+    canEditDepartment: false,
   })
 })
 

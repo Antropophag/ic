@@ -29,6 +29,10 @@ const opinionDraft = ref('')
 const opinionLoading = ref(false)
 const opinionError = ref('')
 const showOpinionModal = ref(false)
+const showDepartmentModal = ref(false)
+const departmentDraft = ref('')
+const departmentLoading = ref(false)
+const departmentError = ref('')
 const securityLoading = ref(false)
 const securityError = ref('')
 const colorLoading = ref(false)
@@ -64,6 +68,7 @@ const executorsRequestGuard = createLatestRequestGuard()
 const expertsRequestGuard = createLatestRequestGuard()
 const actionRequestGuard = createLatestRequestGuard()
 const downloadRequestGuard = createLatestRequestGuard()
+const departmentRequestGuard = createLatestRequestGuard()
 const confirmDialog = createConfirmDialog()
 const feed = computed(() => newestFirstFeed(selected.value?.history || [], selected.value?.comments || []))
 const canStartAction = computed(() => canStartNow(selected.value))
@@ -112,6 +117,38 @@ async function loadRequestDetails(item) {
     if (detailRequestGuard.isCurrent(requestToken, selected.value?.backendId)) {
       detailLoading.value = false
     }
+  }
+}
+
+function openDepartmentModal() {
+  departmentDraft.value = selected.value.department === 'Подразделение не указано' ? '' : selected.value.department
+  departmentError.value = ''
+  showDepartmentModal.value = true
+}
+
+async function changeDepartment() {
+  const department = departmentDraft.value.trim()
+  if (!department) return
+  const requestId = selected.value.backendId
+  const token = departmentRequestGuard.begin(requestId)
+  departmentLoading.value = true
+  departmentError.value = ''
+  try {
+    await requestApi.changeDepartment(requestId, department, selected.value.lockVersion)
+    if (!departmentRequestGuard.isCurrent(token, selected.value?.backendId)) return
+    showDepartmentModal.value = false
+    await loadRequestDetails(selected.value)
+    emit('updated')
+  } catch (error) {
+    if (!departmentRequestGuard.isCurrent(token, selected.value?.backendId)) return
+    if (error.status === 409) {
+      showDepartmentModal.value = false
+      await recoverConflict(requestId, 'Заявка уже изменена.')
+      return
+    }
+    departmentError.value = error.payload?.errors?.department?.[0] || error.message || 'Не удалось изменить подразделение.'
+  } finally {
+    if (departmentRequestGuard.isCurrent(token, selected.value?.backendId)) departmentLoading.value = false
   }
 }
 
@@ -718,7 +755,7 @@ async function suspendOrResumeRequest(action) {
 
 
 function invalidateRequests() {
-  for (const guard of [detailRequestGuard, commentRequestGuard, commentsPageRequestGuard, documentRequestGuard, reportRequestGuard, opinionRequestGuard, securityRequestGuard, colorRequestGuard, rejectRequestGuard, withdrawRequestGuard, claimRequestGuard, reassignRequestGuard, deleteReportRequestGuard, suspendResumeRequestGuard, executorsRequestGuard, expertsRequestGuard, actionRequestGuard, downloadRequestGuard]) guard.invalidate()
+  for (const guard of [detailRequestGuard, commentRequestGuard, commentsPageRequestGuard, documentRequestGuard, reportRequestGuard, opinionRequestGuard, securityRequestGuard, colorRequestGuard, rejectRequestGuard, withdrawRequestGuard, claimRequestGuard, reassignRequestGuard, deleteReportRequestGuard, suspendResumeRequestGuard, executorsRequestGuard, expertsRequestGuard, actionRequestGuard, downloadRequestGuard, departmentRequestGuard]) guard.invalidate()
 }
 
 function resetRequestLocalState() {
@@ -726,6 +763,8 @@ function resetRequestLocalState() {
   commentDraft.value = ''
   opinionDraft.value = ''
   showOpinionModal.value = false
+  departmentDraft.value = ''
+  showDepartmentModal.value = false
   startHintRevealed.value = false
   executorChoice.value = ''
   expertChoice.value = ''
@@ -733,14 +772,14 @@ function resetRequestLocalState() {
   for (const error of [
     detailError, commentError, documentError, reportError, opinionError,
     securityError, colorError, rejectError, withdrawError, claimError,
-    reassignError, deleteReportError, suspendResumeError,
+    reassignError, deleteReportError, suspendResumeError, departmentError,
   ]) error.value = ''
 
   for (const loading of [
     actionLoading, detailLoading, commentLoading, olderCommentsLoading,
     documentLoading, reportLoading, opinionLoading, securityLoading,
     colorLoading, rejectLoading, withdrawLoading, claimLoading,
-    reassignLoading, deleteReportLoading, suspendResumeLoading,
+    reassignLoading, deleteReportLoading, suspendResumeLoading, departmentLoading,
   ]) loading.value = false
 }
 
@@ -780,7 +819,7 @@ onBeforeUnmount(() => {
       <p v-if="colorError" class="action-error">{{ colorError }}</p>
       <h4 class="object-title">{{ selected.product }}</h4>
       <div class="facts-row">
-        <div class="fact"><span>Подразделение</span><b>{{ selected.department }}</b></div>
+        <div class="fact"><span>Подразделение</span><b>{{ selected.department }}</b><button v-if="selected.canEditDepartment" type="button" class="secondary" @click="openDepartmentModal">Изменить</button></div>
         <div class="fact"><span>Производитель</span><b>{{ selected.manufacturer || '—' }}</b></div>
         <div class="fact"><span>Поставщик</span><b>{{ selected.supplier }}</b></div>
         <div class="fact"><span>Количество образцов</span><b>{{ selected.sampleQuantity || '—' }} шт.</b></div>
@@ -949,6 +988,18 @@ onBeforeUnmount(() => {
       <div class="modal-actions">
         <button type="button" class="secondary" :disabled="opinionLoading" @click="showOpinionModal = false">Отмена</button>
         <button class="primary" :disabled="opinionLoading">{{ opinionLoading ? 'Публикация…' : 'Опубликовать и передать в СБ' }}</button>
+      </div>
+    </form>
+  </div>
+  <div v-if="showDepartmentModal" class="overlay" @click.self="!departmentLoading && (showDepartmentModal = false)">
+    <form class="modal" @submit.prevent="changeDepartment">
+      <div class="modal-head"><h2>Изменить подразделение заявки</h2><button type="button" :disabled="departmentLoading" @click="showDepartmentModal = false">×</button></div>
+      <label>Подразделение<input v-model.trim="departmentDraft" :disabled="departmentLoading" maxlength="255" required /></label>
+      <p class="placeholder-copy">Изменение относится только к этой заявке и будет записано в журнал действий.</p>
+      <p v-if="departmentError" class="action-error">{{ departmentError }}</p>
+      <div class="modal-actions">
+        <button type="button" class="secondary" :disabled="departmentLoading" @click="showDepartmentModal = false">Отмена</button>
+        <button class="primary" :disabled="departmentLoading || !departmentDraft.trim()">{{ departmentLoading ? 'Сохранение…' : 'Сохранить' }}</button>
       </div>
     </form>
   </div>
