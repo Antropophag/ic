@@ -186,9 +186,17 @@ Docker Compose и Podman Compose равноправны. Makefile определ
 `.env.dev` — `make dev-up`: соответствующие контейнеры будут пересозданы с
 новым environment. Обычный restart контейнера env-файл не перечитывает.
 Разные project names исключают управление чужими контейнерами и orphan
-warnings между окружениями. По умолчанию production и development оба
-публикуют порт `8080`; для их одновременного запуска одному deployment нужен
-другой `FRONTEND_PORT` в его env-файле.
+warnings между окружениями. Env-файлы являются источником Compose metadata:
+production использует `COMPOSE_PROJECT_NAME=ic-prod`, `COMPOSE_FILE=compose.yaml`
+и `FRONTEND_PORT=8080`; development — `COMPOSE_PROJECT_NAME=ic-dev`, оба
+Compose-файла и `FRONTEND_PORT=8081`. Поэтому оба окружения можно одновременно
+запустить прямыми командами `docker compose --env-file .env.prod up -d` и
+`docker compose --env-file .env.dev up -d`. Make lifecycle остаётся
+предпочтительным, потому что дополнительно выполняет build, migrations, seed и
+provisioning. Backend, scheduler и MariaDB наружу не публикуются; Swagger UI
+доступен через frontend port. Для уже существующих локальных env-файлов новые
+`COMPOSE_PROJECT_NAME`, `COMPOSE_FILE`, `COMPOSE_ENV_FILE` и `FRONTEND_PORT`
+нужно перенести из соответствующего example без замены секретов.
 
 Test deployment разделяет build, start, reset и teardown. `make e2e` ровно один
 раз собирает актуальные backend/frontend images с layer cache и затем запускает
