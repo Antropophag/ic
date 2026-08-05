@@ -1,21 +1,42 @@
 # Эксплуатационный контракт
 
-Production Compose содержит четыре сервиса: `frontend`, `backend`, `scheduler`
-и `mariadb`. `frontend` принимает HTTP, раздаёт статический production bundle
-и проксирует `/api` и `/health` в PHP-FPM.
+Локальный deployment имеет два пользовательских режима: development и
+production. Test — внутренний одноразовый контур `make e2e`. Все режимы
+работают из одной рабочей папки, но используют разные project names, env-файлы
+и volumes.
 
-`.env.example` — production template. Секреты не коммитятся. `compose.yaml`
-не задаёт режим приложения: он передаёт только настройки интеграций из `.env`.
+## Локальная разработка
 
 ```sh
-cp .env.example .env
-make doctor
-make up
-make logs
-make down
+make init
+make dev-up
+make env-status
 ```
 
-`make up` при каждом запуске поднимает MariaDB и backend, применяет миграции,
+Development использует project `ic-dev`, `.env.dev`, `compose.yaml` и
+`compose.dev.yaml`. `dev-up` выполняет build, поднимает сервисы, применяет
+migrations, seed и break-glass provisioning. `dev-down` удаляет containers и
+network, сохраняя named volumes. `dev-reset` явно удаляет volumes project
+`ic-dev`, после чего выполняет полный `dev-up`.
+
+## Промышленная эксплуатация
+
+Production Compose содержит `frontend`, `backend`, `scheduler` и `mariadb`.
+`frontend` принимает HTTP, раздаёт production bundle и проксирует `/api` и
+`/health` в PHP-FPM. Используются только project `ic-prod`, `compose.yaml` и
+`.env.prod`; `.env.example` остаётся шаблоном без секретов.
+
+```sh
+cp .env.example .env.prod
+# заполнить настройки
+make prod-up
+make prod-logs
+make prod-down
+```
+
+`prod-up` сначала выполняет явный build backend, scheduler и frontend. Только
+после успешного build сервисы запускаются с `--no-build`: backend не может быть
+обновлён отдельно от frontend. Затем команда применяет миграции,
 выполняет идемпотентный `php yii admin/provision-break-glass`, затем
 `php yii admin/bootstrap` и только после их успешного завершения
 поднимает frontend и scheduler. Ошибка migration или bootstrap останавливает
@@ -37,8 +58,8 @@ Bootstrap не выполняет LDAP bind/search и не создаёт AD acc
 переменная означает успешный пропуск без изменений, только если существует
 активный локальный пользователь с ролью `administrator`. Если такого пользователя
 нет либо роль есть только у отключённых пользователей, bootstrap завершается
-ошибкой и `make up` не запускает frontend и scheduler. Ошибка любого элемента
-откатывает весь список и делает `make up` неуспешным. Удаление логина из env не отзывает роль — отзыв выполняется
+ошибкой и `prod-up` не запускает frontend и scheduler. Ошибка любого элемента
+откатывает весь список и делает `prod-up` неуспешным. Удаление логина из env не отзывает роль — отзыв выполняется
 штатным административным механизмом. Назначения bootstrap записываются с
 `assigned_by = NULL`, что означает deployment-оператор без authenticated actor.
 Перед записью проверяется наличие production-ролей `employee` и
@@ -51,11 +72,11 @@ Bootstrap не выполняет LDAP bind/search и не создаёт AD acc
 Ручной повтор:
 
 ```sh
-docker compose -p shlz-test-registry --env-file .env -f compose.yaml exec backend php yii admin/bootstrap
+COMPOSE_ENV_FILE=.env.prod docker compose -p ic-prod --env-file .env.prod -f compose.yaml exec backend php yii admin/bootstrap
 ```
 
 Прямой `docker compose up -d` не выполняет миграции и bootstrap. Для production
-deployment требуется `make up`; при прямом Compose-запуске эквивалентные команды
+deployment требуется `make prod-up`; при прямом Compose-запуске эквивалентные команды
 нужно выполнить явно до запуска frontend и scheduler.
 
 ## Аварийный break-glass вход
@@ -105,25 +126,25 @@ unset break_glass_hash
 ```
 
 Поместите результат в одинарных кавычках в защищённую/masked переменную
-deployment либо в локальный `.env`, недоступный из Git. Открытый пароль передайте
+deployment либо в локальный `.env.prod`, недоступный из Git. Открытый пароль передайте
 ответственным лицам по отдельному одобренному защищённому каналу; рекомендуется
 dual control и хранение в корпоративном secrets vault с журналом доступа.
 
 ### Включение, проверка, отключение и ротация
 
-1. Задайте уникальный `BREAK_GLASS_LOGIN` и password hash в `.env`.
-2. Выполните штатный `make up`: он применит migrations, подготовит техническую
+1. Задайте уникальный `BREAK_GLASS_LOGIN` и password hash в `.env.prod`.
+2. Выполните штатный `make prod-up`: он применит migrations, подготовит техническую
    identity и затем проверит administrator bootstrap.
-3. При последующих изменениях переменных повторяйте `make up`, чтобы backend
+3. При последующих изменениях переменных повторяйте `make prod-up`, чтобы backend
    получил новое environment. Обычный restart уже созданного контейнера env-файл
    не перечитывает.
 4. В согласованное окно откройте обычную форму входа и войдите настроенным
    логином. Проверьте доступ к административной панели и событие
    `authentication.break_glass_succeeded` в «Журнале действий».
 5. Завершите сессию. После аварийного использования немедленно сгенерируйте
-   новый пароль/hash, обновите защищённую переменную и снова выполните `make up`.
+   новый пароль/hash, обновите защищённую переменную и снова выполните `make prod-up`.
 6. Для отключения очистите обе переменные и пересоздайте backend через
-   `make up`. Это блокирует новые входы, но уже выданная штатная session живёт
+   `make prod-up`. Это блокирует новые входы, но уже выданная штатная session живёт
    до logout/истечения либо отключения технической identity. Не удаляйте
    техническую строку напрямую из БД.
 
@@ -141,20 +162,23 @@ User-Agent и безопасный классификатор причины, н
 credentials. Успешное использование дополнительно записывается как security
 warning в container logs.
 
-Docker Compose и Podman Compose равноправны. Makefile определяет доступную
-реализацию и экспортирует `COMPOSE`/`CONTAINER_ENGINE` в scripts. Публичные
-`make up`, `make down` и `make logs` однозначно относятся к production-like
-deployment (`compose.yaml`, `.env`, project `shlz-test-registry`). Development
-управляется отдельными `make dev-up`, `make dev-down` и `make dev-logs`
-(`compose.yaml + compose.dev.yaml`, `.env.dev`, project
-`shlz-test-registry-dev`). Test использует только `compose.test.yaml`,
-`.env.test` и project `ic-test` через `make e2e`.
+## Тесты
 
-После изменения `.env` нужно снова выполнить `make up`, а после изменения
+Test использует только project `ic-test`, `compose.test.yaml` и tracked
+`.env.test`. Публичная точка входа — `make e2e`; внутренние `_test-*` нужны CI
+для orchestration и гарантированного cleanup, но не образуют ручной lifecycle.
+CI-конфигурация и test images `shlz-test-registry-test-*` не изменены.
+
+Docker Compose и Podman Compose равноправны. Makefile определяет provider и
+передаёт scripts project/env metadata. Неоднозначные `make up`, `make down` и
+`make logs` всегда завершаются ошибкой с рекомендацией выбрать `dev-*` или
+`prod-*`.
+
+После изменения `.env.prod` нужно снова выполнить `make prod-up`, а после изменения
 `.env.dev` — `make dev-up`: соответствующие контейнеры будут пересозданы с
 новым environment. Обычный restart контейнера env-файл не перечитывает.
 Разные project names исключают управление чужими контейнерами и orphan
-warnings между окружениями. По умолчанию production-like и development оба
+warnings между окружениями. По умолчанию production и development оба
 публикуют порт `8080`; для их одновременного запуска одному deployment нужен
 другой `FRONTEND_PORT` в его env-файле.
 
@@ -172,9 +196,51 @@ image и завершается по SIGTERM с grace period 15 секунд. Р
 обработка:
 
 ```sh
-docker compose -p shlz-test-registry --env-file .env -f compose.yaml exec backend php yii notification/send
-sudo podman-compose --in-pod false -p shlz-test-registry --env-file .env -f compose.yaml exec backend php yii notification/send
+COMPOSE_ENV_FILE=.env.prod docker compose -p ic-prod --env-file .env.prod -f compose.yaml exec backend php yii notification/send
+sudo env COMPOSE_ENV_FILE=.env.prod podman-compose --in-pod false -p ic-prod --env-file .env.prod -f compose.yaml exec backend php yii notification/send
 ```
 
 Готовность: `/health/ready`; liveness: `/health/live`. Документы хранятся в
 именованном volume, MariaDB — в отдельном volume.
+
+## Жизненный цикл данных
+
+- `dev-up`, `prod-up` и соответствующие `down` не удаляют volumes;
+- `dev-reset` без скрытых шагов выполняет `down --volumes`, затем новый
+  `dev-up`; это штатный способ получить чистую development БД;
+- `prod-reset` требует вручную ввести `ic-prod`, затем выполняет
+  `down --volumes` и полный `prod-up`; это аварийная разрушительная операция,
+  не средство обновления;
+- `make e2e` всегда удаляет test volumes в cleanup;
+- `env-status` читает только имя БД и Compose metadata, не печатает env,
+  credentials или значения секретов.
+
+### Миграция старых Compose project names
+
+Смена project name намеренно не переименовывает и не удаляет volumes. Старые
+projects `shlz-test-registry` и `shlz-test-registry-dev` можно вернуть до
+завершения миграции, поэтому rollback остаётся доступным.
+
+1. До обновления остановите старый контур **без** `--volumes`:
+
+   ```sh
+   COMPOSE_ENV_FILE=.env docker compose -p shlz-test-registry --env-file .env -f compose.yaml down
+   COMPOSE_ENV_FILE=.env.dev docker compose -p shlz-test-registry-dev --env-file .env.dev \
+     -f compose.yaml -f compose.dev.yaml down
+   ```
+
+2. Для production сделайте штатный backup MariaDB и отдельный backup volume
+   `shlz-test-registry_document-data`. Создайте `.env.prod`, выполните
+   `make prod-up`, затем восстановите DB и документы в
+   `ic-prod_mariadb-data`/`ic-prod_document-data`. Не копируйте живой datadir.
+3. Development данные обычно не переносятся: `make dev-reset` создаёт чистую
+   `ic-dev` БД и seed. Если данные нужны, примените тот же backup/restore между
+   `shlz-test-registry-dev_*` и `ic-dev_*`.
+4. Проверьте `make env-status`, `/health/ready`, вход администратора и документы.
+5. Только после подтверждения и истечения rollback-окна удалите старые volumes
+   явными командами `docker volume rm`; `prod-up`/`dev-up` этого не делают.
+
+Для rollback остановите новый project без volumes и снова запустите старую
+команду Compose с исходным env-файлом. Production migration должна выполняться
+согласно действующему backup/restore runbook; `prod-reset` для переноса данных
+использовать нельзя.

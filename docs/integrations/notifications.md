@@ -68,7 +68,7 @@ SMTP не предоставляет приложению идемпотентн
 `SMTP_SECURE`, `SMTP_USERNAME`, `SMTP_PASSWORD`, `SMTP_TIMEOUT`,
 `SMTP_VERIFY_PEER`,
 `MAIL_FROM_ADDRESS`, `MAIL_FROM_NAME`. Пароль хранится только в локальном
-`.env` и не должен попадать в Git, логи, PR или задачи.
+`.env.prod` и не должен попадать в Git, логи, PR или задачи.
 
 Timeout сетевых операций SMTP по умолчанию составляет 5 секунд
 (`SMTP_TIMEOUT=5`). Проверка TLS-сертификата включена по умолчанию

@@ -15,7 +15,7 @@ services:
       context: .
       dockerfile: docker/backend.Dockerfile
       target: test
-    env_file: ${TEST_ENV_FILE:-.env.test}
+    env_file: ${TEST_ENV_FILE:?TEST_ENV_FILE must select the test environment}
     depends_on:
       mariadb: {condition: service_healthy}
       ad: {condition: service_healthy}
@@ -33,7 +33,7 @@ services:
       context: .
       dockerfile: docker/backend.Dockerfile
       target: test
-    env_file: ${TEST_ENV_FILE:-.env.test}
+    env_file: ${TEST_ENV_FILE:?TEST_ENV_FILE must select the test environment}
     depends_on:
       mariadb: {condition: service_healthy}
       mailpit: {condition: service_healthy}

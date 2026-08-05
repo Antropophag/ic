@@ -50,7 +50,8 @@ console fragment — только `dev/seed`.
 ## Полный прогон
 
 ```sh
-make test
+make check
+make e2e
 ```
 
 Порядок `make e2e`: один build backend/frontend images, последовательный запуск

@@ -2,17 +2,18 @@
 
 COMPOSE ?= $(shell if docker compose version >/dev/null 2>&1; then printf 'docker compose'; elif command -v podman-compose >/dev/null 2>&1; then printf 'podman-compose'; elif podman compose version >/dev/null 2>&1; then printf 'podman compose'; fi)
 CONTAINER_ENGINE ?= $(if $(findstring podman,$(COMPOSE)),podman,docker)
-PROD_PROJECT := shlz-test-registry
-DEV_PROJECT := shlz-test-registry-dev
+PROD_PROJECT := ic-prod
+DEV_PROJECT := ic-dev
 TEST_PROJECT := ic-test
-PROD_ENV_FILE := .env
+PROD_ENV_FILE := .env.prod
 DEV_ENV_FILE := .env.dev
 TEST_ENV_FILE := .env.test
 PROD_COMPOSE := $(COMPOSE) -p $(PROD_PROJECT) --env-file $(PROD_ENV_FILE) -f compose.yaml
 DEV_COMPOSE := $(COMPOSE) -p $(DEV_PROJECT) --env-file $(DEV_ENV_FILE) -f compose.yaml -f compose.dev.yaml
-export COMPOSE CONTAINER_ENGINE PROD_PROJECT DEV_PROJECT TEST_PROJECT DEV_ENV_FILE TEST_ENV_FILE
+export COMPOSE CONTAINER_ENGINE PROD_PROJECT DEV_PROJECT TEST_PROJECT PROD_ENV_FILE DEV_ENV_FILE TEST_ENV_FILE
 
-.PHONY: help doctor init up down logs dev-up dev-down dev-logs check test e2e coverage schema-diagram \
+.PHONY: help doctor init up down logs dev-up dev-down dev-reset dev-logs \
+	prod-up prod-down prod-reset prod-logs env-status check e2e coverage schema-diagram \
 	_check-backend _check-frontend _check-repository _dev-contract _test-up _test-reset _test-down
 
 help:
@@ -20,19 +21,21 @@ help:
 	@echo "make doctor          Проверить локальные инструменты"
 	@echo "make init            Создать .env.dev и подключить Git hooks"
 	@echo ""
-	@echo "Production-like:"
-	@echo "  make up            Поднять deployment из .env"
-	@echo "  make down          Остановить deployment из .env"
-	@echo "  make logs          Показать логи deployment"
+	@echo "Промышленная эксплуатация:"
+	@echo "  make prod-up       Собрать и поднять deployment из .env.prod"
+	@echo "  make prod-down     Остановить deployment без удаления данных"
+	@echo "  make prod-reset    Удалить production volumes и поднять чистый deployment"
+	@echo "  make prod-logs     Показать логи production deployment"
 	@echo ""
-	@echo "Development:"
+	@echo "Разработка:"
 	@echo "  make dev-up        Поднять и подготовить deployment из .env.dev"
 	@echo "  make dev-down      Остановить deployment из .env.dev"
+	@echo "  make dev-reset     Удалить dev volumes и поднять чистый deployment"
 	@echo "  make dev-logs      Показать логи deployment"
+	@echo "  make env-status    Показать активные локальные окружения без секретов"
 	@echo ""
-	@echo "Quality:"
+	@echo "Проверки качества:"
 	@echo "  make check         Линтеры, анализ, unit, Vitest и production build"
-	@echo "  make test          Полная проверка: check + единый test deployment"
 	@echo "  make e2e           Integration, Playwright и runtime contracts"
 	@echo "  make coverage      Только отчёты покрытия"
 	@echo "  make schema-diagram Обновить ER-диаграмму"
@@ -48,21 +51,35 @@ init: doctor
 	@test -f .env.dev || { cp .env.dev.example .env.dev; echo "Создан .env.dev"; }
 	sh scripts/install-git-hooks.sh
 
-up: doctor
-	@test -f $(PROD_ENV_FILE) || { echo "Скопируйте .env.example в .env и заполните production-настройки." >&2; exit 2; }
-	COMPOSE_ENV_FILE=$(PROD_ENV_FILE) $(PROD_COMPOSE) up -d --build --force-recreate mariadb backend
+up down logs:
+	@echo "Неоднозначная команда '$@' отключена." >&2
+	@echo "Используйте make dev-$@ или make prod-$@." >&2
+	@exit 2
+
+prod-up: doctor
+	@test -f $(PROD_ENV_FILE) || { echo "Скопируйте .env.example в .env.prod и заполните production-настройки." >&2; exit 2; }
+	COMPOSE_ENV_FILE=$(PROD_ENV_FILE) $(PROD_COMPOSE) config >/dev/null
+	COMPOSE_ENV_FILE=$(PROD_ENV_FILE) $(PROD_COMPOSE) build backend scheduler frontend
+	COMPOSE_ENV_FILE=$(PROD_ENV_FILE) $(PROD_COMPOSE) up -d --no-build --force-recreate mariadb backend
 	COMPOSE_ENV_FILE=$(PROD_ENV_FILE) $(PROD_COMPOSE) run --rm backend php yii migrate/up --interactive=0
 	COMPOSE_ENV_FILE=$(PROD_ENV_FILE) $(PROD_COMPOSE) run --rm backend php yii admin/provision-break-glass
 	COMPOSE_ENV_FILE=$(PROD_ENV_FILE) $(PROD_COMPOSE) run --rm backend php yii admin/bootstrap
-	COMPOSE_ENV_FILE=$(PROD_ENV_FILE) $(PROD_COMPOSE) up -d --force-recreate frontend scheduler
+	COMPOSE_ENV_FILE=$(PROD_ENV_FILE) $(PROD_COMPOSE) up -d --no-build --force-recreate frontend scheduler
 
-down: doctor
-	@test -f $(PROD_ENV_FILE) || { echo "Для make down нужен .env." >&2; exit 2; }
-	$(PROD_COMPOSE) down --remove-orphans
+prod-down: doctor
+	@test -f $(PROD_ENV_FILE) || { echo "Для make prod-down нужен .env.prod." >&2; exit 2; }
+	COMPOSE_ENV_FILE=$(PROD_ENV_FILE) $(PROD_COMPOSE) down --remove-orphans
 
-logs: doctor
-	@test -f $(PROD_ENV_FILE) || { echo "Для make logs нужен .env." >&2; exit 2; }
-	$(PROD_COMPOSE) logs --tail=200
+prod-logs: doctor
+	@test -f $(PROD_ENV_FILE) || { echo "Для make prod-logs нужен .env.prod." >&2; exit 2; }
+	COMPOSE_ENV_FILE=$(PROD_ENV_FILE) $(PROD_COMPOSE) logs --tail=200
+
+prod-reset: doctor
+	@test -f $(PROD_ENV_FILE) || { echo "Для make prod-reset нужен .env.prod." >&2; exit 2; }
+	@printf "Будут безвозвратно удалены volumes проекта $(PROD_PROJECT). Введите $(PROD_PROJECT): "; \
+		read -r answer; test "$$answer" = "$(PROD_PROJECT)" || { echo "Отменено." >&2; exit 2; }
+	COMPOSE_ENV_FILE=$(PROD_ENV_FILE) $(PROD_COMPOSE) down --volumes --remove-orphans
+	$(MAKE) prod-up
 
 dev-up: doctor
 	sh scripts/dev.sh
@@ -71,14 +88,21 @@ dev-down: doctor
 	@test -f $(DEV_ENV_FILE) || { echo "Для make dev-down нужен .env.dev (make init)." >&2; exit 2; }
 	COMPOSE_ENV_FILE=$(DEV_ENV_FILE) $(DEV_COMPOSE) down --remove-orphans
 
+dev-reset: doctor
+	@test -f $(DEV_ENV_FILE) || { echo "Для make dev-reset нужен .env.dev (make init)." >&2; exit 2; }
+	@echo "Удаление dev volumes проекта $(DEV_PROJECT)."
+	COMPOSE_ENV_FILE=$(DEV_ENV_FILE) $(DEV_COMPOSE) down --volumes --remove-orphans
+	$(MAKE) dev-up
+
 dev-logs: doctor
 	@test -f $(DEV_ENV_FILE) || { echo "Для make dev-logs нужен .env.dev (make init)." >&2; exit 2; }
 	COMPOSE_ENV_FILE=$(DEV_ENV_FILE) $(DEV_COMPOSE) logs --tail=200
 
+env-status: doctor
+	sh scripts/env-status.sh
+
 check: doctor _check-frontend _check-backend _check-repository
 	git diff --check
-
-test: check e2e
 
 e2e: doctor
 	sh scripts/e2e.sh
@@ -91,8 +115,9 @@ coverage: doctor
 	npm --prefix frontend ci --no-audit --no-fund
 	npm --prefix frontend run coverage
 
-schema-diagram:
-	python3 scripts/gen_schema_diagram.py
+schema-diagram: doctor
+	@test -f $(DEV_ENV_FILE) || { echo "Для make schema-diagram нужен .env.dev (make init)." >&2; exit 2; }
+	COMPOSE_ENV_FILE=$(DEV_ENV_FILE) SCHEMA_COMPOSE_COMMAND='$(DEV_COMPOSE)' python3 scripts/gen_schema_diagram.py
 
 _check-frontend:
 	npm --prefix frontend ci --no-audit --no-fund
