@@ -26,7 +26,7 @@ function safeRemove(key) {
   }
 }
 
-function sanitizedData(data) {
+function sanitizedData(data, { fallbackInvalidQuantity = false } = {}) {
   if (!data || typeof data !== 'object' || Array.isArray(data)) return null
 
   const result = {}
@@ -34,9 +34,9 @@ function sanitizedData(data) {
     if (typeof data[field] !== 'string' || data[field].length > maxLength) return null
     result[field] = data[field]
   }
-  if (!Number.isSafeInteger(data.sampleQuantity)
-    || data.sampleQuantity < 1) return null
-  result.sampleQuantity = data.sampleQuantity
+  const validQuantity = Number.isSafeInteger(data.sampleQuantity) && data.sampleQuantity >= 1
+  if (!validQuantity && !fallbackInvalidQuantity) return null
+  result.sampleQuantity = validQuantity ? data.sampleQuantity : 1
   return result
 }
 
@@ -86,7 +86,7 @@ export function loadApplicationDraft(userId) {
 
 export function saveApplicationDraft(userId, data, hadFiles) {
   if (!validUserId(userId)) return
-  const sanitized = sanitizedData(data)
+  const sanitized = sanitizedData(data, { fallbackInvalidQuantity: true })
   if (!sanitized) return
   if (isEmptyDraft(sanitized, hadFiles === true)) {
     safeRemove(storageKey(userId))

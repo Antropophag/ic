@@ -160,7 +160,6 @@ describe('application draft storage', () => {
   })
 
   it.each([
-    ['fractional quantity', { ...data, sampleQuantity: 1.5 }],
     ['an array instead of a string', { ...data, supplier: ['Поставщик'] }],
     ['oversized product name', { ...data, productName: 'x'.repeat(501) }],
     ['oversized test method', { ...data, testMethod: 'x'.repeat(10001) }],
@@ -168,6 +167,17 @@ describe('application draft storage', () => {
   ])('rejects %s', (_name, invalidData) => {
     saveApplicationDraft(7, invalidData, false)
     expect(localStorage.setItem).not.toHaveBeenCalled()
+  })
+
+  it.each([0, 1.5, ''])('saves other fields with a safe fallback for invalid quantity %s', sampleQuantity => {
+    saveApplicationDraft(7, { ...data, productName: 'Сохранить остальные поля', sampleQuantity }, false)
+
+    const payload = JSON.parse(localStorage.setItem.mock.calls[0][1])
+    expect(payload.data).toEqual({
+      ...data,
+      productName: 'Сохранить остальные поля',
+      sampleQuantity: 1,
+    })
   })
 
   it.each(['getItem', 'setItem', 'removeItem'])('does not throw when %s fails', method => {

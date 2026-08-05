@@ -104,6 +104,20 @@ describe('application create draft form lifecycle', () => {
     expect(loadApplicationDraft(3)).toBeNull()
   })
 
+  it('keeps autosaving other fields while quantity is temporarily invalid', () => {
+    const state = formFor(3)
+    state.form.restore()
+    state.draft.productName = 'Не потерять'
+    state.draft.sampleQuantity = ''
+    state.form.scheduleSave()
+    vi.runAllTimers()
+
+    expect(loadApplicationDraft(3).data).toMatchObject({
+      productName: 'Не потерять',
+      sampleQuantity: 1,
+    })
+  })
+
   it('stores only the hadFiles marker when files are selected', () => {
     const file = new File(['binary content'], 'document.pdf', { type: 'application/pdf' })
     const state = formFor(3, { ...defaults(), productName: 'С документом' }, [file])
