@@ -13,13 +13,11 @@ final class DocumentStorageTest extends TestCase
 
     protected function setUp(): void
     {
-        $this->resetWriteTracking();
         $this->root = sys_get_temp_dir() . '/ic-documents-' . bin2hex(random_bytes(6));
     }
 
     protected function tearDown(): void
     {
-        $this->resetWriteTracking();
         if (!is_dir($this->root)) {
             return;
         }
@@ -124,9 +122,18 @@ final class DocumentStorageTest extends TestCase
         } catch (\LogicException) {
             DocumentStorage::discardWritesSince($inner);
             DocumentStorage::discardWritesSince($outer);
-            $reflection = new \ReflectionClass(DocumentStorage::class);
-            self::assertSame([], $reflection->getStaticPropertyValue('trackingScopes'));
         }
+
+        $source = tempnam(sys_get_temp_dir(), 'ic-source-');
+        self::assertIsString($source);
+        file_put_contents($source, 'document');
+        $storage = new DocumentStorage($this->root);
+        $next = DocumentStorage::writeCheckpoint();
+        $key = $storage->store($source);
+        DocumentStorage::rollbackWritesSince($next);
+
+        self::assertFileDoesNotExist($storage->path($key));
+        unlink($source);
     }
 
     public function testWritableProbeCleansUpAfterItself(): void
@@ -155,13 +162,5 @@ final class DocumentStorageTest extends TestCase
             }
         }
         return $files;
-    }
-
-    private function resetWriteTracking(): void
-    {
-        $reflection = new \ReflectionClass(DocumentStorage::class);
-        $reflection->setStaticPropertyValue('trackedWrites', []);
-        $reflection->setStaticPropertyValue('trackingScopes', []);
-        $reflection->setStaticPropertyValue('nextScopeToken', 0);
     }
 }
