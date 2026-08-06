@@ -292,6 +292,8 @@ watch(
       loadDashboard();
     }
     else {
+      registryGuard.invalidate();
+      dashboardGuard.invalidate();
       showCreate.value = false;
       closeDashboardHelp({ restoreFocus: false });
     }
