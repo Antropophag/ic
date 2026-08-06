@@ -1,11 +1,26 @@
 stages: [test]
 
+default:
+  tags: [runner-test]
+
 workflow:
   rules:
     - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
     - if: '$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH'
 
+.docker-bookworm:
+  before_script:
+    - apt-get update
+    - apt-get install -y --no-install-recommends ca-certificates curl make python3-pip sudo
+    - install -m 0755 -d /etc/apt/keyrings
+    - curl -fsSL https://download.docker.com/linux/debian/gpg -o /etc/apt/keyrings/docker.asc
+    - chmod a+r /etc/apt/keyrings/docker.asc
+    - echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/debian $(. /etc/os-release && echo \"$VERSION_CODENAME\") stable" > /etc/apt/sources.list.d/docker.list
+    - apt-get update
+    - apt-get install -y --no-install-recommends docker-ce-cli docker-compose-plugin
+
 check:
+  extends: .docker-bookworm
   stage: test
   image: node:22.23.0-bookworm
   services:
@@ -14,13 +29,12 @@ check:
   variables:
     DOCKER_HOST: tcp://docker:2375
     DOCKER_TLS_CERTDIR: ""
-  before_script:
-    - apt-get update
-    - apt-get install -y --no-install-recommends curl docker.io docker-compose-v2 make python3-pip sudo
+  script:
     - sh scripts/install-ci-linters.sh
-  script: [make check]
+    - make check
 
 coverage:
+  extends: .docker-bookworm
   stage: test
   image: node:22.23.0-bookworm
   services:
@@ -29,9 +43,6 @@ coverage:
   variables:
     DOCKER_HOST: tcp://docker:2375
     DOCKER_TLS_CERTDIR: ""
-  before_script:
-    - apt-get update
-    - apt-get install -y --no-install-recommends docker.io make python3
   script: [make coverage]
 
 e2e:
