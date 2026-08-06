@@ -11,14 +11,15 @@ let controller = null
 
 async function load() {
   controller?.abort()
-  controller = new AbortController()
+  const localController = new AbortController()
+  controller = localController
   loading.value = true
   error.value = ''
   title.value = ''
   meta.value = ''
   sections.value = []
   try {
-    const response = await fetch(props.src, { signal: controller.signal })
+    const response = await fetch(props.src, { signal: localController.signal })
     if (!response.ok) throw new Error(`HTTP ${response.status}`)
     const documentNode = new DOMParser().parseFromString(await response.text(), 'text/html')
     const main = documentNode.querySelector('main')
@@ -45,9 +46,10 @@ async function load() {
     }
     sections.value = result
   } catch (loadError) {
+    if (controller !== localController) return
     if (loadError.name !== 'AbortError') error.value = 'Не удалось загрузить инструкцию.'
   } finally {
-    loading.value = false
+    if (controller === localController) loading.value = false
   }
 }
 

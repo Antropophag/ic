@@ -94,8 +94,9 @@
     document.getElementById('roles').innerHTML=roles.map(role=>`<button type="button" data-role="${role.id}">${role.label}</button>`).join('');
     document.querySelectorAll('[data-role]').forEach(button=>button.addEventListener('click',()=>{activeRole=roles.find(role=>role.id===button.dataset.role);render()}));
     document.getElementById('matrix-body').innerHTML=roles.map(role=>`<tr><td>${role.label}</td><td>${role.status}</td><td>${role.primary||'<span class="muted">Нет</span>'}</td><td>${[...(role.select?['Выбор исполнителя']:[]),...role.secondary,...role.danger].join(', ')||'<span class="muted">Нет процессных действий</span>'}</td></tr>`).join('');
-    document.addEventListener('click',event=>{if(!event.target.closest('.more-wrap'))document.querySelectorAll('.menu.open').forEach(menu=>menu.classList.remove('open'))});
-    document.addEventListener('keydown',event=>{if(event.key==='Escape')document.querySelectorAll('.menu.open').forEach(menu=>menu.classList.remove('open'))});
+    function closeMenus(){document.querySelectorAll('.menu.open').forEach(menu=>{menu.classList.remove('open');menu.previousElementSibling?.setAttribute('aria-expanded','false')})}
+    document.addEventListener('click',event=>{if(!event.target.closest('.more-wrap'))closeMenus()});
+    document.addEventListener('keydown',event=>{if(event.key==='Escape')closeMenus()});
     render();
   </script>
 </body>

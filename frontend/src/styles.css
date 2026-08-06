@@ -65,11 +65,11 @@
 .registry .tab-count{min-width:22px;height:20px;display:inline-flex;align-items:center;justify-content:center;margin:0;padding:0 6px;border-radius:10px;background:#f0f2f5;color:#697588;font-size:11px;line-height:20px;font-variant-numeric:tabular-nums}
 .registry .tabs button.active .tab-count{background:var(--blue-soft);color:var(--blue)}
 .registry .tabs-cta{flex:none;height:40px;min-height:40px;display:inline-flex;align-items:center;justify-content:center;gap:8px;margin:0;padding:0 18px;border-radius:20px;line-height:20px}
-.registry .tabs-cta svg{width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:1.7;stroke-linecap:round}
+.registry .tabs-cta svg{width:16px;height:16px;fill:none;stroke:currentcolor;stroke-width:1.7;stroke-linecap:round}
 .registry .toolbar{min-height:64px;align-items:center;gap:10px;padding:12px 20px;border-bottom:1px solid var(--line-soft);background:#fff}
 .registry .search{width:min(340px,34vw);min-width:260px;height:var(--control-height);gap:10px;border:1px solid transparent;border-radius:20px;background:#f2f4f7;padding:0 14px;color:var(--muted)}
 .registry .search:focus-within{border-color:var(--blue);background:#fff;box-shadow:0 0 0 3px var(--focus)}
-.registry .search svg{width:17px;height:17px;flex:none;fill:none;stroke:currentColor;stroke-width:1.5;stroke-linecap:round}
+.registry .search svg{width:17px;height:17px;flex:none;fill:none;stroke:currentcolor;stroke-width:1.5;stroke-linecap:round}
 .registry .search input{height:100%;font-size:13px;line-height:20px;color:#142033}
 .registry .search input::placeholder{color:#7d8899;opacity:1}
 .registry .status-filter{height:var(--control-height)}
@@ -100,7 +100,7 @@
 .registry .number{font-weight:600;font-variant-numeric:tabular-nums}
 .registry th.sortable{padding:0}
 .registry .sort-control{width:100%;height:40px;display:flex;align-items:center;justify-content:space-between;gap:6px;border:0;background:transparent;padding:0 14px;color:inherit;font:inherit;line-height:inherit;letter-spacing:inherit;text-transform:inherit;font-weight:inherit;white-space:nowrap}
-.registry th.sortable svg{width:14px;height:14px;flex:none;fill:none;stroke:currentColor;stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round;transition:transform .12s ease}
+.registry th.sortable svg{width:14px;height:14px;flex:none;fill:none;stroke:currentcolor;stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round;transition:transform .12s ease}
 .registry th.sortable svg.ascending{transform:rotate(180deg)}
 .registry .sort-control:focus-visible{outline:2px solid var(--blue);outline-offset:-3px}
 .registry .badge{height:26px;align-items:center;justify-content:center;padding:0 8px;border-radius:13px;font-size:10px;line-height:10px;font-weight:500}
@@ -119,7 +119,7 @@
 .registry .registry-indicator-cell button:focus-visible{outline:2px solid var(--blue);outline-offset:2px}
 .registry .empty{min-height:360px;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:48px 24px;color:var(--muted)}
 .registry .empty-icon{width:48px;height:48px;display:grid;place-items:center;border-radius:24px;background:#f2f4f7;color:#778397}
-.registry .empty-icon svg{width:22px;height:22px;fill:none;stroke:currentColor;stroke-width:1.5;stroke-linecap:round}
+.registry .empty-icon svg{width:22px;height:22px;fill:none;stroke:currentcolor;stroke-width:1.5;stroke-linecap:round}
 .registry .empty h3{margin:14px 0 5px;font-size:15px;line-height:22px;font-weight:600}
 .registry .empty p{font-size:13px;line-height:20px}
 .registry .empty-action{height:36px;margin-top:16px;padding:0 14px;border-radius:18px;line-height:18px}
@@ -138,7 +138,7 @@
 @media (prefers-reduced-motion:reduce){.registry-skeleton td span{animation:none}.registry tbody tr,.registry th.sortable svg{transition:none}}
 .registry-error{display:flex;align-items:center;justify-content:space-between;gap:16px}
 .registry-error span{min-width:0}
-.registry-error button{height:32px;flex:none;border:1px solid currentColor;border-radius:16px;background:transparent;padding:0 12px;color:inherit;font-size:12px;line-height:18px}
+.registry-error button{height:32px;flex:none;border:1px solid currentcolor;border-radius:16px;background:transparent;padding:0 12px;color:inherit;font-size:12px;line-height:18px}
 .registry-error button:hover{background:rgba(180,35,24,.06)}
 .registry-error button:focus-visible{outline:2px solid #b42318;outline-offset:2px}
 @media (max-width:980px){.registry-head{align-items:flex-start;flex-direction:column-reverse;gap:0;padding-top:12px}.registry .tabs{width:100%;flex:none}.registry .tabs-cta{align-self:flex-end}.registry .toolbar{flex-wrap:wrap}.registry .toolbar-meta{display:none}}
@@ -153,7 +153,7 @@
 .request-page>.detail-state{margin-bottom:12px}
 .request-page .request-entity-head{position:relative;margin:0;border-color:var(--line);border-radius:var(--radius-lg) var(--radius-lg) 0 0;padding:16px 24px 0;box-shadow:none}
 .request-corner-back{position:absolute;z-index:5;top:-4px;left:-4px;width:44px;height:44px;display:block;border:0;background:transparent;padding:0;color:var(--blue)}
-.request-corner-shape{position:absolute;inset:0;width:44px;height:44px;fill:currentColor;filter:drop-shadow(1px 2px 2px rgba(11,22,35,.12))}
+.request-corner-shape{position:absolute;inset:0;width:44px;height:44px;fill:currentcolor;filter:drop-shadow(1px 2px 2px rgba(11,22,35,.12))}
 .request-corner-edge{display:none;fill:none}
 .request-corner-arrow{position:absolute;z-index:1;top:6px;left:6px;color:#fff}
 .request-corner-red{color:#cc1f1f}.request-corner-orange{color:#d47e2e}.request-corner-blue{color:#3d88de}.request-corner-violet{color:#8131a7}.request-corner-green{color:#57965c}

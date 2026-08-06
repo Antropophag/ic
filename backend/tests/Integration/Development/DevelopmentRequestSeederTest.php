@@ -91,6 +91,31 @@ final class DevelopmentRequestSeederTest extends IntegrationTestCase
             ),
         );
         self::assertSame(
+            0,
+            (int) $this->scalar(
+                "SELECT COUNT(*) FROM {{%request_transitions}} transition_event "
+                . 'JOIN {{%request_document_versions}} version ON version.id = transition_event.document_version_id '
+                . "WHERE transition_event.action = 'upload_report' AND transition_event.created_at <= version.created_at",
+            ),
+        );
+        self::assertSame(
+            0,
+            (int) $this->scalar(
+                "SELECT COUNT(*) FROM {{%request_transitions}} transition_event "
+                . 'JOIN {{%expert_opinions}} opinion ON opinion.request_id = transition_event.request_id '
+                . "WHERE transition_event.action = 'publish_opinion' AND transition_event.created_at <= opinion.created_at",
+            ),
+        );
+        self::assertSame(
+            0,
+            (int) $this->scalar(
+                "SELECT COUNT(*) FROM {{%request_transitions}} transition_event "
+                . 'JOIN {{%security_checks}} security_check ON security_check.request_id = transition_event.request_id '
+                . "WHERE transition_event.action IN ('security_approve', 'security_return') "
+                . 'AND transition_event.created_at < security_check.created_at',
+            ),
+        );
+        self::assertSame(
             'dev.expert2',
             $this->scalar(
                 "SELECT u.ad_login FROM {{%request_transitions}} t JOIN {{%requests}} r ON r.id = t.request_id JOIN {{%users}} u ON u.id = t.actor_id WHERE r.status = 'security_review' AND t.action = 'publish_opinion'",

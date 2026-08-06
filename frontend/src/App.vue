@@ -38,7 +38,11 @@ const accountAvatarClass = computed(() => {
 })
 
 watch(authUser, async user => {
-  if (!user) return
+  if (!user) {
+    const panel = document.querySelector('.development-tools')
+    if (panel) document.body.append(panel)
+    return
+  }
   await nextTick()
   const slot = document.getElementById('ic-development-tools-slot')
   const panel = document.querySelector('body > .development-tools')

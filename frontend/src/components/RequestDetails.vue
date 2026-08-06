@@ -1050,7 +1050,7 @@ onBeforeUnmount(() => {
               <button v-if="actionHelp" ref="helpTrigger" type="button" class="request-action-help" :aria-label="actionHelp.label" :title="actionHelp.label" @click="openHelpDrawer"><AppIcon name="help" :size="16" /></button>
             </div>
             <p v-if="selected.canStart && startHintRevealed && startHint" class="hero-hint">{{ startHint }}</p>
-            <p v-for="error in [suspendResumeError, rejectError, reportError, deleteReportError, claimError, reassignError, securityError, withdrawError, actionError].filter(Boolean)" :key="error" class="action-error">{{ error }}</p>
+            <p v-for="(error, index) in [suspendResumeError, rejectError, reportError, deleteReportError, claimError, reassignError, securityError, withdrawError, actionError].filter(Boolean)" :key="`${index}-${error}`" class="action-error">{{ error }}</p>
           </div>
         </section>
 

@@ -67,7 +67,7 @@ final class DevelopmentRequestSeeder
             $this->clearRequestData();
             for ($index = 0; $index < self::REQUEST_COUNT; ++$index) {
                 $fixture = self::REQUESTS[$index % count(self::REQUESTS)];
-                $fixture['age'] = 1 + ($index % 90);
+                $fixture['age'] = 8 + ($index % 83);
                 $requestId = $this->insertRequest($index, $fixture, $users);
                 ++$counts['requests'];
                 $counts['comments'] += $this->insertComments($requestId, $index, $fixture['age'], $users);
@@ -98,7 +98,6 @@ final class DevelopmentRequestSeeder
                     $reportVersionId = $version['id'];
                     ++$counts['documents'];
                 }
-                $this->insertWorkflow($requestId, $index, $fixture['status'], $fixture['age'], $users, $reportVersionId);
                 if (in_array($fixture['status'], ['opinion_preparation', 'security_review', 'completed'], true)) {
                     $expert = $index % 2 === 0 ? $users['expert2'] : $users['expert'];
                     $version = $this->insertAttachment($requestId, 'opinion', sprintf('Экспертное заключение %03d.pdf', $index + 1), 'application/pdf', $expert, $fixture['age'] - 4);
@@ -109,6 +108,7 @@ final class DevelopmentRequestSeeder
                         $this->insertSecurityCheck($requestId, $opinionId, $users['security'], $fixture['status'] === 'completed' ? 'approve' : 'return', $fixture['age'] - 5);
                     }
                 }
+                $this->insertWorkflow($requestId, $index, $fixture['status'], $fixture['age'], $users, $reportVersionId);
             }
             $this->db->createCommand()->update('{{%request_number_sequence}}', ['value' => 1000 + self::REQUEST_COUNT], ['id' => 1])->execute();
             $transaction->commit();
@@ -234,7 +234,7 @@ final class DevelopmentRequestSeeder
                 'request_id' => $requestId, 'actor_id' => $actor, 'from_status' => $from,
                 'to_status' => $to, 'action' => $action, 'reason' => $reason,
                 'document_version_id' => $action === 'upload_report' ? $reportVersionId : null,
-                'rule_id' => 'DEV-001', 'created_at' => $this->time(max(0, $age - $offset - 1)),
+                'rule_id' => 'DEV-001', 'created_at' => $this->time(max(0, $age - (2 * $offset) - 1)),
             ])->execute();
         }
     }

@@ -205,6 +205,7 @@ watch(
   () => props.active,
   (active) => {
     if (active) loadRequests();
+    else showCreate.value = false;
   },
 );
 function goToPage(page) {
@@ -533,26 +534,31 @@ onBeforeUnmount(() => {
     <div class="form-grid">
       <label>Объект испытаний *<input
         v-model="draft.productName"
+        :disabled="createLoading"
         required
         maxlength="500"
         placeholder="Укажите наименование и тип продукции"
       /></label><label>Количество образцов *<input
         v-model.number="draft.sampleQuantity"
+        :disabled="createLoading"
         required
         type="number"
         min="1"
       /></label><label>Производитель *<input
         v-model="draft.manufacturer"
+        :disabled="createLoading"
         required
         maxlength="500"
         placeholder="Наименование производителя"
       /></label><label>Поставщик *<input
         v-model="draft.supplier"
+        :disabled="createLoading"
         required
         maxlength="500"
         placeholder="Наименование поставщика"
       /></label><label class="wide">Метод испытаний *<textarea
         v-model="draft.testMethod"
+        :disabled="createLoading"
         required
         maxlength="10000"
         placeholder="Опишите метод или программу испытаний"

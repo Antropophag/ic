@@ -1,6 +1,6 @@
-# Design Language Specification
+# Спецификация дизайн-языка
 
-## Reverse engineering дизайн-языка Service Desk
+## Обратное проектирование дизайн-языка Service Desk
 
 **Версия:** 1.0
 **Источник:** 67 SVG-файлов из предоставленного архива
@@ -13,19 +13,19 @@
 ## 1.1. Что восстановлено точно
 
 - Цветовая палитра — из `Colors.svg`, где указаны HEX и opacity.
-- Spacing scale — из `Spacing.svg`, где явно перечислены интервалы.
+- Шкала интервалов — из `Spacing.svg`, где явно перечислены интервалы.
 - Размеры кнопок, controls, pagination, checkbox, switch, drawer и ряда других компонентов — из геометрии component SVG.
-- Набор вариантов и состояний компонентов — из component boards.
-- Макрокомпозиции экранов — из product screen boards.
+- Набор вариантов и состояний компонентов — из досок компонентов.
+- Макрокомпозиции экранов — из досок экранов продукта.
 
 ## 1.2. Что восстановлено с ограничениями
 
-- Точная типографическая система: текст в SVG в основном переведён в paths, поэтому font family, font weight metadata и исходные text styles отсутствуют.
-- Motion: статические SVG не содержат durations, easing и transition logic.
-- Responsive rules: архив показывает несколько широких desktop layouts, но не даёт полного набора breakpoints.
-- Accessibility semantics: SVG не отражает DOM, aria и keyboard behavior.
+- Точная типографическая система: текст в SVG в основном переведён в контуры, поэтому данные о гарнитуре, насыщенности и исходных стилях текста отсутствуют.
+- Анимация: статические SVG не содержат длительности, функции плавности и логики переходов.
+- Адаптивность: архив показывает несколько широких настольных компоновок, но не даёт полного набора контрольных точек.
+- Семантика доступности: SVG не отражает DOM, ARIA и управление с клавиатуры.
 
-**Правило:** в документе точные source-derived значения помечены как **Observed**; системные интерпретации — как **Inferred**.
+**Правило:** в документе точные значения, подтверждённые источниками помечены как **Подтверждено**; системные интерпретации — как **Выведено**.
 
 ---
 
@@ -33,8 +33,8 @@
 
 Архив содержит две категории:
 
-- **Component boards:** Buttons, Tabs, Table, Drawer, Select, Sidebar, Status, Modal, Checkbox, Switch, Tag, Pagination, Header, Documents, Messages, Calendar и другие.
-- **Product screen boards:** реестры, карточки сущностей, формы, отчёты, календарь, управление статусами/организациями/полями, сообщения и история изменений.
+- **Доски компонентов:** Buttons, Tabs, Table, Drawer, Select, Sidebar, Status, Modal, Checkbox, Switch, Tag, Pagination, Header, Documents, Messages, Calendar и другие.
+- **Доски экранов продукта:** реестры, карточки сущностей, формы, отчёты, календарь, управление статусами/организациями/полями, сообщения и история изменений.
 
 Полный каталог приведён в приложении `component-inventory.csv`.
 
@@ -44,17 +44,17 @@
 
 Дизайн-язык строится не на декоративных эффектах, а на пяти системных качествах:
 
-1. **Content first.** Главным визуальным объектом является рабочая сущность, таблица, сообщение или документ.
-2. **Low visual entropy.** Ограниченная палитра, повторяемые размеры, малая вариативность контейнеров.
-3. **Object-oriented UI.** Файл, человек, статус, событие, строка реестра и фильтр имеют устойчивую форму.
-4. **Progressive disclosure.** Сложные функции раскрываются через drawer, modal, popover и tabs.
-5. **Consistent density.** Плотность меняется по задаче, но геометрия и иерархия остаются едиными.
+1. **Содержимое прежде всего.** Главным визуальным объектом является рабочая сущность, таблица, сообщение или документ.
+2. **Низкая визуальная энтропия.** Ограниченная палитра, повторяемые размеры, малая вариативность контейнеров.
+3. **Объектно-ориентированный интерфейс.** Файл, человек, статус, событие, строка реестра и фильтр имеют устойчивую форму.
+4. **Последовательное раскрытие.** Сложные функции раскрываются через drawer, modal, popover и tabs.
+5. **Согласованная плотность.** Плотность меняется по задаче, но геометрия и иерархия остаются едиными.
 
 ---
 
-# 4. Foundations
+# 4. Основы
 
-## 4.1. Color system — Observed
+## 4.1. Цветовая система — подтверждено
 
 ### Dark Blue
 
@@ -106,13 +106,13 @@ Exact semantic pairs are построены по формуле **100% foregroun
 - Neutral gray формирует большую часть интерфейса.
 - Disabled state достигается opacity и снижением контраста, а не отдельным ярким цветом.
 
-## 4.2. Spacing — Observed
+## 4.2. Spacing — Подтверждено
 
 Исходная шкала из `Spacing.svg`:
 
 `4, 8, 16, 24, 32, 40, 48, 56, 64 px`.
 
-### Семантика шкалы — Inferred
+### Семантика шкалы — Выведено
 
 | Token | Назначение |
 |---|---|
@@ -128,7 +128,7 @@ Exact semantic pairs are построены по формуле **100% foregroun
 
 **Запрет:** значения 6, 10, 14, 18, 20, 28 и другие промежуточные числа не должны появляться без доказанной оптической причины.
 
-## 4.3. Radius — Observed + normalized
+## 4.3. Radius — Подтверждено + normalized
 
 SVG содержит технически точные радиусы, включая дробные значения, появившиеся после scaling/export. Для продуктовой системы они нормализуются:
 
@@ -145,7 +145,7 @@ SVG содержит технически точные радиусы, вклю�
 
 Главное правило: радиус равен примерно половине высоты у pills и icon buttons; rectangular content objects используют 8–16 px.
 
-## 4.4. Stroke and borders — Observed
+## 4.4. Stroke and borders — Подтверждено
 
 - Основной icon stroke: `1.5 px`.
 - Вторичный распространённый stroke: `1.6875 px` — следствие scale, нормализуется до 1.5/1.75.
@@ -153,7 +153,7 @@ SVG содержит технически точные радиусы, вклю�
 - Checkbox border: `#D1D8DF`.
 - Focus/selected border: `#253D98`.
 
-## 4.5. Elevation — Inferred from SVG filters
+## 4.5. Elevation — Выведено from SVG filters
 
 Архив содержит filters, Gaussian blur и offsets, но экспорт не даёт удобной исходной шкалы имён. Поведение подтверждает три уровня:
 
@@ -165,7 +165,7 @@ SVG содержит технически точные радиусы, вклю�
 
 ## 4.6. Typography — Partially inferred
 
-Font metadata отсутствует, так как текст переведён в paths.
+Font metadata отсутствует, так как текст переведён в контуры.
 
 ### Подтверждённые свойства
 
@@ -192,9 +192,9 @@ Font metadata отсутствует, так как текст переведё�
 
 ---
 
-# 5. Component anatomy and states
+# 5. Структура и состояния компонентов
 
-## 5.1. Buttons — Observed
+## 5.1. Buttons — Подтверждено
 
 `Buttons.svg` документирует три families:
 
@@ -228,7 +228,7 @@ Font metadata отсутствует, так как текст переведё�
 
 В одной локальной action group допускается одна primary action.
 
-## 5.2. Tabs — Observed
+## 5.2. Tabs — Подтверждено
 
 Система содержит два основных типа:
 
@@ -250,7 +250,7 @@ Font metadata отсутствует, так как текст переведё�
 
 Underline tabs — режимы списка/раздела. Attached tabs — представления одной сущности.
 
-## 5.3. Inputs and Select — Observed
+## 5.3. Inputs and Select — Подтверждено
 
 `Select.svg` показывает:
 
@@ -272,7 +272,7 @@ Underline tabs — режимы списка/раздела. Attached tabs — �
 - Selected chips: около 27 px high, radius около 13.5.
 - Focus border: primary blue.
 
-## 5.4. Textarea — Observed
+## 5.4. Textarea — Подтверждено
 
 - Typical board variants: около 395×58.
 - Radius: 8.
@@ -281,21 +281,21 @@ Underline tabs — режимы списка/раздела. Attached tabs — �
 - Error: red border.
 - Disabled/read-only variants included.
 
-## 5.5. Checkbox — Observed
+## 5.5. Checkbox — Подтверждено
 
 - Large: 20×20, inner geometry 18.5, radius 5.25.
 - Small: 16×16, inner geometry 14.5, radius 3.25.
 - Default / checked / hover / disabled states.
 - Selected: primary fill + white check.
 
-## 5.6. Switch — Observed
+## 5.6. Switch — Подтверждено
 
 - Main: 38×20, thumb 16.
 - Compact: 24×14, thumb about 11.2.
 - On/off, enabled/disabled states.
 - Primary blue for on, gray for off.
 
-## 5.7. Status — Observed
+## 5.7. Status — Подтверждено
 
 - Height 30 px.
 - Radius 15.
@@ -303,7 +303,7 @@ Underline tabs — режимы списка/раздела. Attached tabs — �
 - Uses semantic foreground and soft background.
 - Includes multiple product statuses; status color is semantic, not decorative.
 
-## 5.8. Badge — Observed
+## 5.8. Badge — Подтверждено
 
 Several badge geometries:
 
@@ -312,21 +312,21 @@ Several badge geometries:
 - 30px circular badge.
 - Primary, neutral, outlined and disabled variants.
 
-## 5.9. Tags — Observed
+## 5.9. Tags — Подтверждено
 
 - Standard tag around 29–30 px high.
 - Text + optional avatar/icon + close.
 - Neutral/outlined and selected variants.
 - Long tags expand by content; chips remain single-line.
 
-## 5.10. Pagination — Observed
+## 5.10. Pagination — Подтверждено
 
 - Main button: 40×40, radius 20.
 - Inner/alternate geometry: 39×39, radius 19.5.
 - States: default, active, disabled.
 - Pagination is a component inside the collection surface.
 
-## 5.11. Drawer — Observed
+## 5.11. Drawer — Подтверждено
 
 `Drawer.svg` documents:
 
@@ -341,7 +341,7 @@ Several badge geometries:
 
 Drawer используется для длинной настройки, filter workflow, history и supporting context — не для короткого подтверждения.
 
-## 5.12. Modal — Observed
+## 5.12. Modal — Подтверждено
 
 - Core modal width around 572 px.
 - Radius 16.
@@ -350,7 +350,7 @@ Drawer используется для длинной настройки, filter
 - Footer actions typically 32px high on board variants.
 - Modal не должен превращаться в длинную страницу.
 
-## 5.13. Sidebar — Observed
+## 5.13. Sidebar — Подтверждено
 
 - Collapsed global rail: 72 px.
 - Item hit area: 44×44.
@@ -360,14 +360,14 @@ Drawer используется для длинной настройки, filter
 - Divider line and grouped navigation.
 - Expanded contextual panel variants also present.
 
-## 5.14. Header — Observed
+## 5.14. Header — Подтверждено
 
 - Avatar: 48×48, radius 24.
 - Header is a shell-level region on page background.
 - Contains title/context actions/profile.
 - User identity is visually stable across screens.
 
-## 5.15. Table — Observed
+## 5.15. Table — Подтверждено
 
 `Table.svg` includes multiple table families: appeals, statuses, organizations, profiles, categories, fields, auto-assignment and dictionaries.
 
@@ -394,7 +394,7 @@ Drawer используется для длинной настройки, filter
 
 Table is an object collection, not a spreadsheet. The primary object label must dominate technical metadata.
 
-## 5.16. Files/Documents — Observed
+## 5.16. Files/Documents — Подтверждено
 
 The archive contains dedicated `Documents.svg` and file treatments in messages/product screens.
 
@@ -409,7 +409,7 @@ Shared anatomy:
 
 Файл — самостоятельный product object. Plain underlined filename is insufficient for primary file presentation.
 
-## 5.17. Messages — Observed
+## 5.17. Messages — Подтверждено
 
 - Avatar + author + time.
 - Text on open white surface; no decorative speech bubbles.
@@ -418,7 +418,7 @@ Shared anatomy:
 - Rich composer may expose formatting/templates/documents progressively.
 - System events are visually quieter than human messages.
 
-## 5.18. History of changes — Observed
+## 5.18. History of changes — Подтверждено
 
 - Right-side timeline/drawer pattern.
 - Actor name + action + changed values + timestamp.
@@ -426,14 +426,14 @@ Shared anatomy:
 - Before/after values can be represented as badges/chips.
 - History is not mixed with the primary content by default.
 
-## 5.19. Popover / Tooltip / Dropdown menu — Observed
+## 5.19. Popover / Tooltip / Dropdown menu — Подтверждено
 
 - Popover: local floating surface with stronger elevation.
 - Tooltip: short explanation only.
 - Dropdown menu: compact vertical action list.
 - These components do not own page-level workflows.
 
-## 5.20. Calendar / Planner / Dashboard — Observed
+## 5.20. Calendar / Planner / Dashboard — Подтверждено
 
 - Calendar is a dense matrix with row categories and date columns.
 - Planner uses structured time/resource grids.
@@ -442,7 +442,7 @@ Shared anatomy:
 
 ---
 
-# 6. Composition patterns
+# 6. Композиционные паттерны
 
 ## 6.1. Collection page
 
@@ -541,7 +541,7 @@ Structure:
 - Error where applicable
 - Empty where applicable
 
-Component boards directly document most visual states for Buttons, Select, Checkbox, Switch and Tabs.
+Доски компонентов directly document most visual states for Buttons, Select, Checkbox, Switch and Tabs.
 
 ---
 
@@ -658,7 +658,7 @@ A new component is allowed only if:
 | Colors | High | Explicit HEX/opacity in source board |
 | Spacing | High | Explicit scale in source board |
 | Button sizes/states | High | Exact SVG geometry and variants |
-| Form control sizes/states | High | Exact component boards |
+| Form control sizes/states | High | Exact досок компонентов |
 | Table rhythm | High | Repeated across many boards |
 | Radius normalization | Medium-high | Exact values include export fractions |
 | Typography family | Low | Text converted to paths |

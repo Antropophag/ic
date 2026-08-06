@@ -330,15 +330,33 @@
   },
   "elevation": {
     "surface": {
-      "$value": "0 0 0 1px rgba(209,216,223,1)",
+      "$value": {
+        "color": "#D1D8DFFF",
+        "offsetX": "0px",
+        "offsetY": "0px",
+        "blur": "0px",
+        "spread": "1px"
+      },
       "$type": "shadow"
     },
     "popover": {
-      "$value": "0 8px 24px rgba(11,22,35,0.10)",
+      "$value": {
+        "color": "#0B16231A",
+        "offsetX": "0px",
+        "offsetY": "8px",
+        "blur": "24px",
+        "spread": "0px"
+      },
       "$type": "shadow"
     },
     "modalDrawer": {
-      "$value": "0 20px 60px rgba(11,22,35,0.18)",
+      "$value": {
+        "color": "#0B16232E",
+        "offsetX": "0px",
+        "offsetY": "20px",
+        "blur": "60px",
+        "spread": "0px"
+      },
       "$type": "shadow"
     }
   },
