@@ -22,9 +22,13 @@ final class DevelopmentRequestSeeder
         'expert' => 'dev.expert',
         'expert2' => 'dev.expert2',
         'security' => 'dev.security',
+        'admin' => 'dev.admin',
     ];
 
     private const REQUEST_COUNT = 100;
+
+    /** @var list<string> */
+    private const INITIATORS = ['employee', 'expert', 'expert2', 'security', 'admin'];
 
     /** @var list<array{status: string, product: string, manufacturer: string, supplier: string, quantity: int, method: string, color: string}> */
     private const REQUESTS = [
@@ -58,6 +62,7 @@ final class DevelopmentRequestSeeder
     public function seed(): array
     {
         $users = $this->resolveUsers();
+        $initiatorDepartments = $this->resolveInitiatorDepartments($users);
         $oldKeys = $this->db->createCommand('SELECT storage_key FROM {{%request_document_versions}}')->queryColumn();
         $newKeys = [];
         $counts = ['requests' => 0, 'comments' => 0, 'documents' => 0];
@@ -68,9 +73,11 @@ final class DevelopmentRequestSeeder
             for ($index = 0; $index < self::REQUEST_COUNT; ++$index) {
                 $fixture = self::REQUESTS[$index % count(self::REQUESTS)];
                 $fixture['age'] = 8 + ($index % 83);
-                $requestId = $this->insertRequest($index, $fixture, $users);
+                $initiator = self::INITIATORS[$index % count(self::INITIATORS)];
+                $initiatorId = $users[$initiator];
+                $requestId = $this->insertRequest($index, $fixture, $initiatorId, $initiatorDepartments[$initiatorId]);
                 ++$counts['requests'];
-                $counts['comments'] += $this->insertComments($requestId, $index, $fixture['age'], $users);
+                $counts['comments'] += $this->insertComments($requestId, $index, $fixture['age'], $initiatorId, $users);
                 $reportVersionId = null;
 
                 $format = self::ATTACHMENT_FORMATS[($index * 5 + 3) % count(self::ATTACHMENT_FORMATS)];
@@ -79,7 +86,7 @@ final class DevelopmentRequestSeeder
                     'attachment',
                     sprintf('Сопроводительные материалы %03d.%s', $index + 1, $format['extension']),
                     $format['mime'],
-                    $users['employee'],
+                    $initiatorId,
                     $fixture['age'] - 1,
                 );
                 $newKeys[] = $version['key'];
@@ -153,6 +160,37 @@ final class DevelopmentRequestSeeder
         return $result;
     }
 
+    /**
+     * @param array<string, int> $users
+     * @return array<int, string>
+     */
+    private function resolveInitiatorDepartments(array $users): array
+    {
+        $params = [];
+        $placeholders = [];
+        foreach (self::INITIATORS as $index => $initiator) {
+            $placeholder = ':initiator' . $index;
+            $placeholders[] = $placeholder;
+            $params[$placeholder] = $users[$initiator];
+        }
+        $rows = $this->db->createCommand(
+            'SELECT id, NULLIF(TRIM(department), \'\') AS department FROM {{%users}} '
+            . 'WHERE id IN (' . implode(', ', $placeholders) . ')',
+            $params,
+        )->queryAll();
+        $departments = [];
+        foreach ($rows as $row) {
+            if ($row['department'] === null) {
+                throw new \RuntimeException("Development initiator '{$row['id']}' has no department.");
+            }
+            $departments[(int) $row['id']] = (string) $row['department'];
+        }
+        if (count($departments) !== count(self::INITIATORS)) {
+            throw new \RuntimeException('Cannot resolve all development initiator departments.');
+        }
+        return $departments;
+    }
+
     private function clearRequestData(): void
     {
         $this->db->createCommand("DELETE FROM {{%audit_events}} WHERE entity_type = 'request'")->execute();
@@ -163,14 +201,13 @@ final class DevelopmentRequestSeeder
 
     /**
      * @param array<string, mixed> $fixture
-     * @param array<string, int> $users
      */
-    private function insertRequest(int $index, array $fixture, array $users): int
+    private function insertRequest(int $index, array $fixture, int $initiatorId, string $department): int
     {
         $created = $this->time($fixture['age']);
         $this->db->createCommand()->insert('{{%requests}}', [
-            'number' => 1001 + $index, 'legacy_id' => null, 'initiator_id' => $users['employee'],
-            'department_name' => 'Тестовое подразделение', 'department_source' => 'current_profile',
+            'number' => 1001 + $index, 'legacy_id' => null, 'initiator_id' => $initiatorId,
+            'department_name' => $department, 'department_source' => 'current_profile',
             'status' => $fixture['status'], 'product_name' => sprintf('%s — демо-серия %03d', $fixture['product'], $index + 1),
             'manufacturer' => $fixture['manufacturer'], 'supplier' => $fixture['supplier'],
             'sample_quantity' => $fixture['quantity'], 'test_method' => $fixture['method'],
@@ -181,12 +218,12 @@ final class DevelopmentRequestSeeder
     }
 
     /** @param array<string, int> $users */
-    private function insertComments(int $requestId, int $index, int $age, array $users): int
+    private function insertComments(int $requestId, int $index, int $age, int $initiatorId, array $users): int
     {
         $thread = [
-            [$users['employee'], 'Демонстрационная заявка создана. Образцы готовы к передаче в ИЦ.'],
+            [$initiatorId, 'Демонстрационная заявка создана. Образцы готовы к передаче в ИЦ.'],
             [$users['executor'], 'Программа испытаний согласована. Отчёт будет загружен после завершения испытаний.'],
-            [$users['employee'], 'Передали комплект образцов и уточнили маркировку на упаковке. Просьба учесть, что один из образцов предназначен для разрушающего контроля, а остальные необходимо вернуть после завершения работ.'],
+            [$initiatorId, 'Передали комплект образцов и уточнили маркировку на упаковке. Просьба учесть, что один из образцов предназначен для разрушающего контроля, а остальные необходимо вернуть после завершения работ.'],
             [$users['executor2'], 'Информация принята. В журнале лаборатории зарезервировано оборудование, проверены условия проведения испытаний и доступность измерительного стенда. Если предварительные результаты выйдут за установленные программой пределы, добавим сюда таблицу измерений и отдельно согласуем повторный цикл.'],
         ];
         $comments = array_slice($thread, 0, 1 + ($index % count($thread)));
