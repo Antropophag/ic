@@ -12,9 +12,12 @@ import { createApplicationDraftForm } from "../applicationDraftForm";
 import { createConfirmDialog } from "../confirmDialog";
 import { triggerBlobDownload } from "../download";
 import { createLatestRequestGuard } from "../latestRequestGuard";
+import AppIcon from "./AppIcon.vue";
+import AppModal from "./AppModal.vue";
 import {
   REGISTRY_PAGE_SIZE,
   REQUEST_STATUS_OPTIONS,
+  avatarRoleClass,
   fromApi,
   initialsFor,
 } from "../registry";
@@ -42,6 +45,7 @@ const registryPage = reactive({
   counts: { active: 0, all: 0, mine: 0 },
 });
 const registryError = ref("");
+const registryLoading = ref(true);
 const showCreate = ref(false);
 const createLoading = ref(false);
 const createError = ref("");
@@ -98,7 +102,7 @@ function hasCreateFormData() {
 
 async function clearCreateDraft() {
   if (hasCreateFormData() && !(await confirmDialog.ask(
-    "Очистить заполненные поля и сохранённый черновик?",
+    "Очистить форму и удалить сохранённый черновик?",
     { confirmLabel: "Очистить" },
   ))) return;
   resetCreateForm({ removeStored: true });
@@ -124,6 +128,7 @@ const pageNumbers = computed(() => {
 
 async function loadRequests({ rethrow = false } = {}) {
   const token = registryGuard.begin(true);
+  registryLoading.value = true;
   try {
     const result = await requestApi.list({
       page: currentPage.value,
@@ -153,7 +158,29 @@ async function loadRequests({ rethrow = false } = {}) {
     if (registryGuard.isCurrent(token, true))
       registryError.value =
         "Не удалось загрузить реестр заявок. Повторите попытку.";
+  } finally {
+    if (registryGuard.isCurrent(token, true)) registryLoading.value = false;
   }
+}
+
+function clearRegistryFilters() {
+  query.value = "";
+  statusFilter.value = "";
+}
+
+function commentAvatarClass(item) {
+  if (item.lastCommentAuthor === item.expert) return avatarRoleClass('expert')
+  if (item.lastCommentAuthor === item.executor) return avatarRoleClass('ic_executor')
+  return avatarRoleClass('employee')
+}
+
+function requestCountLabel(count) {
+  const mod100 = count % 100
+  const mod10 = count % 10
+  if (mod100 >= 11 && mod100 <= 14) return 'заявок'
+  if (mod10 === 1) return 'заявка'
+  if (mod10 >= 2 && mod10 <= 4) return 'заявки'
+  return 'заявок'
 }
 
 function reloadFirstPage() {
@@ -256,7 +283,7 @@ async function createRequest() {
     const warnings = [];
     if (!createdItem)
       warnings.push(
-        "Заявка создана, но пока не появилась в реестре. Не создавайте её повторно; обновите страницу.",
+        "Заявка создана, но пока не появилась в реестре. Не создавайте её повторно. Обновите страницу.",
       );
     if (failedFiles.length || commentFailed)
       warnings.push(
@@ -267,7 +294,7 @@ async function createRequest() {
     else registryError.value = warning;
   } catch {
     if (isCurrent()) registryError.value =
-      "Заявка создана, но обновить реестр не удалось. Не создавайте её повторно; обновите страницу.";
+      "Заявка создана, но обновить реестр не удалось. Не создавайте её повторно. Обновите страницу.";
   } finally {
     if (isCurrent()) {
       showCreate.value = false;
@@ -297,31 +324,53 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <section v-show="active" class="page">
-    <p v-if="registryError" class="detail-state error">{{ registryError }}</p>
-    <div class="card registry">
-      <div class="tabs">
-        <button
-          v-for="tab in tabs"
-          :key="tab.id"
-          :class="{ active: activeTab === tab.id }"
-          @click="activeTab = tab.id"
-        >
-          {{ tab.label }} <span>{{ tab.count }}</span></button><button class="primary tabs-cta" @click="showCreate = true">
-          ＋ Новая заявка
+  <section v-show="active" class="page screen-panel" :class="{ 'screen-panel--active': active }">
+    <div v-if="registryError" class="detail-state error registry-error" role="alert">
+      <span>{{ registryError }}</span>
+      <button type="button" @click="loadRequests">Повторить</button>
+    </div>
+    <div class="card registry" :aria-busy="registryLoading">
+      <span class="visually-hidden" aria-live="polite">{{ registryLoading ? "Загрузка реестра" : "Реестр загружен" }}</span>
+      <div class="registry-head">
+        <div class="tabs" role="tablist" aria-label="Представление реестра">
+          <button
+            v-for="tab in tabs"
+            :key="tab.id"
+            :class="{ active: activeTab === tab.id }"
+            role="tab"
+            :aria-selected="activeTab === tab.id"
+            @click="activeTab = tab.id"
+          >
+            <span class="tab-label">{{ tab.label }}</span><span class="tab-count">{{ tab.count }}</span>
+          </button>
+        </div>
+        <button class="primary tabs-cta" @click="showCreate = true">
+          <AppIcon name="plus" :size="16" />
+          Новая заявка
         </button>
       </div>
       <div class="toolbar">
-        <label class="search">⌕ <input v-model="query" placeholder="Поиск по заявкам" /></label><select v-model="statusFilter">
-          <option value="">Все статусы</option>
-          <option
-            v-for="status in REQUEST_STATUS_OPTIONS"
-            :key="status.value"
-            :value="status.value"
-          >
-            {{ status.label }}
-          </option>
-        </select>
+        <label class="search">
+          <AppIcon name="search" :size="17" />
+          <input v-model="query" type="search" placeholder="Поиск по заявкам" aria-label="Поиск по заявкам" />
+        </label>
+        <label class="status-filter">
+          <span class="visually-hidden">Статус заявки</span>
+          <select v-model="statusFilter">
+            <option value="">Все статусы</option>
+            <option
+              v-for="status in REQUEST_STATUS_OPTIONS"
+              :key="status.value"
+              :value="status.value"
+            >
+              {{ status.label }}
+            </option>
+          </select>
+        </label>
+        <button v-if="query || statusFilter" type="button" class="toolbar-clear" @click="clearRegistryFilters">
+          Сбросить
+        </button>
+        <span class="toolbar-meta">{{ paged.total }} {{ requestCountLabel(paged.total) }}</span>
       </div>
       <div class="table-wrap">
         <table>
@@ -329,11 +378,16 @@ onBeforeUnmount(() => {
             <tr>
               <th
                 class="sortable"
-                @click="
-                  sortDirection = sortDirection === 'desc' ? 'asc' : 'desc'
-                "
+                scope="col"
+                :aria-sort="sortDirection === 'desc' ? 'descending' : 'ascending'"
               >
-                № заявки {{ sortDirection === "desc" ? "↓" : "↑" }}
+                <button
+                  type="button"
+                  class="sort-control"
+                  @click="sortDirection = sortDirection === 'desc' ? 'asc' : 'desc'"
+                >
+                  <span>№ заявки</span><svg viewBox="0 0 16 16" aria-hidden="true" :class="{ ascending: sortDirection === 'asc' }"><path d="m5 6 3 3 3-3" /></svg>
+                </button>
               </th>
               <th>Дата</th>
               <th>Объект испытаний</th>
@@ -341,11 +395,16 @@ onBeforeUnmount(() => {
               <th>Исполнитель</th>
               <th>Статус</th>
               <th>СБ</th>
-              <th class="registry-indicator-cell">Комментарий</th>
+              <th class="registry-feed-cell">Комментарий</th>
               <th class="registry-indicator-cell">Отчёт</th>
             </tr>
           </thead>
-          <tbody>
+          <tbody v-if="registryLoading && !paged.items.length" aria-label="Загрузка заявок">
+            <tr v-for="index in 7" :key="`skeleton-${index}`" class="registry-skeleton" aria-hidden="true">
+              <td v-for="cell in 9" :key="cell"><span /></td>
+            </tr>
+          </tbody>
+          <tbody v-else>
             <tr
               v-for="item in paged.items"
               :key="item.id"
@@ -388,18 +447,22 @@ onBeforeUnmount(() => {
                 >
                   <path :d="item.securityMarkDisplay?.path" /></svg></span>
               </td>
-              <td class="registry-indicator-cell">
+              <td class="registry-feed-cell">
                 <button
                   v-if="item.lastCommentAuthor"
                   type="button"
-                  class="avatar small registry-comment-avatar"
-                  :title="'Последний комментарий: ' + item.lastCommentAuthor"
+                  class="registry-comment-preview"
+                  :title="item.lastCommentBody"
                   :aria-label="
-                    'Последний комментарий: ' + item.lastCommentAuthor
+                    'Последний комментарий: ' + item.lastCommentAuthor + '. ' + item.lastCommentBody
                   "
                   @click.stop="lastCommentModal = item"
                 >
-                  {{ initialsFor(item.lastCommentAuthor) }}</button><span v-else class="muted-dash">—</span>
+                  <span class="avatar small registry-comment-avatar" :class="commentAvatarClass(item)">
+                    {{ initialsFor(item.lastCommentAuthor) }}
+                  </span>
+                  <span class="registry-comment-copy">{{ item.lastCommentBody }}</span>
+                </button><span v-else class="muted-dash">—</span>
               </td>
               <td class="registry-indicator-cell">
                 <button
@@ -409,166 +472,156 @@ onBeforeUnmount(() => {
                       item.reportOriginalName
                   "
                   type="button"
-                  class="doc-icon pdf registry-report-icon"
+                  class="registry-report-icon"
                   title="Скачать отчёт испытаний"
                   aria-label="Скачать отчёт испытаний"
                   @click.stop="downloadReport(item)"
                 >
-                  PDF</button><span v-else class="muted-dash">—</span>
+                  <AppIcon name="file" :size="16" />
+                  <span class="registry-report-download" aria-hidden="true"><AppIcon name="download" :size="9" /></span>
+                </button><span v-else class="muted-dash">—</span>
               </td>
             </tr>
           </tbody>
         </table>
-        <div v-if="!paged.total" class="empty">
-          <div>⌕</div>
+        <div v-if="!registryLoading && !registryError && !paged.total" class="empty">
+          <div class="empty-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6" /><path d="m15 15 4 4" /></svg></div>
           <h3>Ничего не найдено</h3>
-          <p>Измените запрос или очистите фильтры</p>
+          <p>{{ query || statusFilter ? "Измените запрос или сбросьте фильтры." : "В этом представлении пока нет заявок." }}</p>
+          <button v-if="query || statusFilter" type="button" class="secondary empty-action" @click="clearRegistryFilters">Сбросить фильтры</button>
         </div>
       </div>
       <footer v-if="paged.total" class="pagination">
         <span>{{ (paged.page - 1) * pageSize + 1 }}–{{
           Math.min(paged.page * pageSize, paged.total)
         }}
-          из {{ paged.total }}</span><span><button
+          из {{ paged.total }}</span><span v-if="paged.pageCount > 1"><button
           :disabled="paged.page <= 1"
           @click="goToPage(paged.page - 1)"
         >
-          ‹</button><button
+          <span class="visually-hidden">Предыдущая страница</span>
+          <AppIcon name="chevron-left" :size="16" /></button><button
           v-for="page in pageNumbers"
           :key="page"
           :class="{ current: page === paged.page }"
+          :aria-label="`Страница ${page}`"
+          :aria-current="page === paged.page ? 'page' : undefined"
           @click="goToPage(page)"
         >
           {{ page }}</button><button
           :disabled="paged.page >= paged.pageCount"
           @click="goToPage(paged.page + 1)"
         >
-          ›
+          <span class="visually-hidden">Следующая страница</span>
+          <AppIcon name="chevron-right" :size="16" />
         </button></span>
       </footer>
     </div>
   </section>
 
-  <div
-    v-if="active && showCreate"
-    class="overlay"
-    @click.self="!createLoading && (showCreate = false)"
+  <AppModal
+    :open="active && showCreate"
+    as="form"
+    title="Заявка на проведение испытаний"
+    title-id="create-request-title"
+    size="large"
+    :busy="createLoading"
+    @close="showCreate = false"
+    @submit="createRequest"
   >
-    <form class="modal" @submit.prevent="createRequest">
-      <div class="modal-head">
-        <div>
-          <p class="eyebrow">Новая заявка</p>
-          <h2>Проведение испытаний</h2>
-        </div>
-        <button
-          type="button"
-          :disabled="createLoading"
-          @click="showCreate = false"
-        >
-          ×
-        </button>
-      </div>
-      <div class="form-grid">
-        <label>Наименование и тип *<input
-          v-model="draft.productName"
-          required
-          maxlength="500"
-          placeholder="Введите наименование продукции"
-        /></label><label>Количество образцов *<input
-          v-model.number="draft.sampleQuantity"
-          required
-          type="number"
-          min="1"
-        /></label><label>Производитель *<input
-          v-model="draft.manufacturer"
-          required
-          maxlength="500"
-          placeholder="Наименование производителя"
-        /></label><label>Поставщик *<input
-          v-model="draft.supplier"
-          required
-          maxlength="500"
-          placeholder="Наименование поставщика"
-        /></label><label class="wide">Метод испытаний *<textarea
-          v-model="draft.testMethod"
-          required
-          maxlength="10000"
-          placeholder="Опишите метод или программу испытаний"
-        ></textarea></label><label class="wide">Сопроводительная документация
-          <div class="dropzone">
-            <input
-              ref="draftFileInput"
-              type="file"
-              multiple
-              accept=".pdf,.png,.jpg,.jpeg,.docx,.xlsx"
-              :disabled="createLoading"
-              @change="draftFiles = Array.from($event.target.files || [])"
-            /><span>Перетащите файлы сюда или <b>выберите на компьютере</b></span><small v-if="draftFiles.length">Выбрано:
-              {{ draftFiles.map((file) => file.name).join(", ") }}</small>
-          </div></label><label class="wide">Комментарий<textarea
-          v-model="draft.comment"
-          :disabled="createLoading"
-          maxlength="10000"
-          placeholder="Дополнительная информация"
-        ></textarea>
-        </label>
-      </div>
-      <p v-if="createNotice" class="form-notice" role="status">{{ createNotice }}</p>
-      <p v-if="createError" class="form-error">{{ createError }}</p>
-      <div class="modal-actions">
-        <button
-          type="button"
-          class="secondary clear-draft"
-          :disabled="createLoading"
-          @click="clearCreateDraft"
-        >
-          Очистить черновик</button>
-        <button
-          type="button"
-          class="secondary"
-          :disabled="createLoading"
-          @click="showCreate = false"
-        >
-          Отмена</button><button class="primary" :disabled="createLoading">
-          {{ createLoading ? "Создание…" : "Создать заявку" }}
-        </button>
-      </div>
-    </form>
-  </div>
-  <div
-    v-if="confirmDialog.state.open"
-    class="overlay"
-    @click.self="confirmDialog.cancel"
-  >
-    <div class="modal confirm-modal">
-      <p>{{ confirmDialog.state.message }}</p>
-      <div class="modal-actions">
-        <button class="secondary" @click="confirmDialog.cancel">Отмена</button><button class="primary danger" @click="confirmDialog.accept">
-          {{ confirmDialog.state.confirmLabel }}
-        </button>
-      </div>
+    <template #eyebrow><p class="eyebrow">Новая заявка</p></template>
+    <div class="form-grid">
+      <label>Объект испытаний *<input
+        v-model="draft.productName"
+        required
+        maxlength="500"
+        placeholder="Укажите наименование и тип продукции"
+      /></label><label>Количество образцов *<input
+        v-model.number="draft.sampleQuantity"
+        required
+        type="number"
+        min="1"
+      /></label><label>Производитель *<input
+        v-model="draft.manufacturer"
+        required
+        maxlength="500"
+        placeholder="Наименование производителя"
+      /></label><label>Поставщик *<input
+        v-model="draft.supplier"
+        required
+        maxlength="500"
+        placeholder="Наименование поставщика"
+      /></label><label class="wide">Метод испытаний *<textarea
+        v-model="draft.testMethod"
+        required
+        maxlength="10000"
+        placeholder="Опишите метод или программу испытаний"
+      ></textarea></label><label class="wide">Сопроводительные документы
+        <div class="dropzone">
+          <input
+            ref="draftFileInput"
+            type="file"
+            multiple
+            accept=".pdf,.png,.jpg,.jpeg,.docx,.xlsx"
+            :disabled="createLoading"
+            @change="draftFiles = Array.from($event.target.files || [])"
+          /><span>Перетащите файлы сюда или <b>выберите на компьютере</b></span><small v-if="draftFiles.length">Выбрано:
+            {{ draftFiles.map((file) => file.name).join(", ") }}</small>
+        </div></label><label class="wide">Комментарий<textarea
+        v-model="draft.comment"
+        :disabled="createLoading"
+        maxlength="10000"
+        placeholder="Добавьте пояснение к заявке"
+      ></textarea>
+      </label>
     </div>
-  </div>
-  <div
-    v-if="active && lastCommentModal"
-    class="overlay"
-    @click.self="lastCommentModal = null"
+    <p v-if="createNotice" class="form-notice" role="status">{{ createNotice }}</p>
+    <p v-if="createError" class="form-error">{{ createError }}</p>
+    <template #footer>
+      <button
+        type="button"
+        class="secondary clear-draft"
+        :disabled="createLoading"
+        @click="clearCreateDraft"
+      >
+        Очистить черновик</button>
+      <button
+        type="button"
+        class="secondary"
+        :disabled="createLoading"
+        @click="showCreate = false"
+      >
+        Отмена</button><button class="primary" :disabled="createLoading">
+        {{ createLoading ? "Создание…" : "Создать заявку" }}
+      </button>
+    </template>
+  </AppModal>
+  <AppModal
+    :open="confirmDialog.state.open"
+    title="Подтвердите действие"
+    title-id="registry-confirm-title"
+    description-id="registry-confirm-message"
+    size="small"
+    alert
+    @close="confirmDialog.cancel"
   >
-    <div class="modal confirm-modal">
-      <div class="modal-head">
-        <h2>Последний комментарий</h2>
-        <button @click="lastCommentModal = null">×</button>
-      </div>
-      <p class="comment-modal-meta">
-        <b>{{ lastCommentModal.lastCommentAuthor }}</b> ·
-        {{ lastCommentModal.lastCommentAt }}
-      </p>
-      <p>{{ lastCommentModal.lastCommentBody }}</p>
-      <div class="modal-actions">
-        <button class="secondary" @click="lastCommentModal = null">
-          Закрыть
-        </button>
-      </div>
-    </div>
-  </div>
+    <p id="registry-confirm-message">{{ confirmDialog.state.message }}</p>
+    <template #footer>
+      <button class="secondary" @click="confirmDialog.cancel">Отмена</button><button class="primary danger" @click="confirmDialog.accept">
+        {{ confirmDialog.state.confirmLabel }}
+      </button>
+    </template>
+  </AppModal>
+  <AppModal :open="active && Boolean(lastCommentModal)" title="Последний комментарий" title-id="last-comment-title" size="small" @close="lastCommentModal = null">
+    <p v-if="lastCommentModal" class="comment-modal-meta">
+      <b>{{ lastCommentModal.lastCommentAuthor }}</b> ·
+      {{ lastCommentModal.lastCommentAt }}
+    </p>
+    <p v-if="lastCommentModal">{{ lastCommentModal.lastCommentBody }}</p>
+    <template #footer>
+      <button class="secondary" @click="lastCommentModal = null">
+        Закрыть
+      </button>
+    </template>
+  </AppModal>
 </template>

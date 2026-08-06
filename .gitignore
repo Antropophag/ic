@@ -33,7 +33,12 @@
 /dist-demo/
 .DS_Store
 Thumbs.db
+[Dd]esktop.ini
 *:Zone.Identifier
+*.swp
+*.swo
+*~
+~$*
 
 # Локальные исходные материалы содержат корпоративные данные и не коммитятся.
 /Screenshot_*.png

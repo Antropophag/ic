@@ -48,8 +48,8 @@ async function login() {
       </svg>
       <p class="eyebrow">АО «ЩЛЗ» · Испытательный центр</p>
       <h1>Вход в портал</h1>
-      <label>Логин<input v-model="loginForm.login" autocomplete="username" required :disabled="loginLoading" /></label>
-      <label>Пароль<input v-model="loginForm.password" type="password" autocomplete="current-password" required :disabled="loginLoading" /></label>
+      <label>Логин<input v-model="loginForm.login" autocomplete="username" placeholder="ii.ivanov" required :disabled="loginLoading" /></label>
+      <label>Пароль<input v-model="loginForm.password" type="password" autocomplete="current-password" placeholder="Пароль от учётной записи" required :disabled="loginLoading" /></label>
       <p v-if="loginError" class="form-error">{{ loginError }}</p>
       <button class="primary" :disabled="loginLoading">{{ loginLoading ? 'Вход…' : 'Войти' }}</button>
     </form>

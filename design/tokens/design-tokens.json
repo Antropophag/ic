@@ -1,0 +1,348 @@
+{
+  "$schema": "https://design-tokens.github.io/community-group/format/",
+  "meta": {
+    "name": "Service Desk Reverse-Engineered Design Language",
+    "version": "1.0.0",
+    "source": "67 SVG files supplied by user",
+    "confidence": {
+      "colors": "high — exact values are printed in Colors.svg",
+      "spacing": "high — exact scale is printed in Spacing.svg",
+      "component_dimensions": "high for listed source-board dimensions",
+      "typography": "medium/low — text was converted to paths; family and exact type tokens are unavailable",
+      "motion": "low — static SVG sources do not expose timing/easing"
+    }
+  },
+  "color": {
+    "darkBlue": {
+      "100": {
+        "$value": "#0B1623",
+        "$type": "color"
+      },
+      "50pct": {
+        "$value": "rgba(11,22,35,0.50)",
+        "$type": "color"
+      },
+      "25pct": {
+        "$value": "rgba(11,22,35,0.25)",
+        "$type": "color"
+      },
+      "10pct": {
+        "$value": "rgba(11,22,35,0.10)",
+        "$type": "color"
+      }
+    },
+    "blue": {
+      "300": {
+        "$value": "#162773",
+        "$type": "color"
+      },
+      "200": {
+        "$value": "#253D98",
+        "$type": "color"
+      },
+      "200_15pct": {
+        "$value": "rgba(37,61,152,0.15)",
+        "$type": "color"
+      },
+      "100": {
+        "$value": "#DFE2F0",
+        "$type": "color"
+      },
+      "50": {
+        "$value": "#EEF0F4",
+        "$type": "color"
+      }
+    },
+    "gray": {
+      "200": {
+        "$value": "#939CA5",
+        "$type": "color"
+      },
+      "100": {
+        "$value": "#D1D8DF",
+        "$type": "color"
+      },
+      "75": {
+        "$value": "#E0E0E0",
+        "$type": "color"
+      },
+      "50": {
+        "$value": "#F5F5F5",
+        "$type": "color"
+      }
+    },
+    "white": {
+      "100": {
+        "$value": "#FFFFFF",
+        "$type": "color"
+      },
+      "15pct": {
+        "$value": "rgba(255,255,255,0.15)",
+        "$type": "color"
+      },
+      "10pct": {
+        "$value": "rgba(255,255,255,0.10)",
+        "$type": "color"
+      }
+    },
+    "background": {
+      "primary": {
+        "$value": "#F4F6F9",
+        "$type": "color"
+      },
+      "filter": {
+        "$value": "#EEF0F4",
+        "$type": "color"
+      },
+      "secondary": {
+        "$value": "#DFE2F0",
+        "$type": "color"
+      }
+    },
+    "semantic": {
+      "red100": {
+        "$value": "#CC1F1F",
+        "$type": "color"
+      },
+      "red100_15pct": {
+        "$value": "rgba(204,31,31,0.15)",
+        "$type": "color"
+      },
+      "red50": {
+        "$value": "#FBD5D5",
+        "$type": "color"
+      },
+      "brightGreen": {
+        "$value": "#25983E",
+        "$type": "color"
+      },
+      "brightGreen_15pct": {
+        "$value": "rgba(37,152,62,0.15)",
+        "$type": "color"
+      },
+      "green": {
+        "$value": "#57965C",
+        "$type": "color"
+      },
+      "green_15pct": {
+        "$value": "rgba(87,150,92,0.15)",
+        "$type": "color"
+      },
+      "brown": {
+        "$value": "#9B7E46",
+        "$type": "color"
+      },
+      "brown_15pct": {
+        "$value": "rgba(155,126,70,0.15)",
+        "$type": "color"
+      },
+      "orange": {
+        "$value": "#D47E2E",
+        "$type": "color"
+      },
+      "orange_15pct": {
+        "$value": "rgba(212,126,46,0.15)",
+        "$type": "color"
+      },
+      "blue": {
+        "$value": "#245B99",
+        "$type": "color"
+      },
+      "blue_15pct": {
+        "$value": "rgba(36,91,153,0.15)",
+        "$type": "color"
+      },
+      "brightBlue": {
+        "$value": "#3D88DE",
+        "$type": "color"
+      },
+      "brightBlue_15pct": {
+        "$value": "rgba(61,136,222,0.15)",
+        "$type": "color"
+      },
+      "turquoise": {
+        "$value": "#4191B3",
+        "$type": "color"
+      },
+      "turquoise_15pct": {
+        "$value": "rgba(65,145,179,0.15)",
+        "$type": "color"
+      },
+      "violet": {
+        "$value": "#8131A7",
+        "$type": "color"
+      },
+      "violet_15pct": {
+        "$value": "rgba(129,49,167,0.15)",
+        "$type": "color"
+      },
+      "pink": {
+        "$value": "#A942A7",
+        "$type": "color"
+      },
+      "pink_15pct": {
+        "$value": "rgba(169,66,167,0.15)",
+        "$type": "color"
+      }
+    }
+  },
+  "spacing": {
+    "4": {
+      "$value": "4px",
+      "$type": "dimension"
+    },
+    "8": {
+      "$value": "8px",
+      "$type": "dimension"
+    },
+    "16": {
+      "$value": "16px",
+      "$type": "dimension"
+    },
+    "24": {
+      "$value": "24px",
+      "$type": "dimension"
+    },
+    "32": {
+      "$value": "32px",
+      "$type": "dimension"
+    },
+    "40": {
+      "$value": "40px",
+      "$type": "dimension"
+    },
+    "48": {
+      "$value": "48px",
+      "$type": "dimension"
+    },
+    "56": {
+      "$value": "56px",
+      "$type": "dimension"
+    },
+    "64": {
+      "$value": "64px",
+      "$type": "dimension"
+    }
+  },
+  "radius": {
+    "checkbox": {
+      "$value": "5.25px",
+      "$type": "dimension"
+    },
+    "small": {
+      "$value": "8px",
+      "$type": "dimension"
+    },
+    "control": {
+      "$value": "16px",
+      "$type": "dimension"
+    },
+    "pillSm": {
+      "$value": "13px",
+      "$type": "dimension"
+    },
+    "pillMd": {
+      "$value": "16px",
+      "$type": "dimension"
+    },
+    "pillLg": {
+      "$value": "20px",
+      "$type": "dimension"
+    },
+    "surface": {
+      "$value": "16px",
+      "$type": "dimension"
+    },
+    "circle": {
+      "$value": "999px",
+      "$type": "dimension"
+    }
+  },
+  "stroke": {
+    "iconDefault": {
+      "$value": "1.5px",
+      "$type": "dimension"
+    },
+    "iconSecondary": {
+      "$value": "1.6875px",
+      "$type": "dimension"
+    },
+    "divider": {
+      "$value": "1px",
+      "$type": "dimension"
+    }
+  },
+  "size": {
+    "button": {
+      "large": {
+        "height": {
+          "$value": "40px",
+          "$type": "dimension"
+        }
+      },
+      "medium": {
+        "height": {
+          "$value": "32px",
+          "$type": "dimension"
+        }
+      },
+      "small": {
+        "height": {
+          "$value": "26px",
+          "$type": "dimension"
+        }
+      }
+    },
+    "iconButton": {
+      "large": {
+        "$value": "40px",
+        "$type": "dimension"
+      },
+      "medium": {
+        "$value": "32px",
+        "$type": "dimension"
+      }
+    },
+    "input": {
+      "large": {
+        "$value": "40px",
+        "$type": "dimension"
+      },
+      "medium": {
+        "$value": "32px",
+        "$type": "dimension"
+      }
+    },
+    "pagination": {
+      "$value": "40px",
+      "$type": "dimension"
+    },
+    "headerAvatar": {
+      "$value": "48px",
+      "$type": "dimension"
+    },
+    "sidebar": {
+      "collapsed": {
+        "$value": "72px",
+        "$type": "dimension"
+      }
+    }
+  },
+  "elevation": {
+    "surface": {
+      "$value": "0 0 0 1px rgba(209,216,223,1)",
+      "$type": "shadow"
+    },
+    "popover": {
+      "$value": "0 8px 24px rgba(11,22,35,0.10)",
+      "$type": "shadow"
+    },
+    "modalDrawer": {
+      "$value": "0 20px 60px rgba(11,22,35,0.18)",
+      "$type": "shadow"
+    }
+  },
+  "motion": {
+    "note": "No timing/easing tokens can be verified from static SVG files."
+  }
+}

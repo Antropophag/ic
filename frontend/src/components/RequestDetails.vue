@@ -1,13 +1,16 @@
 <script setup>
-import { computed, onBeforeUnmount, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue'
 import { requestApi } from '../api'
+import AppIcon from './AppIcon.vue'
+import AppModal from './AppModal.vue'
+import HelpArticle from './HelpArticle.vue'
 import { createConfirmDialog } from '../confirmDialog'
 import { triggerBlobDownload } from '../download'
 import { createLatestRequestGuard } from '../latestRequestGuard'
-import { REQUEST_COLORS, canStartNow, canSubmitComment, commentFromApi, documentFromApi, documentKind, fromApi, historyFromApi, newestFirstFeed, withoutStaleActions } from '../registry'
+import { REQUEST_COLORS, avatarRoleClass, canStartNow, canSubmitComment, commentFromApi, documentFromApi, documentKind, fromApi, historyFromApi, initialsFor, newestFirstFeed, withoutStaleActions } from '../registry'
 
 const props = defineProps({ requestId: { type: Number, required: true }, currentInitials: { type: String, default: '' }, initialWarning: { type: String, default: '' } })
-const emit = defineEmits(['loaded', 'unavailable', 'updated'])
+const emit = defineEmits(['loaded', 'unavailable', 'updated', 'close'])
 const selected = ref(null)
 const actionError = ref('')
 const actionLoading = ref(false)
@@ -30,6 +33,13 @@ const opinionLoading = ref(false)
 const opinionError = ref('')
 const showOpinionModal = ref(false)
 const showDepartmentModal = ref(false)
+const showAuditDrawer = ref(false)
+const showHelpDrawer = ref(false)
+const auditTrigger = ref(null)
+const auditDrawer = ref(null)
+const helpTrigger = ref(null)
+const helpDrawer = ref(null)
+const colorMenu = ref(null)
 const departmentDraft = ref('')
 const departmentLoading = ref(false)
 const departmentError = ref('')
@@ -70,7 +80,69 @@ const actionRequestGuard = createLatestRequestGuard()
 const downloadRequestGuard = createLatestRequestGuard()
 const departmentRequestGuard = createLatestRequestGuard()
 const confirmDialog = createConfirmDialog()
+const hasRequestContent = computed(() => Boolean(selected.value?.product))
 const feed = computed(() => newestFirstFeed(selected.value?.history || [], selected.value?.comments || []))
+const documentGroups = computed(() => {
+  const documents = selected.value?.documents || []
+  return [
+    { key: 'attachment', label: 'Сопроводительные документы', items: documents.filter(document => !['report', 'opinion'].includes(document.documentType)) },
+    { key: 'report', label: 'Отчётные документы', items: documents.filter(document => document.documentType === 'report') },
+    { key: 'opinion', label: 'Экспертное заключение', items: documents.filter(document => document.documentType === 'opinion') },
+  ].filter(group => group.items.length)
+})
+const participants = computed(() => {
+  if (!selected.value) return []
+  return [
+    { name: selected.value.initiator, role: 'Инициатор', roleCode: 'employee' },
+    selected.value.executorId ? { name: selected.value.executor, role: 'Исполнитель ИЦ', roleCode: 'ic_executor' } : null,
+    selected.value.expertId ? { name: selected.value.expert, role: 'Эксперт', roleCode: 'expert' } : null,
+  ].filter(Boolean)
+})
+
+function avatarClassForAuthor(author) {
+  if (author && author === selected.value?.expert) return avatarRoleClass('expert')
+  if (author && author === selected.value?.executor) return avatarRoleClass('ic_executor')
+  return avatarRoleClass('employee')
+}
+
+function eventIcon(action) {
+  return {
+    create: 'plus', import: 'download', assign_executor: 'user', claim_expert: 'user', reassign_expert: 'user',
+    start: 'play', suspend: 'pause', resume: 'play', upload_report: 'upload', delete_report: 'trash',
+    publish_opinion: 'file-check', security_approve: 'shield-check', security_return: 'return',
+    reject: 'close', withdraw: 'close', change_department: 'building',
+  }[action] || 'history'
+}
+
+function eventIconTone(action) {
+  if (['security_approve', 'start', 'resume'].includes(action)) return 'positive'
+  if (['delete_report', 'reject', 'withdraw'].includes(action)) return 'critical'
+  if (['suspend', 'security_return'].includes(action)) return 'warning'
+  if (['upload_report', 'publish_opinion'].includes(action)) return 'document'
+  return 'neutral'
+}
+
+const COLOR_LABELS = { white: 'Без цвета', red: 'Красный', orange: 'Оранжевый', blue: 'Синий', violet: 'Фиолетовый', green: 'Зелёный' }
+
+function colorLabel(color) {
+  return COLOR_LABELS[color] || color
+}
+const processSteps = computed(() => {
+  const labels = ['Зарегистрирована', 'В работе', 'Экспертиза', 'Контроль СБ', 'Завершена']
+  const statusIndex = {
+    'Заявка зарегистрирована': 0,
+    'Заявка в работе': 1,
+    'Работы приостановлены': 1,
+    'Подготовка заключения': 2,
+    'Контроль СБ': 3,
+    'Заявка выполнена': 4,
+  }[selected.value?.status]
+  const terminal = ['В проведении испытаний отказано', 'Заявка отозвана'].includes(selected.value?.status)
+  return labels.map((label, index) => ({
+    label,
+    state: terminal ? (index === 0 ? 'done' : 'future') : index < statusIndex ? 'done' : index === statusIndex ? 'current' : 'future',
+  }))
+})
 const canStartAction = computed(() => canStartNow(selected.value))
 const startHint = computed(() => {
   if (!selected.value) return ''
@@ -84,6 +156,109 @@ const hasHeroAction = computed(() => Boolean(selected.value && (
   || selected.value.canSecurityDecide || selected.value.canReject || selected.value.canWithdraw || selected.value.canDeleteReport
   || selected.value.canSuspend || selected.value.canResume
 )))
+const actionPrompt = computed(() => {
+  if (!selected.value) return ''
+  if (selected.value.canSecurityDecide) return 'Проверьте заключение и примите решение'
+  if (selected.value.canPublishOpinion) return 'Подготовьте экспертное заключение'
+  if (selected.value.canReassignExpert) return 'Подготовьте заключение или передайте заявку эксперту'
+  if (selected.value.canClaimExpert) return 'Возьмите заявку на экспертизу'
+  if (selected.value.canUploadReport) return 'Завершите испытания и загрузите отчёт'
+  if (selected.value.canDeleteReport) return 'Проверьте загруженный отчёт'
+  if (selected.value.canResume) return 'Возобновите работы по заявке'
+  if (selected.value.canStart) return selected.value.executorId
+    ? 'Запустите работу по заявке'
+    : 'Сначала назначьте исполнителя'
+  if (selected.value.canAssignExecutor) return 'Выберите и назначьте исполнителя'
+  if (selected.value.canSuspend) return 'Продолжите работу или приостановите её'
+  if (selected.value.canWithdraw) return 'Заявка ожидает начала работ'
+  if (selected.value.canReject) return 'Примите заявку в работу или откажите'
+  return 'Выберите действие по заявке'
+})
+const actionHelp = computed(() => {
+  if (!selected.value) return null
+  if (selected.value.canSecurityDecide) return { href: '/help/security-review.html', label: 'Инструкция по контролю СБ' }
+  if (selected.value.canPublishOpinion || selected.value.canClaimExpert || selected.value.canReassignExpert) return { href: '/help/expert-opinion.html', label: 'Инструкция по формированию заключения' }
+  if (selected.value.canUploadReport) return { href: '/help/report.html', label: 'Инструкция по загрузке отчёта испытаний' }
+  if (selected.value.canAssignExecutor || selected.value.canStart || selected.value.canSuspend || selected.value.canResume) return { href: '/help/assignment.html', label: 'Инструкция по назначению и началу работы' }
+  return null
+})
+
+function openAuditDrawer() {
+  showAuditDrawer.value = true
+  nextTick(() => auditDrawer.value?.querySelector('button')?.focus())
+}
+
+function closeAuditDrawer() {
+  showAuditDrawer.value = false
+  nextTick(() => auditTrigger.value?.focus())
+}
+
+function openHelpDrawer() {
+  showHelpDrawer.value = true
+  nextTick(() => helpDrawer.value?.querySelector('button')?.focus())
+}
+
+function closeHelpDrawer() {
+  showHelpDrawer.value = false
+  nextTick(() => helpTrigger.value?.focus())
+}
+
+function handleHelpKeydown(event) {
+  if (event.key === 'Escape') {
+    event.preventDefault()
+    closeHelpDrawer()
+    return
+  }
+  if (event.key !== 'Tab' || !helpDrawer.value) return
+  const focusable = [...helpDrawer.value.querySelectorAll('button,[href],input,select,textarea,[tabindex]:not([tabindex="-1"])')]
+    .filter(element => !element.disabled)
+  if (!focusable.length) return
+  const first = focusable[0]
+  const last = focusable.at(-1)
+  if (event.shiftKey && document.activeElement === first) {
+    event.preventDefault()
+    last.focus()
+  } else if (!event.shiftKey && document.activeElement === last) {
+    event.preventDefault()
+    first.focus()
+  }
+}
+
+function handleAuditKeydown(event) {
+  if (event.key === 'Escape') {
+    event.preventDefault()
+    closeAuditDrawer()
+    return
+  }
+  if (event.key !== 'Tab' || !auditDrawer.value) return
+  const focusable = [...auditDrawer.value.querySelectorAll('button,[href],input,select,textarea,[tabindex]:not([tabindex="-1"])')]
+    .filter(element => !element.disabled)
+  if (!focusable.length) return
+  const first = focusable[0]
+  const last = focusable.at(-1)
+  if (event.shiftKey && document.activeElement === first) {
+    event.preventDefault()
+    last.focus()
+  } else if (!event.shiftKey && document.activeElement === last) {
+    event.preventDefault()
+    first.focus()
+  }
+}
+
+function fileExtensionFor(document) {
+  const fileName = document.originalName || document.title || ''
+  const extension = fileName.includes('.') ? fileName.split('.').at(-1).toUpperCase() : ''
+  return /^[A-Z0-9]{1,5}$/.test(extension) ? extension : documentKind(document.mimeType).label
+}
+
+function fileTypeClassFor(document) {
+  const extension = fileExtensionFor(document).toLowerCase()
+  if (extension === 'pdf') return 'pdf'
+  if (['xlsx', 'xls', 'csv'].includes(extension)) return 'xlsx'
+  if (['docx', 'doc', 'rtf'].includes(extension)) return 'docx'
+  if (['png', 'jpg', 'jpeg', 'webp', 'gif'].includes(extension)) return 'image'
+  return documentKind(document.mimeType).className
+}
 async function loadRequestDetails(item) {
   const requestToken = detailRequestGuard.begin(item.backendId)
   selected.value = item
@@ -112,7 +287,7 @@ async function loadRequestDetails(item) {
     if (!detailRequestGuard.isCurrent(requestToken, selected.value?.backendId)) return
     detailError.value = error.status === 404
       ? 'Заявка не найдена или недоступна.'
-      : 'Не удалось загрузить актуальную карточку заявки.'
+      : 'Не удалось загрузить актуальные данные заявки.'
   } finally {
     if (detailRequestGuard.isCurrent(requestToken, selected.value?.backendId)) {
       detailLoading.value = false
@@ -200,7 +375,7 @@ async function uploadDocument(event) {
       : error.status === 422
         ? 'Разрешены PDF, PNG, JPG, DOCX и XLSX размером до 10 МБ.'
         : error.status === 409
-          ? 'На текущем этапе загрузка документов запрещена.'
+          ? 'На текущем этапе загружать документы нельзя.'
           : 'Не удалось загрузить документ.'
   } finally {
     if (documentRequestGuard.isCurrent(requestToken, selected.value?.backendId)) {
@@ -244,10 +419,10 @@ async function addComment() {
   } catch (error) {
     if (!commentRequestGuard.isCurrent(requestToken, selected.value?.backendId)) return
     if (error.status === 422) {
-      commentError.value = 'Комментарий пуст или превышает допустимый размер.'
+      commentError.value = 'Введите комментарий длиной не более 10 000 символов.'
     } else if (error.status === 409) {
       await loadRequestDetails(selected.value)
-      commentError.value = 'На текущем этапе новые комментарии запрещены.'
+      commentError.value = 'На текущем этапе добавлять комментарии нельзя.'
     } else {
       commentError.value = 'Не удалось добавить комментарий.'
     }
@@ -325,7 +500,7 @@ async function recoverConflict(requestId, message) {
     await refreshSelected(requestId)
     actionError.value = `${message} Данные обновлены — проверьте актуальный статус.`
   } catch {
-    actionError.value = `${message} Не удалось обновить данные; устаревшие действия отключены.`
+    actionError.value = `${message} Не удалось обновить данные. Обновите страницу перед следующим действием.`
   }
 }
 
@@ -340,9 +515,10 @@ async function setColorMark(color) {
     if (!colorRequestGuard.isCurrent(requestToken, selected.value?.backendId)) return
     try {
       await refreshSelected(requestId)
+      colorMenu.value?.removeAttribute('open')
     } catch {
       if (!colorRequestGuard.isCurrent(requestToken, selected.value?.backendId)) return
-      colorError.value = 'Метка сохранена, но обновить карточку не удалось.'
+      colorError.value = 'Цвет сохранён, но данные на экране не обновились.'
     }
   } catch (error) {
     if (!colorRequestGuard.isCurrent(requestToken, selected.value?.backendId)) return
@@ -350,8 +526,8 @@ async function setColorMark(color) {
       await recoverConflict(requestId, 'Заявка уже изменена.')
     } else {
       colorError.value = error.status === 403
-        ? 'У вас нет права менять цветовую метку.'
-        : 'Не удалось сохранить цветовую метку. Повторите попытку.'
+        ? 'У вас нет права менять цвет заявки.'
+        : 'Не удалось сохранить цвет. Повторите попытку.'
     }
   } finally {
     if (colorRequestGuard.isCurrent(requestToken, selected.value?.backendId)) {
@@ -364,7 +540,7 @@ async function rejectRequest() {
   if (rejectLoading.value) return
   const requestId = selected.value.backendId
   const lockVersion = selected.value.lockVersion
-  const confirmed = await confirmDialog.ask('Отказать в проведении испытаний по этой заявке?', {
+  const confirmed = await confirmDialog.ask('Отказать в проведении испытаний?', {
     confirmLabel: 'Отказать',
     danger: true,
     reasonField: { required: false, placeholder: 'Например, образец не соответствует требованиям к отбору' },
@@ -381,7 +557,7 @@ async function rejectRequest() {
       await refreshSelected(requestId)
     } catch {
       if (!rejectRequestGuard.isCurrent(requestToken, selected.value?.backendId)) return
-      rejectError.value = 'Отказ сохранён, но обновить карточку не удалось.'
+      rejectError.value = 'Отказ оформлен, но данные на экране не обновились.'
     }
   } catch (error) {
     if (!rejectRequestGuard.isCurrent(requestToken, selected.value?.backendId)) return
@@ -445,7 +621,7 @@ async function assignExecutor() {
   }
   const requestId = selected.value.backendId
   const lockVersion = selected.value.lockVersion
-  if (!(await confirmDialog.ask('Назначить выбранного исполнителя на заявку?', { confirmLabel: 'Назначить' }))) return
+  if (!(await confirmDialog.ask('Назначить выбранного сотрудника исполнителем?', { confirmLabel: 'Назначить' }))) return
   if (selected.value?.backendId !== requestId) return
 
   const requestToken = actionRequestGuard.begin(requestId)
@@ -457,7 +633,7 @@ async function assignExecutor() {
     try {
       await refreshSelected(requestId)
     } catch {
-      if (actionRequestGuard.isCurrent(requestToken, selected.value?.backendId)) actionError.value = 'Исполнитель назначен, но обновить карточку не удалось. Устаревшие действия отключены.'
+      if (actionRequestGuard.isCurrent(requestToken, selected.value?.backendId)) actionError.value = 'Исполнитель назначен, но данные на экране не обновились. Обновите страницу перед следующим действием.'
     }
   } catch (error) {
     if (!actionRequestGuard.isCurrent(requestToken, selected.value?.backendId)) return
@@ -486,7 +662,7 @@ async function claimExpert() {
       await refreshSelected(requestId)
     } catch {
       if (!claimRequestGuard.isCurrent(requestToken, selected.value?.backendId)) return
-      claimError.value = 'Заявка взята в работу, но обновить карточку не удалось. Устаревшие действия отключены.'
+      claimError.value = 'Заявка принята в работу, но данные на экране не обновились. Обновите страницу перед следующим действием.'
     }
   } catch (error) {
     if (!claimRequestGuard.isCurrent(requestToken, selected.value?.backendId)) return
@@ -510,7 +686,7 @@ async function reassignExpert() {
     reassignError.value = 'Выберите эксперта.'
     return
   }
-  if (!(await confirmDialog.ask('Переназначить заявку выбранному эксперту?', { confirmLabel: 'Переназначить' }))) return
+  if (!(await confirmDialog.ask('Передать заявку выбранному эксперту?', { confirmLabel: 'Передать' }))) return
 
   const requestId = selected.value.backendId
   const requestToken = reassignRequestGuard.begin(requestId)
@@ -524,7 +700,7 @@ async function reassignExpert() {
       await refreshSelected(requestId)
     } catch {
       if (!reassignRequestGuard.isCurrent(requestToken, selected.value?.backendId)) return
-      reassignError.value = 'Заявка переназначена, но обновить карточку не удалось. Устаревшие действия отключены.'
+      reassignError.value = 'Заявка переназначена, но данные на экране не обновились. Обновите страницу перед следующим действием.'
     }
   } catch (error) {
     if (!reassignRequestGuard.isCurrent(requestToken, selected.value?.backendId)) return
@@ -556,7 +732,7 @@ async function deleteReport() {
       await refreshSelected(requestId)
     } catch {
       if (!deleteReportRequestGuard.isCurrent(requestToken, selected.value?.backendId)) return
-      deleteReportError.value = 'Отчёт удалён, но обновить карточку не удалось. Устаревшие действия отключены.'
+      deleteReportError.value = 'Отчёт удалён, но данные на экране не обновились. Обновите страницу перед следующим действием.'
     }
   } catch (error) {
     if (!deleteReportRequestGuard.isCurrent(requestToken, selected.value?.backendId)) return
@@ -627,12 +803,12 @@ async function publishOpinion() {
 async function decideSecurity(decision) {
   const isApprove = decision === 'approve'
   const confirmed = await confirmDialog.ask(
-    isApprove ? 'Согласовать заключение и завершить заявку?' : 'Вернуть заявку исполнителю с указанной причиной?',
+    isApprove ? 'Согласовать заключение и завершить заявку?' : 'Вернуть заявку исполнителю на доработку?',
     isApprove
-      ? { confirmLabel: 'Согласовать', confirm: true }
+      ? { confirmLabel: 'Согласовать' }
       : {
         confirmLabel: 'Вернуть',
-        reasonField: { required: true, placeholder: 'Например, требуется уточнить формулировку вывода' },
+        reasonField: { required: true, placeholder: 'Опишите, что нужно исправить' },
       },
   )
   if (!confirmed) return
@@ -649,7 +825,7 @@ async function decideSecurity(decision) {
     try {
       await refreshSelected(requestId)
     } catch {
-      actionError.value = 'Решение сохранено, но обновить карточку не удалось. Устаревшие действия отключены.'
+      actionError.value = 'Решение сохранено, но данные на экране не обновились. Обновите страницу перед следующим действием.'
     }
   } catch (error) {
     if (!securityRequestGuard.isCurrent(requestToken, selected.value?.backendId)) return
@@ -672,7 +848,7 @@ async function decideSecurity(decision) {
 async function startRequest() {
   const requestId = selected.value.backendId
   const lockVersion = selected.value.lockVersion
-  if (!(await confirmDialog.ask('Перевести заявку в работу?', { confirmLabel: 'Начать работу' }))) return
+  if (!(await confirmDialog.ask('Начать работу по заявке?', { confirmLabel: 'Начать работу' }))) return
   if (selected.value?.backendId !== requestId) return
 
   const requestToken = actionRequestGuard.begin(requestId)
@@ -685,7 +861,7 @@ async function startRequest() {
     try {
       await refreshSelected(requestId)
     } catch {
-      if (actionRequestGuard.isCurrent(requestToken, selected.value?.backendId)) actionError.value = 'Заявка переведена в работу, но обновить карточку не удалось. Устаревшие действия отключены.'
+      if (actionRequestGuard.isCurrent(requestToken, selected.value?.backendId)) actionError.value = 'Заявка переведена в работу, но данные на экране не обновились. Обновите страницу перед следующим действием.'
     }
   } catch (error) {
     if (!actionRequestGuard.isCurrent(requestToken, selected.value?.backendId)) return
@@ -732,8 +908,8 @@ async function suspendOrResumeRequest(action) {
     } catch {
       if (!suspendResumeRequestGuard.isCurrent(requestToken, selected.value?.backendId)) return
       suspendResumeError.value = isSuspend
-        ? 'Работа приостановлена, но обновить карточку не удалось. Устаревшие действия отключены.'
-        : 'Работа возобновлена, но обновить карточку не удалось. Устаревшие действия отключены.'
+        ? 'Работа приостановлена, но данные на экране не обновились. Обновите страницу перед следующим действием.'
+        : 'Работа возобновлена, но данные на экране не обновились. Обновите страницу перед следующим действием.'
     }
   } catch (error) {
     if (!suspendResumeRequestGuard.isCurrent(requestToken, selected.value?.backendId)) return
@@ -763,6 +939,7 @@ function resetRequestLocalState() {
   commentDraft.value = ''
   opinionDraft.value = ''
   showOpinionModal.value = false
+  showHelpDrawer.value = false
   departmentDraft.value = ''
   showDepartmentModal.value = false
   startHintRevealed.value = false
@@ -797,210 +974,178 @@ onBeforeUnmount(() => {
 })
 </script>
 <template>
-  <section class="page request-page">
-    <p v-if="detailLoading" class="detail-state">Загрузка актуальной карточки…</p>
+  <section class="page request-page screen-panel" :class="{ 'screen-panel--active': hasRequestContent }">
+    <p v-if="detailLoading" class="detail-state">Загрузка данных заявки…</p>
     <p v-if="detailError" class="detail-state error">{{ detailError }}</p>
-    <article class="card object-band">
+    <article v-if="hasRequestContent && !detailError" class="card object-band request-entity-head">
+      <button type="button" class="request-corner-back" :class="`request-corner-${selected.color}`" aria-label="Вернуться к списку заявок" @click="emit('close')">
+        <svg class="request-corner-shape" viewBox="0 0 52 52" aria-hidden="true">
+          <path d="M15 1h31.5c4 0 5.9 4.8 3.1 7.6l-41 41C5.8 52.4 1 50.5 1 46.5V15C1 7.3 7.3 1 15 1Z" />
+          <path class="request-corner-edge" d="M49.6 8.6 8.6 49.6" />
+        </svg>
+        <AppIcon class="request-corner-arrow" name="arrow-left" :size="16" />
+      </button>
       <div class="object-status-row">
         <span class="badge" :class="selected.tone">{{ selected.status }}</span>
-        <div v-if="selected.canSetColor" class="color-picker inline">
-          <button
-            v-for="color in REQUEST_COLORS"
-            :key="color"
-            type="button"
-            class="color-swatch"
-            :class="[color, { active: selected.color === color }]"
-            :disabled="colorLoading"
-            :title="color"
-            @click="setColorMark(color)"
-          ></button>
-        </div>
+        <details v-if="selected.canSetColor" ref="colorMenu" class="request-color-control">
+          <summary><span class="request-color-dot" :class="selected.color" aria-hidden="true"></span>Цвет</summary>
+          <div class="request-color-menu" role="group" aria-label="Цвет заявки в реестре">
+            <button v-for="color in REQUEST_COLORS" :key="color" type="button" :class="{ active: selected.color === color }" :disabled="colorLoading" @click="setColorMark(color)"><span>{{ colorLabel(color) }}</span><span class="request-color-dot" :class="color" aria-hidden="true"></span></button>
+          </div>
+        </details>
       </div>
       <p v-if="colorError" class="action-error">{{ colorError }}</p>
-      <h4 class="object-title">{{ selected.product }}</h4>
-      <div class="facts-row">
-        <div class="fact"><span>Подразделение</span><b>{{ selected.department }}</b><button v-if="selected.canEditDepartment" type="button" class="secondary" @click="openDepartmentModal">Изменить</button></div>
-        <div class="fact"><span>Производитель</span><b>{{ selected.manufacturer || '—' }}</b></div>
-        <div class="fact"><span>Поставщик</span><b>{{ selected.supplier }}</b></div>
-        <div class="fact"><span>Количество образцов</span><b>{{ selected.sampleQuantity || '—' }} шт.</b></div>
-      </div>
-      <div class="method-row"><span>Метод испытаний</span><p>{{ selected.testMethod || '—' }}</p></div>
+      <h2 class="object-title">{{ selected.product }}</h2>
+      <p class="request-entity-context">{{ selected.manufacturer || 'Производитель не указан' }} · {{ selected.sampleQuantity || '—' }} шт.</p>
+      <section id="request-overview" class="request-overview" aria-labelledby="overview-title">
+        <h3 id="overview-title" class="visually-hidden">Ключевые сведения</h3>
+        <div class="facts-row">
+          <div class="fact"><span>Подразделение</span><b>{{ selected.department }}</b><button v-if="selected.canEditDepartment" type="button" class="secondary" @click="openDepartmentModal">Изменить</button></div>
+          <div class="fact"><span>Производитель</span><b>{{ selected.manufacturer || '—' }}</b></div>
+          <div class="fact"><span>Поставщик</span><b>{{ selected.supplier }}</b></div>
+          <div class="fact"><span>Количество образцов</span><b>{{ selected.sampleQuantity || '—' }} шт.</b></div>
+        </div>
+        <div class="method-row"><span>Метод испытаний</span><p>{{ selected.testMethod || '—' }}</p></div>
+      </section>
     </article>
-    <div class="request-grid">
+    <div v-if="hasRequestContent && !detailError" class="request-grid">
       <div class="stack">
-        <article v-if="hasHeroAction || actionError" class="card hero">
-          <div v-if="selected.canAssignExecutor || selected.canReject" class="hero-block">
-            <div class="action-row action-row--manager has-help">
-              <label v-if="selected.canAssignExecutor" class="inline-field"><span class="visually-hidden">Исполнитель ИЦ</span><select v-model="executorChoice" :disabled="actionLoading" aria-label="Исполнитель ИЦ"><option value="">Выберите сотрудника</option><option v-for="executor in executors" :key="executor.id" :value="executor.id">{{ executor.displayName }}</option></select></label>
-              <button v-if="selected.canAssignExecutor" type="button" class="primary" :disabled="actionLoading || !executorChoice" @click="assignExecutor">{{ actionLoading ? 'Сохранение…' : (selected.executorId ? 'Переназначить' : 'Назначить') }}</button>
-              <button v-if="selected.canStart" type="button" class="primary" :class="{ 'is-disabled': !canStartAction }" :aria-disabled="!canStartAction" :disabled="actionLoading" @click="handleStartClick">{{ actionLoading ? 'Запуск…' : 'Начать работу' }}</button>
-              <button v-else-if="selected.canSuspend" type="button" class="secondary" :disabled="suspendResumeLoading" @click="suspendOrResumeRequest('suspend')">{{ suspendResumeLoading ? 'Сохранение…' : 'Приостановить работу' }}</button>
-              <button v-else-if="selected.canResume" type="button" class="primary" :disabled="suspendResumeLoading" @click="suspendOrResumeRequest('resume')">{{ suspendResumeLoading ? 'Сохранение…' : 'Возобновить работу' }}</button>
-              <button v-if="selected.canReject" type="button" class="secondary danger" :disabled="rejectLoading" @click="rejectRequest">{{ rejectLoading ? 'Сохранение…' : 'Отказать в проведении испытаний' }}</button>
-              <a class="help-icon" href="/help/assignment.html" target="_blank" title="Инструкция по назначению и началу работы" aria-label="Инструкция по назначению и началу работы">?</a>
+        <section class="card process-section request-process" aria-labelledby="process-title">
+          <div class="section-title"><h3 id="process-title">Процесс заявки</h3><button ref="auditTrigger" type="button" class="request-text-button" @click="openAuditDrawer">Подробная история</button></div>
+          <ol class="process-timeline">
+            <li v-for="step in processSteps" :key="step.label" :class="step.state"><span class="process-node" aria-hidden="true"></span><b>{{ step.label }}</b><small>{{ step.state === 'current' ? 'Текущий этап' : step.state === 'done' ? 'Завершено' : 'Ожидается' }}</small></li>
+          </ol>
+          <div v-if="hasHeroAction || actionError" class="request-process-action">
+            <div class="request-process-action-main">
+              <div class="request-action-context"><span>Следующий шаг</span><b>{{ actionPrompt }}</b></div>
+              <div class="request-action-bar">
+                <div v-if="selected.canAssignExecutor" class="request-action-group">
+                  <select v-model="executorChoice" :disabled="actionLoading" aria-label="Исполнитель ИЦ"><option value="">Выберите исполнителя</option><option v-for="executor in executors" :key="executor.id" :value="executor.id">{{ executor.displayName }}</option></select>
+                  <button type="button" :class="selected.executorId ? 'secondary' : 'primary'" :disabled="actionLoading || !executorChoice" @click="assignExecutor">{{ actionLoading ? 'Сохранение…' : (selected.executorId ? 'Переназначить' : 'Назначить') }}</button>
+                </div>
+                <div v-if="selected.canStart || selected.canSuspend || selected.canResume" class="request-action-group">
+                  <button v-if="selected.canStart" type="button" :class="[selected.executorId ? 'primary' : 'secondary', { 'is-disabled': !canStartAction }]" :aria-disabled="!canStartAction" :disabled="actionLoading" @click="handleStartClick">{{ actionLoading ? 'Запуск…' : 'Начать работу' }}</button>
+                  <button v-else-if="selected.canSuspend" type="button" class="secondary" :disabled="suspendResumeLoading" @click="suspendOrResumeRequest('suspend')">{{ suspendResumeLoading ? 'Сохранение…' : 'Приостановить' }}</button>
+                  <button v-else-if="selected.canResume" type="button" class="primary" :disabled="suspendResumeLoading" @click="suspendOrResumeRequest('resume')">{{ suspendResumeLoading ? 'Сохранение…' : 'Возобновить' }}</button>
+                </div>
+                <div v-if="selected.canUploadReport || selected.canDeleteReport" class="request-action-group">
+                  <label v-if="selected.canUploadReport" class="primary upload-button">{{ reportLoading ? 'Загрузка…' : 'Загрузить отчёт' }}<input type="file" :disabled="reportLoading" accept=".pdf,application/pdf" @change="uploadReport" /></label>
+                  <button v-if="selected.canDeleteReport" type="button" class="secondary danger" :disabled="deleteReportLoading" @click="deleteReport">{{ deleteReportLoading ? 'Удаление…' : 'Удалить отчёт' }}</button>
+                </div>
+                <div v-if="selected.canClaimExpert" class="request-action-group"><button type="button" class="primary" :disabled="claimLoading" @click="claimExpert">{{ claimLoading ? 'Сохранение…' : 'Взять в работу' }}</button></div>
+                <div v-if="selected.canPublishOpinion || selected.canReassignExpert" class="request-action-group">
+                  <button v-if="selected.canPublishOpinion" type="button" class="primary" :disabled="opinionLoading" @click="openOpinionModal">Написать заключение</button>
+                  <select v-if="selected.canReassignExpert" v-model="expertChoice" :disabled="reassignLoading" aria-label="Новый эксперт"><option value="">Выберите эксперта</option><option v-for="expert in experts.filter(candidate => candidate.id !== selected.expertId)" :key="expert.id" :value="expert.id">{{ expert.displayName }}</option></select>
+                  <button v-if="selected.canReassignExpert" type="button" class="secondary" :disabled="reassignLoading || !expertChoice" @click="reassignExpert">{{ reassignLoading ? 'Передача…' : 'Передать' }}</button>
+                </div>
+                <div v-if="selected.canSecurityDecide" class="request-action-group">
+                  <button type="button" class="primary" :disabled="securityLoading" @click="decideSecurity('approve')">{{ securityLoading ? 'Сохранение…' : 'Согласовать' }}</button>
+                  <button type="button" class="secondary" :disabled="securityLoading" @click="decideSecurity('return')">Вернуть в работу</button>
+                </div>
+                <div v-if="selected.canReject || selected.canWithdraw" class="request-action-group request-action-group--danger">
+                  <button v-if="selected.canReject" type="button" class="request-danger-action" :disabled="rejectLoading" @click="rejectRequest">{{ rejectLoading ? 'Сохранение…' : 'Отказать' }}</button>
+                  <button v-if="selected.canWithdraw" type="button" class="request-danger-action" :disabled="withdrawLoading" @click="withdrawRequest">{{ withdrawLoading ? 'Сохранение…' : 'Отозвать' }}</button>
+                </div>
+              </div>
+              <button v-if="actionHelp" ref="helpTrigger" type="button" class="request-action-help" :aria-label="actionHelp.label" :title="actionHelp.label" @click="openHelpDrawer"><AppIcon name="help" :size="16" /></button>
             </div>
             <p v-if="selected.canStart && startHintRevealed && startHint" class="hero-hint">{{ startHint }}</p>
-            <p v-if="suspendResumeError" class="action-error">{{ suspendResumeError }}</p>
-            <p v-if="rejectError" class="action-error">{{ rejectError }}</p>
+            <p v-for="error in [suspendResumeError, rejectError, reportError, deleteReportError, claimError, reassignError, securityError, withdrawError, actionError].filter(Boolean)" :key="error" class="action-error">{{ error }}</p>
           </div>
+        </section>
 
-          <div v-if="!selected.canAssignExecutor && !selected.canReject && (selected.canStart || selected.canSuspend || selected.canResume)" class="hero-block">
-            <div class="action-row action-row--workflow has-help">
-              <button v-if="selected.canStart" type="button" class="primary" :class="{ 'is-disabled': !canStartAction }" :aria-disabled="!canStartAction" :disabled="actionLoading" @click="handleStartClick">{{ actionLoading ? 'Запуск…' : 'Начать работу' }}</button>
-              <button v-else-if="selected.canSuspend" type="button" class="secondary" :disabled="suspendResumeLoading" @click="suspendOrResumeRequest('suspend')">{{ suspendResumeLoading ? 'Сохранение…' : 'Приостановить работу' }}</button>
-              <button v-else-if="selected.canResume" type="button" class="primary" :disabled="suspendResumeLoading" @click="suspendOrResumeRequest('resume')">{{ suspendResumeLoading ? 'Сохранение…' : 'Возобновить работу' }}</button>
-              <a class="help-icon" href="/help/assignment.html" target="_blank" title="Инструкция по назначению и началу работы" aria-label="Инструкция по назначению и началу работы">?</a>
-            </div>
-            <p v-if="selected.canStart && startHintRevealed && startHint" class="hero-hint">{{ startHint }}</p>
-            <p v-if="suspendResumeError" class="action-error">{{ suspendResumeError }}</p>
-          </div>
-
-          <div v-if="selected.canUploadReport || selected.canDeleteReport" class="hero-block">
-            <h4>{{ !selected.canUploadReport ? 'Отчёт испытаний' : selected.canDeleteReport ? 'Загрузить новую версию отчёта' : 'Загрузите отчёт испытаний' }}</h4>
-            <p v-if="selected.canUploadReport && !selected.canDeleteReport" class="hero-sub">Заявка перейдёт на подготовку экспертного заключения сразу после загрузки</p>
-            <div class="hero-actions">
-              <label v-if="selected.canUploadReport" class="primary upload-button">{{ reportLoading ? 'Загрузка отчёта…' : 'Загрузить отчёт испытаний' }}<input type="file" :disabled="reportLoading" accept=".pdf,application/pdf" @change="uploadReport" /></label>
-              <button v-if="selected.canDeleteReport" type="button" class="secondary danger" :disabled="deleteReportLoading" @click="deleteReport">{{ deleteReportLoading ? 'Удаление…' : 'Удалить отчёт' }}</button>
-            </div>
-            <p v-if="reportError" class="action-error">{{ reportError }}</p>
-            <p v-if="deleteReportError" class="action-error">{{ deleteReportError }}</p>
-            <a v-if="selected.canUploadReport" class="help-icon" href="/help/report.html" target="_blank" title="Инструкция по загрузке отчёта испытаний" aria-label="Инструкция по загрузке отчёта испытаний">?</a>
-          </div>
-
-          <div v-if="selected.canClaimExpert" class="hero-block">
-            <h4>Взять заявку в работу</h4>
-            <p class="hero-sub">Вы станете экспертом, готовящим заключение по этой заявке</p>
-            <div class="hero-actions"><button type="button" class="primary" :disabled="claimLoading" @click="claimExpert">{{ claimLoading ? 'Сохранение…' : 'Взять в работу' }}</button></div>
-            <p v-if="claimError" class="action-error">{{ claimError }}</p>
-            <a class="help-icon" href="/help/expert-opinion.html" target="_blank" title="Инструкция по формированию заключения" aria-label="Инструкция по формированию заключения">?</a>
-          </div>
-
-          <div v-if="selected.canPublishOpinion || selected.canReassignExpert" class="hero-block">
-            <div class="action-row action-row--expert has-help">
-              <div v-if="selected.canPublishOpinion" class="expert-action-group expert-action-group--primary">
-                <span class="action-group-label">Заключение</span>
-                <button type="button" class="primary" :disabled="opinionLoading" @click="openOpinionModal">Написать заключение</button>
-              </div>
-              <div v-if="selected.canReassignExpert" class="expert-action-group expert-action-group--reassign">
-                <span class="action-group-label">Переназначение</span>
-                <select v-model="expertChoice" :disabled="reassignLoading" aria-label="Новый эксперт"><option value="">Выберите эксперта</option><option v-for="expert in experts.filter(candidate => candidate.id !== selected.expertId)" :key="expert.id" :value="expert.id">{{ expert.displayName }}</option></select>
-                <button type="button" class="secondary" :disabled="reassignLoading || !expertChoice" @click="reassignExpert">{{ reassignLoading ? 'Сохранение…' : 'Переназначить' }}</button>
-              </div>
-              <a class="help-icon" href="/help/expert-opinion.html" target="_blank" title="Инструкция по формированию заключения" aria-label="Инструкция по формированию заключения">?</a>
-            </div>
-            <p v-if="reassignError" class="action-error">{{ reassignError }}</p>
-          </div>
-
-          <div v-if="selected.canSecurityDecide" class="hero-block">
-            <div class="action-row has-help">
-              <button type="button" class="primary confirm" :disabled="securityLoading" @click="decideSecurity('approve')">{{ securityLoading ? 'Сохранение…' : 'Согласовать и завершить' }}</button>
-              <button type="button" class="secondary" :disabled="securityLoading" @click="decideSecurity('return')">Вернуть в работу</button>
-              <a class="help-icon" href="/help/security-review.html" target="_blank" title="Инструкция по контролю СБ" aria-label="Инструкция по контролю СБ">?</a>
-            </div>
-            <p v-if="securityError" class="action-error">{{ securityError }}</p>
-          </div>
-
-          <div v-if="selected.canWithdraw" class="hero-block">
-            <button type="button" class="secondary danger" :disabled="withdrawLoading" @click="withdrawRequest">{{ withdrawLoading ? 'Сохранение…' : 'Отозвать заявку' }}</button>
-            <p v-if="withdrawError" class="action-error">{{ withdrawError }}</p>
-          </div>
-          <p v-if="actionError" class="action-error">{{ actionError }}</p>
-        </article>
-
-        <article class="card feed">
-          <div class="section-title"><h3>Лента заявки</h3></div>
-          <form v-if="canSubmitComment(selected, detailLoading)" class="comment-input" @submit.prevent="addComment"><span class="avatar small">{{ currentInitials }}</span><input v-model="commentDraft" :disabled="commentLoading" maxlength="10000" placeholder="Оставьте комментарий…" /><button :disabled="commentLoading">➤</button></form>
-          <p v-else class="placeholder-copy">На текущем этапе новые комментарии недоступны.</p>
+        <article id="request-comments" class="card feed request-comments">
+          <div class="section-title"><h3>Лента</h3></div>
           <p v-if="commentError" class="action-error">{{ commentError }}</p>
+          <form v-if="canSubmitComment(selected, detailLoading)" class="comment-input request-comment-composer" @submit.prevent="addComment"><span class="avatar small">{{ currentInitials }}</span><input v-model="commentDraft" :disabled="commentLoading" maxlength="10000" placeholder="Оставьте комментарий…" /><button :disabled="commentLoading" aria-label="Отправить комментарий"><AppIcon name="send" :size="16" /></button></form>
+          <p v-else class="placeholder-copy request-comment-unavailable">На текущем этапе добавлять комментарии нельзя.</p>
           <div class="stream">
-            <div v-for="entry in feed" :key="`${entry.type}-${entry.id}`" class="entry" :class="{ system: entry.type === 'milestone' }">
-              <span class="avatar small" :class="{ 'blue-avatar': entry.type === 'comment' }">●</span>
+            <div v-for="entry in feed" :key="`${entry.type}-${entry.id}`" class="entry" :class="{ system: entry.type !== 'comment' }">
+              <span v-if="entry.type === 'comment'" class="avatar small" :class="avatarClassForAuthor(entry.author)">{{ initialsFor(entry.author) }}</span>
+              <span v-else class="request-feed-event-actor" aria-hidden="true"><span class="avatar small request-feed-system-avatar">{{ initialsFor(entry.actor) }}</span><span class="request-feed-event-mark" :class="eventIconTone(entry.action)"><AppIcon :name="eventIcon(entry.action)" :size="10" /></span></span>
               <div class="entry-body">
-                <template v-if="entry.type === 'milestone'">
-                  <div class="entry-head"><b>{{ entry.actor }} — {{ entry.description }}</b><time>{{ entry.occurredAt }} · {{ entry.ruleId }}</time></div>
-                  <button v-if="entry.versionId && entry.originalName" type="button" class="feed-document-link" @click="downloadDocument(entry)">{{ entry.originalName }}</button>
-                </template>
-                <template v-else>
-                  <div class="entry-head"><b>{{ entry.author }}</b><time>{{ entry.createdAt }}</time></div>
-                  <p>{{ entry.body }}</p>
-                </template>
+                <div class="entry-head"><b>{{ entry.type === 'comment' ? entry.author : entry.actor }}</b><time>{{ entry.type === 'comment' ? entry.createdAt : entry.occurredAt }}</time></div>
+                <p>{{ entry.type === 'comment' ? entry.body : entry.description }}</p>
+                <button v-if="entry.versionId && entry.originalName" type="button" class="request-audit-file request-feed-file" :aria-label="`Скачать ${entry.originalName}`" @click="downloadDocument(entry)"><span class="request-file-thumb request-audit-file-thumb" aria-hidden="true"><span class="request-file-lines"></span><span class="request-file-type" :class="fileTypeClassFor(entry)">{{ fileExtensionFor(entry) }}</span></span><span><b :title="entry.originalName">{{ entry.originalName }}</b><small>Скачать вложение</small></span><span class="request-file-action" aria-hidden="true"><AppIcon name="download" :size="14" /></span></button>
               </div>
             </div>
           </div>
-          <p v-if="!feed.length" class="placeholder-copy">Лента пока пуста.</p>
-          <button v-if="selected.commentsPage?.hasMore" class="secondary" :disabled="olderCommentsLoading" @click="loadOlderComments">{{ olderCommentsLoading ? 'Загрузка…' : 'Показать предыдущие' }}</button>
+          <p v-if="!feed.length" class="placeholder-copy">Событий пока нет.</p>
+          <button v-if="selected.commentsPage?.hasMore" class="secondary" :disabled="olderCommentsLoading" @click="loadOlderComments">{{ olderCommentsLoading ? 'Загрузка…' : 'Показать ранние комментарии' }}</button>
         </article>
       </div>
       <aside class="stack side-column">
-        <article class="card"><h3>Статус</h3>
-          <div class="fact-list">
-            <div class="fact"><span>Инициатор</span><b>{{ selected.initiator }}</b></div>
-            <div class="fact"><span>Исполнитель</span><b>{{ selected.executor }}</b></div>
-            <div class="fact"><span>Эксперт</span><b>{{ selected.expert }}</b></div>
-            <div class="fact"><span>Отметка СБ</span><b><span class="security-mark-icon" :class="selected.securityMarkDisplay?.className" :title="selected.securityMarkDisplay?.label" :aria-label="selected.securityMarkDisplay?.label"><svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path :d="selected.securityMarkDisplay?.path" /></svg></span></b></div>
-          </div>
+        <article class="card request-participants"><h3>Участники</h3>
+          <div v-for="person in participants" :key="`${person.role}-${person.name}`" class="request-person-row"><span class="avatar small" :class="avatarRoleClass(person.roleCode)">{{ initialsFor(person.name) }}</span><span><b>{{ person.name }}</b><small>{{ person.role }}</small></span></div>
+          <section class="request-security-section" aria-labelledby="security-control-title"><h3 id="security-control-title">Контроль СБ</h3><div class="request-security-status"><span class="security-mark-icon" :class="selected.securityMarkDisplay?.className" aria-hidden="true"><svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" focusable="false"><path :d="selected.securityMarkDisplay?.path" /></svg></span><span><b>{{ selected.securityMarkDisplay?.label }}</b><small>Статус проверки</small></span></div></section>
         </article>
-        <article class="card documents"><h3>Документы <span>{{ selected.documents?.length || 0 }}</span></h3>
-          <button v-for="document in selected.documents || []" :key="document.versionId" class="document-row" @click="downloadDocument(document)"><span class="doc-icon" :class="documentKind(document.mimeType).className">{{ documentKind(document.mimeType).label }}</span><span><b>{{ document.title }}</b><small>Версия {{ document.version }} · {{ document.size }} · {{ document.createdAt }}</small></span></button>
+        <article id="request-documents" class="card documents request-documents"><div class="section-title request-documents-head"><h3>Документы <span class="request-document-count" :aria-label="`Документов: ${selected.documents?.length || 0}`">{{ selected.documents?.length || 0 }}</span></h3><label v-if="selected.canUploadDocument" class="request-document-upload"><AppIcon v-if="!documentLoading" name="plus" :size="14" />{{ documentLoading ? 'Загрузка…' : 'Добавить' }}<input type="file" :disabled="documentLoading" accept=".pdf,.png,.jpg,.jpeg,.docx,.xlsx" @change="uploadDocument" /></label></div>
+          <section v-for="group in documentGroups" :key="group.key" class="request-document-group" :aria-labelledby="`document-group-${group.key}`"><h4 :id="`document-group-${group.key}`">{{ group.label }} <span>{{ group.items.length }}</span></h4><button v-for="document in group.items" :key="document.versionId" class="document-row request-file-card" :aria-label="`Скачать ${document.title}, версия ${document.version}`" @click="downloadDocument(document)"><span class="request-file-thumb" aria-hidden="true"><span class="request-file-lines"></span><span class="request-file-type" :class="fileTypeClassFor(document)">{{ fileExtensionFor(document) }}</span></span><span class="request-file-copy"><b :title="document.title">{{ document.title }}</b><small>Версия {{ document.version }} · {{ document.size }}</small><small>{{ document.createdAt }}</small></span><span class="request-file-action" aria-hidden="true"><AppIcon name="download" :size="14" /></span></button></section>
           <p v-if="!selected.documents?.length" class="placeholder-copy">Документов пока нет.</p>
-          <label v-if="selected.canUploadDocument" class="secondary upload-button">{{ documentLoading ? 'Загрузка…' : 'Загрузить документ' }}<input type="file" :disabled="documentLoading" accept=".pdf,.png,.jpg,.jpeg,.docx,.xlsx" @change="uploadDocument" /></label>
           <p v-if="documentError" class="action-error">{{ documentError }}</p>
         </article>
       </aside>
     </div>
   </section>
-  <div v-if="confirmDialog.state.open" class="overlay" @click.self="confirmDialog.cancel">
-    <div class="modal confirm-modal">
-      <p>{{ confirmDialog.state.message }}</p>
-      <label v-if="confirmDialog.state.reasonField" class="confirm-reason-field">
-        Причина{{ confirmDialog.state.reasonField.required ? '' : ' (необязательно)' }}
-        <textarea
-          v-model="confirmDialog.state.reasonValue"
-          maxlength="5000"
-          :placeholder="confirmDialog.state.reasonField.placeholder"
-        ></textarea>
-      </label>
-      <div class="modal-actions">
-        <button type="button" class="secondary" @click="confirmDialog.cancel">Отмена</button>
-        <button
-          type="button"
-          class="primary"
-          :class="{ danger: confirmDialog.state.danger, confirm: confirmDialog.state.confirm }"
-          :disabled="confirmDialog.state.reasonField?.required && !confirmDialog.state.reasonValue.trim()"
-          @click="confirmDialog.accept"
-        >{{ confirmDialog.state.confirmLabel }}</button>
+  <div v-if="showAuditDrawer" class="request-drawer-overlay" @click.self="closeAuditDrawer">
+    <aside ref="auditDrawer" class="request-drawer" role="dialog" aria-modal="true" aria-labelledby="audit-title" @keydown="handleAuditKeydown">
+      <header class="request-drawer-head"><div><p>Заявка №{{ selected.id }}</p><h2 id="audit-title">История процесса</h2></div><button type="button" aria-label="Закрыть историю" @click="closeAuditDrawer"><AppIcon name="close" /></button></header>
+      <div class="request-drawer-body">
+        <div v-for="entry in selected.history || []" :key="entry.id" class="request-audit-entry"><span class="request-audit-node" aria-hidden="true"></span><div><b>{{ entry.actor }}</b><p>{{ entry.description }}</p><time>{{ entry.occurredAt }}</time><button v-if="entry.versionId && entry.originalName" type="button" class="request-audit-file" :aria-label="`Скачать ${entry.originalName}`" @click="downloadDocument(entry)"><span class="request-file-thumb request-audit-file-thumb" aria-hidden="true"><span class="request-file-lines"></span><span class="request-file-type" :class="fileTypeClassFor(entry)">{{ fileExtensionFor(entry) }}</span></span><span><b :title="entry.originalName">{{ entry.originalName }}</b><small>Скачать вложение</small></span><span class="request-file-action" aria-hidden="true"><AppIcon name="download" :size="14" /></span></button></div></div>
+        <p v-if="!selected.history?.length" class="placeholder-copy">История процесса пока пуста.</p>
       </div>
-    </div>
+    </aside>
   </div>
+  <div v-if="showHelpDrawer && actionHelp" class="request-drawer-overlay" @click.self="closeHelpDrawer">
+    <aside ref="helpDrawer" class="request-drawer request-help-drawer" role="dialog" aria-modal="true" aria-labelledby="help-title" @keydown="handleHelpKeydown">
+      <header class="request-drawer-head"><div><p>Заявка №{{ selected.id }}</p><h2 id="help-title">Справка</h2></div><button type="button" aria-label="Закрыть справку" @click="closeHelpDrawer"><AppIcon name="close" /></button></header>
+      <HelpArticle :src="actionHelp.href" />
+    </aside>
+  </div>
+  <AppModal :open="confirmDialog.state.open" title="Подтвердите действие" title-id="request-confirm-title" description-id="request-confirm-message" size="small" alert @close="confirmDialog.cancel">
+    <p id="request-confirm-message">{{ confirmDialog.state.message }}</p>
+    <label v-if="confirmDialog.state.reasonField" class="confirm-reason-field">
+      <span class="visually-hidden">{{ confirmDialog.state.reasonField.required ? 'Причина решения' : 'Комментарий к решению (необязательно)' }}</span>
+      <textarea
+        v-model="confirmDialog.state.reasonValue"
+        maxlength="5000"
+        :placeholder="confirmDialog.state.reasonField.placeholder"
+      ></textarea>
+    </label>
+    <template #footer>
+      <button type="button" class="secondary" @click="confirmDialog.cancel">Отмена</button>
+      <button
+        type="button"
+        class="primary"
+        :class="{ danger: confirmDialog.state.danger }"
+        :disabled="confirmDialog.state.reasonField?.required && !confirmDialog.state.reasonValue.trim()"
+        @click="confirmDialog.accept"
+      >{{ confirmDialog.state.confirmLabel }}</button>
+    </template>
+  </AppModal>
 
-  <div v-if="showOpinionModal" class="overlay" @click.self="!opinionLoading && (showOpinionModal = false)">
-    <form class="modal" @submit.prevent="publishOpinion">
-      <div class="modal-head"><h2>Экспертное заключение</h2><button type="button" :disabled="opinionLoading" @click="showOpinionModal = false">×</button></div>
-      <div class="fact-list opinion-summary">
-        <div class="fact"><span>Объект испытаний</span><b>{{ selected.product }}</b></div>
-        <div class="fact"><span>Производитель</span><b>{{ selected.manufacturer || '—' }}</b></div>
-        <div class="fact"><span>Поставщик</span><b>{{ selected.supplier }}</b></div>
-        <div class="fact"><span>Количество образцов</span><b>{{ selected.sampleQuantity || '—' }} шт.</b></div>
-        <div class="fact wide"><span>Метод испытаний</span><b>{{ selected.testMethod || '—' }}</b></div>
-      </div>
-      <textarea v-model="opinionDraft" :disabled="opinionLoading" minlength="10" maxlength="20000" placeholder="Введите итоговое заключение по результатам испытаний"></textarea>
-      <p v-if="opinionError" class="action-error">{{ opinionError }}</p>
-      <div class="modal-actions">
-        <button type="button" class="secondary" :disabled="opinionLoading" @click="showOpinionModal = false">Отмена</button>
-        <button class="primary" :disabled="opinionLoading">{{ opinionLoading ? 'Публикация…' : 'Опубликовать и передать в СБ' }}</button>
-      </div>
-    </form>
-  </div>
-  <div v-if="showDepartmentModal" class="overlay" @click.self="!departmentLoading && (showDepartmentModal = false)">
-    <form class="modal" @submit.prevent="changeDepartment">
-      <div class="modal-head"><h2>Изменить подразделение заявки</h2><button type="button" :disabled="departmentLoading" @click="showDepartmentModal = false">×</button></div>
-      <label>Подразделение<input v-model.trim="departmentDraft" :disabled="departmentLoading" maxlength="255" required /></label>
-      <p class="placeholder-copy">Изменение относится только к этой заявке и будет записано в журнал действий.</p>
-      <p v-if="departmentError" class="action-error">{{ departmentError }}</p>
-      <div class="modal-actions">
-        <button type="button" class="secondary" :disabled="departmentLoading" @click="showDepartmentModal = false">Отмена</button>
-        <button class="primary" :disabled="departmentLoading || !departmentDraft.trim()">{{ departmentLoading ? 'Сохранение…' : 'Сохранить' }}</button>
-      </div>
-    </form>
-  </div>
+  <AppModal :open="showOpinionModal" as="form" title="Экспертное заключение" title-id="opinion-modal-title" size="large" :busy="opinionLoading" @close="showOpinionModal = false" @submit="publishOpinion">
+    <div class="fact-list opinion-summary">
+      <div class="fact"><span>Объект испытаний</span><b>{{ selected.product }}</b></div>
+      <div class="fact"><span>Производитель</span><b>{{ selected.manufacturer || '—' }}</b></div>
+      <div class="fact"><span>Поставщик</span><b>{{ selected.supplier }}</b></div>
+      <div class="fact"><span>Количество образцов</span><b>{{ selected.sampleQuantity || '—' }} шт.</b></div>
+      <div class="fact wide"><span>Метод испытаний</span><b>{{ selected.testMethod || '—' }}</b></div>
+    </div>
+    <textarea v-model="opinionDraft" :disabled="opinionLoading" minlength="10" maxlength="20000" placeholder="Введите итоговое заключение по результатам испытаний"></textarea>
+    <p v-if="opinionError" class="action-error">{{ opinionError }}</p>
+    <template #footer>
+      <button type="button" class="secondary" :disabled="opinionLoading" @click="showOpinionModal = false">Отмена</button>
+      <button class="primary" :disabled="opinionLoading">{{ opinionLoading ? 'Публикация…' : 'Опубликовать и передать в СБ' }}</button>
+    </template>
+  </AppModal>
+  <AppModal :open="showDepartmentModal" as="form" title="Изменить подразделение" title-id="department-modal-title" size="medium" :busy="departmentLoading" @close="showDepartmentModal = false" @submit="changeDepartment">
+    <label>Подразделение<input v-model.trim="departmentDraft" :disabled="departmentLoading" maxlength="255" required /></label>
+    <p class="placeholder-copy">Новое подразделение будет указано только в этой заявке. Изменение появится в журнале действий.</p>
+    <p v-if="departmentError" class="action-error">{{ departmentError }}</p>
+    <template #footer>
+      <button type="button" class="secondary" :disabled="departmentLoading" @click="showDepartmentModal = false">Отмена</button>
+      <button class="primary" :disabled="departmentLoading || !departmentDraft.trim()">{{ departmentLoading ? 'Сохранение…' : 'Сохранить' }}</button>
+    </template>
+  </AppModal>
 </template>

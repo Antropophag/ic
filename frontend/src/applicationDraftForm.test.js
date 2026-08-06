@@ -50,7 +50,7 @@ describe('application create draft form lifecycle', () => {
     state.form.restore()
 
     expect(state.draft).toMatchObject({ productName: 'Восстановлено', sampleQuantity: 4 })
-    expect(state.notices).toEqual(['Черновик заявки восстановлен.'])
+    expect(state.notices).toEqual(['Черновик восстановлен.'])
   })
 
   it('restores and notifies only once', () => {
@@ -61,7 +61,7 @@ describe('application create draft form lifecycle', () => {
     state.form.restore()
 
     expect(state.draft.productName).toBe('Изменено после восстановления')
-    expect(state.notices).toEqual(['Черновик заявки восстановлен.'])
+    expect(state.notices).toEqual(['Черновик восстановлен.'])
   })
 
   it('asks to select files again without restoring file contents', () => {
@@ -70,7 +70,7 @@ describe('application create draft form lifecycle', () => {
     state.form.restore()
 
     expect(state.notices).toEqual([
-      'Черновик заявки восстановлен. Файлы необходимо выбрать повторно.',
+      'Черновик восстановлен. Выберите файлы ещё раз.',
     ])
     expect(loadApplicationDraft(3)).not.toHaveProperty('files')
   })
@@ -86,7 +86,7 @@ describe('application create draft form lifecycle', () => {
     const reopened = formFor(3)
     reopened.form.restore()
     expect(reopened.notices).toEqual([
-      'Черновик заявки восстановлен. Файлы необходимо выбрать повторно.',
+      'Черновик восстановлен. Выберите файлы ещё раз.',
     ])
   })
 

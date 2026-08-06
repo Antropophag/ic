@@ -40,17 +40,19 @@ export function renderUserSwitcher(browserWindow, document, users) {
   }
 
   const panel = document.createElement('aside')
-  panel.setAttribute('aria-label', 'Development tools')
-  panel.style.cssText = 'position:fixed;right:16px;bottom:16px;z-index:9999;padding:10px 12px;border:1px solid #d8b34b;border-radius:10px;background:#fff8dc;box-shadow:0 4px 18px #0002;font:13px sans-serif'
+  panel.className = 'development-tools'
+  panel.setAttribute('aria-label', 'Инструменты разработки')
   const label = document.createElement('label')
-  label.textContent = 'Пользователь: '
+  label.className = 'development-tools-user'
+  const labelText = document.createElement('span')
+  labelText.className = 'visually-hidden'
+  labelText.textContent = 'Пользователь разработки'
   const select = document.createElement('select')
   select.setAttribute('aria-label', 'Пользователь разработки')
   for (const user of users) {
     const option = document.createElement('option')
     option.value = String(user.id)
-    const roles = Array.isArray(user.roles) ? user.roles.join(', ') : ''
-    option.textContent = `${user.displayName} — ${user.position}${roles ? ` [${roles}]` : ''}`
+    option.textContent = `${user.displayName} — ${user.position}`
     option.selected = option.value === current
     select.append(option)
   }
@@ -58,9 +60,22 @@ export function renderUserSwitcher(browserWindow, document, users) {
     browserWindow.localStorage.setItem(storageKey, select.value)
     browserWindow.location.reload()
   })
-  label.append(select)
+  label.append(labelText, select)
   panel.append(label)
-  document.body.append(panel)
+
+  if (users.find(user => String(user.id) === current)?.roles?.includes('administrator')) {
+    const seedButton = document.createElement('button')
+    seedButton.type = 'button'
+    seedButton.className = 'development-tools-seed'
+    seedButton.textContent = 'Заполнить демо'
+    seedButton.addEventListener('click', () => {
+      browserWindow.dispatchEvent(new CustomEvent('ic:request-demo-seed'))
+    })
+    panel.append(seedButton)
+  }
+
+  const target = document.getElementById?.('ic-development-tools-slot') || document.body
+  target.append(panel)
 }
 
 export function startDevelopmentTools(browserWindow, document) {

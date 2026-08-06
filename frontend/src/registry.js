@@ -31,6 +31,15 @@ export function initialsFor(displayName) {
   return (displayName || '').split(' ').filter(Boolean).map(part => part[0]).join('').slice(0, 2).toUpperCase() || '?'
 }
 
+const AVATAR_ROLE_CLASSES = new Set([
+  'employee', 'ic_executor', 'expert', 'ic_manager', 'laboratory_manager', 'security_officer', 'administrator',
+])
+
+export function avatarRoleClass(role) {
+  const normalizedRole = AVATAR_ROLE_CLASSES.has(role) ? role : 'employee'
+  return `avatar-role--${normalizedRole.replaceAll('_', '-')}`
+}
+
 export function fromApi(item) {
   const securityMark = item.security_mark === 'approve' || item.security_mark === 'return' ? item.security_mark : null
   return {
@@ -103,22 +112,22 @@ export function withoutStaleActions(item) {
 }
 
 const HISTORY_LABELS = {
-  create: 'создал(а) заявку',
-  import: 'импортировал(а) заявку',
-  assign_executor: 'назначил(а) исполнителя',
-  claim_expert: 'взял(а) заявку в работу (эксперт)',
-  reassign_expert: 'переназначил(а) эксперта',
-  start: 'перевёл(а) заявку в работу',
-  suspend: 'приостановил(а) работы по заявке',
-  resume: 'возобновил(а) работы по заявке',
-  upload_report: 'загрузил(а) отчёт испытаний',
-  delete_report: 'удалил(а) отчёт испытаний',
-  publish_opinion: 'опубликовал(а) экспертное заключение',
-  security_approve: 'согласовал(а) заключение',
-  security_return: 'вернул(а) заявку в работу',
-  reject: 'отказал(а) в проведении испытаний',
-  withdraw: 'отозвал(а) заявку',
-  change_department: 'изменил(а) подразделение заявки',
+  create: 'Заявка создана',
+  import: 'Заявка импортирована',
+  assign_executor: 'Исполнитель назначен',
+  claim_expert: 'Эксперт взял заявку в работу',
+  reassign_expert: 'Эксперт переназначен',
+  start: 'Заявка переведена в работу',
+  suspend: 'Работа по заявке приостановлена',
+  resume: 'Работа по заявке возобновлена',
+  upload_report: 'Отчёт испытаний загружен',
+  delete_report: 'Отчёт испытаний удалён',
+  publish_opinion: 'Экспертное заключение опубликовано',
+  security_approve: 'Заключение согласовано',
+  security_return: 'Заявка возвращена в работу',
+  reject: 'В проведении испытаний отказано',
+  withdraw: 'Заявка отозвана',
+  change_department: 'Подразделение заявки изменено',
 }
 
 // Действия с явным адресатом (кого назначили) — для остальных targetName
@@ -135,6 +144,7 @@ export function historyFromApi(item) {
   return {
     type: 'milestone',
     id: `${item.kind}-${item.id}`,
+    action: item.action,
     actor: item.actorName,
     description: qualifier ? `${description}: ${qualifier}` : description,
     ruleId: item.ruleId,

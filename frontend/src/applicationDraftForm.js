@@ -32,8 +32,8 @@ export function createApplicationDraftForm({ userId, draft, files, notify }) {
       lastValidQuantity = saved.data.sampleQuantity
       hadFiles = saved.hadFiles
       notify(saved.hadFiles
-        ? 'Черновик заявки восстановлен. Файлы необходимо выбрать повторно.'
-        : 'Черновик заявки восстановлен.')
+        ? 'Черновик восстановлен. Выберите файлы ещё раз.'
+        : 'Черновик восстановлен.')
     }
     restored = true
     return saved

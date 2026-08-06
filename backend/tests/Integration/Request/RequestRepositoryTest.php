@@ -745,7 +745,7 @@ final class RequestRepositoryTest extends IntegrationTestCase
         )->queryOne();
 
         self::assertNotFalse($notification);
-        self::assertStringContainsString('принята в работу', $notification['subject']);
+        self::assertStringContainsString('зарегистрирована', $notification['subject']);
         self::assertStringContainsString('зарегистрирована', $notification['body']);
     }
 
@@ -931,8 +931,8 @@ final class RequestRepositoryTest extends IntegrationTestCase
     public function testReassignmentEmailReflectsInProgressStatus(): void
     {
         // Issue #72/WF-012: переназначенному исполнителю не нужно «принимать
-        // в работу» заявку, которая уже в работе — письмо должно отражать
-        // реальный статус, а не всегда говорить про первичное назначение.
+        // в работу» заявку, по которой уже начались испытания, — письмо должно
+        // отражать реальный статус, а не всегда говорить про первичное назначение.
         $manager = $this->createUser('dev.it.manager7', 'Тестовый руководитель 7');
         $this->grantRole($manager, 'ic_manager');
         $initiator = $this->createUser('dev.it.initiator12', 'Тестовый инициатор 12');
@@ -958,7 +958,7 @@ final class RequestRepositoryTest extends IntegrationTestCase
             [':id' => $requestId],
         );
         self::assertIsString($body);
-        self::assertStringContainsString('уже в работе', $body);
+        self::assertStringContainsString('уже начались испытания', $body);
         self::assertStringNotContainsString('принять её в работу', $body);
     }
 

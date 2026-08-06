@@ -60,14 +60,26 @@ final class DevelopmentRequestSeederTest extends IntegrationTestCase
         $seeder = new DevelopmentRequestSeeder($this->db(), new DocumentStorage($this->storageRoot));
 
         $first = $seeder->seed();
-        self::assertSame(['requests' => 7, 'comments' => 13, 'documents' => 9], $first);
+        self::assertSame(['requests' => 100, 'comments' => 250, 'documents' => 174], $first);
         self::assertSame(
-            ['completed', 'in_progress', 'opinion_preparation', 'registered', 'rejected', 'security_review', 'suspended'],
-            $this->db()->createCommand('SELECT status FROM {{%requests}} ORDER BY status')->queryColumn(),
+            ['completed', 'in_progress', 'opinion_preparation', 'registered', 'rejected', 'security_review', 'suspended', 'withdrawn'],
+            $this->db()->createCommand('SELECT DISTINCT status FROM {{%requests}} ORDER BY status')->queryColumn(),
         );
         self::assertSame(0, (int) $this->scalar('SELECT COUNT(*) FROM {{%requests}} WHERE legacy_id IS NOT NULL'));
-        self::assertSame(['approve', 'return'], $this->db()->createCommand('SELECT decision FROM {{%security_checks}} ORDER BY decision')->queryColumn());
-        self::assertSame(1, (int) $this->scalar("SELECT COUNT(*) FROM {{%request_transitions}} WHERE action = 'security_return'"));
+        self::assertSame(['approve', 'return'], $this->db()->createCommand('SELECT DISTINCT decision FROM {{%security_checks}} ORDER BY decision')->queryColumn());
+        self::assertSame(13, (int) $this->scalar("SELECT COUNT(*) FROM {{%request_transitions}} WHERE action = 'security_return'"));
+        self::assertSame(
+            'Демонстрационная заявка создана. Образцы готовы к передаче в ИЦ.',
+            $this->scalar('SELECT body FROM {{%request_comments}} ORDER BY id LIMIT 1'),
+        );
+        self::assertSame(
+            'Требуется уточнить вывод экспертного заключения.',
+            $this->scalar("SELECT reason FROM {{%security_checks}} WHERE decision = 'return'"),
+        );
+        self::assertSame(
+            'По результатам демонстрационных испытаний образец соответствует требованиям программы.',
+            $this->scalar('SELECT body FROM {{%expert_opinions}} ORDER BY id LIMIT 1'),
+        );
         self::assertSame(
             0,
             (int) $this->scalar(
@@ -84,14 +96,38 @@ final class DevelopmentRequestSeederTest extends IntegrationTestCase
                 "SELECT u.ad_login FROM {{%request_transitions}} t JOIN {{%requests}} r ON r.id = t.request_id JOIN {{%users}} u ON u.id = t.actor_id WHERE r.status = 'security_review' AND t.action = 'publish_opinion'",
             ),
         );
+        self::assertSame(
+            ['docx', 'jpeg', 'jpg', 'pdf', 'png', 'xlsx'],
+            $this->db()->createCommand(
+                "SELECT DISTINCT LOWER(SUBSTRING_INDEX(v.original_name, '.', -1)) "
+                . 'FROM {{%request_document_versions}} v '
+                . 'JOIN {{%request_documents}} d ON d.id = v.document_id '
+                . "WHERE d.document_type = 'attachment' ORDER BY 1",
+            )->queryColumn(),
+        );
+        self::assertSame(
+            0,
+            (int) $this->scalar(
+                "SELECT COUNT(*) FROM {{%request_document_versions}} v "
+                . 'JOIN {{%request_documents}} d ON d.id = v.document_id '
+                . "WHERE d.document_type IN ('report', 'opinion') "
+                . "AND (LOWER(v.original_name) NOT LIKE '%.pdf' OR v.mime_type <> 'application/pdf')",
+            ),
+        );
+        self::assertSame(1, (int) $this->scalar('SELECT MIN(comment_count) FROM (SELECT COUNT(*) comment_count FROM {{%request_comments}} GROUP BY request_id) comments'));
+        self::assertSame(4, (int) $this->scalar('SELECT MAX(comment_count) FROM (SELECT COUNT(*) comment_count FROM {{%request_comments}} GROUP BY request_id) comments'));
+        self::assertGreaterThan(
+            150,
+            (int) $this->scalar('SELECT MAX(CHAR_LENGTH(body)) - MIN(CHAR_LENGTH(body)) FROM {{%request_comments}}'),
+        );
         self::assertSame($userCount, (int) $this->scalar('SELECT COUNT(*) FROM {{%users}}'));
 
         $requestIds = $this->db()->createCommand('SELECT id FROM {{%requests}} ORDER BY id')->queryColumn();
         $second = $seeder->seed();
         self::assertSame($first, $second);
         self::assertNotSame($requestIds, $this->db()->createCommand('SELECT id FROM {{%requests}} ORDER BY id')->queryColumn());
-        self::assertSame(7, (int) $this->scalar('SELECT COUNT(*) FROM {{%requests}}'));
-        self::assertSame(1007, (int) $this->scalar('SELECT value FROM {{%request_number_sequence}} WHERE id = 1'));
+        self::assertSame(100, (int) $this->scalar('SELECT COUNT(*) FROM {{%requests}}'));
+        self::assertSame(1100, (int) $this->scalar('SELECT value FROM {{%request_number_sequence}} WHERE id = 1'));
     }
 
     public function testSeedRequiresDevelopmentUsers(): void
@@ -113,7 +149,7 @@ final class DevelopmentRequestSeederTest extends IntegrationTestCase
         $method = new \ReflectionMethod($seeder, 'insertAttachment');
 
         try {
-            $method->invoke($seeder, $requestId, 'attachment', 'Программа испытаний.txt', $userId, 1);
+            $method->invoke($seeder, $requestId, 'attachment', 'Сопроводительные материалы 002.jpg', 'image/jpeg', $userId, 1);
             self::fail('The duplicate document title must violate the unique constraint.');
         } catch (IntegrityException) {
             self::assertCount(count($filesBefore), glob($this->storageRoot . '/*/*/*') ?: []);

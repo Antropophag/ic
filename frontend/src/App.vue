@@ -1,13 +1,14 @@
 <script setup>
-import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
-import { authApi, setCsrfToken } from './api'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { authApi, devApi, setCsrfToken } from './api'
 import AuthScreen from './components/AuthScreen.vue'
+import AppModal from './components/AppModal.vue'
 import AdminPanel from './components/AdminPanel.vue'
 import RequestDetails from './components/RequestDetails.vue'
 import RequestRegistry from './components/RequestRegistry.vue'
 import { createLatestRequestGuard } from './latestRequestGuard'
 import { requestIdFromLocation, setRequestInUrl } from './requestDeepLink'
-import { initialsFor } from './registry'
+import { avatarRoleClass, initialsFor } from './registry'
 
 const authLoading = ref(true)
 const authUser = ref(null)
@@ -17,6 +18,9 @@ const showAdmin = ref(false)
 const requestWarning = ref('')
 const registryRefreshTrigger = ref(0)
 const authGuard = createLatestRequestGuard()
+const showDemoSeedConfirm = ref(false)
+const demoSeedLoading = ref(false)
+const demoSeedMessage = ref('')
 
 const currentProfile = computed(() => ({
   displayName: authUser.value?.displayName || '',
@@ -26,6 +30,20 @@ const currentProfile = computed(() => ({
 }))
 const currentInitials = computed(() => initialsFor(currentProfile.value.displayName))
 const isAdministrator = computed(() => (currentProfile.value.roles || []).includes('administrator'))
+const accountAvatarClass = computed(() => {
+  const roles = new Set(currentProfile.value.roles || [])
+  const rolePriority = ['administrator', 'security_officer', 'ic_manager', 'laboratory_manager', 'expert', 'ic_executor']
+  const primaryRole = rolePriority.find(role => roles.has(role)) || 'employee'
+  return avatarRoleClass(primaryRole)
+})
+
+watch(authUser, async user => {
+  if (!user) return
+  await nextTick()
+  const slot = document.getElementById('ic-development-tools-slot')
+  const panel = document.querySelector('body > .development-tools')
+  if (slot && panel) slot.append(panel)
+})
 
 async function bootstrapAuth() {
   const token = authGuard.begin(true)
@@ -104,12 +122,37 @@ function handlePopState() {
   selectedRequestTitle.value = null
 }
 
+function requestDemoSeed() {
+  showDemoSeedConfirm.value = true
+  demoSeedMessage.value = ''
+}
+
+async function seedDemoRequests() {
+  if (demoSeedLoading.value) return
+  demoSeedLoading.value = true
+  demoSeedMessage.value = ''
+  try {
+    const result = await devApi.seedRequests()
+    showDemoSeedConfirm.value = false
+    closeRequest({ push: false })
+    showAdmin.value = false
+    registryRefreshTrigger.value += 1
+    demoSeedMessage.value = `Создано демо-заявок: ${result.requests}.`
+  } catch {
+    demoSeedMessage.value = 'Не удалось создать демонстрационные данные.'
+  } finally {
+    demoSeedLoading.value = false
+  }
+}
+
 onMounted(() => {
   window.addEventListener('popstate', handlePopState)
+  window.addEventListener('ic:request-demo-seed', requestDemoSeed)
   bootstrapAuth()
 })
 onBeforeUnmount(() => {
   window.removeEventListener('popstate', handlePopState)
+  window.removeEventListener('ic:request-demo-seed', requestDemoSeed)
   authGuard.invalidate()
 })
 </script>
@@ -128,10 +171,15 @@ onBeforeUnmount(() => {
               </button>
               <div><p class="eyebrow">АО «ЩЛЗ» · Испытательный центр</p><h1>{{ selectedRequestTitle ? `Заявка №${selectedRequestTitle.id} от ${selectedRequestTitle.date}` : selectedRequestId ? 'Заявка' : 'Заявки на проведение испытаний' }}</h1></div>
             </div>
-            <div class="profile">
-              <span class="avatar">{{ currentInitials }}</span><span><b>{{ currentProfile.displayName }}</b><small>{{ currentProfile.position }}</small></span>
-              <button v-if="isAdministrator" type="button" class="secondary" @click="openAdmin">Администрирование</button>
-              <button type="button" class="secondary" @click="logout">Выйти</button>
+            <div class="header-account">
+              <div class="header-account-actions">
+                <button v-if="isAdministrator" type="button" class="secondary" @click="openAdmin">Администрирование</button>
+                <button type="button" class="secondary" @click="logout">Выйти</button>
+              </div>
+              <div id="ic-development-tools-slot" class="development-tools-slot"></div>
+              <div class="profile">
+                <span class="avatar account-avatar" :class="accountAvatarClass">{{ currentInitials }}</span><span><b>{{ currentProfile.displayName }}</b><small>{{ currentProfile.position }}</small></span>
+              </div>
             </div>
           </div>
         </header>
@@ -144,6 +192,12 @@ onBeforeUnmount(() => {
           @select-request="openRequest"
         />
       </main>
+      <AppModal :open="showDemoSeedConfirm" title="Создать демонстрационные данные" title-id="demo-seed-title" description-id="demo-seed-description" size="small" alert :busy="demoSeedLoading" @close="showDemoSeedConfirm = false">
+        <p id="demo-seed-description">Все существующие заявки, комментарии и файлы будут безвозвратно удалены и заменены демонстрационными данными. Пользователи не изменятся.</p>
+        <p v-if="demoSeedMessage" class="form-error" role="alert">{{ demoSeedMessage }}</p>
+        <template #footer><button type="button" class="secondary" :disabled="demoSeedLoading" @click="showDemoSeedConfirm = false">Отмена</button><button type="button" class="primary danger" :disabled="demoSeedLoading" @click="seedDemoRequests">{{ demoSeedLoading ? 'Заполнение…' : 'Заполнить демо' }}</button></template>
+      </AppModal>
+      <p v-if="demoSeedMessage && !showDemoSeedConfirm" class="development-tools-notice" role="status">{{ demoSeedMessage }}</p>
     </template>
   </div>
 </template>

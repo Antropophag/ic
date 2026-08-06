@@ -1,0 +1,2 @@
+# Raw corporate design-reference boards are source assets, not reviewable code.
+design/references/**/*.svg filter=lfs diff=lfs merge=lfs -text linguist-generated=true

@@ -99,10 +99,10 @@ describe('standalone development tools', () => {
       roles: ['employee', 'ic_executor'],
     }])
 
-    const select = document.body.children[0].children[0].children[0]
+    const select = document.body.children[0].children[0].children[1]
     expect(select.children.map((option) => option.textContent)).toEqual([
-      'Manager — IC [employee, administrator]',
-      'Executor — Lab [employee, ic_executor]',
+      'Manager — IC',
+      'Executor — Lab',
     ])
     expect(JSON.stringify(document.body)).not.toContain('must-not-render@example.invalid')
 
@@ -110,6 +110,25 @@ describe('standalone development tools', () => {
     select.dispatchEvent(new Event('change'))
     expect(selectedUserId(browser)).toBe('2')
     expect(reload).toHaveBeenCalledOnce()
+  })
+
+  it('offers demo data only to the selected administrator', () => {
+    const { browserWindow: browser, document } = browserEnvironment()
+    browser.localStorage.setItem('ic.dev.userId', '1')
+    renderUserSwitcher(browser, document, [
+      { id: 1, displayName: 'Admin', position: 'Administrator', roles: ['administrator'] },
+      { id: 2, displayName: 'Employee', position: 'Engineer', roles: ['employee'] },
+    ])
+
+    expect(document.body.children[0].children[1].textContent).toBe('Заполнить демо')
+
+    const second = browserEnvironment()
+    second.browserWindow.localStorage.setItem('ic.dev.userId', '2')
+    renderUserSwitcher(second.browserWindow, second.document, [
+      { id: 1, displayName: 'Admin', position: 'Administrator', roles: ['administrator'] },
+      { id: 2, displayName: 'Employee', position: 'Engineer', roles: ['employee'] },
+    ])
+    expect(second.document.body.children[0].children).toHaveLength(1)
   })
 
   it('replaces an invalid persisted selection with the first available user', () => {

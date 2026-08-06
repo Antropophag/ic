@@ -1,0 +1,65 @@
+# Design knowledge base
+
+Каталог содержит источники дизайн-языка Портала Испытательного центра и
+референсного корпоративного продукта. SVG — это доски компонентов и экранов,
+а не готовые иллюстрации для копирования в интерфейс.
+
+## Структура
+
+| Каталог | Содержимое | Как использовать |
+|---|---|---|
+| [`specifications/`](specifications/) | Каноническое описание дизайн-языка в Markdown и его HTML-представление | Правила композиции, состояний, плотности и применения компонентов |
+| [`tokens/`](tokens/) | Машиночитаемые дизайн-токены | Цвета, размеры, интервалы, радиусы и другие системные значения |
+| [`research/`](research/) | Анализ источников и реестр SVG | Проверка происхождения решений, полноты и ограничений материала |
+| [`prototypes/`](prototypes/) | Интерактивные HTML-референсы экранов Портала ИЦ | Основной ориентир для конкретного экрана; открываются без сборки |
+| [`references/components/`](references/components/) | SVG-доски компонентов и их состояний | Восстановление геометрии и поведения компонента |
+| [`references/screens/`](references/screens/) | Полноэкранные SVG корпоративного продукта | Композиционные паттерны и связи компонентов в реальных сценариях |
+
+## Приоритет источников
+
+При расхождении материалов использовать следующий порядок:
+
+1. Техническое задание и корректная существующая бизнес-логика.
+2. [`Design_Language_Specification.md`](specifications/Design_Language_Specification.md).
+3. Экранный HTML-прототип из [`prototypes/`](prototypes/), соответствующий задаче.
+4. [`design-tokens.json`](tokens/design-tokens.json).
+5. Компонентные SVG из [`references/components/`](references/components/).
+6. Полноэкранные SVG из [`references/screens/`](references/screens/).
+7. Исследовательские сводки из [`research/`](research/).
+
+## Основные экранные прототипы Портала ИЦ
+
+| Файл | Назначение |
+|---|---|
+| [`Portal_IC_registry_reference_v1.html`](prototypes/Portal_IC_registry_reference_v1.html) | Реестр заявок |
+| [`Portal_IC_request_card_reference_v1.html`](prototypes/Portal_IC_request_card_reference_v1.html) | Карточка заявки |
+| [`Portal_IC_admin_reference_v1.html`](prototypes/Portal_IC_admin_reference_v1.html) | Администрирование |
+
+## Карта зависимостей
+
+```text
+ТЗ и бизнес-логика
+        ↓
+Design Language Specification
+        ↓
+Design Tokens ← Source Analysis ← SVG-архив
+        ↓
+HTML-прототип конкретного экрана
+        ↓
+Production-компоненты приложения
+```
+
+## Реестр исследовательских материалов
+
+| Файл | Назначение | Доверие |
+|---|---|---|
+| [`source-analysis.json`](research/source-analysis.json) | Сводка измеренных свойств компонентов и известных ограничений источников | Высокое для числовых фактов, среднее для интерпретаций |
+| [`component-inventory.csv`](research/component-inventory.csv) | Классификация исходных SVG на component boards и product screen boards | Высокое |
+
+## Правила сопровождения
+
+- Новые component boards помещать в `references/components/`, полные экраны — в `references/screens/`.
+- HTML для обсуждения конкретных экранов хранить в `prototypes/`; временные рабочие эксперименты — в корневом `artifacts/`, не в `design/`.
+- Не добавлять `*:Zone.Identifier`, `Thumbs.db`, `.DS_Store`, временные файлы редакторов и Office.
+- Не удалять варианты одного компонента как дубликаты без сравнения содержимого и состояний. Например, три SVG pagination имеют разные контрольные примеры и сохранены намеренно.
+- При перемещении или переименовании источника обновлять этот индекс и `research/component-inventory.csv`.
