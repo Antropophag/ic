@@ -86,16 +86,22 @@ describe('Bitrix file migration tooling', () => {
     expect(await readFile(path, 'utf8')).toBe('{"sourceFileId":"7"}\n')
   })
 
-  test('a concurrent conflicting writer cannot replace published associations', async () => {
+  test('concurrent conflicting writers cannot replace published associations', async () => {
     const directory = await fixtureDirectory()
     const path = join(directory, 'associations.jsonl')
-    const published = [{ sourceFileId: '7' }]
-    await writePrivateJsonLines(path, published)
-    await writeFile(`${path}.lock`, '', { flag: 'wx', mode: 0o600 })
+    const first = [{ sourceFileId: '7' }]
+    const second = [{ sourceFileId: '8' }]
 
-    await expect(writePrivateJsonLines(path, [{ sourceFileId: '8' }])).rejects.toThrow('lock acquisition failed')
-    expect(await readFile(path, 'utf8')).toBe('{"sourceFileId":"7"}\n')
-    expect(await readFile(`${path}.lock`, 'utf8')).toBe('')
+    const results = await Promise.allSettled([
+      writePrivateJsonLines(path, first),
+      writePrivateJsonLines(path, second),
+    ])
+    const published = await readFile(path, 'utf8')
+
+    expect(results.map(({ status }) => status).sort()).toEqual(['fulfilled', 'rejected'])
+    expect(['{"sourceFileId":"7"}\n', '{"sourceFileId":"8"}\n']).toContain(published)
+    await expect(writePrivateJsonLines(path, published.includes('"7"') ? second : first)).rejects.toThrow('does not match')
+    expect(await readFile(path, 'utf8')).toBe(published)
   })
 
   test('streams response to a private object and calculates metadata', async () => {

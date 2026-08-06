@@ -1,6 +1,6 @@
-import { createHash } from 'node:crypto'
+import { createHash, randomUUID } from 'node:crypto'
 import { createReadStream, createWriteStream, existsSync } from 'node:fs'
-import { appendFile, chmod, mkdir, open, readFile, rename, rm, stat, writeFile } from 'node:fs/promises'
+import { appendFile, chmod, link, mkdir, open, readFile, rename, rm, stat, writeFile } from 'node:fs/promises'
 import { dirname, join, resolve } from 'node:path'
 import { createInterface } from 'node:readline'
 import { Readable, Transform } from 'node:stream'
@@ -366,33 +366,24 @@ export function assertOutsideGit(path) {
 
 export async function writePrivateJsonLines(path, records) {
   const contents = records.map((record) => JSON.stringify(record)).join('\n') + '\n'
-  const lockPath = `${path}.lock`
-  let lock
-  try {
-    lock = await open(lockPath, 'wx', 0o600)
-  } catch (error) {
-    throw new Error(`Another process is publishing ${path}; lock acquisition failed.`, { cause: error })
+  if (existsSync(path)) {
+    if (await readFile(path, 'utf8') === contents) return
+    throw new Error(`Existing ${path} does not match the current snapshot.`)
   }
+  const temporary = `${path}.${process.pid}.${randomUUID()}.partial`
   try {
-    if (existsSync(path)) {
-      if (await readFile(path, 'utf8') === contents) return
-      throw new Error(`Existing ${path} does not match the current snapshot.`)
-    }
-    const temporary = `${path}.partial`
+    await writeFile(temporary, contents, { mode: 0o600, flag: 'wx' })
     try {
-      await rm(temporary, { force: true })
-      await writeFile(temporary, contents, { mode: 0o600, flag: 'wx' })
-      await rename(temporary, path)
+      await link(temporary, path)
     } catch (error) {
-      await rm(temporary, { force: true })
+      if (error?.code === 'EEXIST') {
+        if (await readFile(path, 'utf8') === contents) return
+        throw new Error(`Existing ${path} does not match the current snapshot.`, { cause: error })
+      }
       throw error
     }
   } finally {
-    try {
-      await lock.close()
-    } finally {
-      await rm(lockPath, { force: true })
-    }
+    await rm(temporary, { force: true })
   }
 }
 
