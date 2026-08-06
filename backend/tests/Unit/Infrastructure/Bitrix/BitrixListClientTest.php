@@ -29,6 +29,7 @@ final class BitrixListClientTest extends TestCase
 
         self::assertSame(['1', '2'], array_column($items, 'ID'));
         self::assertSame(['lists.element.get', 'lists.element.get'], array_column($transport->calls, 0));
+        self::assertSame(['ID' => 'asc'], $transport->calls[0][1]['ELEMENT_ORDER']);
         self::assertSame(50, $transport->calls[1][1]['start']);
     }
 
@@ -70,5 +71,18 @@ final class BitrixListClientTest extends TestCase
 
         $this->expectException(\RuntimeException::class);
         iterator_to_array((new BitrixListClient($transport, 'lists', 114, 0))->elements());
+    }
+
+    public function testRejectsNegativePageLimitBeforeCallingBitrix(): void
+    {
+        $transport = new class () implements BitrixTransport {
+            public function call(string $method, array $parameters = []): array
+            {
+                \PHPUnit\Framework\Assert::fail('Transport must not be called for an invalid page limit.');
+            }
+        };
+
+        $this->expectException(\RuntimeException::class);
+        iterator_to_array((new BitrixListClient($transport, 'lists', 114, 0))->elements(-1));
     }
 }
