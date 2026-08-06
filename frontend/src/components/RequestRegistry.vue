@@ -12,7 +12,6 @@ import { requestApi } from "../api";
 import { createApplicationDraftForm } from "../applicationDraftForm";
 import { createConfirmDialog } from "../confirmDialog";
 import { triggerBlobDownload } from "../download";
-import { createLatestRequestGuard } from "../latestRequestGuard";
 import { createRequestRegistryLoadLifecycle } from "../requestRegistryLoadLifecycle";
 import AppIcon from "./AppIcon.vue";
 import AppModal from "./AppModal.vue";
@@ -81,9 +80,12 @@ const draft = reactive({
   comment: "",
 });
 const registryLoadLifecycle = createRequestRegistryLoadLifecycle();
-const { registryGuard, dashboardGuard } = registryLoadLifecycle;
-const downloadGuard = createLatestRequestGuard();
-const createRequestGuard = createLatestRequestGuard();
+const {
+  registryGuard,
+  dashboardGuard,
+  downloadGuard,
+  createRequestGuard,
+} = registryLoadLifecycle;
 const confirmDialog = createConfirmDialog();
 const draftForm = createApplicationDraftForm({
   userId: props.currentUserId,
@@ -91,7 +93,6 @@ const draftForm = createApplicationDraftForm({
   files: () => draftFiles.value,
   notify: message => { createNotice.value = message; },
 });
-let searchTimer = null;
 
 function resetCreateForm({ removeStored = false } = {}) {
   if (removeStored) draftForm.remove();
@@ -271,8 +272,7 @@ function reloadFirstPage() {
 
 watch([activeTab, activeAttention, statusFilter, sortDirection], reloadFirstPage);
 watch(query, () => {
-  window.clearTimeout(searchTimer);
-  searchTimer = window.setTimeout(reloadFirstPage, 300);
+  registryLoadLifecycle.scheduleReload(reloadFirstPage);
 });
 watch(draft, draftForm.scheduleSave, { deep: true, flush: "sync" });
 watch(draftFiles, draftForm.scheduleFilesSave, { flush: "sync" });
@@ -295,6 +295,7 @@ watch(
     else {
       registryLoadLifecycle.deactivate();
       showCreate.value = false;
+      createLoading.value = false;
       closeDashboardHelp({ restoreFocus: false });
     }
   },
@@ -373,7 +374,9 @@ async function createRequest() {
   }
   resetCreateForm();
   try {
+    if (!isCurrent()) return;
     await loadRequests({ rethrow: true });
+    if (!isCurrent()) return;
     await loadDashboard();
     if (!isCurrent()) return;
     const createdItem = requests.value.find(
@@ -414,12 +417,9 @@ onMounted(() => {
   loadDashboard();
 });
 onBeforeUnmount(() => {
-  window.clearTimeout(searchTimer);
   window.removeEventListener("pagehide", draftForm.flushSave);
   draftForm.dispose();
   registryLoadLifecycle.deactivate();
-  downloadGuard.invalidate();
-  createRequestGuard.invalidate();
 });
 </script>
 

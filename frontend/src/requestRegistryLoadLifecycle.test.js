@@ -68,4 +68,33 @@ describe('request registry load lifecycle', () => {
 
     expect(state).toEqual({ registry: 'new registry', dashboard: 'new dashboard' })
   })
+
+  it('cancels a scheduled reload and creation side effects on deactivation', async () => {
+    const scheduled = new Map()
+    let timerId = 0
+    const lifecycle = createRequestRegistryLoadLifecycle({
+      setTimeoutFn(callback) {
+        scheduled.set(++timerId, callback)
+        return timerId
+      },
+      clearTimeoutFn(id) {
+        scheduled.delete(id)
+      },
+    })
+    const effects = []
+    lifecycle.scheduleReload(() => effects.push('list'))
+    const createResponse = deferred()
+    const createToken = lifecycle.createRequestGuard.begin(true)
+    const creation = createResponse.promise.then(() => {
+      if (!lifecycle.createRequestGuard.isCurrent(createToken, true)) return
+      effects.push('list', 'dashboard', 'select-request')
+    })
+
+    lifecycle.deactivate()
+    createResponse.resolve()
+    await creation
+    for (const callback of scheduled.values()) callback()
+
+    expect(effects).toEqual([])
+  })
 })
