@@ -40,7 +40,7 @@ final class DevController extends Controller
         4 => [
             'ad_login' => 'dev.expert', 'display_name' => 'Анна Смирнова',
             'email' => 'dev.expert@example.invalid', 'position' => 'Эксперт',
-            'department' => 'Испытательный центр', 'roles' => ['employee', 'expert'],
+            'department' => 'СГК', 'roles' => ['employee', 'expert'],
         ],
         5 => [
             'ad_login' => 'dev.security', 'display_name' => 'Олег Воронцов',
@@ -107,7 +107,7 @@ final class DevController extends Controller
     private const ADDITIONAL_EXPERTS = [
         'dev.expert2' => [
             'display_name' => 'Виктор Дорохов', 'email' => 'dev.expert2@example.invalid',
-            'position' => 'Эксперт', 'department' => 'Испытательный центр', 'roles' => ['employee', 'expert'],
+            'position' => 'Эксперт', 'department' => 'СГК', 'roles' => ['employee', 'expert'],
         ],
     ];
 
