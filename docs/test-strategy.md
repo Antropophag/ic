@@ -62,6 +62,15 @@ health checks, backend Integration, повторный reset, Playwright и за
 При любом исходе teardown удаляет containers, network и test volumes, но
 сохраняет images, dependency caches и Playwright diagnostics.
 
+Playwright сначала запускает обычные сценарии в параллельном проекте
+`chromium`. После их успешного завершения зависимый проект
+`stateful-chromium` одним worker последовательно выполняет
+`idempotency.e2e.js` и `notifications.e2e.js`, чтобы они не конкурировали за
+общее состояние тестовой БД. Если `chromium` падает, зависимый проект
+пропускается. Полный порядок воспроизводится командой `make e2e`; при уже
+поднятом test-окружении отдельный проект можно запустить из `frontend` командой
+`npx playwright test --project=stateful-chromium --no-deps`.
+
 Runtime contracts проверяют реальный LDAP bind и группы, восстановление LDAP,
 SMTP failure/recovery, reconnect scheduler после рестарта MariaDB и SIGTERM.
 Playwright artifacts находятся в `frontend/playwright-report`.
