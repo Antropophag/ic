@@ -110,12 +110,16 @@ test('заявка проходит критический путь до сог�
 
 test('заявка перемещается между персональными очередями ролей', async ({ page, context, baseURL }) => {
   const marker = `E2E-queue-${Date.now()}`
-  const initiator = await apiFor(baseURL, 3)
-  const manager = await apiFor(baseURL, 1)
-  const executor = await apiFor(baseURL, 2)
-  const expert = await apiFor(baseURL, 4)
+  let initiator
+  let manager
+  let executor
+  let expert
 
   try {
+    initiator = await apiFor(baseURL, 3)
+    manager = await apiFor(baseURL, 1)
+    executor = await apiFor(baseURL, 2)
+    expert = await apiFor(baseURL, 4)
     const created = await expectOk(await initiator.post('/api/v1/requests', { data: {
       productName: marker,
       manufacturer: 'Тестовый производитель',
@@ -170,7 +174,7 @@ test('заявка перемещается между персональным�
     await securityPage.getByRole('button', { name: /Проверить СБ/ }).click()
     await expect(securityPage.getByRole('row').filter({ hasText: marker })).toBeVisible()
   } finally {
-    await Promise.all([initiator.dispose(), manager.dispose(), executor.dispose(), expert.dispose()])
+    await Promise.all([initiator, manager, executor, expert].filter(Boolean).map(api => api.dispose()))
   }
 })
 
