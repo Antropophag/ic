@@ -14,12 +14,12 @@ final class AttentionQueueTest extends TestCase
     {
         self::assertSame(
             [
-                'assign_executor' => ['Назначить исполнителя', 'Выберите ответственного за испытания.', [Role::IcManager, Role::LaboratoryManager]],
-                'start_or_resume_work' => ['Начать или возобновить работы', 'Начните зарегистрированные или возобновите приостановленные работы.', [Role::IcExecutor, Role::IcManager, Role::LaboratoryManager]],
-                'upload_report' => ['Загрузить отчёт', 'Добавьте PDF с результатами испытаний.', [Role::IcExecutor, Role::IcManager, Role::LaboratoryManager]],
-                'claim_expert' => ['Взять экспертизу', 'Возьмите заявку для подготовки заключения.', [Role::Expert]],
-                'publish_opinion' => ['Подготовить заключение', 'Опубликуйте заключение и передайте его в СБ.', [Role::Expert]],
-                'security_decision' => ['Проверить СБ', 'Согласуйте заключение или верните заявку.', [Role::SecurityOfficer]],
+                'assign_executor' => ['Назначить исполнителя', 'Назначьте ответственного за проведение испытаний.', [Role::IcManager, Role::LaboratoryManager]],
+                'start_or_resume_work' => ['Начать или возобновить работы', 'Начните работу по зарегистрированным заявкам или возобновите приостановленные.', [Role::IcExecutor, Role::IcManager, Role::LaboratoryManager]],
+                'upload_report' => ['Загрузить отчёт', 'Загрузите отчёт о результатах испытаний в формате PDF.', [Role::IcExecutor, Role::IcManager, Role::LaboratoryManager]],
+                'claim_expert' => ['Взять заявку на экспертизу', 'Возьмите заявку в работу для подготовки заключения.', [Role::Expert]],
+                'publish_opinion' => ['Подготовить заключение', 'Подготовьте и опубликуйте экспертное заключение.', [Role::Expert]],
+                'security_decision' => ['Визировать протокол испытаний', 'Визируйте протокол испытаний либо верните заявку на доработку.', [Role::SecurityOfficer]],
             ],
             array_reduce(
                 AttentionQueue::cases(),

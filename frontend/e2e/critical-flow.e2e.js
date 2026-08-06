@@ -157,11 +157,12 @@ test('заявка перемещается между персональным�
     const expertPage = await context.newPage()
     await useTestIdentity(expertPage, 4)
     await expertPage.goto('/')
-    await expertPage.getByRole('button', { name: /Взять экспертизу/ }).click()
+    await expertPage.getByRole('button', { name: /Взять заявку на экспертизу/ }).click()
     await expect(expertPage.getByRole('row').filter({ hasText: marker })).toBeVisible()
     await expectOk(await expert.post(`/api/v1/requests/${requestId}/expert/claim`, {
       data: { lockVersion: 4 },
     }))
+    await expertPage.reload()
     await expertPage.getByRole('button', { name: /Подготовить заключение/ }).click()
     await expect(expertPage.getByRole('row').filter({ hasText: marker })).toBeVisible()
     await expectOk(await expert.post(`/api/v1/requests/${requestId}/opinion`, {
@@ -171,8 +172,23 @@ test('заявка перемещается между персональным�
     const securityPage = await context.newPage()
     await useTestIdentity(securityPage, 5)
     await securityPage.goto('/')
-    await securityPage.getByRole('button', { name: /Проверить СБ/ }).click()
+    const securityQueue = securityPage.getByRole('button', { name: /Визировать протокол испытаний/ })
+    const securityCountBefore = Number(await securityQueue.locator('.attention-count').innerText())
+    await securityQueue.click()
     await expect(securityPage.getByRole('row').filter({ hasText: marker })).toBeVisible()
+    await securityPage.getByRole('row').filter({ hasText: marker }).click()
+    await securityPage.getByRole('button', { name: 'Согласовать', exact: true }).click()
+    await securityPage.getByRole('alertdialog').getByRole('button', { name: 'Согласовать', exact: true }).click()
+    await expect(securityPage.getByRole('button', { name: 'Согласовать', exact: true })).toHaveCount(0)
+    await Promise.all([
+      securityPage.waitForResponse(response => response.url().includes('/api/v1/requests/dashboard') && response.ok()),
+      securityPage.getByTitle('На главную').click(),
+    ])
+    if (securityCountBefore === 1) {
+      await expect(securityQueue).toHaveCount(0)
+    } else {
+      await expect(securityQueue.locator('.attention-count')).toHaveText(String(securityCountBefore - 1))
+    }
   } finally {
     await Promise.all([initiator, manager, executor, expert].filter(Boolean).map(api => api.dispose()))
   }

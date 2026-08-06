@@ -135,7 +135,7 @@ final class AttentionDashboardTest extends IntegrationTestCase
             $manager,
         );
 
-        self::assertSame(0, $this->queueCount($query->attentionDashboard($manager), 'assign_executor'));
+        $this->assertQueueAbsent($query->attentionDashboard($manager), 'assign_executor');
         self::assertSame(1, $this->queueCount($query->attentionDashboard($executor), 'start_or_resume_work'));
         self::assertSame(1, $query->findPage(
             $executor,
@@ -194,5 +194,11 @@ final class AttentionDashboardTest extends IntegrationTestCase
             }
         }
         self::fail("Queue {$id} is not visible.");
+    }
+
+    /** @param array{categories: list<array{id: string, title: string, description: string, count: int}>} $dashboard */
+    private function assertQueueAbsent(array $dashboard, string $id): void
+    {
+        self::assertNotContains($id, array_column($dashboard['categories'], 'id'));
     }
 }
