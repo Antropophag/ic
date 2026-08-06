@@ -63,6 +63,17 @@ export function renderUserSwitcher(browserWindow, document, users) {
   label.append(labelText, select)
   panel.append(label)
 
+  const guideButton = document.createElement('button')
+  guideButton.type = 'button'
+  guideButton.className = 'development-tools-guide'
+  guideButton.textContent = new URL(browserWindow.location.href).pathname.replace(/\/+$/, '') === '/review-guide'
+    ? 'Гайд открыт'
+    : 'Гайд ревью'
+  guideButton.addEventListener('click', () => {
+    browserWindow.dispatchEvent(new CustomEvent('ic:open-review-guide'))
+  })
+  panel.append(guideButton)
+
   if (users.find(user => String(user.id) === current)?.roles?.includes('administrator')) {
     const seedButton = document.createElement('button')
     seedButton.type = 'button'

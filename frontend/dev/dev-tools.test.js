@@ -120,7 +120,8 @@ describe('standalone development tools', () => {
       { id: 2, displayName: 'Employee', position: 'Engineer', roles: ['employee'] },
     ])
 
-    expect(document.body.children[0].children[1].textContent).toBe('Заполнить демо')
+    expect(document.body.children[0].children[1].textContent).toBe('Гайд ревью')
+    expect(document.body.children[0].children[2].textContent).toBe('Заполнить демо')
 
     const second = browserEnvironment()
     second.browserWindow.localStorage.setItem('ic.dev.userId', '2')
@@ -128,7 +129,23 @@ describe('standalone development tools', () => {
       { id: 1, displayName: 'Admin', position: 'Administrator', roles: ['administrator'] },
       { id: 2, displayName: 'Employee', position: 'Engineer', roles: ['employee'] },
     ])
-    expect(second.document.body.children[0].children).toHaveLength(1)
+    expect(second.document.body.children[0].children).toHaveLength(2)
+  })
+
+  it('opens the review guide without changing identity', () => {
+    const { browserWindow: browser, document, reload } = browserEnvironment()
+    browser.localStorage.setItem('ic.dev.userId', '1')
+    const opened = vi.fn()
+    browser.addEventListener('ic:open-review-guide', opened)
+    renderUserSwitcher(browser, document, [
+      { id: 1, displayName: 'Manager', position: 'IC', roles: ['ic_manager'] },
+    ])
+
+    document.body.children[0].children[1].dispatchEvent(new Event('click'))
+
+    expect(opened).toHaveBeenCalledOnce()
+    expect(selectedUserId(browser)).toBe('1')
+    expect(reload).not.toHaveBeenCalled()
   })
 
   it('replaces an invalid persisted selection with the first available user', () => {
