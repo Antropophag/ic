@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto'
 import { link, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
-import { afterEach, describe, expect, test } from 'vitest'
+import { afterEach, describe, expect, test, vi } from 'vitest'
 import {
   downloadResponse,
   loadCheckpoint,
@@ -16,6 +16,7 @@ import {
 const temporaryDirectories = []
 
 afterEach(async () => {
+  vi.restoreAllMocks()
   await Promise.all(temporaryDirectories.splice(0).map((directory) => rm(directory, { recursive: true, force: true })))
 })
 
@@ -118,6 +119,19 @@ describe('Bitrix file migration tooling', () => {
 
     await expect(readFile(linkedPartial, 'utf8')).rejects.toThrow()
     await expect(readFile(legacyPartial, 'utf8')).rejects.toThrow()
+    expect(await readFile(path, 'utf8')).toBe('{"sourceFileId":"7"}\n')
+  })
+
+  test('matching published associations remain resumable when partial cleanup fails', async () => {
+    const directory = await fixtureDirectory()
+    const path = join(directory, 'associations.jsonl')
+    const records = [{ sourceFileId: '7' }]
+    await writePrivateJsonLines(path, records)
+    await mkdir(`${path}.partial`)
+    const warning = vi.spyOn(process.stderr, 'write').mockReturnValue(true)
+
+    await expect(writePrivateJsonLines(path, records)).resolves.toBeUndefined()
+    expect(warning).toHaveBeenCalledWith(expect.stringContaining('Не удалось очистить partial-файлы'))
     expect(await readFile(path, 'utf8')).toBe('{"sourceFileId":"7"}\n')
   })
 

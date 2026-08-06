@@ -367,8 +367,14 @@ export function assertOutsideGit(path) {
 export async function writePrivateJsonLines(path, records) {
   const contents = records.map((record) => JSON.stringify(record)).join('\n') + '\n'
   if (existsSync(path)) {
-    await cleanupPublishedPartials(path)
-    if (await readFile(path, 'utf8') === contents) return
+    if (await readFile(path, 'utf8') === contents) {
+      try {
+        await cleanupPublishedPartials(path)
+      } catch (error) {
+        process.stderr.write(`Не удалось очистить partial-файлы ${path}: ${error instanceof Error ? error.message : 'unknown error'}\n`)
+      }
+      return
+    }
     throw new Error(`Existing ${path} does not match the current snapshot.`)
   }
   const temporary = `${path}.${process.pid}.${randomUUID()}.partial`
