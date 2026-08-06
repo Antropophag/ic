@@ -148,7 +148,7 @@ paths:
                 categories:
                   - id: assign_executor
                     title: Назначить исполнителя
-                    description: Выберите ответственного за испытания.
+                    description: Назначьте ответственного за проведение испытаний.
                     count: 4
         '401':
           $ref: '#/components/responses/Unauthorized'

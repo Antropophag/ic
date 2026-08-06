@@ -13,6 +13,7 @@ import { createApplicationDraftForm } from "../applicationDraftForm";
 import { createConfirmDialog } from "../confirmDialog";
 import { triggerBlobDownload } from "../download";
 import { createLatestRequestGuard } from "../latestRequestGuard";
+import { createRequestRegistryLoadLifecycle } from "../requestRegistryLoadLifecycle";
 import AppIcon from "./AppIcon.vue";
 import AppModal from "./AppModal.vue";
 import HelpArticle from "./HelpArticle.vue";
@@ -79,8 +80,8 @@ const draft = reactive({
   testMethod: "",
   comment: "",
 });
-const registryGuard = createLatestRequestGuard();
-const dashboardGuard = createLatestRequestGuard();
+const registryLoadLifecycle = createRequestRegistryLoadLifecycle();
+const { registryGuard, dashboardGuard } = registryLoadLifecycle;
 const downloadGuard = createLatestRequestGuard();
 const createRequestGuard = createLatestRequestGuard();
 const confirmDialog = createConfirmDialog();
@@ -292,8 +293,7 @@ watch(
       loadDashboard();
     }
     else {
-      registryGuard.invalidate();
-      dashboardGuard.invalidate();
+      registryLoadLifecycle.deactivate();
       showCreate.value = false;
       closeDashboardHelp({ restoreFocus: false });
     }
@@ -417,8 +417,7 @@ onBeforeUnmount(() => {
   window.clearTimeout(searchTimer);
   window.removeEventListener("pagehide", draftForm.flushSave);
   draftForm.dispose();
-  registryGuard.invalidate();
-  dashboardGuard.invalidate();
+  registryLoadLifecycle.deactivate();
   downloadGuard.invalidate();
   createRequestGuard.invalidate();
 });
