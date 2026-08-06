@@ -31,6 +31,17 @@ it('sends registry pagination, filters, search, and sorting', async () => {
   )
 })
 
+it('loads dashboard counts and sends an attention queue filter', async () => {
+  const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({ categories: [] }), { status: 200 }))
+  vi.stubGlobal('fetch', fetchMock)
+
+  await requestApi.dashboard()
+  await requestApi.list({ page: 1, attention: 'publish_opinion' })
+
+  expect(fetchMock.mock.calls[0][0]).toBe('/api/v1/requests/dashboard')
+  expect(fetchMock.mock.calls[1][0]).toBe('/api/v1/requests?page=1&attention=publish_opinion')
+})
+
 it('loads one request card with its history', async () => {
   const payload = { item: { id: 7 }, history: [] }
   const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify(payload), { status: 200 }))

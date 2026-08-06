@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Application\Request;
 
+use App\Domain\Request\AttentionQueue;
 use App\Domain\Request\RequestStatus;
 use yii\base\Model;
 
@@ -15,6 +16,7 @@ final class ListRequestsInput extends Model
     public mixed $status = null;
     public mixed $query = '';
     public mixed $sort = 'desc';
+    public mixed $attention = null;
 
     public function rules(): array
     {
@@ -25,6 +27,7 @@ final class ListRequestsInput extends Model
             ['status', 'in', 'range' => array_column(RequestStatus::cases(), 'value'), 'skipOnEmpty' => true],
             ['query', 'string', 'max' => 200],
             ['sort', 'in', 'range' => ['asc', 'desc']],
+            ['attention', 'in', 'range' => array_column(AttentionQueue::cases(), 'value'), 'skipOnEmpty' => true],
         ];
     }
 }

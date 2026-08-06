@@ -55,6 +55,8 @@
 
 /* Registry workspace: compact collection-first layout. */
 .registry{border-color:var(--line);border-radius:var(--radius-lg);box-shadow:0 1px 2px rgba(11,22,35,.025)}
+.attention-dashboard{margin-bottom:12px;padding:14px 16px;border:1px solid var(--line);border-radius:var(--radius-lg);background:#fff;box-shadow:0 1px 2px rgba(11,22,35,.025)}
+.attention-heading{display:flex;align-items:center;justify-content:space-between;gap:16px;margin-bottom:10px}.attention-heading h2{margin:0;font-size:15px;line-height:21px}.attention-heading p{margin:1px 0 0;color:var(--muted);font-size:11px;line-height:16px}.attention-help{width:18px;height:18px;display:inline-flex;align-items:center;justify-content:center;border-radius:9px;background:#eef1f5;color:#68758a;font-size:11px;text-decoration:none;vertical-align:1px}.attention-help:hover{background:#e2e6ec;color:#172337}.attention-retry{border:0;border-radius:15px;background:var(--blue-soft);padding:6px 11px;color:var(--blue);font-size:12px}.attention-help:focus-visible,.attention-retry:focus-visible,.attention-card:focus-visible{outline:2px solid var(--blue);outline-offset:2px}.attention-error{margin:0;color:#b42318;font-size:12px}.attention-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:8px}.attention-card{min-height:58px;display:flex;align-items:center;gap:11px;border:1px solid var(--line-soft);border-radius:10px;background:var(--surface-subtle);padding:9px 11px;text-align:left;color:#1c293d}.attention-card:hover{border-color:#c6cfdd;background:#f6f8fb}.attention-card--active{border-color:var(--blue);background:var(--blue-soft);box-shadow:inset 0 0 0 1px var(--blue)}.attention-count{min-width:34px;color:var(--blue);font-size:23px;line-height:28px;font-weight:600;font-variant-numeric:tabular-nums;text-align:center}.attention-copy{min-width:0;display:grid;gap:2px}.attention-copy b{font-size:12px;line-height:16px;font-weight:600}.attention-copy small{color:#697588;font-size:10px;line-height:14px}.attention-skeleton{height:58px;border-radius:10px;background:linear-gradient(90deg,#eef1f5 25%,#f8f9fb 45%,#eef1f5 65%);background-size:300% 100%;animation:registry-shimmer 1.2s ease-in-out infinite}
 .registry-head{min-height:64px;display:flex;align-items:center;padding:0 20px;border-bottom:1px solid var(--line);gap:24px}
 .registry .tabs{height:64px;flex:1;padding:0;border:0;gap:28px;align-items:stretch}
 .registry .tabs button:not(.tabs-cta){position:relative;height:64px;display:inline-flex;align-items:center;gap:7px;padding:0 2px;border-bottom-width:2px;font-size:13px;line-height:18px;font-weight:500}
@@ -136,6 +138,7 @@
 .registry .row-color-red{--row-accent:#cc1f1f}.registry .row-color-orange{--row-accent:#d47e2e}.registry .row-color-blue{--row-accent:#3d88de}.registry .row-color-violet{--row-accent:#8131a7}.registry .row-color-green{--row-accent:#57965c}
 .registry .row-color-red:hover,.registry .row-color-orange:hover,.registry .row-color-blue:hover,.registry .row-color-violet:hover,.registry .row-color-green:hover{background:#f8f9fc}
 @media (prefers-reduced-motion:reduce){.registry-skeleton td span{animation:none}.registry tbody tr,.registry th.sortable svg{transition:none}}
+@media (prefers-reduced-motion:reduce){.attention-skeleton{animation:none}}
 .registry-error{display:flex;align-items:center;justify-content:space-between;gap:16px}
 .registry-error span{min-width:0}
 .registry-error button{height:32px;flex:none;border:1px solid currentcolor;border-radius:16px;background:transparent;padding:0 12px;color:inherit;font-size:12px;line-height:18px}
@@ -143,6 +146,7 @@
 .registry-error button:focus-visible{outline:2px solid #b42318;outline-offset:2px}
 @media (max-width:980px){.registry-head{align-items:flex-start;flex-direction:column-reverse;gap:0;padding-top:12px}.registry .tabs{width:100%;flex:none}.registry .tabs-cta{align-self:flex-end}.registry .toolbar{flex-wrap:wrap}.registry .toolbar-meta{display:none}}
 @media (max-width:700px){.registry-head{padding:12px 14px 0}.registry .tabs{gap:14px;overflow-x:auto}.registry .tab-label{white-space:nowrap}.registry .toolbar{padding:10px 14px}.registry .search{width:100%;min-width:100%}.registry .status-filter,.registry .status-filter select{width:100%}}
+@media (max-width:700px){.attention-grid{grid-template-columns:1fr}.attention-dashboard{padding:12px}}
 
 /* Shared screen entrance keeps registry/details swaps calm without unmounting registry state. */
 @keyframes screen-enter{from{opacity:.35}to{opacity:1}}

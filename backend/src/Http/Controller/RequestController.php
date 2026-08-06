@@ -89,7 +89,14 @@ final class RequestController extends ApiController
             $input->status === null || $input->status === '' ? null : (string) $input->status,
             trim((string) $input->query),
             (string) $input->sort,
+            $input->attention === null || $input->attention === '' ? null : (string) $input->attention,
         );
+    }
+
+    /** @return array{categories: list<array{id: string, title: string, description: string, count: int}>} */
+    public function actionDashboard(): array
+    {
+        return $this->query()->attentionDashboard($this->currentUserId());
     }
 
     /** @return array{item: array<string, mixed>, history: list<array<string, mixed>>, comments: list<array<string, mixed>>, commentsPage: array{hasMore: bool, nextBeforeId: int|null}, documents: list<array<string, mixed>>} */
