@@ -110,7 +110,11 @@ Development deployment дополнительно монтирует маршр�
 
 - `GET /api/v1/dev/users` — безопасный список активных seeded users;
 - `POST /api/v1/dev/seed-requests` — подготовка development-данных; запрос
-  требует выбранного активного пользователя с ролью `administrator`.
+  требует выбранного активного пользователя с ролью `administrator`, удаляет
+  прежние данные заявок и создаёт 100 синтетических заявок на всех стадиях.
+  Набор включает обсуждения разной длины, сопроводительные документы в форматах
+  PDF, PNG, JPG, JPEG, DOCX и XLSX, а также PDF-отчёты и PDF-заключения. Успешный
+  ответ содержит счётчики `requests`, `comments` и `documents`.
 
 Они отсутствуют в production и test route table. Header `X-Dev-User-ID`
 принимается только когда `compose.dev.yaml` смонтировал development
