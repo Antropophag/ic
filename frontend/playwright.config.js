@@ -12,5 +12,18 @@ export default defineConfig({
     screenshot: 'only-on-failure',
     video: 'retain-on-failure',
   },
-  projects: [{ name: 'chromium', use: { ...devices['Desktop Chrome'] } }],
+  projects: [
+    {
+      name: 'chromium',
+      testIgnore: ['**/idempotency.e2e.js', '**/notifications.e2e.js'],
+      use: { ...devices['Desktop Chrome'] },
+    },
+    {
+      name: 'stateful-chromium',
+      testMatch: ['**/idempotency.e2e.js', '**/notifications.e2e.js'],
+      dependencies: ['chromium'],
+      workers: 1,
+      use: { ...devices['Desktop Chrome'] },
+    },
+  ],
 })
