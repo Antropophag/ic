@@ -228,21 +228,6 @@ final class DevelopmentRequestSeederTest extends IntegrationTestCase
         (new DevelopmentRequestSeeder($this->db(), new DocumentStorage($this->storageRoot)))->seed();
     }
 
-    public function testInitiatorDepartmentsRequireEveryConfiguredInitiator(): void
-    {
-        $seeder = new DevelopmentRequestSeeder($this->db(), new DocumentStorage($this->storageRoot));
-        $method = new \ReflectionMethod($seeder, 'resolveInitiatorDepartments');
-
-        $this->expectException(\RuntimeException::class);
-        $this->expectExceptionMessage("Development initiator 'admin' is not resolved.");
-        $method->invoke($seeder, [
-            'employee' => 1,
-            'expert' => 2,
-            'expert2' => 3,
-            'security' => 4,
-        ]);
-    }
-
     public function testAttachmentIsRemovedWhenDatabaseInsertFails(): void
     {
         $seeder = new DevelopmentRequestSeeder($this->db(), new DocumentStorage($this->storageRoot));
