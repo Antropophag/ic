@@ -71,6 +71,8 @@ Playwright сначала запускает обычные сценарии в 
 поднятом test-окружении отдельный проект запускается из `frontend` так:
 
 ```sh
+npm ci --no-audit --no-fund
+npx playwright install chromium
 E2E_BASE_URL=http://localhost:18080 \
 MAILPIT_BASE_URL=http://localhost:18026 \
 npx playwright test --project=stateful-chromium --no-deps
