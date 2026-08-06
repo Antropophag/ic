@@ -68,8 +68,16 @@ Playwright сначала запускает обычные сценарии в 
 `idempotency.e2e.js` и `notifications.e2e.js`, чтобы они не конкурировали за
 общее состояние тестовой БД. Если `chromium` падает, зависимый проект
 пропускается. Полный порядок воспроизводится командой `make e2e`; при уже
-поднятом test-окружении отдельный проект можно запустить из `frontend` командой
-`npx playwright test --project=stateful-chromium --no-deps`.
+поднятом test-окружении отдельный проект запускается из `frontend` так:
+
+```sh
+E2E_BASE_URL=http://localhost:18080 \
+MAILPIT_BASE_URL=http://localhost:18026 \
+npx playwright test --project=stateful-chromium --no-deps
+```
+
+При переопределении `FRONTEND_PORT` или `MAILPIT_PORT` URL нужно изменить
+соответственно.
 
 Runtime contracts проверяют реальный LDAP bind и группы, восстановление LDAP,
 SMTP failure/recovery, reconnect scheduler после рестарта MariaDB и SIGTERM.
