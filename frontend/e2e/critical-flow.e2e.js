@@ -135,8 +135,10 @@ test('заявка перемещается между персональным�
     await expect(dashboardHelp).toBeVisible()
     await expect(dashboardHelp).toHaveCSS('position', 'static')
     await dashboardHelp.click()
-    await expect(page.getByRole('dialog', { name: 'Справка' })).toContainText('Заявки, требующие внимания')
+    const dashboardHelpDialog = page.getByRole('dialog', { name: 'Справка' })
+    await expect(dashboardHelpDialog).toContainText('Заявки, требующие внимания')
     await page.getByRole('button', { name: 'Закрыть справку' }).click()
+    await expect(dashboardHelpDialog).toBeHidden()
     await page.getByRole('button', { name: /Назначить исполнителя/ }).click()
     await page.getByRole('row').filter({ hasText: marker }).click()
 
