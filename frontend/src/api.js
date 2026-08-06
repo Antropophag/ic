@@ -107,6 +107,7 @@ function idempotentRequest(path, options) {
 }
 
 export const requestApi = {
+  dashboard: () => request('/api/v1/requests/dashboard'),
   list: (params = {}) => {
     const query = new URLSearchParams()
     Object.entries(params).forEach(([key, value]) => {

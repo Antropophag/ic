@@ -8,7 +8,8 @@
 `make openapi-validate` и входит в `make check`; генерация не требуется.
 
 На первом этапе OpenAPI покрывает `GET /health/live`,
-`GET /api/v1/auth/me`, `GET /api/v1/requests` и
+`GET /api/v1/auth/me`, `GET /api/v1/requests`,
+`GET /api/v1/requests/dashboard` и
 `POST /api/v1/requests/{id}/comments`. Остальные существующие маршруты будут
 добавляться постепенно. Отсутствие маршрута в спецификации на этом этапе не
 означает, что маршрут отсутствует в приложении.
@@ -26,6 +27,14 @@ frontend или integration/E2E тесты.
 
 Изменение публичного API должно сопровождаться соответствующим обновлением
 OpenAPI-контракта.
+
+`GET /api/v1/requests/dashboard` возвращает применимые текущему пользователю
+категории действий в форме `{categories: [{id, title, description, count}]}`.
+Счётчики вычисляются для полного персонального scope и не зависят от параметров
+реестра. `attention` в `GET /api/v1/requests` принимает только идентификатор из
+этого набора и сужает обычную серверную выборку; подмена идентификатора не даёт
+прав, а неизвестное значение возвращает `422`. Read-only dashboard использует
+обычную session cookie и не требует CSRF либо `Idempotency-Key`.
 
 Все публичные маршруты доступны через сервис `frontend` под `/api/v1`.
 `GET /api/v1/auth/me` возвращает CSRF token и текущего пользователя:

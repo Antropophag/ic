@@ -101,6 +101,14 @@ paths:
             type: string
             enum: [asc, desc]
             default: desc
+        - name: attention
+          in: query
+          description: |
+            Персональная категория действия. Сервер проверяет полномочия и
+            назначение текущего пользователя; параметр только сужает обычный
+            доступный ему реестр. Поиск, статус и сортировка применяются поверх.
+          schema:
+            $ref: '#/components/schemas/AttentionQueueId'
       responses:
         '200':
           description: Страница доступных текущему пользователю заявок
@@ -112,6 +120,37 @@ paths:
           $ref: '#/components/responses/Unauthorized'
         '422':
           $ref: '#/components/responses/ValidationError'
+        '500':
+          $ref: '#/components/responses/ServerError'
+
+  /api/v1/requests/dashboard:
+    get:
+      tags: [Requests]
+      summary: Получить персональные очереди действий
+      description: |
+        Возвращает только категории реальных действий текущего активного
+        пользователя с учётом ролей и действующих назначений. Счётчики точные,
+        относятся ко всему доступному scope и не зависят от страницы, вкладки,
+        поиска или статусного фильтра реестра. Одна заявка может входить в
+        несколько категорий при совмещении полномочий.
+      operationId: getRequestDashboard
+      security:
+        - cookieSession: []
+      responses:
+        '200':
+          description: Персональные очереди текущего пользователя
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AttentionDashboard'
+              example:
+                categories:
+                  - id: assign_executor
+                    title: Назначить исполнителя
+                    description: Выберите ответственного за испытания.
+                    count: 4
+        '401':
+          $ref: '#/components/responses/Unauthorized'
         '500':
           $ref: '#/components/responses/ServerError'
 
@@ -330,6 +369,38 @@ components:
           minimum: 1
         counts:
           $ref: '#/components/schemas/RequestCounts'
+      additionalProperties: false
+    AttentionQueueId:
+      type: string
+      enum:
+        - assign_executor
+        - start_or_resume_work
+        - upload_report
+        - claim_expert
+        - publish_opinion
+        - security_decision
+    AttentionDashboard:
+      type: object
+      required: [categories]
+      properties:
+        categories:
+          type: array
+          items:
+            $ref: '#/components/schemas/AttentionCategory'
+      additionalProperties: false
+    AttentionCategory:
+      type: object
+      required: [id, title, description, count]
+      properties:
+        id:
+          $ref: '#/components/schemas/AttentionQueueId'
+        title:
+          type: string
+        description:
+          type: string
+        count:
+          type: integer
+          minimum: 0
       additionalProperties: false
     RequestCounts:
       type: object

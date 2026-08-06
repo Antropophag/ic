@@ -108,6 +108,76 @@ test('заявка проходит критический путь до сог�
   await Promise.all([initiator.dispose(), manager.dispose(), executor.dispose(), expert.dispose()])
 })
 
+test('заявка перемещается между персональными очередями ролей', async ({ page, context, baseURL }) => {
+  const marker = `E2E-queue-${Date.now()}`
+  let initiator
+  let manager
+  let executor
+  let expert
+
+  try {
+    initiator = await apiFor(baseURL, 3)
+    manager = await apiFor(baseURL, 1)
+    executor = await apiFor(baseURL, 2)
+    expert = await apiFor(baseURL, 4)
+    const created = await expectOk(await initiator.post('/api/v1/requests', { data: {
+      productName: marker,
+      manufacturer: 'Тестовый производитель',
+      supplier: 'Тестовый поставщик',
+      sampleQuantity: 1,
+      testMethod: 'Перемещение между очередями — E2E',
+    } }))
+    const requestId = created.id
+
+    await useTestIdentity(page, 1)
+    await page.goto('/')
+    await page.getByRole('button', { name: /Назначить исполнителя/ }).click()
+    await page.getByRole('row').filter({ hasText: marker }).click()
+
+    await expectOk(await manager.post(`/api/v1/requests/${requestId}/executor`, {
+      data: { executorId: 2, lockVersion: 1 },
+    }))
+    await page.getByTitle('На главную').click()
+    await expect(page.getByRole('row').filter({ hasText: marker })).toHaveCount(0)
+
+    const executorPage = await context.newPage()
+    await useTestIdentity(executorPage, 2)
+    await executorPage.goto('/')
+    await executorPage.getByRole('button', { name: /Начать или возобновить работы/ }).click()
+    await expect(executorPage.getByRole('row').filter({ hasText: marker })).toBeVisible()
+    await expectOk(await executor.post(`/api/v1/requests/${requestId}/start`, {
+      data: { lockVersion: 2 },
+    }))
+    await executorPage.getByRole('button', { name: /Загрузить отчёт/ }).click()
+    await expect(executorPage.getByRole('row').filter({ hasText: marker })).toBeVisible()
+    await expectOk(await executor.post(`/api/v1/requests/${requestId}/report`, {
+      multipart: { file: { name: 'queue-report.pdf', mimeType: 'application/pdf', buffer: Buffer.from('%PDF-1.4\n%%EOF') } },
+    }))
+
+    const expertPage = await context.newPage()
+    await useTestIdentity(expertPage, 4)
+    await expertPage.goto('/')
+    await expertPage.getByRole('button', { name: /Взять экспертизу/ }).click()
+    await expect(expertPage.getByRole('row').filter({ hasText: marker })).toBeVisible()
+    await expectOk(await expert.post(`/api/v1/requests/${requestId}/expert/claim`, {
+      data: { lockVersion: 4 },
+    }))
+    await expertPage.getByRole('button', { name: /Подготовить заключение/ }).click()
+    await expect(expertPage.getByRole('row').filter({ hasText: marker })).toBeVisible()
+    await expectOk(await expert.post(`/api/v1/requests/${requestId}/opinion`, {
+      data: { body: 'Заключение для проверки перемещения между очередями.', lockVersion: 5 },
+    }))
+
+    const securityPage = await context.newPage()
+    await useTestIdentity(securityPage, 5)
+    await securityPage.goto('/')
+    await securityPage.getByRole('button', { name: /Проверить СБ/ }).click()
+    await expect(securityPage.getByRole('row').filter({ hasText: marker })).toBeVisible()
+  } finally {
+    await Promise.all([initiator, manager, executor, expert].filter(Boolean).map(api => api.dispose()))
+  }
+})
+
 test('комментарий, оставленный при создании заявки, появляется в её ленте', async ({ page }) => {
   const marker = `E2E-comment-${Date.now()}`
   const comment = 'Срочно, испытания нужны до конца недели.'

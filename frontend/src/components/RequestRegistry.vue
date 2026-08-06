@@ -31,6 +31,10 @@ const emit = defineEmits([
   "select-request",
 ]);
 const activeTab = ref("active");
+const activeAttention = ref("");
+const attentionCategories = ref([]);
+const dashboardLoading = ref(true);
+const dashboardError = ref("");
 const query = ref("");
 const statusFilter = ref("");
 const sortDirection = ref("desc");
@@ -62,6 +66,7 @@ const draft = reactive({
   comment: "",
 });
 const registryGuard = createLatestRequestGuard();
+const dashboardGuard = createLatestRequestGuard();
 const downloadGuard = createLatestRequestGuard();
 const createRequestGuard = createLatestRequestGuard();
 const confirmDialog = createConfirmDialog();
@@ -137,6 +142,7 @@ async function loadRequests({ rethrow = false } = {}) {
       status: statusFilter.value,
       query: query.value.trim(),
       sort: sortDirection.value,
+      attention: activeAttention.value,
     });
     if (!registryGuard.isCurrent(token, true)) return;
     registryError.value = "";
@@ -161,6 +167,31 @@ async function loadRequests({ rethrow = false } = {}) {
   } finally {
     if (registryGuard.isCurrent(token, true)) registryLoading.value = false;
   }
+}
+
+async function loadDashboard() {
+  const token = dashboardGuard.begin(true);
+  dashboardLoading.value = true;
+  try {
+    const result = await requestApi.dashboard();
+    if (!dashboardGuard.isCurrent(token, true)) return;
+    dashboardError.value = "";
+    attentionCategories.value = result.categories || [];
+    if (activeAttention.value && !attentionCategories.value.some(category => category.id === activeAttention.value)) {
+      activeAttention.value = "";
+    }
+  } catch {
+    if (dashboardGuard.isCurrent(token, true)) {
+      dashboardError.value = "Не удалось обновить персональные очереди.";
+    }
+  } finally {
+    if (dashboardGuard.isCurrent(token, true)) dashboardLoading.value = false;
+  }
+}
+
+function selectAttention(categoryId) {
+  activeAttention.value = activeAttention.value === categoryId ? "" : categoryId;
+  activeTab.value = "all";
 }
 
 function clearRegistryFilters() {
@@ -188,7 +219,7 @@ function reloadFirstPage() {
   loadRequests();
 }
 
-watch([activeTab, statusFilter, sortDirection], reloadFirstPage);
+watch([activeTab, activeAttention, statusFilter, sortDirection], reloadFirstPage);
 watch(query, () => {
   window.clearTimeout(searchTimer);
   searchTimer = window.setTimeout(reloadFirstPage, 300);
@@ -198,7 +229,10 @@ watch(draftFiles, draftForm.scheduleFilesSave, { flush: "sync" });
 watch(
   () => props.refreshTrigger,
   () => {
-    if (props.active) loadRequests();
+    if (props.active) {
+      loadRequests();
+      loadDashboard();
+    }
   },
 );
 watch(
@@ -277,6 +311,7 @@ async function createRequest() {
   resetCreateForm();
   try {
     await loadRequests({ rethrow: true });
+    await loadDashboard();
     if (!isCurrent()) return;
     const createdItem = requests.value.find(
       (item) => item.backendId === created.id,
@@ -313,12 +348,14 @@ onMounted(() => {
   draftForm.restore();
   window.addEventListener("pagehide", draftForm.flushSave);
   loadRequests();
+  loadDashboard();
 });
 onBeforeUnmount(() => {
   window.clearTimeout(searchTimer);
   window.removeEventListener("pagehide", draftForm.flushSave);
   draftForm.dispose();
   registryGuard.invalidate();
+  dashboardGuard.invalidate();
   downloadGuard.invalidate();
   createRequestGuard.invalidate();
 });
@@ -326,6 +363,35 @@ onBeforeUnmount(() => {
 
 <template>
   <section v-show="active" class="page screen-panel" :class="{ 'screen-panel--active': active }">
+    <section
+      v-if="dashboardLoading || dashboardError || attentionCategories.length"
+      class="attention-dashboard"
+      aria-labelledby="attention-title"
+      :aria-busy="dashboardLoading"
+    >
+      <div class="attention-heading">
+        <div><h2 id="attention-title">Требуют вашего внимания <a class="attention-help" href="/help/dashboard.html" target="_blank" rel="noopener" aria-label="Открыть инструкцию по персональным очередям">?</a></h2><p>Персональные очереди действий</p></div>
+        <button v-if="dashboardError" type="button" class="attention-retry" @click="loadDashboard">Повторить</button>
+      </div>
+      <p v-if="dashboardError" class="attention-error" role="alert">{{ dashboardError }}</p>
+      <div v-if="dashboardLoading && !attentionCategories.length" class="attention-grid attention-grid--loading" aria-label="Загрузка персональных очередей">
+        <span v-for="index in 3" :key="index" class="attention-skeleton" aria-hidden="true"></span>
+      </div>
+      <div v-else-if="attentionCategories.length" class="attention-grid">
+        <button
+          v-for="category in attentionCategories"
+          :key="category.id"
+          type="button"
+          class="attention-card"
+          :class="{ 'attention-card--active': activeAttention === category.id }"
+          :aria-pressed="activeAttention === category.id"
+          @click="selectAttention(category.id)"
+        >
+          <span class="attention-count">{{ category.count }}</span>
+          <span class="attention-copy"><b>{{ category.title }}</b><small>{{ category.description }}</small></span>
+        </button>
+      </div>
+    </section>
     <div v-if="registryError" class="detail-state error registry-error" role="alert">
       <span>{{ registryError }}</span>
       <button type="button" @click="loadRequests">Повторить</button>
