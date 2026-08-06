@@ -366,18 +366,33 @@ export function assertOutsideGit(path) {
 
 export async function writePrivateJsonLines(path, records) {
   const contents = records.map((record) => JSON.stringify(record)).join('\n') + '\n'
-  if (existsSync(path)) {
-    if (await readFile(path, 'utf8') === contents) return
-    throw new Error(`Existing ${path} does not match the current snapshot.`)
-  }
-  const temporary = `${path}.partial`
+  const lockPath = `${path}.lock`
+  let lock
   try {
-    await rm(temporary, { force: true })
-    await writeFile(temporary, contents, { mode: 0o600, flag: 'wx' })
-    await rename(temporary, path)
+    lock = await open(lockPath, 'wx', 0o600)
   } catch (error) {
-    await rm(temporary, { force: true })
-    throw error
+    throw new Error(`Another process is publishing ${path}; lock acquisition failed.`, { cause: error })
+  }
+  try {
+    if (existsSync(path)) {
+      if (await readFile(path, 'utf8') === contents) return
+      throw new Error(`Existing ${path} does not match the current snapshot.`)
+    }
+    const temporary = `${path}.partial`
+    try {
+      await rm(temporary, { force: true })
+      await writeFile(temporary, contents, { mode: 0o600, flag: 'wx' })
+      await rename(temporary, path)
+    } catch (error) {
+      await rm(temporary, { force: true })
+      throw error
+    }
+  } finally {
+    try {
+      await lock.close()
+    } finally {
+      await rm(lockPath, { force: true })
+    }
   }
 }
 

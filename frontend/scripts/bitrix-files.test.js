@@ -86,6 +86,18 @@ describe('Bitrix file migration tooling', () => {
     expect(await readFile(path, 'utf8')).toBe('{"sourceFileId":"7"}\n')
   })
 
+  test('a concurrent conflicting writer cannot replace published associations', async () => {
+    const directory = await fixtureDirectory()
+    const path = join(directory, 'associations.jsonl')
+    const published = [{ sourceFileId: '7' }]
+    await writePrivateJsonLines(path, published)
+    await writeFile(`${path}.lock`, '', { flag: 'wx', mode: 0o600 })
+
+    await expect(writePrivateJsonLines(path, [{ sourceFileId: '8' }])).rejects.toThrow('lock acquisition failed')
+    expect(await readFile(path, 'utf8')).toBe('{"sourceFileId":"7"}\n')
+    expect(await readFile(`${path}.lock`, 'utf8')).toBe('')
+  })
+
   test('streams response to a private object and calculates metadata', async () => {
     const directory = await fixtureDirectory()
     const destination = join(directory, '7')
