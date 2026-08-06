@@ -146,7 +146,10 @@ test('заявка перемещается между персональным�
       data: { executorId: 2, lockVersion: 1 },
     }))
     await page.reload()
-    await page.getByTitle('На главную').click()
+    await Promise.all([
+      page.waitForResponse(response => response.url().includes('/api/v1/requests/dashboard') && response.ok()),
+      page.getByTitle('На главную').click(),
+    ])
     await expect(page.getByRole('row').filter({ hasText: marker })).toHaveCount(0)
 
     const executorPage = await context.newPage()
