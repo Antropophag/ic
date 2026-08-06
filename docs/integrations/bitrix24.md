@@ -177,6 +177,8 @@ Downloader:
 - принимает только HTTPS, исходный host и каталог
   `/docs/file/FilesProposalTest/`, запрещает credentials и query string;
 - корректно кодирует пробелы, кириллицу и `#` в старых URL;
+- при `403/404` перебирает варианты с восстановлением одного потерянного `+` в
+  имени; два подтверждённых многосимвольных искажения нормализуются до перебора;
 - передаёт только cookies из изолированного профиля и не пишет URL в отчёт;
 - открывает карточку файла и использует штатную ссылку Bitrix24
   `/disk/downloadFile/...`, не извлекая OAuth-токены из браузера;
@@ -188,6 +190,18 @@ Downloader:
 - останавливает полный цикл при OAuth redirect;
 - сохраняет безопасный `associations.jsonl` без URL для восстановления связей с
   заявками.
+
+После полной выгрузки выполняется офлайн-проверка без браузера и Bitrix24:
+
+```bash
+npm --prefix frontend run bitrix-files -- verify \
+  --snapshot=/srv/ic-migration/bitrix24/snapshot-YYYYMMDDTHHMMSSZ \
+  --workspace=/srv/ic-migration/bitrix24/files-YYYYMMDD
+```
+
+Команда требует точного совпадения всех записей `associations.jsonl` со
+snapshot, всех файловых ID в `objects/` и успешных checkpoint-записей, а затем
+повторно вычисляет размер и SHA-256 каждого объекта.
 
 `checkpoint.jsonl`, `associations.jsonl`, `objects/` и `browser-profile/`
 содержат миграционные либо авторизационные данные и никогда не коммитятся.

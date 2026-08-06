@@ -7,10 +7,12 @@ import {
   downloadResponse,
   loadCheckpoint,
   normalizeFileUrl,
+  plusSubstitutionCandidates,
   parseArguments,
   readSnapshotFiles,
   assertOutsideGit,
   writePrivateJsonLines,
+  verifyWorkspace,
 } from './bitrix-files.mjs'
 
 const temporaryDirectories = []
@@ -42,6 +44,30 @@ describe('Bitrix file migration tooling', () => {
     expect(() => normalizeFileUrl('https://portal.example/other/file.pdf', 'portal.example')).toThrow(
       'outside the legacy file directory',
     )
+  })
+
+  test('removes legacy padding immediately before a file extension', () => {
+    expect(normalizeFileUrl(
+      'https://portal.example/docs/file/FilesProposalTest/4010101006Б    .tif',
+      'portal.example',
+    )).toBe('https://portal.example/docs/file/FilesProposalTest/4010101006%D0%91.tif')
+  })
+
+  test('restores three plus signs represented by legacy padding', () => {
+    expect(normalizeFileUrl(
+      'https://portal.example/docs/file/FilesProposalTest/0060700001Е    (1).tif',
+      'portal.example',
+    )).toBe('https://portal.example/docs/file/FilesProposalTest/0060700001%D0%95%2B%2B%2B%20(1).tif')
+  })
+
+  test('builds single-plus fallback candidates for legacy spaces', () => {
+    expect(plusSubstitutionCandidates(
+      'https://portal.example/docs/file/FilesProposalTest/one%20two%20three.pdf',
+    )).toEqual([
+      'https://portal.example/docs/file/FilesProposalTest/one%20two%20three.pdf',
+      'https://portal.example/docs/file/FilesProposalTest/one%2Btwo%20three.pdf',
+      'https://portal.example/docs/file/FilesProposalTest/one%20two%2Bthree.pdf',
+    ])
   })
 
   test('verifies snapshot and deduplicates associations by source ID', async () => {
@@ -186,6 +212,37 @@ describe('Bitrix file migration tooling', () => {
       status: 'downloaded',
       bytes: 10,
     })
+  })
+
+  test('verifies snapshot associations, objects, and checkpoint hashes', async () => {
+    const snapshot = await fixtureDirectory()
+    const workspace = await fixtureDirectory()
+    const contents = 'historical document'
+    const detailUrl = 'https://portal.example/docs/file/FilesProposalTest/file.pdf'
+    await writeSnapshot(snapshot, [element('10', [{ id: 7, name: 'file.pdf', detailURL: detailUrl }], [])])
+    await mkdir(join(workspace, 'objects'))
+    await writeFile(join(workspace, 'objects', '7'), contents)
+    await writeFile(join(workspace, 'checkpoint.jsonl'), `${JSON.stringify({
+      sourceFileId: '7',
+      status: 'downloaded',
+      bytes: Buffer.byteLength(contents),
+      sha256: createHash('sha256').update(contents).digest('hex'),
+    })}\n`)
+    await writePrivateJsonLines(join(workspace, 'associations.jsonl'), [{
+      requestNumber: '10',
+      documentType: 'supporting',
+      sourceFileId: '7',
+      originalName: 'file.pdf',
+    }])
+
+    await expect(verifyWorkspace(snapshot, workspace)).resolves.toEqual({
+      uniqueFiles: 1,
+      associations: 1,
+      verified: 1,
+    })
+
+    await writeFile(join(workspace, 'objects', '7'), 'corrupted')
+    await expect(verifyWorkspace(snapshot, workspace)).rejects.toThrow('integrity check failed')
   })
 })
 
