@@ -1,5 +1,5 @@
 <script setup>
-import { computed, onMounted, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { devApi } from '../src/api'
 import { readReviewGuideProgress, writeReviewGuideProgress } from './review-guide'
 
@@ -13,6 +13,8 @@ const feedbackItems = ref([])
 const feedbackLoading = ref(true)
 const feedbackSending = ref(false)
 const feedbackMessage = ref('')
+const feedbackAbortController = new AbortController()
+let feedbackLoadSequence = 0
 
 const quickSteps = [
   ['quick-seed', 'Подготовьте демонстрационные данные', 'Переключитесь на Елену Васильеву — администратора портала — и нажмите «Заполнить данные».', 'seed'],
@@ -99,32 +101,45 @@ function toggleFeedbackCheck(item) {
 }
 
 async function loadFeedback() {
+  const sequence = ++feedbackLoadSequence
   feedbackLoading.value = true
   try {
-    const result = await devApi.reviewFeedback()
+    const result = await devApi.reviewFeedback(feedbackAbortController.signal)
+    if (feedbackAbortController.signal.aborted || sequence !== feedbackLoadSequence) return
     feedbackItems.value = result.items || []
-  } catch {
+  } catch (error) {
+    if (error?.name === 'AbortError') return
     feedbackMessage.value = 'Не удалось загрузить замечания.'
   } finally {
-    feedbackLoading.value = false
+    if (!feedbackAbortController.signal.aborted && sequence === feedbackLoadSequence) {
+      feedbackLoading.value = false
+    }
   }
 }
 
 async function submitFeedback() {
   const body = feedbackBody.value.trim()
   if (!body || feedbackSending.value) return
+  feedbackLoadSequence++
+  feedbackLoading.value = false
   feedbackSending.value = true
   feedbackMessage.value = ''
   try {
-    const created = await devApi.createReviewFeedback(body, [...selectedChecks.value])
+    const created = await devApi.createReviewFeedback(
+      body,
+      [...selectedChecks.value],
+      feedbackAbortController.signal,
+    )
+    if (feedbackAbortController.signal.aborted) return
     feedbackItems.value = [created, ...feedbackItems.value]
     feedbackBody.value = ''
     selectedChecks.value = new Set()
     feedbackMessage.value = 'Спасибо, замечание сохранено.'
-  } catch {
+  } catch (error) {
+    if (error?.name === 'AbortError') return
     feedbackMessage.value = 'Не удалось сохранить замечание. Повторите попытку.'
   } finally {
-    feedbackSending.value = false
+    if (!feedbackAbortController.signal.aborted) feedbackSending.value = false
   }
 }
 
@@ -133,6 +148,7 @@ function feedbackDate(value) {
 }
 
 onMounted(loadFeedback)
+onBeforeUnmount(() => feedbackAbortController.abort())
 </script>
 
 <template>

@@ -22,6 +22,24 @@ it('creates and loads development review feedback', async () => {
   expect(fetchMock).toHaveBeenNthCalledWith(2, '/api/v1/dev/review-feedback', expect.any(Object))
 })
 
+it('passes cancellation signals to development feedback requests', async () => {
+  const fetchMock = vi.fn()
+    .mockResolvedValueOnce(new Response('{"items":[]}', { status: 200 }))
+    .mockResolvedValueOnce(new Response('{"id":1}', { status: 201 }))
+  vi.stubGlobal('fetch', fetchMock)
+  const controller = new AbortController()
+
+  await devApi.reviewFeedback(controller.signal)
+  await devApi.createReviewFeedback('Текст', [], controller.signal)
+
+  expect(fetchMock).toHaveBeenNthCalledWith(1, '/api/v1/dev/review-feedback', expect.objectContaining({
+    signal: controller.signal,
+  }))
+  expect(fetchMock).toHaveBeenNthCalledWith(2, '/api/v1/dev/review-feedback', expect.objectContaining({
+    signal: controller.signal,
+  }))
+})
+
 it('loads the registry as JSON', async () => {
   const fetchMock = vi.fn().mockResolvedValue(new Response(
     JSON.stringify({ items: [] }),

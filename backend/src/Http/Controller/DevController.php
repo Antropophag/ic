@@ -96,8 +96,12 @@ final class DevController extends Controller
     {
         $this->assertDevelopmentDatabase();
         $authorId = (new CurrentUser(Yii::$app->db))->id(Yii::$app->request);
-        $body = trim((string) Yii::$app->request->getBodyParam('body', ''));
+        $rawBody = Yii::$app->request->getBodyParam('body');
         $rawChecklist = Yii::$app->request->getBodyParam('checklist', []);
+        if (!is_string($rawBody)) {
+            throw new UnprocessableEntityHttpException('Текст замечания должен быть строкой.');
+        }
+        $body = trim($rawBody);
         if ($body === '' || mb_strlen($body) > 5000) {
             throw new UnprocessableEntityHttpException('Введите текст замечания длиной до 5000 символов.');
         }
