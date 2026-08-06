@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto'
-import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
+import { link, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
 import { afterEach, describe, expect, test } from 'vitest'
@@ -102,6 +102,23 @@ describe('Bitrix file migration tooling', () => {
     expect(['{"sourceFileId":"7"}\n', '{"sourceFileId":"8"}\n']).toContain(published)
     await expect(writePrivateJsonLines(path, published.includes('"7"') ? second : first)).rejects.toThrow('does not match')
     expect(await readFile(path, 'utf8')).toBe(published)
+  })
+
+  test('removes safely identifiable partials left after publication', async () => {
+    const directory = await fixtureDirectory()
+    const path = join(directory, 'associations.jsonl')
+    const records = [{ sourceFileId: '7' }]
+    await writePrivateJsonLines(path, records)
+    const linkedPartial = `${path}.123.crash.partial`
+    const legacyPartial = `${path}.partial`
+    await link(path, linkedPartial)
+    await writeFile(legacyPartial, 'stale legacy partial', { mode: 0o600 })
+
+    await writePrivateJsonLines(path, records)
+
+    await expect(readFile(linkedPartial, 'utf8')).rejects.toThrow()
+    await expect(readFile(legacyPartial, 'utf8')).rejects.toThrow()
+    expect(await readFile(path, 'utf8')).toBe('{"sourceFileId":"7"}\n')
   })
 
   test('streams response to a private object and calculates metadata', async () => {

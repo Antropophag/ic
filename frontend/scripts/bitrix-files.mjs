@@ -1,7 +1,7 @@
 import { createHash, randomUUID } from 'node:crypto'
 import { createReadStream, createWriteStream, existsSync } from 'node:fs'
-import { appendFile, chmod, link, mkdir, open, readFile, rename, rm, stat, writeFile } from 'node:fs/promises'
-import { dirname, join, resolve } from 'node:path'
+import { appendFile, chmod, link, mkdir, open, readFile, readdir, rename, rm, stat, writeFile } from 'node:fs/promises'
+import { basename, dirname, join, resolve } from 'node:path'
 import { createInterface } from 'node:readline'
 import { Readable, Transform } from 'node:stream'
 import { pipeline } from 'node:stream/promises'
@@ -367,6 +367,7 @@ export function assertOutsideGit(path) {
 export async function writePrivateJsonLines(path, records) {
   const contents = records.map((record) => JSON.stringify(record)).join('\n') + '\n'
   if (existsSync(path)) {
+    await cleanupPublishedPartials(path)
     if (await readFile(path, 'utf8') === contents) return
     throw new Error(`Existing ${path} does not match the current snapshot.`)
   }
@@ -384,6 +385,30 @@ export async function writePrivateJsonLines(path, records) {
     }
   } finally {
     await rm(temporary, { force: true })
+  }
+}
+
+async function cleanupPublishedPartials(path) {
+  const published = await stat(path)
+  const directory = dirname(path)
+  const name = basename(path)
+  for (const entry of await readdir(directory)) {
+    const legacyPartial = entry === `${name}.partial`
+    const uniquePartial = entry.startsWith(`${name}.`) && entry.endsWith('.partial')
+    if (!legacyPartial && !uniquePartial) continue
+    const candidate = join(directory, entry)
+    if (legacyPartial) {
+      await rm(candidate, { force: true })
+      continue
+    }
+    try {
+      const candidateStat = await stat(candidate)
+      if (candidateStat.dev === published.dev && candidateStat.ino === published.ino) {
+        await rm(candidate, { force: true })
+      }
+    } catch (error) {
+      if (error?.code !== 'ENOENT') throw error
+    }
   }
 }
 
@@ -408,7 +433,6 @@ async function protectTree(path) {
   const current = await stat(path)
   await chmod(path, current.isDirectory() ? 0o700 : 0o600)
   if (!current.isDirectory()) return
-  const { readdir } = await import('node:fs/promises')
   for (const entry of await readdir(path)) await protectTree(join(path, entry))
 }
 
