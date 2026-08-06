@@ -6,6 +6,7 @@ namespace Tests\Integration\Development;
 
 use App\Infrastructure\Development\DevelopmentRequestSeeder;
 use App\Infrastructure\Document\DocumentStorage;
+use App\Infrastructure\Request\RequestQuery;
 use Tests\Integration\IntegrationTestCase;
 use yii\db\IntegrityException;
 
@@ -18,7 +19,7 @@ final class DevelopmentRequestSeederTest extends IntegrationTestCase
         parent::setUp();
         $this->storageRoot = sys_get_temp_dir() . '/ic-development-seed-test-' . bin2hex(random_bytes(8));
         mkdir($this->storageRoot, 0700, true);
-        foreach (['dev.user', 'dev.executor', 'dev.executor.naumov', 'dev.employee', 'dev.expert', 'dev.expert2', 'dev.security'] as $login) {
+        foreach (['dev.user', 'dev.executor', 'dev.executor.naumov', 'dev.employee', 'dev.expert', 'dev.expert2', 'dev.security', 'dev.admin'] as $login) {
             if ($this->scalar('SELECT id FROM {{%users}} WHERE ad_login = :login', [':login' => $login]) === false) {
                 $this->createUser($login, $login);
             }
@@ -64,6 +65,52 @@ final class DevelopmentRequestSeederTest extends IntegrationTestCase
         self::assertSame(
             ['completed', 'in_progress', 'opinion_preparation', 'registered', 'rejected', 'security_review', 'suspended', 'withdrawn'],
             $this->db()->createCommand('SELECT DISTINCT status FROM {{%requests}} ORDER BY status')->queryColumn(),
+        );
+        $initiatorIds = array_map(
+            'intval',
+            $this->db()->createCommand('SELECT DISTINCT initiator_id FROM {{%requests}} ORDER BY initiator_id')->queryColumn(),
+        );
+        self::assertCount(5, $initiatorIds);
+        foreach ($initiatorIds as $initiatorId) {
+            $mine = (new RequestQuery($this->db()))->findPage($initiatorId, 1, 100, 'mine', null, '', 'desc');
+            $statuses = array_values(array_unique(array_column($mine['items'], 'status')));
+            sort($statuses);
+            self::assertSame(
+                ['completed', 'in_progress', 'opinion_preparation', 'registered', 'rejected', 'security_review', 'suspended', 'withdrawn'],
+                $statuses,
+            );
+        }
+        self::assertSame(
+            0,
+            (int) $this->scalar(
+                'SELECT COUNT(DISTINCT r.initiator_id) FROM {{%requests}} r '
+                . 'JOIN {{%user_roles}} ur ON ur.user_id = r.initiator_id '
+                . 'JOIN {{%roles}} role ON role.id = ur.role_id '
+                . "WHERE role.code IN ('ic_executor', 'ic_manager', 'laboratory_manager')",
+            ),
+        );
+        self::assertSame(
+            0,
+            (int) $this->scalar(
+                'SELECT COUNT(*) FROM {{%requests}} r JOIN {{%users}} u ON u.id = r.initiator_id '
+                . "WHERE r.department_name <> u.department OR r.department_source <> 'current_profile'",
+            ),
+        );
+        self::assertSame(
+            0,
+            (int) $this->scalar(
+                'SELECT COUNT(*) FROM {{%requests}} r JOIN {{%request_documents}} d ON d.request_id = r.id '
+                . 'JOIN {{%request_document_versions}} v ON v.document_id = d.id '
+                . "WHERE d.document_type = 'attachment' AND v.uploaded_by <> r.initiator_id",
+            ),
+        );
+        self::assertSame(
+            0,
+            (int) $this->scalar(
+                'SELECT COUNT(*) FROM {{%requests}} r JOIN {{%request_comments}} c ON c.request_id = r.id '
+                . 'AND c.id = (SELECT MIN(first_comment.id) FROM {{%request_comments}} first_comment '
+                . 'WHERE first_comment.request_id = r.id) WHERE c.author_id <> r.initiator_id',
+            ),
         );
         self::assertSame(0, (int) $this->scalar('SELECT COUNT(*) FROM {{%requests}} WHERE legacy_id IS NOT NULL'));
         self::assertSame(['approve', 'return'], $this->db()->createCommand('SELECT DISTINCT decision FROM {{%security_checks}} ORDER BY decision')->queryColumn());
