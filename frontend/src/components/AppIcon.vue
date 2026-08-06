@@ -9,7 +9,7 @@ defineProps({ name: { type: String, required: true }, size: { type: Number, defa
     <template v-else-if="name === 'arrow-left'"><path d="m10 6-6 6 6 6M4 12h16" /></template>
     <template v-else-if="name === 'chevron-left'"><path d="m15 6-6 6 6 6" /></template>
     <template v-else-if="name === 'chevron-right'"><path d="m9 6 6 6-6 6" /></template>
-    <template v-else-if="name === 'help'"><circle cx="12" cy="12" r="8.5" /><path d="M9.8 9.4a2.35 2.35 0 0 1 4.55.8c0 1.7-2.35 2.05-2.35 3.65M12 17.2h.01" /></template>
+    <template v-else-if="name === 'help'"><circle cx="12" cy="12" r="10" stroke-width="2" /><path d="M9.1 9a3 3 0 1 1 5.8 1c0 2-2.9 2.4-2.9 4" stroke-width="2" /><path d="M12 18h.01" stroke-width="2.5" /></template>
     <template v-else-if="name === 'send'"><path d="m4 4 16 8-16 8 3.5-8L4 4Z" /><path d="M7.5 12H20" /></template>
     <template v-else-if="name === 'download'"><path d="M12 4v12m-4-4 4 4 4-4M5 20h14" /></template>
     <template v-else-if="name === 'search'"><circle cx="10.5" cy="10.5" r="6" /><path d="m15 15 4 4" /></template>

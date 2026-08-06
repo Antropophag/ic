@@ -131,6 +131,14 @@ test('заявка перемещается между персональным�
 
     await useTestIdentity(page, 1)
     await page.goto('/')
+    const dashboardHelp = page.getByRole('button', { name: 'Инструкция по заявкам, требующим внимания' })
+    await expect(dashboardHelp).toBeVisible()
+    await expect(dashboardHelp).toHaveCSS('position', 'static')
+    await dashboardHelp.click()
+    const dashboardHelpDialog = page.getByRole('dialog', { name: 'Справка' })
+    await expect(dashboardHelpDialog).toContainText('Заявки, требующие внимания')
+    await page.getByRole('button', { name: 'Закрыть справку' }).click()
+    await expect(dashboardHelpDialog).toBeHidden()
     await page.getByRole('button', { name: /Назначить исполнителя/ }).click()
     await page.getByRole('row').filter({ hasText: marker }).click()
 
