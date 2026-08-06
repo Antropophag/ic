@@ -46,4 +46,34 @@ final class PrivateJsonReportWriterTest extends TestCase
             rmdir($directory);
         }
     }
+
+    public function testRejectsInsecureDestinationDirectory(): void
+    {
+        $directory = sys_get_temp_dir() . '/ic-bitrix-report-' . bin2hex(random_bytes(8));
+        mkdir($directory, 0755);
+        chmod($directory, 0755);
+        try {
+            $this->expectException(RuntimeException::class);
+            $this->expectExceptionMessage('permissions 0700');
+            (new PrivateJsonReportWriter())->write($directory . '/inventory.json', ['records' => 2]);
+        } finally {
+            rmdir($directory);
+        }
+    }
+
+    public function testRemovesPartialFileWhenEncodingFails(): void
+    {
+        $directory = sys_get_temp_dir() . '/ic-bitrix-report-' . bin2hex(random_bytes(8));
+        mkdir($directory, 0700);
+        $destination = $directory . '/inventory.json';
+        try {
+            (new PrivateJsonReportWriter())->write($destination, ['invalidUtf8' => "\xB1\x31"]);
+            self::fail('Invalid UTF-8 must fail JSON encoding.');
+        } catch (\JsonException) {
+            self::assertFileDoesNotExist($destination);
+            self::assertFileDoesNotExist($destination . '.partial');
+        } finally {
+            rmdir($directory);
+        }
+    }
 }

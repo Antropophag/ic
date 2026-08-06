@@ -72,4 +72,17 @@ final class BitrixListClientTest extends TestCase
         $this->expectException(\RuntimeException::class);
         iterator_to_array((new BitrixListClient($transport, 'lists', 114, 0))->elements());
     }
+
+    public function testRejectsNegativePageLimitBeforeCallingBitrix(): void
+    {
+        $transport = new class () implements BitrixTransport {
+            public function call(string $method, array $parameters = []): array
+            {
+                \PHPUnit\Framework\Assert::fail('Transport must not be called for an invalid page limit.');
+            }
+        };
+
+        $this->expectException(\RuntimeException::class);
+        iterator_to_array((new BitrixListClient($transport, 'lists', 114, 0))->elements(-1));
+    }
 }

@@ -46,4 +46,18 @@ final class BitrixUserClientTest extends TestCase
         $this->expectException(RuntimeException::class);
         (new BitrixUserClient($transport, 0))->usersById(['7']);
     }
+
+    public function testRejectsAResponseForAnotherUser(): void
+    {
+        $transport = new class () implements BitrixTransport {
+            public function call(string $method, array $parameters = []): array
+            {
+                return ['result' => [['ID' => '8']]];
+            }
+        };
+
+        $this->expectException(RuntimeException::class);
+        $this->expectExceptionMessage('different user');
+        (new BitrixUserClient($transport, 0))->usersById(['7']);
+    }
 }

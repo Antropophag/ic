@@ -42,6 +42,9 @@ final class BitrixController extends Controller
 
     public function actionInspect(): int
     {
+        if (!$this->validMaxPages()) {
+            return ExitCode::USAGE;
+        }
         $client = $this->client();
         $elements = iterator_to_array($client->elements($this->maxPages), false);
         $users = $this->usersForElements($elements);
@@ -79,6 +82,9 @@ final class BitrixController extends Controller
 
     public function actionImport(): int
     {
+        if (!$this->validMaxPages()) {
+            return ExitCode::USAGE;
+        }
         if (!in_array($this->apply, ['0', '1'], true)) {
             $this->stderr("--apply accepts only 0 or 1; database was not changed.\n");
             return ExitCode::USAGE;
@@ -113,8 +119,7 @@ final class BitrixController extends Controller
             $this->stderr("--output is required; no snapshot was created.\n");
             return ExitCode::USAGE;
         }
-        if ($this->maxPages < 0) {
-            $this->stderr("--max-pages must be zero or a positive integer.\n");
+        if (!$this->validMaxPages()) {
             return ExitCode::USAGE;
         }
 
@@ -161,6 +166,15 @@ final class BitrixController extends Controller
             $this->iblockType(),
             $this->listId(),
         );
+    }
+
+    private function validMaxPages(): bool
+    {
+        if ($this->maxPages >= 0) {
+            return true;
+        }
+        $this->stderr("--max-pages must be zero or a positive integer.\n");
+        return false;
     }
 
     /** @param list<array<string, mixed>> $elements

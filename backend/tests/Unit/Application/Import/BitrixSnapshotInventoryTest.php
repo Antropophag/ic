@@ -59,6 +59,8 @@ final class BitrixSnapshotInventoryTest extends TestCase
         self::assertSame('101', $report['numberCandidates']['NAME']['maximum']);
         self::assertSame(['10'], $report['numberCandidates']['NAME']['leadingZeroElementIds']);
         self::assertSame(['10', '12'], $report['numberCandidates']['NAME']['duplicatesAfterNumericNormalization']['100']);
+        self::assertSame(0, $report['numberCandidates']['NAME']['gaps']['count']);
+        self::assertSame(0, $report['numberCandidates']['ID']['gaps']['count']);
         self::assertSame(2, $report['fileStructures']['DETAIL_TEXT.supportingDocFiles']['totalItems']);
         self::assertSame(1, $report['fileStructures']['PROPERTY_648']['totalItems']);
         $encoded = json_encode($report, JSON_THROW_ON_ERROR);
@@ -74,6 +76,32 @@ final class BitrixSnapshotInventoryTest extends TestCase
         $this->expectException(RuntimeException::class);
         $this->expectExceptionMessage('integrity check failed');
         (new BitrixSnapshotInventory())->inspect($snapshot);
+    }
+
+    public function testDoesNotEnumerateAnExcessiveCandidateRange(): void
+    {
+        $snapshot = $this->snapshot([
+            $this->element('1', '1', 'Выполнено'),
+            $this->element('1000002', '1000002', 'Выполнено'),
+        ]);
+
+        $report = (new BitrixSnapshotInventory())->inspect($snapshot);
+
+        self::assertFalse($report['numberCandidates']['ID']['gaps']['available']);
+        self::assertSame('candidate range exceeds 1000000', $report['numberCandidates']['ID']['gaps']['reason']);
+    }
+
+    public function testReportsSparseIdentifierRanges(): void
+    {
+        $snapshot = $this->snapshot([
+            $this->element('10', '10', 'Выполнено'),
+            $this->element('12', '12', 'Выполнено'),
+        ]);
+
+        $gaps = (new BitrixSnapshotInventory())->inspect($snapshot)['numberCandidates']['ID']['gaps'];
+
+        self::assertSame(1, $gaps['count']);
+        self::assertSame([[11, 11]], $gaps['ranges']);
     }
 
     /** @param array<string, mixed> $detailOverrides

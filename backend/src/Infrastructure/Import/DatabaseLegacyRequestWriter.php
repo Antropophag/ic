@@ -107,7 +107,7 @@ final class DatabaseLegacyRequestWriter implements LegacyRequestWriter
         )->queryScalar();
         $created = $existing === false;
         if ($created) {
-            $this->db->createCommand()->insert('{{%users}}', [
+            $created = $this->db->createCommand()->upsert('{{%users}}', [
                 'ad_login' => $login,
                 'display_name' => $request->creator->displayName,
                 'email' => $request->creator->email,
@@ -116,22 +116,28 @@ final class DatabaseLegacyRequestWriter implements LegacyRequestWriter
                 'is_active' => $request->creator->active,
                 'created_at' => $now,
                 'updated_at' => $now,
-            ])->execute();
-            $userId = (int) $this->db->getLastInsertID();
-        } else {
-            // Existing local identity wins: import must not activate, deactivate,
-            // or overwrite a profile that may already have been synchronized from AD.
-            $userId = (int) $existing;
+            ], false)->execute() === 1;
+            $existing = $this->db->createCommand(
+                'SELECT id FROM {{%users}} WHERE ad_login = :login FOR UPDATE',
+                [':login' => $login],
+            )->queryScalar();
+            if ($existing === false) {
+                throw new \RuntimeException('Imported identity could not be created or loaded.');
+            }
         }
+        // Existing local identity wins: import must not activate, deactivate,
+        // or overwrite a profile that may already have been synchronized from AD.
+        $userId = (int) $existing;
         if ($created && $request->creator->active) {
             $roleId = $this->db->createCommand("SELECT id FROM {{%roles}} WHERE code = 'employee'")->queryScalar();
-            if ($roleId !== false) {
-                $this->db->createCommand()->upsert('{{%user_roles}}', [
-                    'user_id' => $userId,
-                    'role_id' => (int) $roleId,
-                    'created_at' => $now,
-                ], false)->execute();
+            if ($roleId === false) {
+                throw new \RuntimeException('Required employee role is not available; run migrations first.');
             }
+            $this->db->createCommand()->upsert('{{%user_roles}}', [
+                'user_id' => $userId,
+                'role_id' => (int) $roleId,
+                'created_at' => $now,
+            ], false)->execute();
         }
         return $userId;
     }

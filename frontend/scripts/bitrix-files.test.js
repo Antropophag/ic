@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto'
-import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
+import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
 import { afterEach, describe, expect, test } from 'vitest'
@@ -9,6 +9,8 @@ import {
   normalizeFileUrl,
   parseArguments,
   readSnapshotFiles,
+  assertOutsideGit,
+  writePrivateJsonLines,
 } from './bitrix-files.mjs'
 
 const temporaryDirectories = []
@@ -55,6 +57,33 @@ describe('Bitrix file migration tooling', () => {
     expect(result.associations).toHaveLength(2)
     expect(result.uniqueFiles).toHaveLength(1)
     expect(result.allowedHost).toBe('portal.example')
+  })
+
+  test('rejects unsafe file identifiers and malformed detail JSON', async () => {
+    const unsafe = await fixtureDirectory()
+    await writeSnapshot(unsafe, [element('10', [{ id: '../escape', name: 'x', detailURL: 'https://portal.example/docs/file/FilesProposalTest/x' }], [])])
+    await expect(readSnapshotFiles(unsafe)).rejects.toThrow('Unsafe source file identifier')
+
+    const malformed = await fixtureDirectory()
+    await writeSnapshot(malformed, [{ ID: '11', DETAIL_TEXT: '{invalid' }])
+    await expect(readSnapshotFiles(malformed)).rejects.toThrow('Element 11 has malformed DETAIL_TEXT JSON')
+  })
+
+  test('rejects the workspace itself when it is a Git root', async () => {
+    const directory = await fixtureDirectory()
+    await mkdir(join(directory, '.git'))
+    expect(() => assertOutsideGit(directory)).toThrow('outside a Git working tree')
+  })
+
+  test('reuses only matching associations and cleans stale partial file', async () => {
+    const directory = await fixtureDirectory()
+    const path = join(directory, 'associations.jsonl')
+    const records = [{ sourceFileId: '7' }]
+    await writeFile(`${path}.partial`, 'stale')
+    await writePrivateJsonLines(path, records)
+    await writePrivateJsonLines(path, records)
+    await expect(writePrivateJsonLines(path, [{ sourceFileId: '8' }])).rejects.toThrow('does not match')
+    expect(await readFile(path, 'utf8')).toBe('{"sourceFileId":"7"}\n')
   })
 
   test('streams response to a private object and calculates metadata', async () => {

@@ -101,7 +101,7 @@ final class LegacyRequestMapper
     /** @param array<string, mixed> $source */
     private function string(array $source, string $key): string
     {
-        return is_scalar($source[$key] ?? null) ? trim((string) $source[$key]) : '';
+        return is_string($source[$key] ?? null) ? trim($source[$key]) : '';
     }
 
     /** @param array<string, mixed> $source */

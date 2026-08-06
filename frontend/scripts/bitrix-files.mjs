@@ -7,7 +7,7 @@ import { Readable, Transform } from 'node:stream'
 import { pipeline } from 'node:stream/promises'
 import { pathToFileURL } from 'node:url'
 import process from 'node:process'
-import { chromium } from 'playwright'
+import { chromium } from '@playwright/test'
 
 process.umask(0o077)
 
@@ -63,18 +63,26 @@ export async function readSnapshotFiles(snapshotDirectory) {
   const input = createInterface({ input: createReadStream(elementsPath), crlfDelay: Infinity })
   for await (const line of input) {
     const element = JSON.parse(line)
-    const details = JSON.parse(element.DETAIL_TEXT)
+    if (typeof element.DETAIL_TEXT !== 'string') throw new Error(`Element ${element.ID} has no textual DETAIL_TEXT.`)
+    let details
+    try {
+      details = JSON.parse(element.DETAIL_TEXT)
+    } catch (error) {
+      throw new Error(`Element ${element.ID} has malformed DETAIL_TEXT JSON.`, { cause: error })
+    }
     for (const [type, files] of [
       ['supporting', details.supportingDocFiles ?? []],
       ['report', details.reportFiles ?? []],
     ]) {
       for (const file of files) {
+        const sourceFileId = scalarString(file.id, 'file.id')
+        if (!/^[0-9A-Za-z_-]+$/.test(sourceFileId)) throw new Error(`Unsafe source file identifier: ${sourceFileId}`)
         associations.push({
-          requestNumber: String(element.ID),
+          requestNumber: scalarString(element.ID, 'element.ID'),
           documentType: type,
-          sourceFileId: String(file.id),
-          originalName: String(file.name),
-          detailUrl: String(file.detailURL),
+          sourceFileId,
+          originalName: scalarString(file.name, 'file.name'),
+          detailUrl: scalarString(file.detailURL, 'file.detailURL'),
         })
       }
     }
@@ -181,7 +189,11 @@ async function auth(snapshotDirectory, workspace) {
   })
   try {
     const page = context.pages()[0] ?? await context.newPage()
-    await page.goto(source.uniqueFiles[0].detailUrl, { waitUntil: 'domcontentloaded', timeout: 30_000 }).catch(() => {})
+    try {
+      await page.goto(source.uniqueFiles[0].detailUrl, { waitUntil: 'domcontentloaded', timeout: 30_000 })
+    } catch (error) {
+      process.stderr.write(`Первичная навигация не завершилась: ${error instanceof Error ? error.message : 'unknown error'}\n`)
+    }
     process.stdout.write('Войдите в Bitrix24 и завершите OAuth в открытом окне. Затем вернитесь сюда и нажмите Enter.\n')
     await waitForEnter()
     await verifyBrowserFileAccess(page, source.uniqueFiles[0].detailUrl)
@@ -337,13 +349,13 @@ async function verifyDownloadedObject(path, checkpoint) {
 
 async function preparePrivateWorkspace(workspace) {
   const path = resolve(workspace)
-  await assertOutsideGit(path)
+  assertOutsideGit(path)
   await mkdir(path, { recursive: true, mode: 0o700 })
   await chmod(path, 0o700)
 }
 
-async function assertOutsideGit(path) {
-  let current = dirname(path)
+export function assertOutsideGit(path) {
+  let current = resolve(path)
   while (true) {
     if (existsSync(join(current, '.git'))) throw new Error('Workspace must be outside a Git working tree.')
     const parent = dirname(current)
@@ -352,11 +364,27 @@ async function assertOutsideGit(path) {
   }
 }
 
-async function writePrivateJsonLines(path, records) {
-  if (existsSync(path)) return
+export async function writePrivateJsonLines(path, records) {
+  const contents = records.map((record) => JSON.stringify(record)).join('\n') + '\n'
+  if (existsSync(path)) {
+    if (await readFile(path, 'utf8') === contents) return
+    throw new Error(`Existing ${path} does not match the current snapshot.`)
+  }
   const temporary = `${path}.partial`
-  await writeFile(temporary, records.map((record) => JSON.stringify(record)).join('\n') + '\n', { mode: 0o600, flag: 'wx' })
-  await rename(temporary, path)
+  try {
+    await rm(temporary, { force: true })
+    await writeFile(temporary, contents, { mode: 0o600, flag: 'wx' })
+    await rename(temporary, path)
+  } catch (error) {
+    await rm(temporary, { force: true })
+    throw error
+  }
+}
+
+function scalarString(value, name) {
+  if (typeof value === 'string') return value
+  if (typeof value === 'number' && Number.isFinite(value)) return String(value)
+  throw new Error(`Snapshot field ${name} must be a string or a finite number.`)
 }
 
 async function appendCheckpoint(path, record) {

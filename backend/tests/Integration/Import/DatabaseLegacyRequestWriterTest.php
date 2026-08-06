@@ -237,4 +237,25 @@ final class DatabaseLegacyRequestWriterTest extends IntegrationTestCase
             'department_source' => 'bitrix24',
         ], $snapshot);
     }
+
+    public function testMissingEmployeeRoleRollsBackImportedIdentityAndRequest(): void
+    {
+        $this->db()->createCommand()->update('{{%roles}}', ['code' => 'employee_unavailable'], ['code' => 'employee'])->execute();
+        try {
+            (new DatabaseLegacyRequestWriter($this->db()))->write(
+                $this->request('bitrix24:114:511', '77007'),
+            );
+            self::fail('Import must fail when the required role is unavailable.');
+        } catch (\RuntimeException $exception) {
+            self::assertStringContainsString('employee role', $exception->getMessage());
+            self::assertSame(0, (int) $this->scalar(
+                "SELECT COUNT(*) FROM {{%users}} WHERE ad_login = 'user77007'",
+            ));
+            self::assertSame(0, (int) $this->scalar(
+                "SELECT COUNT(*) FROM {{%requests}} WHERE legacy_id = 'bitrix24:114:511'",
+            ));
+        } finally {
+            $this->db()->createCommand()->update('{{%roles}}', ['code' => 'employee'], ['code' => 'employee_unavailable'])->execute();
+        }
+    }
 }

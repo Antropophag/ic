@@ -64,7 +64,7 @@ final class LegacyUserMapper
     /** @param array<string, mixed> $source */
     private function string(array $source, string $key): string
     {
-        return is_scalar($source[$key] ?? null) ? trim((string) $source[$key]) : '';
+        return is_string($source[$key] ?? null) ? trim($source[$key]) : '';
     }
 
     private function assertMaximumLength(string $value, int $maximum, string $field): void

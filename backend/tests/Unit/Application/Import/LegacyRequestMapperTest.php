@@ -92,6 +92,18 @@ final class LegacyRequestMapperTest extends TestCase
         ]), 114);
     }
 
+    public function testRejectsNonStringRequestFields(): void
+    {
+        $this->expectException(UnexpectedValueException::class);
+        $this->mapper()->map($this->element(['nameType' => 123]), 114);
+    }
+
+    public function testRejectsNonStringCreatorId(): void
+    {
+        $this->expectException(UnexpectedValueException::class);
+        $this->mapper()->map($this->element(['creator' => ['ID' => true]]), 114);
+    }
+
     public function testRejectsStringLongerThanDatabaseColumn(): void
     {
         $this->expectException(UnexpectedValueException::class);

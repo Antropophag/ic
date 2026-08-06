@@ -145,6 +145,36 @@ final class BitrixSnapshotExporterTest extends TestCase
         );
     }
 
+    public function testDoesNotPublishSnapshotTruncatedByPageLimit(): void
+    {
+        $transport = new class () implements BitrixTransport {
+            public function call(string $method, array $parameters = []): array
+            {
+                if ($method === 'lists.field.get') {
+                    return ['result' => []];
+                }
+                return ['result' => [['ID' => '1']], 'next' => 50, 'total' => 2];
+            }
+        };
+        $destination = $this->directory . '/snapshot';
+
+        try {
+            (new BitrixSnapshotExporter())->export(
+                new BitrixListClient($transport, 'lists', 114, 0),
+                new BitrixUserClient($transport),
+                $destination,
+                'lists',
+                114,
+                1,
+            );
+            self::fail('A truncated snapshot must not be published.');
+        } catch (RuntimeException $exception) {
+            self::assertStringContainsString('partial data remains', $exception->getMessage());
+        }
+        self::assertDirectoryDoesNotExist($destination);
+        self::assertDirectoryExists($destination . '.partial');
+    }
+
     public function testRefusesToWriteSensitiveSnapshotInsideGitWorkTree(): void
     {
         file_put_contents($this->directory . '/.git', 'gitdir: elsewhere');

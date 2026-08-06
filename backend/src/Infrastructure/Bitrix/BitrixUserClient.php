@@ -27,6 +27,10 @@ final class BitrixUserClient
             if (!is_array($result) || count($result) !== 1 || !is_array($result[0])) {
                 throw new RuntimeException("Bitrix24 user {$id} was not found unambiguously.");
             }
+            $returnedId = $result[0]['ID'] ?? null;
+            if ((!is_string($returnedId) && !is_int($returnedId)) || (string) $returnedId !== $id) {
+                throw new RuntimeException("Bitrix24 returned a different user for requested ID {$id}.");
+            }
             $users[$id] = $result[0];
             if ($index < count($uniqueIds) - 1 && $this->requestDelayMilliseconds > 0) {
                 usleep($this->requestDelayMilliseconds * 1000);

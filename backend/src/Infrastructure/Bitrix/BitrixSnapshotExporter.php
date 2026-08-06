@@ -51,9 +51,11 @@ final class BitrixSnapshotExporter
             $records = 0;
             $pages = 0;
             $sourceTotal = null;
+            $sourceHasMore = false;
             $creatorIds = [];
             try {
                 foreach ($client->pageBatches($maxPages, $selection) as $batch) {
+                    $sourceHasMore = $batch['hasNext'];
                     ++$pages;
                     if ($batch['total'] !== null) {
                         if ($sourceTotal !== null && $sourceTotal !== $batch['total']) {
@@ -76,6 +78,9 @@ final class BitrixSnapshotExporter
             }
             if ($maxPages === 0 && $sourceTotal !== null && $records !== $sourceTotal) {
                 throw new RuntimeException('Complete snapshot record count does not match the Bitrix24 total.');
+            }
+            if ($maxPages > 0 && ($sourceHasMore || ($sourceTotal !== null && $records < $sourceTotal))) {
+                throw new RuntimeException('Page limit produced an incomplete snapshot; it will not be published.');
             }
 
             $usersPath = $partial . '/users.json';

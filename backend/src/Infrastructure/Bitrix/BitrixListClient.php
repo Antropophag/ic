@@ -42,10 +42,13 @@ final class BitrixListClient
     }
 
     /** @param list<string> $select
-     *  @return iterable<int, array{items: list<array<string, mixed>>, total: ?int}>
+     *  @return iterable<int, array{items: list<array<string, mixed>>, total: ?int, hasNext: bool}>
      */
     public function pageBatches(int $maxPages = 0, array $select = []): iterable
     {
+        if ($maxPages < 0) {
+            throw new RuntimeException('Maximum page count must be zero or a positive integer.');
+        }
         $start = 0;
         $page = 0;
         do {
@@ -73,10 +76,10 @@ final class BitrixListClient
                     throw new RuntimeException('Bitrix24 returned an invalid total element count.');
                 }
             }
-            yield ['items' => $items, 'total' => $total];
+            $next = $response['next'] ?? null;
+            yield ['items' => $items, 'total' => $total, 'hasNext' => $next !== null];
 
             ++$page;
-            $next = $response['next'] ?? null;
             if ($next !== null) {
                 $nextStart = filter_var($next, FILTER_VALIDATE_INT);
                 if ($nextStart === false || $nextStart <= $start) {

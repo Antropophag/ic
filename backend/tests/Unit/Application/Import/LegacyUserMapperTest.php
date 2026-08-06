@@ -48,5 +48,7 @@ final class LegacyUserMapperTest extends TestCase
         yield 'missing first name' => [[...$valid, 'NAME' => '']];
         yield 'missing last name' => [[...$valid, 'LAST_NAME' => '']];
         yield 'invalid active flag' => [[...$valid, 'ACTIVE' => '1']];
+        yield 'numeric first name' => [[...$valid, 'NAME' => 123]];
+        yield 'boolean ID' => [[...$valid, 'ID' => true]];
     }
 }
