@@ -19,9 +19,26 @@ final class DevelopmentRequestSeederTest extends IntegrationTestCase
         parent::setUp();
         $this->storageRoot = sys_get_temp_dir() . '/ic-development-seed-test-' . bin2hex(random_bytes(8));
         mkdir($this->storageRoot, 0700, true);
-        foreach (['dev.user', 'dev.executor', 'dev.executor.naumov', 'dev.employee', 'dev.expert', 'dev.expert2', 'dev.security', 'dev.admin'] as $login) {
-            if ($this->scalar('SELECT id FROM {{%users}} WHERE ad_login = :login', [':login' => $login]) === false) {
-                $this->createUser($login, $login);
+        $departments = [
+            'dev.user' => 'Испытательный центр',
+            'dev.executor' => 'Испытательный центр',
+            'dev.executor.naumov' => 'Испытательный центр',
+            'dev.employee' => 'Тестовое подразделение',
+            'dev.expert' => 'СГК',
+            'dev.expert2' => 'СГК',
+            'dev.security' => 'Служба безопасности',
+            'dev.admin' => 'ИТ',
+        ];
+        foreach ($departments as $login => $department) {
+            $userId = $this->scalar('SELECT id FROM {{%users}} WHERE ad_login = :login', [':login' => $login]);
+            if ($userId === false) {
+                $this->createUser($login, $login, department: $department);
+            } else {
+                $this->db()->createCommand()->update(
+                    '{{%users}}',
+                    ['department' => $department],
+                    ['id' => (int) $userId],
+                )->execute();
             }
         }
     }

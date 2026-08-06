@@ -30,14 +30,6 @@ final class DevelopmentRequestSeeder
     /** @var list<string> */
     private const INITIATORS = ['employee', 'expert', 'expert2', 'security', 'admin'];
 
-    private const INITIATOR_DEPARTMENTS = [
-        'employee' => 'Тестовое подразделение',
-        'expert' => 'СГК',
-        'expert2' => 'СГК',
-        'security' => 'Служба безопасности',
-        'admin' => 'ИТ',
-    ];
-
     /** @var list<array{status: string, product: string, manufacturer: string, supplier: string, quantity: int, method: string, color: string}> */
     private const REQUESTS = [
         ['status' => 'registered', 'product' => 'Панель управления лифтом «Вектор»', 'manufacturer' => 'ООО «Учебные системы»', 'supplier' => 'ООО «Демо Комплект»', 'quantity' => 2, 'method' => 'Входной контроль комплектности и маркировки.', 'color' => 'white'],
@@ -70,6 +62,7 @@ final class DevelopmentRequestSeeder
     public function seed(): array
     {
         $users = $this->resolveUsers();
+        $initiatorDepartments = $this->resolveInitiatorDepartments($users);
         $oldKeys = $this->db->createCommand('SELECT storage_key FROM {{%request_document_versions}}')->queryColumn();
         $newKeys = [];
         $counts = ['requests' => 0, 'comments' => 0, 'documents' => 0];
@@ -82,7 +75,7 @@ final class DevelopmentRequestSeeder
                 $fixture['age'] = 8 + ($index % 83);
                 $initiator = self::INITIATORS[$index % count(self::INITIATORS)];
                 $initiatorId = $users[$initiator];
-                $requestId = $this->insertRequest($index, $fixture, $initiatorId, self::INITIATOR_DEPARTMENTS[$initiator]);
+                $requestId = $this->insertRequest($index, $fixture, $initiatorId, $initiatorDepartments[$initiatorId]);
                 ++$counts['requests'];
                 $counts['comments'] += $this->insertComments($requestId, $index, $fixture['age'], $initiatorId, $users);
                 $reportVersionId = null;
@@ -165,6 +158,37 @@ final class DevelopmentRequestSeeder
             $result[$name] = (int) $ids[$login];
         }
         return $result;
+    }
+
+    /**
+     * @param array<string, int> $users
+     * @return array<int, string>
+     */
+    private function resolveInitiatorDepartments(array $users): array
+    {
+        $params = [];
+        $placeholders = [];
+        foreach (self::INITIATORS as $index => $initiator) {
+            $placeholder = ':initiator' . $index;
+            $placeholders[] = $placeholder;
+            $params[$placeholder] = $users[$initiator];
+        }
+        $rows = $this->db->createCommand(
+            'SELECT id, NULLIF(TRIM(department), \'\') AS department FROM {{%users}} '
+            . 'WHERE id IN (' . implode(', ', $placeholders) . ')',
+            $params,
+        )->queryAll();
+        $departments = [];
+        foreach ($rows as $row) {
+            if ($row['department'] === null) {
+                throw new \RuntimeException("Development initiator '{$row['id']}' has no department.");
+            }
+            $departments[(int) $row['id']] = (string) $row['department'];
+        }
+        if (count($departments) !== count(self::INITIATORS)) {
+            throw new \RuntimeException('Cannot resolve all development initiator departments.');
+        }
+        return $departments;
     }
 
     private function clearRequestData(): void
