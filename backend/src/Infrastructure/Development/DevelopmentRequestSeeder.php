@@ -169,6 +169,9 @@ final class DevelopmentRequestSeeder
         $params = [];
         $placeholders = [];
         foreach (self::INITIATORS as $index => $initiator) {
+            if (!array_key_exists($initiator, $users)) {
+                throw new \RuntimeException("Development initiator '{$initiator}' is not resolved.");
+            }
             $placeholder = ':initiator' . $index;
             $placeholders[] = $placeholder;
             $params[$placeholder] = $users[$initiator];
