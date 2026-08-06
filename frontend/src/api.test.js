@@ -37,9 +37,11 @@ it('loads dashboard counts and sends an attention queue filter', async () => {
 
   await requestApi.dashboard()
   await requestApi.list({ page: 1, attention: 'publish_opinion' })
+  await requestApi.list({ page: 1, attention: '' })
 
   expect(fetchMock.mock.calls[0][0]).toBe('/api/v1/requests/dashboard')
   expect(fetchMock.mock.calls[1][0]).toBe('/api/v1/requests?page=1&attention=publish_opinion')
+  expect(fetchMock.mock.calls[2][0]).toBe('/api/v1/requests?page=1')
 })
 
 it('loads one request card with its history', async () => {
