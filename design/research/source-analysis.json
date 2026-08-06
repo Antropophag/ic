@@ -1,0 +1,87 @@
+{
+  "source_count": 67,
+  "component_facts": {
+    "buttons": {
+      "families": [
+        "primary",
+        "secondary",
+        "text"
+      ],
+      "states": [
+        "default",
+        "hover",
+        "active",
+        "disabled"
+      ],
+      "large_label": "142x40",
+      "medium_label": "131x32",
+      "small_label": "121x26",
+      "large_icon": "40x40",
+      "medium_icon": "32x32"
+    },
+    "select": {
+      "widths": [
+        250,
+        280
+      ],
+      "heights": [
+        32,
+        40
+      ],
+      "states": [
+        "rest",
+        "focus",
+        "disabled",
+        "multi-select",
+        "dropdown-open"
+      ]
+    },
+    "table": {
+      "common_row_height": 50,
+      "checkbox": 20,
+      "status_height": 30
+    },
+    "pagination": {
+      "size": 40,
+      "radius": 20
+    },
+    "drawer": {
+      "content_width": 420,
+      "surface_radius": 16,
+      "close_button": 32,
+      "footer_action": "180x40"
+    },
+    "modal": {
+      "core_width": 572,
+      "radius": 16,
+      "close_button": 32
+    },
+    "sidebar": {
+      "collapsed_width": 72,
+      "item_hit_area": 44,
+      "active_radius": 8
+    },
+    "header": {
+      "avatar": 48,
+      "avatar_radius": 24
+    },
+    "checkbox": {
+      "large": 20,
+      "small": 16
+    },
+    "switch": {
+      "main": "38x20",
+      "compact": "24x14"
+    },
+    "status": {
+      "height": 30,
+      "radius": 15
+    }
+  },
+  "limitations": [
+    "font metadata absent",
+    "motion absent",
+    "responsive coverage incomplete",
+    "accessibility semantics absent"
+  ]
+}

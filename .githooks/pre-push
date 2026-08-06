@@ -1,0 +1,6 @@
+#!/usr/bin/env sh
+set -eu
+
+project_root=$(git rev-parse --show-toplevel)
+make -C "$project_root" check
+exec git lfs pre-push "$@"

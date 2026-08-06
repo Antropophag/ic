@@ -1,0 +1,14 @@
+services:
+  frontend:
+    build:
+      target: development
+
+  backend:
+    volumes:
+      - document-data:/app/storage/documents
+      - ./deployment/dev/web.php:/app/deployment/web.php:ro
+      - ./deployment/dev/console.php:/app/deployment/console.php:ro
+
+  scheduler:
+    volumes:
+      - ./deployment/dev/console.php:/app/deployment/console.php:ro

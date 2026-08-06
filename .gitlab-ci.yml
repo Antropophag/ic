@@ -1,0 +1,74 @@
+stages: [test]
+
+default:
+  tags: [runner-test]
+
+workflow:
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+    - if: '$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH'
+
+check:
+  stage: test
+  image: node:22.23.0-bookworm
+  services:
+    - name: docker:29.0.0-dind
+      command: ["--tls=false"]
+  variables:
+    DOCKER_HOST: tcp://docker:2375
+    DOCKER_TLS_CERTDIR: ""
+  before_script:
+    - apt-get update
+    - apt-get install -y --no-install-recommends curl docker.io docker-compose-v2 make python3-pip sudo
+    - sh scripts/install-ci-linters.sh
+  script: [make check]
+
+coverage:
+  stage: test
+  image: node:22.23.0-bookworm
+  services:
+    - name: docker:29.0.0-dind
+      command: ["--tls=false"]
+  variables:
+    DOCKER_HOST: tcp://docker:2375
+    DOCKER_TLS_CERTDIR: ""
+  before_script:
+    - apt-get update
+    - apt-get install -y --no-install-recommends docker.io make python3
+  script: [make coverage]
+
+e2e:
+  stage: test
+  image: mcr.microsoft.com/playwright:v1.62.0-noble
+  services:
+    - name: docker:29.0.0-dind
+      command: ["--tls=false"]
+  variables:
+    DOCKER_HOST: tcp://docker:2375
+    DOCKER_TLS_CERTDIR: ""
+    COMPOSE_PUBLISHED_HOST: docker
+  before_script:
+    - apt-get update
+    - apt-get install -y --no-install-recommends docker.io docker-compose-v2 make
+  script: [make e2e]
+  after_script:
+    - make _test-down
+  artifacts:
+    when: on_failure
+    paths: [frontend/playwright-report/]
+
+analyze:
+  stage: test
+  image: semgrep/semgrep
+  script:
+    - semgrep scan --config auto --error backend/src frontend/src
+
+secrets:
+  stage: test
+  image:
+    name: zricethezav/gitleaks:v8.24.2
+    entrypoint: [""]
+  variables:
+    GIT_DEPTH: 0
+  script:
+    - gitleaks detect --source . --no-banner

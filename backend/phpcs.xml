@@ -1,0 +1,10 @@
+<?xml version="1.0"?>
+<ruleset name="ЩЛЗ">
+    <description>Проверка серверного кода по PSR-12.</description>
+    <file>src</file>
+    <file>tests</file>
+    <arg name="colors"/>
+    <arg name="extensions" value="php"/>
+    <arg name="parallel" value="4"/>
+    <rule ref="PSR12"/>
+</ruleset>

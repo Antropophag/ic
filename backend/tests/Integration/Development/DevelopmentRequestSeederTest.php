@@ -1,0 +1,247 @@
+<?php
+
+declare(strict_types=1);
+
+namespace Tests\Integration\Development;
+
+use App\Infrastructure\Development\DevelopmentRequestSeeder;
+use App\Infrastructure\Document\DocumentStorage;
+use App\Infrastructure\Request\RequestQuery;
+use Tests\Integration\IntegrationTestCase;
+use yii\db\IntegrityException;
+
+final class DevelopmentRequestSeederTest extends IntegrationTestCase
+{
+    private string $storageRoot;
+
+    protected function setUp(): void
+    {
+        parent::setUp();
+        $this->storageRoot = sys_get_temp_dir() . '/ic-development-seed-test-' . bin2hex(random_bytes(8));
+        mkdir($this->storageRoot, 0700, true);
+        $departments = [
+            'dev.user' => 'Испытательный центр',
+            'dev.executor' => 'Испытательный центр',
+            'dev.executor.naumov' => 'Испытательный центр',
+            'dev.employee' => 'Тестовое подразделение',
+            'dev.expert' => 'СГК',
+            'dev.expert2' => 'СГК',
+            'dev.security' => 'Служба безопасности',
+            'dev.admin' => 'ИТ',
+        ];
+        foreach ($departments as $login => $department) {
+            $userId = $this->scalar('SELECT id FROM {{%users}} WHERE ad_login = :login', [':login' => $login]);
+            if ($userId === false) {
+                $this->createUser($login, $login, department: $department);
+            } else {
+                $this->db()->createCommand()->update(
+                    '{{%users}}',
+                    ['department' => $department],
+                    ['id' => (int) $userId],
+                )->execute();
+            }
+        }
+    }
+
+    protected function tearDown(): void
+    {
+        try {
+            $files = glob($this->storageRoot . '/*/*/*') ?: [];
+            foreach ($files as $file) {
+                if (is_file($file)) {
+                    unlink($file);
+                }
+            }
+            $directories = glob($this->storageRoot . '/*/*', GLOB_ONLYDIR) ?: [];
+            foreach ($directories as $directory) {
+                if (is_dir($directory)) {
+                    rmdir($directory);
+                }
+            }
+            $directories = glob($this->storageRoot . '/*', GLOB_ONLYDIR) ?: [];
+            foreach ($directories as $directory) {
+                if (is_dir($directory)) {
+                    rmdir($directory);
+                }
+            }
+            if (is_dir($this->storageRoot)) {
+                rmdir($this->storageRoot);
+            }
+        } finally {
+            parent::tearDown();
+        }
+    }
+
+    public function testSeedCreatesFullSyntheticRegistryAndCanResetIt(): void
+    {
+        $userCount = (int) $this->scalar('SELECT COUNT(*) FROM {{%users}}');
+        $seeder = new DevelopmentRequestSeeder($this->db(), new DocumentStorage($this->storageRoot));
+
+        $first = $seeder->seed();
+        self::assertSame(['requests' => 100, 'comments' => 250, 'documents' => 174], $first);
+        self::assertSame(
+            ['completed', 'in_progress', 'opinion_preparation', 'registered', 'rejected', 'security_review', 'suspended', 'withdrawn'],
+            $this->db()->createCommand('SELECT DISTINCT status FROM {{%requests}} ORDER BY status')->queryColumn(),
+        );
+        $initiatorIds = array_map(
+            'intval',
+            $this->db()->createCommand('SELECT DISTINCT initiator_id FROM {{%requests}} ORDER BY initiator_id')->queryColumn(),
+        );
+        self::assertCount(5, $initiatorIds);
+        foreach ($initiatorIds as $initiatorId) {
+            $mine = (new RequestQuery($this->db()))->findPage($initiatorId, 1, 100, 'mine', null, '', 'desc');
+            $statuses = array_values(array_unique(array_column($mine['items'], 'status')));
+            sort($statuses);
+            self::assertSame(
+                ['completed', 'in_progress', 'opinion_preparation', 'registered', 'rejected', 'security_review', 'suspended', 'withdrawn'],
+                $statuses,
+            );
+        }
+        self::assertSame(
+            0,
+            (int) $this->scalar(
+                'SELECT COUNT(DISTINCT r.initiator_id) FROM {{%requests}} r '
+                . 'JOIN {{%user_roles}} ur ON ur.user_id = r.initiator_id '
+                . 'JOIN {{%roles}} role ON role.id = ur.role_id '
+                . "WHERE role.code IN ('ic_executor', 'ic_manager', 'laboratory_manager')",
+            ),
+        );
+        self::assertSame(
+            0,
+            (int) $this->scalar(
+                'SELECT COUNT(*) FROM {{%requests}} r JOIN {{%users}} u ON u.id = r.initiator_id '
+                . "WHERE r.department_name <> u.department OR r.department_source <> 'current_profile'",
+            ),
+        );
+        self::assertSame(
+            0,
+            (int) $this->scalar(
+                'SELECT COUNT(*) FROM {{%requests}} r JOIN {{%request_documents}} d ON d.request_id = r.id '
+                . 'JOIN {{%request_document_versions}} v ON v.document_id = d.id '
+                . "WHERE d.document_type = 'attachment' AND v.uploaded_by <> r.initiator_id",
+            ),
+        );
+        self::assertSame(
+            0,
+            (int) $this->scalar(
+                'SELECT COUNT(*) FROM {{%requests}} r JOIN {{%request_comments}} c ON c.request_id = r.id '
+                . 'AND c.id = (SELECT MIN(first_comment.id) FROM {{%request_comments}} first_comment '
+                . 'WHERE first_comment.request_id = r.id) WHERE c.author_id <> r.initiator_id',
+            ),
+        );
+        self::assertSame(0, (int) $this->scalar('SELECT COUNT(*) FROM {{%requests}} WHERE legacy_id IS NOT NULL'));
+        self::assertSame(['approve', 'return'], $this->db()->createCommand('SELECT DISTINCT decision FROM {{%security_checks}} ORDER BY decision')->queryColumn());
+        self::assertSame(13, (int) $this->scalar("SELECT COUNT(*) FROM {{%request_transitions}} WHERE action = 'security_return'"));
+        self::assertSame(
+            'Демонстрационная заявка создана. Образцы готовы к передаче в ИЦ.',
+            $this->scalar('SELECT body FROM {{%request_comments}} ORDER BY id LIMIT 1'),
+        );
+        self::assertSame(
+            'Требуется уточнить вывод экспертного заключения.',
+            $this->scalar("SELECT reason FROM {{%security_checks}} WHERE decision = 'return'"),
+        );
+        self::assertSame(
+            'По результатам демонстрационных испытаний образец соответствует требованиям программы.',
+            $this->scalar('SELECT body FROM {{%expert_opinions}} ORDER BY id LIMIT 1'),
+        );
+        self::assertSame(
+            0,
+            (int) $this->scalar(
+                "SELECT COUNT(*) FROM {{%request_transitions}} transition_event "
+                . 'LEFT JOIN {{%request_document_versions}} version ON version.id = transition_event.document_version_id '
+                . 'LEFT JOIN {{%request_documents}} document ON document.id = version.document_id '
+                . "WHERE transition_event.action = 'upload_report' "
+                . "AND (transition_event.document_version_id IS NULL OR document.document_type <> 'report')",
+            ),
+        );
+        self::assertSame(
+            0,
+            (int) $this->scalar(
+                "SELECT COUNT(*) FROM {{%request_transitions}} transition_event "
+                . 'JOIN {{%request_document_versions}} version ON version.id = transition_event.document_version_id '
+                . "WHERE transition_event.action = 'upload_report' AND transition_event.created_at <= version.created_at",
+            ),
+        );
+        self::assertSame(
+            0,
+            (int) $this->scalar(
+                "SELECT COUNT(*) FROM {{%request_transitions}} transition_event "
+                . 'JOIN {{%expert_opinions}} opinion ON opinion.request_id = transition_event.request_id '
+                . "WHERE transition_event.action = 'publish_opinion' AND transition_event.created_at <= opinion.created_at",
+            ),
+        );
+        self::assertSame(
+            0,
+            (int) $this->scalar(
+                "SELECT COUNT(*) FROM {{%request_transitions}} transition_event "
+                . 'JOIN {{%security_checks}} security_check ON security_check.request_id = transition_event.request_id '
+                . "WHERE transition_event.action IN ('security_approve', 'security_return') "
+                . 'AND transition_event.created_at < security_check.created_at',
+            ),
+        );
+        self::assertSame(
+            'dev.expert2',
+            $this->scalar(
+                "SELECT u.ad_login FROM {{%request_transitions}} t JOIN {{%requests}} r ON r.id = t.request_id JOIN {{%users}} u ON u.id = t.actor_id WHERE r.status = 'security_review' AND t.action = 'publish_opinion'",
+            ),
+        );
+        self::assertSame(
+            ['docx', 'jpeg', 'jpg', 'pdf', 'png', 'xlsx'],
+            $this->db()->createCommand(
+                "SELECT DISTINCT LOWER(SUBSTRING_INDEX(v.original_name, '.', -1)) "
+                . 'FROM {{%request_document_versions}} v '
+                . 'JOIN {{%request_documents}} d ON d.id = v.document_id '
+                . "WHERE d.document_type = 'attachment' ORDER BY 1",
+            )->queryColumn(),
+        );
+        self::assertSame(
+            0,
+            (int) $this->scalar(
+                "SELECT COUNT(*) FROM {{%request_document_versions}} v "
+                . 'JOIN {{%request_documents}} d ON d.id = v.document_id '
+                . "WHERE d.document_type IN ('report', 'opinion') "
+                . "AND (LOWER(v.original_name) NOT LIKE '%.pdf' OR v.mime_type <> 'application/pdf')",
+            ),
+        );
+        self::assertSame(1, (int) $this->scalar('SELECT MIN(comment_count) FROM (SELECT COUNT(*) comment_count FROM {{%request_comments}} GROUP BY request_id) comments'));
+        self::assertSame(4, (int) $this->scalar('SELECT MAX(comment_count) FROM (SELECT COUNT(*) comment_count FROM {{%request_comments}} GROUP BY request_id) comments'));
+        self::assertGreaterThan(
+            150,
+            (int) $this->scalar('SELECT MAX(CHAR_LENGTH(body)) - MIN(CHAR_LENGTH(body)) FROM {{%request_comments}}'),
+        );
+        self::assertSame($userCount, (int) $this->scalar('SELECT COUNT(*) FROM {{%users}}'));
+
+        $requestIds = $this->db()->createCommand('SELECT id FROM {{%requests}} ORDER BY id')->queryColumn();
+        $second = $seeder->seed();
+        self::assertSame($first, $second);
+        self::assertNotSame($requestIds, $this->db()->createCommand('SELECT id FROM {{%requests}} ORDER BY id')->queryColumn());
+        self::assertSame(100, (int) $this->scalar('SELECT COUNT(*) FROM {{%requests}}'));
+        self::assertSame(1100, (int) $this->scalar('SELECT value FROM {{%request_number_sequence}} WHERE id = 1'));
+    }
+
+    public function testSeedRequiresDevelopmentUsers(): void
+    {
+        $this->db()->createCommand()->delete('{{%users}}', ['ad_login' => 'dev.expert2'])->execute();
+
+        $this->expectException(\RuntimeException::class);
+        $this->expectExceptionMessage("Run dev/seed first");
+        (new DevelopmentRequestSeeder($this->db(), new DocumentStorage($this->storageRoot)))->seed();
+    }
+
+    public function testAttachmentIsRemovedWhenDatabaseInsertFails(): void
+    {
+        $seeder = new DevelopmentRequestSeeder($this->db(), new DocumentStorage($this->storageRoot));
+        $seeder->seed();
+        $requestId = (int) $this->scalar('SELECT id FROM {{%requests}} WHERE number = 1002');
+        $userId = (int) $this->scalar("SELECT id FROM {{%users}} WHERE ad_login = 'dev.employee'");
+        $filesBefore = glob($this->storageRoot . '/*/*/*') ?: [];
+        $method = new \ReflectionMethod($seeder, 'insertAttachment');
+
+        try {
+            $method->invoke($seeder, $requestId, 'attachment', 'Сопроводительные материалы 002.jpg', 'image/jpeg', $userId, 1);
+            self::fail('The duplicate document title must violate the unique constraint.');
+        } catch (IntegrityException) {
+            self::assertCount(count($filesBefore), glob($this->storageRoot . '/*/*/*') ?: []);
+        }
+    }
+}

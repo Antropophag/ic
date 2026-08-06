@@ -1,0 +1,8 @@
+parameters:
+    level: 6
+    paths:
+        - src
+        - tests
+    bootstrapFiles:
+        - phpstan-bootstrap.php
+    tmpDir: build/phpstan

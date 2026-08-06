@@ -1,0 +1,14 @@
+export default {
+  config: {
+    MD013: false,
+    MD024: { siblings_only: true },
+    MD033: false,
+    MD041: false,
+    MD060: false,
+  },
+  globs: [
+    '*.md',
+    'docs/**/*.md',
+    '.github/**/*.md',
+  ],
+}

@@ -1,0 +1,23 @@
+# Qodo reviews only actionable findings and skips generated dependency files.
+inline_comments_severity_threshold = 2
+comments_location_policy = "both"
+
+[config]
+ignore_pr_labels = ["dependencies", "skip-ai-review"]
+ignore_language_framework = ["lock"]
+
+[review_agent_ux]
+finding_overflow_count = 3
+resolved_overflow_count = 1
+expand_description = true
+expand_code = true
+expand_evidence = true
+expand_prompt = false
+
+# Автоматическая перепроверка при каждом push в открытый PR — иначе после
+# исправления замечаний нет свежего вердикта Qodo без ручного /agentic_review,
+# который запрещён отдельно (см. docs/ai-review.md и CLAUDE.md): ручной вызов
+# может перезапустить весь review, а не просто перепроверить diff.
+[github_app]
+handle_push_trigger = true
+push_commands = ["/review"]

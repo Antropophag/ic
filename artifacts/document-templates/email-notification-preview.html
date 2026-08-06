@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Превью почтового уведомления · Портал ИЦ</title>
+  <style>
+    *{box-sizing:border-box}body{margin:0;background:#e9edf3;color:#142033;font-family:Arial,sans-serif}
+    .preview-bar{position:sticky;top:0;z-index:2;display:flex;align-items:center;justify-content:space-between;gap:16px;padding:12px 20px;border-bottom:1px solid #d9dfe8;background:rgba(255,255,255,.96)}
+    .preview-bar strong{font-size:13px}.preview-bar span{color:#7a8698;font-size:11px}.preview-controls{display:flex;gap:6px}
+    .preview-controls button{height:32px;border:1px solid #d9dfe8;border-radius:16px;background:#fff;padding:0 13px;color:#536075;font:12px Arial,sans-serif;cursor:pointer}
+    .preview-controls button.active{border-color:#253d98;background:#e8ebfb;color:#253d98}
+    .viewport{width:100%;min-height:calc(100vh - 57px);margin:auto;background:#f3f5f9;transition:width .2s ease}
+    .viewport.mobile{width:390px}.note{padding:14px 20px 0;text-align:center;color:#7a8698;font-size:11px}
+    @media(max-width:500px){.preview-bar span{display:none}.viewport.mobile{width:100%}}
+  </style>
+</head>
+<body>
+  <header class="preview-bar">
+    <div><strong>Почтовое уведомление</strong> <span>демонстрационные данные · изображения не используются</span></div>
+    <div class="preview-controls" aria-label="Ширина превью">
+      <button class="active" type="button" data-mode="desktop">Desktop</button>
+      <button type="button" data-mode="mobile">Mobile</button>
+    </div>
+  </header>
+  <main id="viewport" class="viewport">
+    <div class="note">Так письмо выглядит при заблокированной загрузке изображений.</div>
+    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" bgcolor="#f3f5f9" style="width:100%;background-color:#f3f5f9;">
+      <tr><td align="center" style="padding:28px 12px;">
+        <table role="presentation" width="600" cellspacing="0" cellpadding="0" border="0" bgcolor="#ffffff" style="width:100%;max-width:600px;background-color:#ffffff;border:1px solid #dde3ec;border-collapse:separate;">
+          <tr><td style="padding:18px 24px;border-bottom:1px solid #e7ebf0;font-family:Arial,sans-serif;">
+            <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0"><tr>
+              <td width="34" height="34" align="center" valign="middle" bgcolor="#253d98" style="width:34px;height:34px;background-color:#253d98;color:#ffffff;font:700 11px/34px Arial,sans-serif;text-align:center;">ИЦ</td>
+              <td valign="middle" style="padding-left:11px;color:#142033;font-family:Arial,sans-serif;"><div style="font-size:14px;line-height:18px;font-weight:bold;">АО «ЩЛЗ»</div><div style="font-size:10px;line-height:14px;letter-spacing:.7px;text-transform:uppercase;color:#7a8698;">Испытательный центр</div></td>
+              <td align="right" valign="middle" style="font:10px/14px Arial,sans-serif;color:#7a8698;text-transform:uppercase;letter-spacing:.6px;">Портал ИЦ</td>
+            </tr></table>
+          </td></tr>
+          <tr><td style="padding:28px 24px 30px;font-family:Arial,sans-serif;">
+            <table role="presentation" cellspacing="0" cellpadding="0" border="0"><tr><td bgcolor="#e8ebfb" style="padding:5px 10px;background-color:#e8ebfb;color:#29449f;font:700 10px/14px Arial,sans-serif;letter-spacing:.5px;text-transform:uppercase;">Уведомление портала</td></tr></table>
+            <h1 style="margin:14px 0 14px;font-size:21px;line-height:28px;font-weight:bold;color:#142033;">Заявка № 000143 передана на экспертизу</h1>
+            <div style="font-size:14px;line-height:22px;color:#344054;">Здравствуйте, Анна Сергеевна.<br><br>По заявке № 000143 загружен отчёт испытаний. Заявка ожидает подготовки экспертного заключения.<br><br><strong>Объект испытаний:</strong> Частотный преобразователь ЩЛЗ-ПЧ-15<br><br><a href="#" style="color:#253d98;text-decoration:underline;word-break:break-word;">Скачать отчёт</a></div>
+            <table role="presentation" cellspacing="0" cellpadding="0" border="0" style="margin-top:24px;"><tr><td><a href="#" style="display:inline-block;padding:11px 20px;border-radius:20px;background-color:#253d98;color:#ffffff;font:bold 13px/18px Arial,sans-serif;text-decoration:none;">Открыть заявку</a></td></tr></table>
+          </td></tr>
+          <tr><td bgcolor="#f8f9fb" style="padding:14px 24px;background-color:#f8f9fb;border-top:1px solid #e7ebf0;font:10px/16px Arial,sans-serif;color:#7a8698;">Системное уведомление. Отвечать на это письмо не требуется.</td></tr>
+        </table>
+      </td></tr>
+    </table>
+  </main>
+  <script>
+    const viewport = document.getElementById('viewport');
+    document.querySelectorAll('[data-mode]').forEach(button => button.addEventListener('click', () => {
+      document.querySelectorAll('[data-mode]').forEach(item => item.classList.toggle('active', item === button));
+      viewport.classList.toggle('mobile', button.dataset.mode === 'mobile');
+    }));
+    document.querySelectorAll('a[href="#"]').forEach(link => link.addEventListener('click', event => event.preventDefault()));
+  </script>
+</body>
+</html>

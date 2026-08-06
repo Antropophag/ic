@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Превью экспертного заключения · Портал ИЦ</title>
+  <style>
+    *{box-sizing:border-box}body{margin:0;background:#e9edf3;color:#142033;font-family:Arial,sans-serif}
+    .preview-bar{position:sticky;top:0;z-index:2;display:flex;align-items:center;justify-content:space-between;padding:12px 20px;border-bottom:1px solid #d9dfe8;background:rgba(255,255,255,.96)}
+    .preview-bar strong{font-size:13px}.preview-bar span{color:#7a8698;font-size:11px}
+    .stage{padding:28px 16px 52px}.page{position:relative;width:210mm;min-height:297mm;margin:auto;overflow:hidden;background:#fff;padding:17mm 18mm 18mm 20mm;box-shadow:0 8px 30px rgba(20,32,51,.12)}
+    .accent-rail{position:absolute;inset:0 auto 0 0;width:4mm;background:#253d98}.brand{width:100%;border-collapse:collapse;margin-bottom:18mm}
+    .brand-mark{width:28px;height:28px;background:#253d98;color:#fff;text-align:center;font-size:12px;font-weight:bold}.brand-copy{padding-left:9px;color:#142033;font-size:10px;font-weight:600;letter-spacing:.02em}
+    .brand-copy span{display:block;color:#7a8698;font-size:7px;font-weight:normal;letter-spacing:.08em;text-transform:uppercase}.document-kind{text-align:right;color:#7a8698;font-size:8px;letter-spacing:.07em;text-transform:uppercase}
+    .kicker{margin-bottom:6px;color:#657286;font-size:8px;letter-spacing:.09em;text-transform:uppercase}h1{margin:0;color:#142033;font-size:23px;line-height:1.25;font-weight:600;letter-spacing:-.02em}
+    .request-number{display:inline-block;margin:9px 0 22px;padding:5px 10px;border-radius:11px;background:#e8ebfb;color:#29449f;font-size:9px;font-weight:600}
+    .facts{padding:14px 16px;border:1px solid #e6eaf0;border-radius:10px;background:#f8f9fb}.fact{margin:0;padding:7px 0;border-bottom:1px solid #e6eaf0;font-size:10px;line-height:1.55}.fact:first-child{padding-top:0}.fact:last-child{padding-bottom:0;border-bottom:0}
+    .label{display:inline-block;width:118px;color:#7a8698;font-size:7.5px;letter-spacing:.04em;text-transform:uppercase}.value{color:#263348}.primary-value{font-weight:600}
+    .section-title{margin:22px 0 8px;color:#142033;font-size:11px;font-weight:600}.section-title:before{content:"";display:inline-block;width:14px;height:3px;margin:0 7px 2px 0;background:#253d98}
+    .opinion{min-height:185px;margin:0;white-space:pre-wrap;color:#263348;font-size:11px;line-height:1.75}.signoff{width:100%;border-collapse:collapse;border-top:1px solid #dfe4eb;font-size:10px;line-height:1.55}.signoff td{padding-top:12px;vertical-align:top}.expert-name{font-weight:600}.position{display:block;margin-top:2px;color:#7a8698;font-size:8px}.date{width:145px;text-align:right;color:#536075}
+    @media(max-width:860px){.preview-bar span{display:none}.stage{overflow:auto}.page{transform-origin:top left}}
+    @media print{body{background:#fff}.preview-bar{display:none}.stage{padding:0}.page{box-shadow:none;margin:0}}
+  </style>
+</head>
+<body>
+  <header class="preview-bar"><strong>Экспертное заключение</strong><span>демонстрационные данные · формат A4</span></header>
+  <main class="stage">
+    <article class="page">
+      <div class="accent-rail"></div>
+      <table class="brand"><tr><td class="brand-mark">ИЦ</td><td class="brand-copy">АО «ЩЛЗ»<span>Испытательный центр</span></td><td class="document-kind">Экспертный документ</td></tr></table>
+      <header><div class="kicker">Результат рассмотрения заявки</div><h1>Экспертное заключение</h1><p class="request-number">Заявка № 143</p></header>
+      <section class="facts">
+        <div class="fact"><span class="label">Объект испытаний</span><span class="value primary-value">Частотный преобразователь ЩЛЗ-ПЧ-15</span></div>
+        <div class="fact"><span class="label">Производитель</span><span class="value">АО «Электропривод»</span></div>
+        <div class="fact"><span class="label">Поставщик</span><span class="value">ООО «Промышленная автоматика»</span></div>
+      </section>
+      <section><h2 class="section-title">Заключение эксперта</h2><p class="opinion">Представленный отчёт испытаний рассмотрен в полном объёме. Результаты измерений соответствуют требованиям программы и методики испытаний.
+
+Заявленные характеристики объекта испытаний подтверждены. Замечаний, препятствующих завершению заявки, не выявлено.</p></section>
+      <table class="signoff"><tr><td><span class="expert-name">Анна Сергеевна Смирнова</span><span class="position">Эксперт Испытательного центра</span></td><td class="date">Дата заключения<br><strong>06.08.2026</strong></td></tr></table>
+    </article>
+  </main>
+</body>
+</html>

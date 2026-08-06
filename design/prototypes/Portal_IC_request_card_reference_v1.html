@@ -1,0 +1,109 @@
+<!doctype html><html lang="ru"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Портал ИЦ · Карточка заявки</title><style>
+:root{
+  --ink:#0B1623;--ink50:rgba(11,22,35,.50);--ink25:rgba(11,22,35,.25);
+  --blue300:#162773;--blue200:#253D98;--blue100:#DFE2F0;--blue50:#EEF0F4;
+  --gray200:#939CA5;--gray100:#D1D8DF;--gray75:#E0E0E0;--gray50:#F5F5F5;
+  --page:#F4F6F9;--surface:#fff;--red:#CC1F1F;--redSoft:rgba(204,31,31,.15);
+  --green:#25983E;--greenSoft:rgba(37,152,62,.15);--orange:#D47E2E;--orangeSoft:rgba(212,126,46,.15);
+  --sky:#3D88DE;--skySoft:rgba(61,136,222,.15);--violet:#8131A7;--violetSoft:rgba(129,49,167,.15);
+  --r8:8px;--r16:16px;--pill:999px;--shadow:0 28px 80px rgba(11,22,35,.22)
+}
+*{box-sizing:border-box}html,body{margin:0;min-height:100%;font-family:Inter,-apple-system,BlinkMacSystemFont,"Segoe UI",Arial,sans-serif;color:var(--ink);background:var(--page)}
+button,input,select,textarea{font:inherit}button{cursor:pointer}
+button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-visible{outline:3px solid rgba(37,61,152,.20);outline-offset:2px}
+.app{min-height:100vh;display:grid;grid-template-columns:72px minmax(0,1fr)}
+.rail{position:sticky;top:0;height:100vh;background:var(--ink);display:flex;flex-direction:column;align-items:center;padding:16px 0;color:#fff}
+.brand{width:40px;height:40px;border-radius:50%;background:#fff;color:var(--ink);display:grid;place-items:center;font-weight:700;margin-bottom:24px}
+.sep{width:32px;height:1px;background:rgba(255,255,255,.14);margin-bottom:8px}
+.rail-btn{width:44px;height:44px;border:0;border-radius:8px;background:transparent;color:rgba(255,255,255,.58);display:grid;place-items:center;margin:2px 0}
+.rail-btn:hover,.rail-btn.active{background:rgba(255,255,255,.13);color:#fff}.rail-btn svg{width:21px;height:21px}.spacer{flex:1}
+.main{min-width:0;padding:24px 32px 32px}
+.topbar{min-height:56px;display:flex;align-items:center;justify-content:space-between;gap:24px;margin-bottom:16px}
+.title{display:flex;align-items:center;gap:16px}.title h1{font-size:30px;line-height:36px;letter-spacing:-.03em;margin:0;font-weight:600}.title p{font-size:12px;color:var(--gray200);margin:4px 0 0}
+.actions,.user{display:flex;align-items:center;gap:8px}.avatar{width:48px;height:48px;border-radius:50%;background:linear-gradient(145deg,#D9EBE6,#EDF4F2);color:#235D55;display:grid;place-items:center;font-size:12px;font-weight:600}
+.user{margin-left:8px}.user b{display:block;font-size:13px}.user span{font-size:10px;color:var(--gray200)}
+.btn{height:40px;border-radius:var(--pill);border:1px solid var(--gray100);background:#fff;color:var(--ink);padding:0 16px;font-size:13px;line-height:1;font-weight:500;display:inline-flex;align-items:center;justify-content:center;gap:8px;white-space:nowrap}
+.btn:hover{background:var(--gray50)}.btn.primary{background:var(--blue200);border-color:var(--blue200);color:#fff}.btn.primary:hover{background:var(--blue300)}.btn.icon{width:40px;padding:0}.btn.text{height:32px;padding:0 8px;border-color:transparent;background:transparent}.btn.danger{color:var(--red);border-color:transparent;background:transparent}.btn svg{width:18px;height:18px}
+.workspace{background:#fff;border:1px solid var(--gray75);border-radius:16px;overflow:hidden;box-shadow:0 4px 20px rgba(11,22,35,.035)}
+.tabs{display:flex;align-items:end;gap:32px}.tab{height:56px;border:0;background:transparent;padding:0;color:var(--gray200);font-size:13px;font-weight:500;position:relative}.tab.active{color:var(--blue200)}.tab.active:after{content:"";position:absolute;left:0;right:0;bottom:-1px;height:2px;background:var(--blue200)}
+.count{display:inline-flex;align-items:center;justify-content:center;height:20px;min-width:20px;padding:0 6px;border-radius:999px;background:var(--blue50);font-size:10px;margin-left:4px}
+.status{height:30px;border-radius:15px;padding:0 10px;display:inline-flex;align-items:center;font-size:10px;font-weight:500}.work{color:var(--sky);background:var(--skySoft)}
+.overlay{position:fixed;inset:0;background:rgba(11,22,35,.28);backdrop-filter:blur(2px);display:none;z-index:50}.overlay.open{display:block}
+.drawer{position:absolute;top:16px;right:16px;bottom:16px;width:500px;background:#fff;border-radius:16px;box-shadow:var(--shadow);padding:24px;display:flex;flex-direction:column}
+.drawer-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:24px}.drawer-head h2{font-size:22px;margin:0}.close{width:32px;height:32px;border:0;border-radius:50%;background:var(--blue50);font-size:18px}
+.drawer-body{overflow:auto}.drawer-actions{margin-top:auto;padding-top:16px;display:grid;grid-template-columns:1fr 1fr;gap:16px}
+.field{margin-bottom:16px}.field label{display:block;font-size:11px;color:var(--ink50);margin-bottom:8px}.field input,.field select,.field textarea{width:100%;border:0;background:var(--blue50);color:var(--ink);padding:0 16px;font-size:12px}.field input,.field select{height:40px;border-radius:20px}.field textarea{min-height:96px;border-radius:12px;padding-top:12px}
+@media(max-width:1100px){.app{grid-template-columns:1fr}.rail{display:none}.main{padding:16px}.drawer{left:12px;right:12px;width:auto}}
+
+.entity-tabs{height:56px;padding:0 24px;border-bottom:1px solid var(--gray75);display:flex;align-items:end;justify-content:space-between}
+.entity-grid{display:grid;grid-template-columns:minmax(0,1fr) 320px;min-height:calc(100vh - 160px)}
+.entity-main{padding:24px 28px 20px;border-right:1px solid var(--gray75)}.entity-aside{padding:20px}
+.hero{display:flex;align-items:flex-start;justify-content:space-between;gap:24px;padding-bottom:20px;border-bottom:1px solid var(--gray75)}
+.kicker{font-size:11px;color:var(--gray200);margin-bottom:6px}.hero h2{font-size:22px;line-height:28px;margin:0;font-weight:600}.meta{display:flex;gap:8px;margin-top:10px;color:var(--ink50);font-size:11px}.hero-actions{display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end}
+.section{padding:18px 0;border-bottom:1px solid var(--gray75)}.section:last-child{border-bottom:0}.section-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px}.section-head h3{font-size:15px;margin:0}
+.info{display:grid;grid-template-columns:140px minmax(0,1fr) 140px minmax(0,1fr);gap:12px 18px}.label{font-size:11px;color:var(--gray200)}.value{font-size:12px;line-height:17px}
+.tags{display:flex;gap:6px}.tag{height:28px;padding:0 10px;border-radius:14px;border:1px solid var(--gray100);font-size:10px;display:inline-flex;align-items:center}
+.timeline{display:grid;grid-template-columns:repeat(5,1fr);margin-top:16px}.step{position:relative;padding:16px 10px 0 0;border-top:2px solid var(--gray100)}.step:before{content:"";position:absolute;left:0;top:-6px;width:10px;height:10px;border-radius:50%;background:var(--gray100)}.step.done,.step.current{border-color:var(--blue200)}.step.done:before,.step.current:before{background:var(--blue200)}.step.current:before{box-shadow:0 0 0 5px var(--blue100)}.step b{font-size:10px}.step span{display:block;font-size:9px;color:var(--gray200);margin-top:3px}
+.bottom{display:grid;grid-template-columns:.95fr 1.05fr;gap:24px;padding-top:18px}.files{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}.file{height:68px;border:1px solid var(--gray100);border-radius:12px;display:grid;grid-template-columns:46px 1fr 28px;gap:9px;align-items:center;padding:8px}.file:hover{background:#FAFBFD}.thumb{width:44px;height:50px;border:1px solid var(--gray100);border-radius:7px;background:linear-gradient(145deg,#fff,var(--blue50));position:relative}.thumb:before{content:"";position:absolute;inset:7px;background:repeating-linear-gradient(to bottom,#C9D1DA 0 2px,transparent 2px 6px)}.type{position:absolute;left:3px;bottom:3px;color:#fff;font-size:7px;font-weight:700;border-radius:4px;padding:2px 4px}.pdf{background:var(--red)}.xlsx{background:var(--green)}.dwg{background:var(--orange)}.file b{font-size:10px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.file small{display:block;font-size:9px;color:var(--gray200);margin-top:3px}.kebab{border:0;background:transparent;color:var(--gray200)}
+.comment{display:grid;grid-template-columns:34px 1fr;gap:10px}.comment .avatar{width:34px;height:34px}.comment b{font-size:10px}.comment time{font-size:9px;color:var(--gray200);margin-left:6px}.comment p{font-size:11px;line-height:16px;margin:5px 0 0}.more{display:none;margin-top:12px;padding-top:12px;border-top:1px solid var(--gray75)}.more.open{display:block}.composer{display:grid;grid-template-columns:1fr 36px;gap:8px;margin-top:12px}.composer input{height:36px;border:0;border-radius:18px;background:var(--blue50);padding:0 13px;font-size:11px}.send{width:36px;height:36px;border:0;border-radius:50%;background:var(--blue100);color:var(--blue200)}
+.aside-block{padding-bottom:18px;margin-bottom:18px;border-bottom:1px solid var(--gray75)}.aside-block h3{font-size:14px;margin:0 0 12px}.person-row{display:grid;grid-template-columns:36px 1fr auto;gap:10px;align-items:center;padding:8px 0;border-top:1px solid var(--gray75)}.person-row:first-of-type{border-top:0}.person-row .avatar{width:36px;height:36px;font-size:10px}.person-row b{font-size:10px}.person-row span{display:block;font-size:9px;color:var(--gray200)}.pstate{font-size:9px;color:var(--ink50)}.stack{display:grid;gap:8px}.stack .btn{width:100%;border-radius:12px}.event{background:var(--blue50);border-left:3px solid var(--sky);border-radius:12px;padding:10px;display:grid;grid-template-columns:42px 1fr;gap:10px}.edate{text-align:center;font-size:9px}.edate b{display:block;font-size:22px}.event strong{font-size:10px}.event span{display:block;font-size:9px;color:var(--gray200)}
+.audit{display:grid;grid-template-columns:30px 1fr;gap:10px;padding-bottom:18px;position:relative}.audit:before{content:"";position:absolute;left:14px;top:28px;bottom:0;width:1px;background:var(--gray100)}.audit:last-child:before{display:none}.adot{width:28px;height:28px;border-radius:50%;background:var(--blue100);color:var(--blue200);display:grid;place-items:center;font-size:9px;font-weight:600}.audit b{font-size:11px}.audit p{font-size:10px;color:var(--ink50);margin:4px 0}.audit time{font-size:9px;color:var(--gray200)}
+@media(max-width:1180px){.entity-grid{grid-template-columns:1fr}.entity-main{border-right:0}.entity-aside{border-top:1px solid var(--gray75)}.info{grid-template-columns:130px 1fr}.bottom{grid-template-columns:1fr}}
+</style></head><body>
+<div class="app">
+<aside class="rail">
+  <div class="brand">Щ</div><div class="sep"></div>
+  <button class="rail-btn active" title="Заявки"><svg viewBox="0 0 24 24" fill="none"><path d="M5 4.5h14v15H5zM8 9h8M8 13h6" stroke="currentColor" stroke-width="1.5"/></svg></button>
+  <button class="rail-btn" title="Документы"><svg viewBox="0 0 24 24" fill="none"><path d="M6 3.5h8l4 4V20H6zM14 3.5V8h4" stroke="currentColor" stroke-width="1.5"/></svg></button>
+  <button class="rail-btn" title="Уведомления"><svg viewBox="0 0 24 24" fill="none"><path d="M7 17h10l-1.2-2.1V10a3.8 3.8 0 0 0-7.6 0v4.9zM10 20h4" stroke="currentColor" stroke-width="1.5"/></svg></button>
+  <button class="rail-btn" title="Администрирование"><svg viewBox="0 0 24 24" fill="none"><circle cx="12" cy="8" r="3" stroke="currentColor" stroke-width="1.5"/><path d="M5.5 20c.5-4 2.7-6 6.5-6s6 2 6.5 6" stroke="currentColor" stroke-width="1.5"/></svg></button>
+  <div class="spacer"></div>
+</aside>
+<main class="main">
+<header class="topbar"><div class="title"><button class="btn icon">←</button><div><h1>Заявка №001002</h1><p>Испытательный центр · создана 27 июля 2026</p></div></div><div class="actions"><button class="btn" id="editBtn">Изменить</button><button class="btn icon" id="historyBtn">↺</button><button class="btn icon">⋮</button><div class="user"><div class="avatar">ОВ</div><div><b>Олег Воронцов</b><span>Сотрудник СБ</span></div></div></div></header>
+<section class="workspace">
+<div class="entity-tabs"><nav class="tabs"><button class="tab active">Общая информация</button><button class="tab" id="historyTab">История</button><button class="tab">Документы <span class="count">3</span></button><button class="tab">Комментарии <span class="count">3</span></button></nav><span class="status work">В работе</span></div>
+<div class="entity-grid">
+<div class="entity-main">
+<section class="hero"><div><div class="kicker">Опытный образец · ресурсные испытания</div><h2>Редуктор главного привода РГП-Д</h2><div class="meta"><span>АО «Макет Маш»</span><span>·</span><span>1 образец</span><span>·</span><span>обновлена сегодня в 14:32</span></div></div><div class="hero-actions"><button class="btn primary">Загрузить отчёт</button><button class="btn">Приостановить</button><button class="btn icon">⋮</button></div></section>
+<section class="section"><div class="section-head"><h3>Общая информация</h3><span>Ключевые параметры испытания</span></div><div class="info">
+<div class="label">Подразделение</div><div class="value">Тестовое подразделение</div><div class="label">Инициатор</div><div class="value">Тестовый сотрудник</div>
+<div class="label">Производитель</div><div class="value">АО «Макет Маш»</div><div class="label">Исполнитель</div><div class="value">Сергей Кашин</div>
+<div class="label">Поставщик</div><div class="value">ООО «Пробный поставщик»</div><div class="label">Количество образцов</div><div class="value">1 шт.</div>
+<div class="label">Метод испытаний</div><div class="value">Ресурсные испытания под номинальной нагрузкой</div><div class="label">Теги</div><div class="value"><div class="tags"><span class="tag">Ресурсные</span><span class="tag">Опытный образец</span></div></div>
+</div></section>
+<section class="section"><div class="section-head"><h3>История процесса</h3><button class="btn text" id="openAudit">Открыть журнал</button></div><div class="timeline">
+<div class="step done"><b>Зарегистрирована</b><span>27.07 · 09:12</span></div><div class="step done"><b>Назначен исполнитель</b><span>27.07 · 10:03</span></div><div class="step current"><b>В работе</b><span>Текущий этап</span></div><div class="step"><b>Экспертиза</b><span>Ожидается</span></div><div class="step"><b>Контроль СБ</b><span>Ожидается</span></div>
+</div></section>
+<div class="bottom">
+<section><div class="section-head"><h3>Документы</h3><button class="btn text">+ Добавить</button></div><div class="files">
+<div class="file"><div class="thumb"><span class="type xlsx">XLSX</span></div><div><b>Программа испытаний.xlsx</b><small>20 МБ · версия 1</small></div><button class="kebab">⋮</button></div>
+<div class="file"><div class="thumb"><span class="type pdf">PDF</span></div><div><b>Схема подключения.pdf</b><small>4,1 МБ · версия 2</small></div><button class="kebab">⋮</button></div>
+<div class="file"><div class="thumb"><span class="type dwg">DWG</span></div><div><b>Габаритный чертёж.dwg</b><small>8,6 МБ · версия 1</small></div><button class="kebab">⋮</button></div>
+</div></section>
+<section><div class="section-head"><h3>Последний комментарий</h3><button class="btn text" id="toggleMore">Показать ещё 2</button></div><div class="comment"><div class="avatar">СК</div><div><b>Сергей Кашин</b><time>28.07.2026, 23:16</time><p>Программа испытаний согласована. Результаты будут добавлены в карточку после завершения серии.</p></div></div><div class="more" id="more"><div class="comment"><div class="avatar">МУ</div><div><b>Максим Умнов</b><time>27.07.2026, 18:10</time><p>Образец передан исполнителю.</p></div></div></div><div class="composer"><input placeholder="Напишите комментарий…"><button class="send">↑</button></div></section>
+</div>
+</div>
+<aside class="entity-aside">
+<section class="aside-block"><h3>Ближайшее событие</h3><div class="event"><div class="edate">АВГ<b>12</b></div><div><strong>Плановое завершение испытаний</strong><span>Ответственный: Сергей Кашин</span></div></div></section>
+<section class="aside-block"><h3>Участники</h3>
+<div class="person-row"><div class="avatar">ТС</div><div><b>Тестовый сотрудник</b><span>Инициатор</span></div><em class="pstate">Активен</em></div>
+<div class="person-row"><div class="avatar">СК</div><div><b>Сергей Кашин</b><span>Исполнитель ИЦ</span></div><em class="pstate">Назначен</em></div>
+<div class="person-row"><div class="avatar">АС</div><div><b>Анна Смирнова</b><span>Эксперт</span></div><em class="pstate">Ожидает</em></div>
+<div class="person-row"><div class="avatar">ОВ</div><div><b>Олег Воронцов</b><span>Сотрудник СБ</span></div><em class="pstate">Ожидает</em></div>
+</section>
+<section class="aside-block"><h3>Действия</h3><div class="stack"><button class="btn primary">Загрузить отчёт</button><button class="btn">Сменить исполнителя</button><button class="btn">Приостановить</button><button class="btn danger">Отказать</button></div></section>
+</aside></div></section></main></div>
+<div class="overlay" id="auditDrawer" role="dialog" aria-modal="true" aria-label="История изменений"><aside class="drawer"><div class="drawer-head"><h2>История изменений</h2><button class="close">×</button></div><div class="drawer-body">
+<div class="audit"><div class="adot">СК</div><div><b>Сергей Кашин перевёл заявку в работу</b><p>Статус изменён: «Зарегистрирована» → «В работе»</p><time>27.07.2026, 10:03</time></div></div>
+<div class="audit"><div class="adot">МУ</div><div><b>Максим Умнов назначил исполнителя</b><p>Исполнитель: Сергей Кашин</p><time>27.07.2026, 09:58</time></div></div>
+<div class="audit"><div class="adot">ТС</div><div><b>Тестовый сотрудник создал заявку</b><p>Добавлены исходные сведения и программа испытаний</p><time>27.07.2026, 09:12</time></div></div>
+</div></aside></div>
+<div class="overlay" id="editDrawer" role="dialog" aria-modal="true" aria-label="Изменить заявку"><aside class="drawer"><div class="drawer-head"><h2>Изменить заявку</h2><button class="close">×</button></div><div class="drawer-body"><div class="field"><label>Объект испытаний</label><input value="Редуктор главного привода РГП-Д"></div><div class="field"><label>Исполнитель</label><select><option>Сергей Кашин</option></select></div><div class="field"><label>Метод испытаний</label><textarea>Ресурсные испытания под номинальной нагрузкой</textarea></div></div><div class="drawer-actions"><button class="btn">Отмена</button><button class="btn primary">Сохранить</button></div></aside></div>
+<script>
+const audit=document.getElementById('auditDrawer'),edit=document.getElementById('editDrawer'),focusable='button:not([disabled]),input:not([disabled]),select:not([disabled]),textarea:not([disabled]),[href],[tabindex]:not([tabindex="-1"])';
+function openD(x,trigger){x._trigger=trigger;x.classList.add('open');requestAnimationFrame(()=>x.querySelector(focusable)?.focus())}function closeD(x){x.classList.remove('open');x._trigger?.focus()}function bindD(x){x.querySelector('.close').onclick=()=>closeD(x);x.onclick=e=>{if(e.target===x)closeD(x)}}
+['historyBtn','historyTab','openAudit'].forEach(id=>{const trigger=document.getElementById(id);trigger.onclick=()=>openD(audit,trigger)});const editTrigger=document.getElementById('editBtn');editTrigger.onclick=()=>openD(edit,editTrigger);bindD(audit);bindD(edit);document.addEventListener('keydown',e=>{const x=document.querySelector('.overlay.open');if(!x)return;if(e.key==='Escape'){e.preventDefault();closeD(x);return}if(e.key!=='Tab')return;const items=[...x.querySelectorAll(focusable)];if(!items.length)return;const first=items[0],last=items.at(-1);if(e.shiftKey&&document.activeElement===first){e.preventDefault();last.focus()}else if(!e.shiftKey&&document.activeElement===last){e.preventDefault();first.focus()}});
+const more=document.getElementById('more'),toggle=document.getElementById('toggleMore');toggle.onclick=()=>{more.classList.toggle('open');toggle.textContent=more.classList.contains('open')?'Скрыть историю':'Показать ещё 2'};
+</script>
+</body></html>
