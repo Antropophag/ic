@@ -2,4 +2,5 @@
 set -eu
 
 project_root=$(git rev-parse --show-toplevel)
-exec make -C "$project_root" check
+make -C "$project_root" check
+exec git lfs pre-push "$@"

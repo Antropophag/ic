@@ -28,7 +28,7 @@ final class AuditQuery
         'request.expert_assignment_denied' => 'Назначение эксперта отклонено',
         'request.executor_assigned' => 'Назначен исполнитель',
         'request.executor_assignment_denied' => 'Назначение исполнителя отклонено',
-        'request.color_marked' => 'Изменена цветовая метка',
+        'request.color_marked' => 'Изменён цвет заявки',
         'request.color_mark_denied' => 'Изменение метки отклонено',
         'request.started' => 'Испытания начаты', 'request.suspended' => 'Работы приостановлены',
         'request.resumed' => 'Работы возобновлены', 'request.suspend_resume_denied' => 'Изменение состояния отклонено',

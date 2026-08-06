@@ -227,6 +227,10 @@ export const authApi = {
   logout: () => request('/api/v1/auth/logout', { method: 'POST' }),
 }
 
+export const devApi = {
+  seedRequests: () => request('/api/v1/dev/seed-requests', { method: 'POST' }),
+}
+
 export const adminApi = {
   users: () => request('/api/v1/admin/users'),
   roles: () => request('/api/v1/admin/roles'),

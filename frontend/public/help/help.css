@@ -62,3 +62,9 @@ main p{margin:0 0 14px;max-width:60ch}
 main ol,main ul{margin:0 0 14px;padding-left:22px;max-width:58ch}
 main li{margin:0 0 8px}
 main li:last-child{margin-bottom:0}
+@media(max-width:500px){
+  body{background:#fff}
+  .help-bar{display:none}
+  main{width:100%;margin:0;border:0;border-radius:0;padding:24px 22px 40px}
+  main h1{font-size:20px;line-height:1.3}
+}

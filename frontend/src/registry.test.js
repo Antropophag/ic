@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { buildFeed, canStartNow, canSubmitComment, commentFromApi, documentFromApi, documentKind, filterRequests, fromApi, historyFromApi, initialsFor, newestFirstFeed, paginate, securityMarkIcon, withoutStaleActions } from './registry'
+import { avatarRoleClass, buildFeed, canStartNow, canSubmitComment, commentFromApi, documentFromApi, documentKind, filterRequests, fromApi, historyFromApi, initialsFor, newestFirstFeed, paginate, securityMarkIcon, withoutStaleActions } from './registry'
 
 const registered = {
   id: 4,
@@ -28,6 +28,12 @@ const registered = {
   can_publish_opinion: 0,
   can_security_decide: 0,
 }
+
+it('maps portal roles to stable avatar classes and safely falls back to employee', () => {
+  expect(avatarRoleClass('ic_executor')).toBe('avatar-role--ic-executor')
+  expect(avatarRoleClass('expert')).toBe('avatar-role--expert')
+  expect(avatarRoleClass('unknown-role')).toBe('avatar-role--employee')
+})
 
 it('maps the API contract to a registry row', () => {
   expect(fromApi(registered)).toMatchObject({
@@ -64,7 +70,7 @@ it('maps administrative department permission and its feed event', () => {
     occurredAt: '2026-08-05T10:00:00Z',
   })).toMatchObject({
     actor: 'Администратор',
-    description: 'изменил(а) подразделение заявки: Подразделение C',
+    description: 'Подразделение заявки изменено: Подразделение C',
     ruleId: 'REQ-011',
   })
 })
@@ -129,22 +135,22 @@ it('maps reject and withdraw permissions and history labels', () => {
   expect(historyFromApi({
     id: 14, kind: 'transition', action: 'reject', actorName: 'Руководитель',
     ruleId: 'WF-006', occurredAt: '2026-07-28T10:04:00Z',
-  }).description).toBe('отказал(а) в проведении испытаний')
+  }).description).toBe('В проведении испытаний отказано')
   expect(historyFromApi({
     id: 15, kind: 'transition', action: 'withdraw', actorName: 'Тестовый сотрудник',
     ruleId: 'WF-007', occurredAt: '2026-07-28T10:05:00Z',
-  }).description).toBe('отозвал(а) заявку')
+  }).description).toBe('Заявка отозвана')
 })
 
 it('maps suspend and resume history actions to user-facing labels', () => {
   expect(historyFromApi({
     id: 22, kind: 'transition', action: 'suspend', actorName: 'Исполнитель',
     ruleId: 'WF-010', occurredAt: '2026-07-31T10:00:00Z',
-  }).description).toBe('приостановил(а) работы по заявке')
+  }).description).toBe('Работа по заявке приостановлена')
   expect(historyFromApi({
     id: 23, kind: 'transition', action: 'resume', actorName: 'Исполнитель',
     ruleId: 'WF-011', occurredAt: '2026-07-31T11:00:00Z',
-  }).description).toBe('возобновил(а) работы по заявке')
+  }).description).toBe('Работа по заявке возобновлена')
 })
 
 it('maps the report stage, permission and history label', () => {
@@ -157,18 +163,22 @@ it('maps the report stage, permission and history label', () => {
   expect(historyFromApi({
     id: 10, kind: 'transition', action: 'upload_report', actorName: 'Исполнитель',
     ruleId: 'DOC-002', occurredAt: '2026-07-28T10:00:00Z',
-  }).description).toBe('загрузил(а) отчёт испытаний')
+  }).description).toBe('Отчёт испытаний загружен')
+  expect(historyFromApi({
+    id: 10, kind: 'transition', action: 'upload_report', actorName: 'Исполнитель',
+    ruleId: 'DOC-002', occurredAt: '2026-07-28T10:00:00Z',
+  }).action).toBe('upload_report')
   expect(historyFromApi({
     id: 11, kind: 'assignment', action: 'claim_expert', actorName: 'Эксперт',
     ruleId: 'WF-010', occurredAt: '2026-07-28T10:01:00Z',
-  }).description).toBe('взял(а) заявку в работу (эксперт)')
+  }).description).toBe('Эксперт взял заявку в работу')
 })
 
 it('maps the reassign-expert history label', () => {
   expect(historyFromApi({
     id: 16, kind: 'assignment', action: 'reassign_expert', actorName: 'Эксперт',
     ruleId: 'WF-011', occurredAt: '2026-07-28T10:06:00Z',
-  }).description).toBe('переназначил(а) эксперта')
+  }).description).toBe('Эксперт переназначен')
 })
 
 it('maps a downloadable report reference only when backend grants access', () => {
@@ -187,18 +197,18 @@ it('appends the target name for assign_executor and reassign_expert', () => {
   expect(historyFromApi({
     id: 17, kind: 'assignment', action: 'assign_executor', actorName: 'Руководитель',
     targetName: 'Сергей Кашин', ruleId: 'WF-001', occurredAt: '2026-07-28T10:07:00Z',
-  }).description).toBe('назначил(а) исполнителя: Сергей Кашин')
+  }).description).toBe('Исполнитель назначен: Сергей Кашин')
   expect(historyFromApi({
     id: 18, kind: 'assignment', action: 'reassign_expert', actorName: 'Эксперт',
     targetName: 'Виктор Дорохов', ruleId: 'WF-011', occurredAt: '2026-07-28T10:08:00Z',
-  }).description).toBe('переназначил(а) эксперта: Виктор Дорохов')
+  }).description).toBe('Эксперт переназначен: Виктор Дорохов')
 })
 
 it('ignores the target name for claim_expert (self-assignment)', () => {
   expect(historyFromApi({
     id: 19, kind: 'assignment', action: 'claim_expert', actorName: 'Эксперт',
     targetName: 'Эксперт', ruleId: 'WF-010', occurredAt: '2026-07-28T10:09:00Z',
-  }).description).toBe('взял(а) заявку в работу (эксперт)')
+  }).description).toBe('Эксперт взял заявку в работу')
 })
 
 it('maps the delete-report permission and history label', () => {
@@ -208,7 +218,7 @@ it('maps the delete-report permission and history label', () => {
   expect(historyFromApi({
     id: 17, kind: 'assignment', action: 'delete_report', actorName: 'Исполнитель',
     ruleId: 'DOC-011', occurredAt: '2026-07-28T10:07:00Z',
-  }).description).toBe('удалил(а) отчёт испытаний')
+  }).description).toBe('Отчёт испытаний удалён')
 })
 
 it('maps permission and history for publishing an expert opinion', () => {
@@ -217,7 +227,7 @@ it('maps permission and history for publishing an expert opinion', () => {
   expect(historyFromApi({
     id: 12, kind: 'transition', action: 'publish_opinion', actorName: 'Эксперт',
     ruleId: 'DOC-007', occurredAt: '2026-07-28T10:02:00Z',
-  }).description).toBe('опубликовал(а) экспертное заключение')
+  }).description).toBe('Экспертное заключение опубликовано')
 })
 
 it('maps the security decision permission and history', () => {
@@ -226,7 +236,7 @@ it('maps the security decision permission and history', () => {
   expect(historyFromApi({
     id: 13, kind: 'transition', action: 'security_return', actorName: 'Сотрудник СБ',
     reason: 'Уточнить вывод', ruleId: 'SEC-003', occurredAt: '2026-07-28T10:03:00Z',
-  }).description).toBe('вернул(а) заявку в работу: Уточнить вывод')
+  }).description).toBe('Заявка возвращена в работу: Уточнить вывод')
 })
 
 it('maps a safe history event without audit payload', () => {
@@ -240,7 +250,7 @@ it('maps a safe history event without audit payload', () => {
   })).toMatchObject({
     id: 'transition-9',
     actor: 'Сергей Кашин',
-    description: 'перевёл(а) заявку в работу',
+    description: 'Заявка переведена в работу',
     ruleId: 'WF-004',
   })
 })

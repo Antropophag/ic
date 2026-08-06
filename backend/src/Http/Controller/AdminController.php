@@ -65,7 +65,7 @@ final class AdminController extends ApiController
             return $this->auditQuery()->findPage($this->auditFilters($input));
         } catch (InvalidArgumentException) {
             Yii::$app->response->statusCode = 422;
-            return ['errors' => ['cursor' => ['Некорректный cursor.']]];
+            return ['errors' => ['cursor' => ['Некорректный курсор.']]];
         }
     }
 
@@ -81,7 +81,7 @@ final class AdminController extends ApiController
             return $this->notificationQuery()->findPage($this->notificationFilters($input));
         } catch (InvalidArgumentException) {
             Yii::$app->response->statusCode = 422;
-            return ['errors' => ['cursor' => ['Некорректный cursor.']]];
+            return ['errors' => ['cursor' => ['Некорректный курсор.']]];
         }
     }
 
