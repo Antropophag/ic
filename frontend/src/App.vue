@@ -134,18 +134,25 @@ function handlePopState() {
 }
 
 function openReviewGuide() {
-  if (!isDevelopment) return
+  if (!isDevelopment || showReviewGuide.value) return
+  const guideUrl = new URL(window.location.href)
+  guideUrl.pathname = '/review-guide'
   showReviewGuide.value = true
   showAdmin.value = false
-  closeRequest({ push: false })
-  window.history.pushState({}, '', '/review-guide')
+  selectedRequestId.value = null
+  selectedRequestTitle.value = null
+  requestWarning.value = ''
+  window.history.pushState({}, '', `${guideUrl.pathname}${guideUrl.search}${guideUrl.hash}`)
 }
 
 function leaveReviewGuide() {
   showReviewGuide.value = false
   showAdmin.value = false
-  closeRequest({ push: false })
-  window.history.pushState({}, '', '/')
+  const portalUrl = new URL(window.location.href)
+  portalUrl.pathname = '/'
+  window.history.pushState({}, '', `${portalUrl.pathname}${portalUrl.search}${portalUrl.hash}`)
+  selectedRequestId.value = requestIdFromLocation()
+  selectedRequestTitle.value = null
 }
 
 function requestDemoSeed() {
@@ -163,7 +170,7 @@ async function seedDemoRequests() {
     closeRequest({ push: false })
     showAdmin.value = false
     registryRefreshTrigger.value += 1
-    demoSeedMessage.value = `Создано демо-заявок: ${result.requests}.`
+    demoSeedMessage.value = `Создано демонстрационных заявок: ${result.requests}.`
   } catch {
     demoSeedMessage.value = 'Не удалось создать демонстрационные данные.'
   } finally {
@@ -175,12 +182,14 @@ onMounted(() => {
   window.addEventListener('popstate', handlePopState)
   window.addEventListener('ic:request-demo-seed', requestDemoSeed)
   window.addEventListener('ic:open-review-guide', openReviewGuide)
+  window.addEventListener('ic:close-review-guide', leaveReviewGuide)
   bootstrapAuth()
 })
 onBeforeUnmount(() => {
   window.removeEventListener('popstate', handlePopState)
   window.removeEventListener('ic:request-demo-seed', requestDemoSeed)
   window.removeEventListener('ic:open-review-guide', openReviewGuide)
+  window.removeEventListener('ic:close-review-guide', leaveReviewGuide)
   authGuard.invalidate()
 })
 </script>
@@ -197,7 +206,7 @@ onBeforeUnmount(() => {
               <button type="button" class="brand-mark-btn" title="На главную" :disabled="!selectedRequestId && !showAdmin && !showReviewGuide" @click="returnHome">
                 <svg class="brand-mark" width="48" height="48" viewBox="0 0 40 40" fill="none" aria-hidden="true"><rect x="2" y="2" width="36" height="36" rx="10" fill="currentColor" /><path d="M12 25a8 8 0 1 1 16 0" stroke="#fff" stroke-width="2" stroke-linecap="round" /><path d="M12 25h2M26 25h2M20 15v2" stroke="#fff" stroke-width="1.6" stroke-linecap="round" /><path d="M20 25l5-6.5" stroke="#fff" stroke-width="2" stroke-linecap="round" /><circle cx="20" cy="25" r="1.6" fill="#fff" /></svg>
               </button>
-              <div><p class="eyebrow">АО «ЩЛЗ» · Испытательный центр</p><h1>{{ showReviewGuide ? 'Гайд предварительного ревью' : selectedRequestTitle ? `Заявка №${selectedRequestTitle.id} от ${selectedRequestTitle.date}` : selectedRequestId ? 'Заявка' : 'Заявки на проведение испытаний' }}</h1></div>
+              <div><p class="eyebrow">АО «ЩЛЗ» · Испытательный центр</p><h1>{{ showReviewGuide ? 'Гайд для предварительного ревью' : selectedRequestTitle ? `Заявка №${selectedRequestTitle.id} от ${selectedRequestTitle.date}` : selectedRequestId ? 'Заявка' : 'Заявки на проведение испытаний' }}</h1></div>
             </div>
             <div class="header-account">
               <div class="header-account-actions">
@@ -225,7 +234,7 @@ onBeforeUnmount(() => {
       <AppModal :open="showDemoSeedConfirm" title="Создать демонстрационные данные" title-id="demo-seed-title" description-id="demo-seed-description" size="small" alert :busy="demoSeedLoading" @close="showDemoSeedConfirm = false">
         <p id="demo-seed-description">Все существующие заявки, комментарии и файлы будут безвозвратно удалены и заменены демонстрационными данными. Пользователи не изменятся.</p>
         <p v-if="demoSeedMessage" class="form-error" role="alert">{{ demoSeedMessage }}</p>
-        <template #footer><button type="button" class="secondary" :disabled="demoSeedLoading" @click="showDemoSeedConfirm = false">Отмена</button><button type="button" class="primary danger" :disabled="demoSeedLoading" @click="seedDemoRequests">{{ demoSeedLoading ? 'Заполнение…' : 'Заполнить демо' }}</button></template>
+        <template #footer><button type="button" class="secondary" :disabled="demoSeedLoading" @click="showDemoSeedConfirm = false">Отмена</button><button type="button" class="primary danger" :disabled="demoSeedLoading" @click="seedDemoRequests">{{ demoSeedLoading ? 'Заполнение…' : 'Заполнить данные' }}</button></template>
       </AppModal>
       <p v-if="demoSeedMessage && !showDemoSeedConfirm" class="development-tools-notice" role="status">{{ demoSeedMessage }}</p>
     </template>

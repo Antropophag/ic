@@ -5,12 +5,14 @@ declare(strict_types=1);
 namespace App\Http\Controller;
 
 use App\Infrastructure\Development\DevelopmentRequestSeeder;
+use App\Infrastructure\Development\ReviewFeedbackRepository;
 use App\Infrastructure\Deployment\DatabasePurpose;
 use App\Infrastructure\Document\DocumentStorage;
 use App\Infrastructure\Identity\CurrentUser;
 use Yii;
 use yii\rest\Controller;
 use yii\web\ForbiddenHttpException;
+use yii\web\UnprocessableEntityHttpException;
 
 final class DevController extends Controller
 {
@@ -80,6 +82,43 @@ final class DevController extends Controller
         ))->seed();
     }
 
+    /** @return array{items: list<array<string, mixed>>} */
+    public function actionReviewFeedback(): array
+    {
+        $this->assertDevelopmentDatabase();
+        (new CurrentUser(Yii::$app->db))->id(Yii::$app->request);
+
+        return ['items' => $this->feedbackRepository()->latest()];
+    }
+
+    /** @return array<string, mixed> */
+    public function actionCreateReviewFeedback(): array
+    {
+        $this->assertDevelopmentDatabase();
+        $authorId = (new CurrentUser(Yii::$app->db))->id(Yii::$app->request);
+        $body = trim((string) Yii::$app->request->getBodyParam('body', ''));
+        $rawChecklist = Yii::$app->request->getBodyParam('checklist', []);
+        if ($body === '' || mb_strlen($body) > 5000) {
+            throw new UnprocessableEntityHttpException('Введите текст замечания длиной до 5000 символов.');
+        }
+        if (!is_array($rawChecklist) || count($rawChecklist) > 50) {
+            throw new UnprocessableEntityHttpException('Некорректный чек-лист замечания.');
+        }
+        $checklist = [];
+        foreach ($rawChecklist as $item) {
+            if (!is_string($item) || mb_strlen($item) > 200) {
+                throw new UnprocessableEntityHttpException('Некорректный пункт чек-листа.');
+            }
+            $item = trim($item);
+            if ($item !== '') {
+                $checklist[] = $item;
+            }
+        }
+
+        Yii::$app->response->statusCode = 201;
+        return $this->feedbackRepository()->create($authorId, $body, array_values(array_unique($checklist)));
+    }
+
     private function assertDevelopmentDatabase(): void
     {
         $database = Yii::$app->db->createCommand('SELECT DATABASE()')->queryScalar();
@@ -88,5 +127,10 @@ final class DevController extends Controller
                 'Инструменты разработки доступны только для БД с именем, оканчивающимся на _dev.',
             );
         }
+    }
+
+    private function feedbackRepository(): ReviewFeedbackRepository
+    {
+        return new ReviewFeedbackRepository(Yii::$app->db);
     }
 }

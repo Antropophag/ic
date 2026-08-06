@@ -46,9 +46,9 @@ export function renderUserSwitcher(browserWindow, document, users) {
   label.className = 'development-tools-user'
   const labelText = document.createElement('span')
   labelText.className = 'visually-hidden'
-  labelText.textContent = 'Пользователь разработки'
+  labelText.textContent = 'Пользователь для проверки'
   const select = document.createElement('select')
-  select.setAttribute('aria-label', 'Пользователь разработки')
+  select.setAttribute('aria-label', 'Пользователь для проверки')
   for (const user of users) {
     const option = document.createElement('option')
     option.value = String(user.id)
@@ -66,11 +66,10 @@ export function renderUserSwitcher(browserWindow, document, users) {
   const guideButton = document.createElement('button')
   guideButton.type = 'button'
   guideButton.className = 'development-tools-guide'
-  guideButton.textContent = new URL(browserWindow.location.href).pathname.replace(/\/+$/, '') === '/review-guide'
-    ? 'Гайд открыт'
-    : 'Гайд ревью'
+  const guideIsOpen = new URL(browserWindow.location.href).pathname.replace(/\/+$/, '') === '/review-guide'
+  guideButton.textContent = guideIsOpen ? 'Вернуться в портал' : 'Гайд'
   guideButton.addEventListener('click', () => {
-    browserWindow.dispatchEvent(new CustomEvent('ic:open-review-guide'))
+    browserWindow.dispatchEvent(new CustomEvent(guideIsOpen ? 'ic:close-review-guide' : 'ic:open-review-guide'))
   })
   panel.append(guideButton)
 
@@ -78,7 +77,7 @@ export function renderUserSwitcher(browserWindow, document, users) {
     const seedButton = document.createElement('button')
     seedButton.type = 'button'
     seedButton.className = 'development-tools-seed'
-    seedButton.textContent = 'Заполнить демо'
+    seedButton.textContent = 'Заполнить данные'
     seedButton.addEventListener('click', () => {
       browserWindow.dispatchEvent(new CustomEvent('ic:request-demo-seed'))
     })

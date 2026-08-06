@@ -39,4 +39,10 @@ describe('review guide navigation and progress', () => {
     storage.setItem(REVIEW_GUIDE_STORAGE_KEY, JSON.stringify({ completed: [1, 'flow-1'], context: 'bad' }))
     expect(readReviewGuideProgress(storage)).toEqual({ completed: ['flow-1'], context: null })
   })
+
+  it('does not throw when browser storage rejects a write', () => {
+    const storage = { setItem: () => { throw new Error('quota') } }
+
+    expect(writeReviewGuideProgress({ completed: [] }, storage)).toBe(false)
+  })
 })

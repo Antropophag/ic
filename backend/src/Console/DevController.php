@@ -23,44 +23,44 @@ final class DevController extends Controller
      */
     public const CORE_USERS = [
         1 => [
-            'ad_login' => 'dev.user', 'display_name' => 'Максим Умнов',
+            'ad_login' => 'dev.user', 'display_name' => 'Александр Иванов',
             'email' => 'dev.user@example.invalid', 'position' => 'Руководитель ИЦ',
             'department' => 'Испытательный центр', 'roles' => ['employee', 'ic_manager'],
         ],
         2 => [
-            'ad_login' => 'dev.executor', 'display_name' => 'Сергей Кашин',
+            'ad_login' => 'dev.executor', 'display_name' => 'Дмитрий Петров',
             'email' => 'dev.executor@example.invalid', 'position' => 'Исполнитель ИЦ',
             'department' => 'Испытательный центр', 'roles' => ['employee', 'ic_executor'],
         ],
         3 => [
-            'ad_login' => 'dev.employee', 'display_name' => 'Тестовый сотрудник',
+            'ad_login' => 'dev.employee', 'display_name' => 'Алексей Соколов',
             'email' => 'dev.employee@example.invalid', 'position' => 'Сотрудник',
             'department' => 'Тестовое подразделение', 'roles' => ['employee'],
         ],
         4 => [
-            'ad_login' => 'dev.expert', 'display_name' => 'Анна Смирнова',
+            'ad_login' => 'dev.expert', 'display_name' => 'Анна Кузнецова',
             'email' => 'dev.expert@example.invalid', 'position' => 'Эксперт',
             'department' => 'СГК', 'roles' => ['employee', 'expert'],
         ],
         5 => [
-            'ad_login' => 'dev.security', 'display_name' => 'Олег Воронцов',
+            'ad_login' => 'dev.security', 'display_name' => 'Михаил Попов',
             'email' => 'dev.security@example.invalid', 'position' => 'Сотрудник СБ',
             'department' => 'Служба безопасности', 'roles' => ['employee', 'security_officer'],
         ],
         6 => [
-            'ad_login' => 'dev.admin', 'display_name' => 'Дарья Королёва',
+            'ad_login' => 'dev.admin', 'display_name' => 'Елена Васильева',
             'email' => 'dev.admin@example.invalid', 'position' => 'Администратор портала',
             'department' => 'ИТ', 'roles' => ['employee', 'administrator'],
         ],
         7 => [
-            'ad_login' => 'dev.laboratory_manager', 'display_name' => 'Ирина Лебедева',
+            'ad_login' => 'dev.laboratory_manager', 'display_name' => 'Мария Новикова',
             'email' => 'dev.laboratory_manager@example.invalid', 'position' => 'Руководитель лаборатории',
             'department' => 'Лаборатория', 'roles' => ['employee', 'laboratory_manager'],
         ],
     ];
 
     /**
-     * Остальные исполнители ИЦ по списку ТЗ (раздел 7.5), помимо Кашина С. И.
+     * Остальные исполнители ИЦ по списку ТЗ (раздел 7.5), помимо основного профиля.
      * Без фиксированного id: на персистентной development-БД эти числа мог уже
      * занять реально созданный пользователь (например, технический профиль
      * из импорта Bitrix24), и upsert по id молча переписал бы его личность.
@@ -70,27 +70,27 @@ final class DevController extends Controller
      */
     private const ADDITIONAL_EXECUTORS = [
         'dev.executor.naumov' => [
-            'display_name' => 'Сергей Наумов', 'email' => 'dev.executor.naumov@example.invalid',
+            'display_name' => 'Сергей Морозов', 'email' => 'dev.executor.naumov@example.invalid',
             'position' => 'Исполнитель ИЦ', 'department' => 'Испытательный центр', 'roles' => ['employee', 'ic_executor'],
         ],
         'dev.executor.prikul' => [
-            'display_name' => 'Сергей Прикуль', 'email' => 'dev.executor.prikul@example.invalid',
+            'display_name' => 'Андрей Волков', 'email' => 'dev.executor.prikul@example.invalid',
             'position' => 'Исполнитель ИЦ', 'department' => 'Испытательный центр', 'roles' => ['employee', 'ic_executor'],
         ],
         'dev.executor.shaposhnikov' => [
-            'display_name' => 'Сергей Шапошников', 'email' => 'dev.executor.shaposhnikov@example.invalid',
+            'display_name' => 'Иван Фёдоров', 'email' => 'dev.executor.shaposhnikov@example.invalid',
             'position' => 'Исполнитель ИЦ', 'department' => 'Испытательный центр', 'roles' => ['employee', 'ic_executor'],
         ],
         'dev.executor.galkin' => [
-            'display_name' => 'Виктор Галкин', 'email' => 'dev.executor.galkin@example.invalid',
+            'display_name' => 'Николай Михайлов', 'email' => 'dev.executor.galkin@example.invalid',
             'position' => 'Исполнитель ИЦ', 'department' => 'Испытательный центр', 'roles' => ['employee', 'ic_executor'],
         ],
         'dev.executor.kozlov' => [
-            'display_name' => 'Виктор Козлов', 'email' => 'dev.executor.kozlov@example.invalid',
+            'display_name' => 'Артём Павлов', 'email' => 'dev.executor.kozlov@example.invalid',
             'position' => 'Исполнитель ИЦ', 'department' => 'Испытательный центр', 'roles' => ['employee', 'ic_executor'],
         ],
         'dev.executor.nelidova' => [
-            'display_name' => 'Ольга Нелидова', 'email' => 'dev.executor.nelidova@example.invalid',
+            'display_name' => 'Ольга Семёнова', 'email' => 'dev.executor.nelidova@example.invalid',
             'position' => 'Исполнитель ИЦ', 'department' => 'Испытательный центр', 'roles' => ['employee', 'ic_executor'],
         ],
     ];
@@ -106,7 +106,7 @@ final class DevController extends Controller
      */
     private const ADDITIONAL_EXPERTS = [
         'dev.expert2' => [
-            'display_name' => 'Виктор Дорохов', 'email' => 'dev.expert2@example.invalid',
+            'display_name' => 'Екатерина Голубева', 'email' => 'dev.expert2@example.invalid',
             'position' => 'Эксперт', 'department' => 'СГК', 'roles' => ['employee', 'expert'],
         ],
     ];

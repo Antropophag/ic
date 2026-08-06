@@ -11,7 +11,7 @@ export function setRequestInUrl(requestId, { push = false, history = window.hist
   const url = new URL(location.href)
   if (requestId) url.searchParams.set('request', String(requestId))
   else url.searchParams.delete('request')
-  const target = `${url.pathname}${url.search}${url.hash}`
+  const target = `/${url.search}${url.hash}`
   if (push) history.pushState({}, '', target)
   else history.replaceState({}, '', target)
 }

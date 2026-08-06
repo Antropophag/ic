@@ -230,6 +230,12 @@ export const authApi = {
 
 export const devApi = {
   seedRequests: () => request('/api/v1/dev/seed-requests', { method: 'POST' }),
+  reviewFeedback: () => request('/api/v1/dev/review-feedback'),
+  createReviewFeedback: (body, checklist) => request('/api/v1/dev/review-feedback', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ body, checklist }),
+  }),
 }
 
 export const adminApi = {

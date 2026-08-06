@@ -1,9 +1,25 @@
 import { afterEach, expect, it, vi } from 'vitest'
-import { adminApi, authApi, hasCsrfToken, requestApi, setCsrfToken } from './api'
+import { adminApi, authApi, devApi, hasCsrfToken, requestApi, setCsrfToken } from './api'
 
 afterEach(() => {
   vi.unstubAllGlobals()
   setCsrfToken('')
+})
+
+it('creates and loads development review feedback', async () => {
+  const fetchMock = vi.fn()
+    .mockResolvedValueOnce(new Response('{"id":1}', { status: 201 }))
+    .mockResolvedValueOnce(new Response('{"items":[]}', { status: 200 }))
+  vi.stubGlobal('fetch', fetchMock)
+
+  await devApi.createReviewFeedback('Текст замечания', ['Проверка статуса'])
+  await devApi.reviewFeedback()
+
+  expect(fetchMock).toHaveBeenNthCalledWith(1, '/api/v1/dev/review-feedback', expect.objectContaining({
+    method: 'POST',
+    body: JSON.stringify({ body: 'Текст замечания', checklist: ['Проверка статуса'] }),
+  }))
+  expect(fetchMock).toHaveBeenNthCalledWith(2, '/api/v1/dev/review-feedback', expect.any(Object))
 })
 
 it('loads the registry as JSON', async () => {
