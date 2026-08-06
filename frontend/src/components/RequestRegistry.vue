@@ -295,7 +295,6 @@ watch(
     else {
       registryLoadLifecycle.deactivate();
       showCreate.value = false;
-      createLoading.value = false;
       closeDashboardHelp({ restoreFocus: false });
     }
   },
@@ -328,9 +327,17 @@ async function downloadReport(item) {
 
 async function createRequest() {
   if (createLoading.value) return;
+  createLoading.value = true;
+  try {
+    await performCreateRequest();
+  } finally {
+    createLoading.value = false;
+  }
+}
+
+async function performCreateRequest() {
   createError.value = "";
   registryError.value = "";
-  createLoading.value = true;
   const token = createRequestGuard.begin(true);
   const isCurrent = () => createRequestGuard.isCurrent(token, true);
   let created;
@@ -344,7 +351,6 @@ async function createRequest() {
         : error.status === 403
           ? "Ваш профиль не может подавать заявки. Обратитесь к администратору."
           : "Не удалось создать заявку. Повторите попытку.";
-    createLoading.value = false;
     return;
   }
   if (!isCurrent()) return;
@@ -398,10 +404,7 @@ async function createRequest() {
     if (isCurrent()) registryError.value =
       "Заявка создана, но обновить реестр не удалось. Не создавайте её повторно. Обновите страницу.";
   } finally {
-    if (isCurrent()) {
-      showCreate.value = false;
-      createLoading.value = false;
-    }
+    if (isCurrent()) showCreate.value = false;
   }
 }
 
