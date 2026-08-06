@@ -1,6 +1,7 @@
 <script setup>
 import {
   computed,
+  nextTick,
   onBeforeUnmount,
   onMounted,
   reactive,
@@ -14,6 +15,7 @@ import { triggerBlobDownload } from "../download";
 import { createLatestRequestGuard } from "../latestRequestGuard";
 import AppIcon from "./AppIcon.vue";
 import AppModal from "./AppModal.vue";
+import HelpArticle from "./HelpArticle.vue";
 import {
   REGISTRY_PAGE_SIZE,
   REQUEST_STATUS_OPTIONS,
@@ -30,21 +32,33 @@ const props = defineProps({
 const emit = defineEmits([
   "select-request",
 ]);
+const ATTENTION_ICONS = Object.freeze({
+  assign_executor: "user",
+  start_or_resume_work: "play",
+  upload_report: "upload",
+  claim_expert: "file",
+  publish_opinion: "file-check",
+  security_decision: "shield-check",
+});
+const PAGE_SIZE_OPTIONS = Object.freeze([10, 25, 50, 100]);
 const activeTab = ref("active");
 const activeAttention = ref("");
 const attentionCategories = ref([]);
 const dashboardLoading = ref(true);
 const dashboardError = ref("");
+const showDashboardHelp = ref(false);
+const dashboardHelpTrigger = ref(null);
+const dashboardHelpDrawer = ref(null);
 const query = ref("");
 const statusFilter = ref("");
 const sortDirection = ref("desc");
 const currentPage = ref(1);
-const pageSize = REGISTRY_PAGE_SIZE;
+const pageSize = ref(REGISTRY_PAGE_SIZE);
 const requests = ref([]);
 const registryPage = reactive({
   total: 0,
   page: 1,
-  pageSize,
+  pageSize: pageSize.value,
   pageCount: 1,
   counts: { active: 0, all: 0, mine: 0 },
 });
@@ -137,7 +151,7 @@ async function loadRequests({ rethrow = false } = {}) {
   try {
     const result = await requestApi.list({
       page: currentPage.value,
-      pageSize,
+      pageSize: pageSize.value,
       tab: activeTab.value,
       status: statusFilter.value,
       query: query.value.trim(),
@@ -150,7 +164,7 @@ async function loadRequests({ rethrow = false } = {}) {
     Object.assign(registryPage, {
       total: result.total ?? result.items.length,
       page: result.page ?? 1,
-      pageSize: result.pageSize ?? pageSize,
+      pageSize: result.pageSize ?? pageSize.value,
       pageCount: result.pageCount ?? 1,
       counts: result.counts ?? {
         active: result.items.length,
@@ -182,7 +196,7 @@ async function loadDashboard() {
     }
   } catch {
     if (dashboardGuard.isCurrent(token, true)) {
-      dashboardError.value = "Не удалось обновить персональные очереди.";
+      dashboardError.value = "Не удалось обновить список текущих задач.";
     }
   } finally {
     if (dashboardGuard.isCurrent(token, true)) dashboardLoading.value = false;
@@ -192,6 +206,41 @@ async function loadDashboard() {
 function selectAttention(categoryId) {
   activeAttention.value = activeAttention.value === categoryId ? "" : categoryId;
   activeTab.value = "all";
+}
+
+function attentionIcon(categoryId) {
+  return ATTENTION_ICONS[categoryId] || "file";
+}
+
+function openDashboardHelp() {
+  showDashboardHelp.value = true;
+  nextTick(() => dashboardHelpDrawer.value?.querySelector("button")?.focus());
+}
+
+function closeDashboardHelp({ restoreFocus = true } = {}) {
+  showDashboardHelp.value = false;
+  if (restoreFocus) nextTick(() => dashboardHelpTrigger.value?.focus());
+}
+
+function handleDashboardHelpKeydown(event) {
+  if (event.key === "Escape") {
+    event.preventDefault();
+    closeDashboardHelp();
+    return;
+  }
+  if (event.key !== "Tab" || !dashboardHelpDrawer.value) return;
+  const focusable = [...dashboardHelpDrawer.value.querySelectorAll('button,[href],[tabindex]:not([tabindex="-1"])')]
+    .filter((element) => !element.disabled);
+  if (!focusable.length) return;
+  const first = focusable[0];
+  const last = focusable.at(-1);
+  if (event.shiftKey && document.activeElement === first) {
+    event.preventDefault();
+    last.focus();
+  } else if (!event.shiftKey && document.activeElement === last) {
+    event.preventDefault();
+    first.focus();
+  }
 }
 
 function clearRegistryFilters() {
@@ -238,14 +287,26 @@ watch(
 watch(
   () => props.active,
   (active) => {
-    if (active) loadRequests();
-    else showCreate.value = false;
+    if (active) {
+      loadRequests();
+      loadDashboard();
+    }
+    else {
+      showCreate.value = false;
+      closeDashboardHelp({ restoreFocus: false });
+    }
   },
 );
 function goToPage(page) {
   if (page === currentPage.value) return;
   currentPage.value = page;
   loadRequests();
+}
+
+function selectPageSize(size) {
+  if (pageSize.value === size) return;
+  pageSize.value = size;
+  reloadFirstPage();
 }
 
 async function downloadReport(item) {
@@ -370,11 +431,11 @@ onBeforeUnmount(() => {
       :aria-busy="dashboardLoading"
     >
       <div class="attention-heading">
-        <div><h2 id="attention-title">Требуют вашего внимания <a class="attention-help" href="/help/dashboard.html" target="_blank" rel="noopener" aria-label="Открыть инструкцию по персональным очередям">?</a></h2><p>Персональные очереди действий</p></div>
+        <div><h2 id="attention-title">Требуют вашего внимания <button ref="dashboardHelpTrigger" type="button" class="request-action-help attention-help" aria-label="Инструкция по заявкам, требующим внимания" title="Инструкция по заявкам, требующим внимания" @click="openDashboardHelp"><AppIcon name="help" :size="16" /></button></h2><p>Ваши текущие задачи по заявкам</p></div>
         <button v-if="dashboardError" type="button" class="attention-retry" @click="loadDashboard">Повторить</button>
       </div>
       <p v-if="dashboardError" class="attention-error" role="alert">{{ dashboardError }}</p>
-      <div v-if="dashboardLoading && !attentionCategories.length" class="attention-grid attention-grid--loading" aria-label="Загрузка персональных очередей">
+      <div v-if="dashboardLoading && !attentionCategories.length" class="attention-grid attention-grid--loading" aria-label="Загрузка текущих задач">
         <span v-for="index in 3" :key="index" class="attention-skeleton" aria-hidden="true"></span>
       </div>
       <div v-else-if="attentionCategories.length" class="attention-grid">
@@ -387,8 +448,9 @@ onBeforeUnmount(() => {
           :aria-pressed="activeAttention === category.id"
           @click="selectAttention(category.id)"
         >
-          <span class="attention-count">{{ category.count }}</span>
+          <span class="attention-icon" aria-hidden="true"><AppIcon :name="attentionIcon(category.id)" :size="18" /></span>
           <span class="attention-copy"><b>{{ category.title }}</b><small>{{ category.description }}</small></span>
+          <span class="attention-count" :aria-label="`${category.count} заявок`">{{ category.count }}</span>
         </button>
       </div>
     </section>
@@ -559,10 +621,23 @@ onBeforeUnmount(() => {
         </div>
       </div>
       <footer v-if="paged.total" class="pagination">
-        <span>{{ (paged.page - 1) * pageSize + 1 }}–{{
+        <span class="pagination-range">{{ (paged.page - 1) * pageSize + 1 }}–{{
           Math.min(paged.page * pageSize, paged.total)
         }}
-          из {{ paged.total }}</span><span v-if="paged.pageCount > 1"><button
+          из {{ paged.total }}</span>
+        <div class="page-size-picker" role="group" aria-label="Заявок на странице">
+          <span>На странице</span><button
+            v-for="size in PAGE_SIZE_OPTIONS"
+            :key="size"
+            type="button"
+            class="page-size-option"
+            :class="[`page-size-option--${size}`, { current: pageSize === size }]"
+            :aria-label="`Показывать по ${size} заявок`"
+            :aria-pressed="pageSize === size"
+            @click="selectPageSize(size)"
+          >{{ size }}</button>
+        </div>
+        <span v-if="paged.pageCount > 1" class="pagination-pages"><button
           :disabled="paged.page <= 1"
           @click="goToPage(paged.page - 1)"
         >
@@ -581,11 +656,17 @@ onBeforeUnmount(() => {
         >
           <span class="visually-hidden">Следующая страница</span>
           <AppIcon name="chevron-right" :size="16" />
-        </button></span>
+        </button></span><span v-else class="pagination-pages-placeholder" aria-hidden="true"></span>
       </footer>
     </div>
   </section>
 
+  <div v-if="active && showDashboardHelp" class="request-drawer-overlay" @click.self="closeDashboardHelp()">
+    <aside ref="dashboardHelpDrawer" class="request-drawer request-help-drawer" role="dialog" aria-modal="true" aria-labelledby="dashboard-help-title" @keydown="handleDashboardHelpKeydown">
+      <header class="request-drawer-head"><div><p>Реестр заявок</p><h2 id="dashboard-help-title">Справка</h2></div><button type="button" aria-label="Закрыть справку" @click="closeDashboardHelp()"><AppIcon name="close" /></button></header>
+      <HelpArticle src="/help/dashboard.html" />
+    </aside>
+  </div>
   <AppModal
     :open="active && showCreate"
     as="form"

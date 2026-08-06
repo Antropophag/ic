@@ -19,21 +19,21 @@ enum AttentionQueue: string
             self::AssignExecutor => 'Назначить исполнителя',
             self::StartOrResumeWork => 'Начать или возобновить работы',
             self::UploadReport => 'Загрузить отчёт',
-            self::ClaimExpert => 'Взять экспертизу',
+            self::ClaimExpert => 'Взять заявку на экспертизу',
             self::PublishOpinion => 'Подготовить заключение',
-            self::SecurityDecision => 'Проверить СБ',
+            self::SecurityDecision => 'Визировать протокол испытаний',
         };
     }
 
     public function description(): string
     {
         return match ($this) {
-            self::AssignExecutor => 'Выберите ответственного за испытания.',
-            self::StartOrResumeWork => 'Начните зарегистрированные или возобновите приостановленные работы.',
-            self::UploadReport => 'Добавьте PDF с результатами испытаний.',
-            self::ClaimExpert => 'Возьмите заявку для подготовки заключения.',
-            self::PublishOpinion => 'Опубликуйте заключение и передайте его в СБ.',
-            self::SecurityDecision => 'Согласуйте заключение или верните заявку.',
+            self::AssignExecutor => 'Назначьте ответственного за проведение испытаний.',
+            self::StartOrResumeWork => 'Начните работу по зарегистрированным заявкам или возобновите приостановленные.',
+            self::UploadReport => 'Загрузите отчёт о результатах испытаний в формате PDF.',
+            self::ClaimExpert => 'Возьмите заявку в работу для подготовки заключения.',
+            self::PublishOpinion => 'Подготовьте и опубликуйте экспертное заключение.',
+            self::SecurityDecision => 'Визируйте протокол испытаний либо верните заявку на доработку.',
         };
     }
 

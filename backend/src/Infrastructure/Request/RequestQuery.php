@@ -242,14 +242,6 @@ final class RequestQuery
     /** @return array{categories: list<array{id: string, title: string, description: string, count: int}>} */
     public function attentionDashboard(int $actorId): array
     {
-        $roleRows = $this->db->createCommand(
-            'SELECT role.code FROM {{%users}} actor '
-            . 'JOIN {{%user_roles}} ur ON ur.user_id = actor.id '
-            . 'JOIN {{%roles}} role ON role.id = ur.role_id '
-            . 'WHERE actor.id = :actor AND actor.is_active = 1',
-            [':actor' => $actorId],
-        )->queryColumn();
-        $roles = array_fill_keys(array_map('strval', $roleRows), true);
         $queues = AttentionQueue::cases();
         $scope = new AttentionQueueScope();
         $columns = [];
@@ -265,17 +257,7 @@ final class RequestQuery
         $categories = [];
         foreach ($queues as $queue) {
             $count = (int) ($counts[$queue->value] ?? 0);
-            $roleApplies = false;
-            foreach ($queue->roles() as $role) {
-                if (isset($roles[$role->value])) {
-                    $roleApplies = true;
-                    break;
-                }
-            }
-            // An assignment remains authoritative if a process role is later
-            // revoked: OpinionPolicy permits the current expert to finish the
-            // opinion, so the dashboard must not hide that real action.
-            if (!$roleApplies && $count === 0) {
+            if ($count === 0) {
                 continue;
             }
             $categories[] = [
