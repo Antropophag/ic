@@ -29,6 +29,7 @@ final class BitrixListClientTest extends TestCase
 
         self::assertSame(['1', '2'], array_column($items, 'ID'));
         self::assertSame(['lists.element.get', 'lists.element.get'], array_column($transport->calls, 0));
+        self::assertSame(['ID' => 'asc'], $transport->calls[0][1]['ELEMENT_ORDER']);
         self::assertSame(50, $transport->calls[1][1]['start']);
     }
 

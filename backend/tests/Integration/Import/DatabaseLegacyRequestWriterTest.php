@@ -6,6 +6,7 @@ namespace Tests\Integration\Import;
 
 use App\Application\Import\LegacyImportOutcome;
 use App\Application\Import\LegacyRequestData;
+use App\Application\Import\LegacyUserData;
 use App\Domain\Request\RequestStatus;
 use App\Infrastructure\Import\DatabaseLegacyRequestWriter;
 use DateTimeImmutable;
@@ -18,9 +19,11 @@ final class DatabaseLegacyRequestWriterTest extends IntegrationTestCase
         string $creatorLegacyId = '1595',
         string $department = 'Лаборатория',
         ?string $departmentExternalId = null,
+        bool $creatorActive = true,
     ): LegacyRequestData {
         return new LegacyRequestData(
             $legacyId,
+            (int) substr($legacyId, (int) strrpos($legacyId, ':') + 1),
             'Тестовое изделие',
             'Тестовый завод',
             'Тестовый поставщик',
@@ -28,8 +31,14 @@ final class DatabaseLegacyRequestWriterTest extends IntegrationTestCase
             'Метод испытаний',
             RequestStatus::Completed,
             new DateTimeImmutable('2024-01-01T12:00:00+00:00'),
-            $creatorLegacyId,
-            'Иванов Иван',
+            new LegacyUserData(
+                $creatorLegacyId,
+                "user{$creatorLegacyId}",
+                'Иванов Иван',
+                "user{$creatorLegacyId}@example.test",
+                'Инженер',
+                $creatorActive,
+            ),
             $department,
             1,
             0,
@@ -50,7 +59,13 @@ final class DatabaseLegacyRequestWriterTest extends IntegrationTestCase
         );
         self::assertNotFalse($requestId);
 
-        $status = $this->scalar('SELECT status FROM {{%requests}} WHERE id = :id', [':id' => $requestId]);
+        $stored = $this->db()->createCommand(
+            'SELECT number, status FROM {{%requests}} WHERE id = :id',
+            [':id' => $requestId],
+        )->queryOne();
+        self::assertNotFalse($stored);
+        self::assertSame(501, (int) $stored['number']);
+        $status = $stored['status'];
         self::assertSame('completed', $status);
         $snapshot = $this->db()->createCommand(
             'SELECT department_name, department_source FROM {{%requests}} WHERE id = :id',
@@ -71,6 +86,10 @@ final class DatabaseLegacyRequestWriterTest extends IntegrationTestCase
             [':id' => $requestId],
         );
         self::assertSame(1, (int) $auditCount);
+        self::assertSame(
+            501,
+            (int) $this->scalar('SELECT value FROM {{%request_number_sequence}} WHERE id = 1'),
+        );
     }
 
     public function testRepeatedWriteWithSameLegacyIdIsSkipped(): void
@@ -89,19 +108,84 @@ final class DatabaseLegacyRequestWriterTest extends IntegrationTestCase
         self::assertSame(1, (int) $count);
     }
 
-    public function testImportedInitiatorIsCreatedAsInactivePlaceholder(): void
+    public function testImportDoesNotMoveNumberSequenceBackwards(): void
+    {
+        $this->db()->createCommand()->update('{{%request_number_sequence}}', ['value' => 900], ['id' => 1])->execute();
+
+        $writer = new DatabaseLegacyRequestWriter($this->db());
+        self::assertSame(
+            LegacyImportOutcome::Created,
+            $writer->write($this->request('bitrix24:114:508')),
+        );
+
+        self::assertSame(
+            900,
+            (int) $this->scalar('SELECT value FROM {{%request_number_sequence}} WHERE id = 1'),
+        );
+    }
+
+    public function testImportedActiveInitiatorIsPreProvisionedWithEmployeeRole(): void
     {
         $writer = new DatabaseLegacyRequestWriter($this->db());
         $writer->write($this->request('bitrix24:114:503', '77001'));
 
         $user = $this->db()->createCommand(
-            "SELECT is_active, display_name, department FROM {{%users}} WHERE ad_login = 'legacy.bitrix24.77001'",
+            "SELECT id, is_active, display_name, email, position, department FROM {{%users}} "
+            . "WHERE ad_login = 'user77001'",
         )->queryOne();
 
         self::assertNotFalse($user);
-        self::assertSame(0, (int) $user['is_active']);
+        self::assertSame(1, (int) $user['is_active']);
         self::assertSame('Иванов Иван', $user['display_name']);
+        self::assertSame('user77001@example.test', $user['email']);
+        self::assertSame('Инженер', $user['position']);
         self::assertSame('Лаборатория', $user['department']);
+        self::assertSame(1, (int) $this->scalar(
+            "SELECT COUNT(*) FROM {{%user_roles}} ur JOIN {{%roles}} r ON r.id = ur.role_id "
+            . "WHERE ur.user_id = :id AND r.code = 'employee'",
+            [':id' => $user['id']],
+        ));
+    }
+
+    public function testImportedInactiveInitiatorRemainsBlocked(): void
+    {
+        $writer = new DatabaseLegacyRequestWriter($this->db());
+        $writer->write($this->request('bitrix24:114:509', '77005', 'Лаборатория', null, false));
+
+        $user = $this->db()->createCommand(
+            "SELECT id, is_active FROM {{%users}} WHERE ad_login = 'user77005'",
+        )->queryOne();
+        self::assertNotFalse($user);
+        self::assertSame(0, (int) $user['is_active']);
+        self::assertSame(0, (int) $this->scalar(
+            'SELECT COUNT(*) FROM {{%user_roles}} WHERE user_id = :id',
+            [':id' => $user['id']],
+        ));
+    }
+
+    public function testImportDoesNotOverwriteExistingLocalIdentity(): void
+    {
+        $this->db()->createCommand()->insert('{{%users}}', [
+            'ad_login' => 'user77006',
+            'display_name' => 'Актуальное имя AD',
+            'email' => 'actual@example.test',
+            'is_active' => false,
+            'created_at' => '2024-01-01 00:00:00',
+            'updated_at' => '2024-01-01 00:00:00',
+        ])->execute();
+        $existingId = (int) $this->db()->getLastInsertID();
+
+        $writer = new DatabaseLegacyRequestWriter($this->db());
+        $writer->write($this->request('bitrix24:114:510', '77006'));
+
+        $user = $this->db()->createCommand(
+            'SELECT id, display_name, email, is_active FROM {{%users}} WHERE ad_login = :login',
+            [':login' => 'user77006'],
+        )->queryOne();
+        self::assertSame($existingId, (int) $user['id']);
+        self::assertSame('Актуальное имя AD', $user['display_name']);
+        self::assertSame('actual@example.test', $user['email']);
+        self::assertSame(0, (int) $user['is_active']);
     }
 
     public function testSameLegacyCreatorIsReusedAcrossRequests(): void
@@ -111,13 +195,13 @@ final class DatabaseLegacyRequestWriterTest extends IntegrationTestCase
         $writer->write($this->request('bitrix24:114:505', '77002'));
 
         $userCount = $this->scalar(
-            "SELECT COUNT(*) FROM {{%users}} WHERE ad_login = 'legacy.bitrix24.77002'",
+            "SELECT COUNT(*) FROM {{%users}} WHERE ad_login = 'user77002'",
         );
         self::assertSame(1, (int) $userCount);
 
         $requestCount = $this->scalar(
             'SELECT COUNT(*) FROM {{%requests}} r JOIN {{%users}} u ON u.id = r.initiator_id '
-            . "WHERE u.ad_login = 'legacy.bitrix24.77002'",
+            . "WHERE u.ad_login = 'user77002'",
         );
         self::assertSame(2, (int) $requestCount);
     }
@@ -129,7 +213,7 @@ final class DatabaseLegacyRequestWriterTest extends IntegrationTestCase
         $writer->write($this->request('bitrix24:114:506', '77003', ''));
 
         $department = $this->db()->createCommand(
-            "SELECT department FROM {{%users}} WHERE ad_login = 'legacy.bitrix24.77003'",
+            "SELECT department FROM {{%users}} WHERE ad_login = 'user77003'",
         )->queryScalar();
         self::assertNull($department);
         $snapshot = $this->db()->createCommand(

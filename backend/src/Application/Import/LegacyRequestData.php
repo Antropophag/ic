@@ -11,6 +11,7 @@ final readonly class LegacyRequestData
 {
     public function __construct(
         public string $legacyId,
+        public int $number,
         public string $productName,
         public string $manufacturer,
         public string $supplier,
@@ -18,8 +19,7 @@ final readonly class LegacyRequestData
         public string $testMethod,
         public RequestStatus $status,
         public DateTimeImmutable $createdAt,
-        public string $creatorLegacyId,
-        public string $creatorDisplayName,
+        public LegacyUserData $creator,
         public string $department,
         public int $supportingDocumentCount,
         public int $reportCount,

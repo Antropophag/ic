@@ -33,13 +33,13 @@ final class DatabaseLegacyRequestWriter implements LegacyRequestWriter
             $initiatorId = $this->initiatorId($request);
             $this->db->createCommand(
                 'UPDATE {{%request_number_sequence}} '
-                . 'SET value = LAST_INSERT_ID(value + 1) WHERE id = 1',
+                . 'SET value = GREATEST(value, :number) WHERE id = 1',
+                [':number' => $request->number],
             )->execute();
-            $number = (int) $this->db->createCommand('SELECT LAST_INSERT_ID()')->queryScalar();
             $createdAt = $request->createdAt->setTimezone(new \DateTimeZone('UTC'))->format('Y-m-d H:i:s.u');
 
             $this->db->createCommand()->insert('{{%requests}}', [
-                'number' => $number,
+                'number' => $request->number,
                 'legacy_id' => $request->legacyId,
                 'initiator_id' => $initiatorId,
                 'department_name' => $request->department !== '' ? $request->department : null,
@@ -99,28 +99,40 @@ final class DatabaseLegacyRequestWriter implements LegacyRequestWriter
 
     private function initiatorId(LegacyRequestData $request): int
     {
-        $login = 'legacy.bitrix24.' . $request->creatorLegacyId;
+        $login = $request->creator->adLogin;
         $now = Clock::now();
-        $this->db->createCommand()->upsert('{{%users}}', [
-            'ad_login' => $login,
-            'display_name' => $request->creatorDisplayName !== ''
-                ? $request->creatorDisplayName
-                : 'Пользователь Bitrix24',
-            'department' => $request->department !== '' ? $request->department : null,
-            'is_active' => false,
-            'created_at' => $now,
-            'updated_at' => $now,
-        ], [
-            'display_name' => $request->creatorDisplayName !== ''
-                ? $request->creatorDisplayName
-                : 'Пользователь Bitrix24',
-            'department' => $request->department !== '' ? $request->department : null,
-            'updated_at' => $now,
-        ])->execute();
-
-        return (int) $this->db->createCommand(
-            'SELECT id FROM {{%users}} WHERE ad_login = :login',
+        $existing = $this->db->createCommand(
+            'SELECT id FROM {{%users}} WHERE ad_login = :login FOR UPDATE',
             [':login' => $login],
         )->queryScalar();
+        $created = $existing === false;
+        if ($created) {
+            $this->db->createCommand()->insert('{{%users}}', [
+                'ad_login' => $login,
+                'display_name' => $request->creator->displayName,
+                'email' => $request->creator->email,
+                'position' => $request->creator->position,
+                'department' => $request->department !== '' ? $request->department : null,
+                'is_active' => $request->creator->active,
+                'created_at' => $now,
+                'updated_at' => $now,
+            ])->execute();
+            $userId = (int) $this->db->getLastInsertID();
+        } else {
+            // Existing local identity wins: import must not activate, deactivate,
+            // or overwrite a profile that may already have been synchronized from AD.
+            $userId = (int) $existing;
+        }
+        if ($created && $request->creator->active) {
+            $roleId = $this->db->createCommand("SELECT id FROM {{%roles}} WHERE code = 'employee'")->queryScalar();
+            if ($roleId !== false) {
+                $this->db->createCommand()->upsert('{{%user_roles}}', [
+                    'user_id' => $userId,
+                    'role_id' => (int) $roleId,
+                    'created_at' => $now,
+                ], false)->execute();
+            }
+        }
+        return $userId;
     }
 }

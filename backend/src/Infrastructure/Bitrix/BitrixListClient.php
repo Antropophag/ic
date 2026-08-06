@@ -26,20 +26,54 @@ final class BitrixListClient
     /** @return iterable<int, array<string, mixed>> */
     public function elements(int $maxPages = 0): iterable
     {
+        foreach ($this->pages($maxPages) as $items) {
+            foreach ($items as $item) {
+                yield $item;
+            }
+        }
+    }
+
+    /** @return iterable<int, list<array<string, mixed>>> */
+    public function pages(int $maxPages = 0): iterable
+    {
+        foreach ($this->pageBatches($maxPages) as $batch) {
+            yield $batch['items'];
+        }
+    }
+
+    /** @param list<string> $select
+     *  @return iterable<int, array{items: list<array<string, mixed>>, total: ?int}>
+     */
+    public function pageBatches(int $maxPages = 0, array $select = []): iterable
+    {
         $start = 0;
         $page = 0;
         do {
-            $response = $this->transport->call('lists.element.get', [
+            $parameters = [
                 ...$this->baseParameters(),
+                'ELEMENT_ORDER' => ['ID' => 'asc'],
                 'start' => $start,
-            ]);
-            $items = $this->result($response);
-            foreach ($items as $item) {
+            ];
+            if ($select !== []) {
+                $parameters['SELECT'] = $select;
+            }
+            $response = $this->transport->call('lists.element.get', $parameters);
+            $result = $this->result($response);
+            $items = [];
+            foreach ($result as $item) {
                 if (!is_array($item)) {
                     throw new RuntimeException('Bitrix24 returned an invalid list element.');
                 }
-                yield $item;
+                $items[] = $item;
             }
+            $total = $response['total'] ?? null;
+            if ($total !== null) {
+                $total = filter_var($total, FILTER_VALIDATE_INT);
+                if ($total === false || $total < 0) {
+                    throw new RuntimeException('Bitrix24 returned an invalid total element count.');
+                }
+            }
+            yield ['items' => $items, 'total' => $total];
 
             ++$page;
             $next = $response['next'] ?? null;

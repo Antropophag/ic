@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Tests\Unit\Application\Import;
 
 use App\Application\Import\LegacyRequestMapper;
+use App\Application\Import\LegacyUserData;
 use App\Domain\Request\RequestStatus;
 use DateTimeInterface;
 use PHPUnit\Framework\Attributes\DataProvider;
@@ -29,15 +30,16 @@ final class LegacyRequestMapperTest extends TestCase
             'reportFiles' => [['id' => 2], ['id' => 3]],
         ];
 
-        $request = (new LegacyRequestMapper())->map([
+        $request = $this->mapper()->map([
             'ID' => '42',
             'DETAIL_TEXT' => json_encode($details, JSON_THROW_ON_ERROR),
         ], 114);
 
         self::assertSame('bitrix24:114:42', $request->legacyId);
+        self::assertSame(42, $request->number);
         self::assertSame(RequestStatus::Completed, $request->status);
         self::assertSame(2, $request->sampleQuantity);
-        self::assertSame('Иванов Иван', $request->creatorDisplayName);
+        self::assertSame('Иванов Иван', $request->creator->displayName);
         self::assertSame(1, $request->supportingDocumentCount);
         self::assertSame(2, $request->reportCount);
         self::assertObjectNotHasProperty('personalPhone', $request);
@@ -46,7 +48,7 @@ final class LegacyRequestMapperTest extends TestCase
     public function testRejectsUnknownStatus(): void
     {
         $this->expectException(UnexpectedValueException::class);
-        (new LegacyRequestMapper())->map([
+        $this->mapper()->map([
             'ID' => '42',
             'DETAIL_TEXT' => json_encode([
                 'nameType' => 'Редуктор',
@@ -62,7 +64,7 @@ final class LegacyRequestMapperTest extends TestCase
 
     public function testMapsStrictDateOnlyValueAtUtcMidnight(): void
     {
-        $request = (new LegacyRequestMapper())->map($this->element(['dateCreate' => '2025-02-03']), 114);
+        $request = $this->mapper()->map($this->element(['dateCreate' => '2025-02-03']), 114);
 
         self::assertSame('2025-02-03T00:00:00+00:00', $request->createdAt->format(DateTimeInterface::ATOM));
     }
@@ -71,7 +73,7 @@ final class LegacyRequestMapperTest extends TestCase
     public function testRejectsInvalidDate(string $date): void
     {
         $this->expectException(UnexpectedValueException::class);
-        (new LegacyRequestMapper())->map($this->element(['dateCreate' => $date]), 114);
+        $this->mapper()->map($this->element(['dateCreate' => $date]), 114);
     }
 
     /** @return iterable<string, array{string}> */
@@ -85,7 +87,7 @@ final class LegacyRequestMapperTest extends TestCase
     public function testRejectsNonNumericCreatorId(): void
     {
         $this->expectException(UnexpectedValueException::class);
-        (new LegacyRequestMapper())->map($this->element([
+        $this->mapper()->map($this->element([
             'creator' => ['ID' => '../admin'],
         ]), 114);
     }
@@ -93,7 +95,7 @@ final class LegacyRequestMapperTest extends TestCase
     public function testRejectsStringLongerThanDatabaseColumn(): void
     {
         $this->expectException(UnexpectedValueException::class);
-        (new LegacyRequestMapper())->map($this->element([
+        $this->mapper()->map($this->element([
             'nameType' => str_repeat('Я', 501),
         ]), 114);
     }
@@ -101,7 +103,7 @@ final class LegacyRequestMapperTest extends TestCase
     public function testRejectsQuantityOutsideUnsignedDatabaseInteger(): void
     {
         $this->expectException(UnexpectedValueException::class);
-        (new LegacyRequestMapper())->map($this->element([
+        $this->mapper()->map($this->element([
             'countTestItems' => '4294967296',
         ]), 114);
     }
@@ -109,7 +111,7 @@ final class LegacyRequestMapperTest extends TestCase
     #[DataProvider('knownStatuses')]
     public function testMapsEveryKnownStatus(string $legacyStatus, RequestStatus $expected): void
     {
-        $request = (new LegacyRequestMapper())->map($this->element([
+        $request = $this->mapper()->map($this->element([
             'status' => $legacyStatus,
             'countTestItems' => '3.000',
         ]), 114);
@@ -124,11 +126,14 @@ final class LegacyRequestMapperTest extends TestCase
     {
         yield 'зарегистрирована' => ['Заявка зарегистрирована', RequestStatus::Registered];
         yield 'в работе' => ['Заявка в работе', RequestStatus::InProgress];
+        yield 'фактическое значение в работе' => ['В работе', RequestStatus::InProgress];
         yield 'приостановлена' => ['Работы приостановлены', RequestStatus::Suspended];
+        yield 'фактическое значение приостановлена' => ['Приостановлено', RequestStatus::Suspended];
         yield 'заключение' => ['Подготовка заключения', RequestStatus::OpinionPreparation];
         yield 'контроль СБ' => ['Контроль СБ', RequestStatus::SecurityReview];
         yield 'выполнена' => ['Заявка выполнена', RequestStatus::Completed];
         yield 'отказана' => ['Отказано', RequestStatus::Rejected];
+        yield 'фактическое значение отказана' => ['В проведении испытаний отказано', RequestStatus::Rejected];
         yield 'отозвана' => ['Заявка отозвана', RequestStatus::Withdrawn];
     }
 
@@ -151,5 +156,12 @@ final class LegacyRequestMapperTest extends TestCase
                 ...$overrides,
             ], JSON_THROW_ON_ERROR),
         ];
+    }
+
+    private function mapper(): LegacyRequestMapper
+    {
+        return new LegacyRequestMapper([
+            '77' => new LegacyUserData('77', 'ivanov', 'Иванов Иван', 'ivanov@example.test', null, true),
+        ]);
     }
 }

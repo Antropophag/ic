@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "vite --host 0.0.0.0",
     "build": "vite build",
+    "bitrix-files": "node scripts/bitrix-files.mjs",
     "lint": "eslint . --max-warnings=0",
     "openapi:validate": "node scripts/check-openapi.mjs",
     "audit": "npm audit --audit-level=high",

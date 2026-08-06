@@ -8,6 +8,7 @@ use App\Application\Import\LegacyImportOutcome;
 use App\Application\Import\LegacyRequestData;
 use App\Application\Import\LegacyRequestImporter;
 use App\Application\Import\LegacyRequestMapper;
+use App\Application\Import\LegacyUserData;
 use App\Application\Import\LegacyRequestWriter;
 use PHPUnit\Framework\TestCase;
 
@@ -15,7 +16,7 @@ final class LegacyRequestImporterTest extends TestCase
 {
     public function testDryRunValidatesWithoutWriting(): void
     {
-        $summary = (new LegacyRequestImporter(new LegacyRequestMapper()))->import([
+        $summary = (new LegacyRequestImporter($this->mapper()))->import([
             $this->element('1'),
             ['ID' => '2', 'DETAIL_TEXT' => '{}'],
         ], 114);
@@ -40,7 +41,7 @@ final class LegacyRequestImporterTest extends TestCase
             }
         };
 
-        $summary = (new LegacyRequestImporter(new LegacyRequestMapper()))->import([
+        $summary = (new LegacyRequestImporter($this->mapper()))->import([
             $this->element('1'),
             $this->element('2'),
         ], 114, $writer);
@@ -67,5 +68,19 @@ final class LegacyRequestImporterTest extends TestCase
                 'department' => ['NAME' => 'Лаборатория'],
             ], JSON_THROW_ON_ERROR | JSON_UNESCAPED_UNICODE),
         ];
+    }
+
+    private function mapper(): LegacyRequestMapper
+    {
+        return new LegacyRequestMapper([
+            '1595' => new LegacyUserData(
+                '1595',
+                'ivanov',
+                'Иванов Иван',
+                'ivanov@example.test',
+                null,
+                true,
+            ),
+        ]);
     }
 }

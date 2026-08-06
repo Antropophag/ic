@@ -10,7 +10,7 @@ use RuntimeException;
 
 final class NativeBitrixTransport implements BitrixTransport
 {
-    private const ALLOWED_METHODS = ['lists.field.get', 'lists.element.get'];
+    private const ALLOWED_METHODS = ['lists.field.get', 'lists.element.get', 'user.get'];
 
     /** @var Closure(string, resource): (string|false) */
     private readonly Closure $fetch;

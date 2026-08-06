@@ -12,12 +12,21 @@ use UnexpectedValueException;
 
 final class LegacyRequestMapper
 {
+    /** @param array<int|string, LegacyUserData> $usersById */
+    public function __construct(private readonly array $usersById)
+    {
+    }
+
     /** @param array<string, mixed> $element */
     public function map(array $element, int $listId): LegacyRequestData
     {
         $elementId = $this->requiredString($element, 'ID');
         if (preg_match('/^\d+$/', $elementId) !== 1) {
             throw new UnexpectedValueException('Legacy request ID must be numeric.');
+        }
+        $number = filter_var($elementId, FILTER_VALIDATE_INT, ['options' => ['min_range' => 1]]);
+        if ($number === false) {
+            throw new UnexpectedValueException('Legacy request ID must fit a positive integer.');
         }
         $legacyId = "bitrix24:{$listId}:{$elementId}";
         $this->assertMaximumLength($legacyId, 128, 'legacyId');
@@ -43,14 +52,15 @@ final class LegacyRequestMapper
         $manufacturer = $this->requiredString($details, 'manufacturer');
         $supplier = $this->requiredString($details, 'supplier');
         $testMethod = $this->string($details, 'testMethod');
-        $creatorDisplayName = trim($this->string($creator, 'LAST_NAME') . ' ' . $this->string($creator, 'NAME'));
+        $creatorProfile = $this->usersById[$creatorLegacyId] ?? null;
+        if (!$creatorProfile instanceof LegacyUserData) {
+            throw new UnexpectedValueException("Bitrix24 creator {$creatorLegacyId} has no mapped user profile.");
+        }
         $departmentName = $this->string($department, 'NAME');
         $departmentExternalId = $this->string($department, 'ID');
         $this->assertMaximumLength($productName, 500, 'nameType');
         $this->assertMaximumLength($manufacturer, 500, 'manufacturer');
         $this->assertMaximumLength($supplier, 500, 'supplier');
-        $this->assertMaximumLength($creatorLegacyId, 112, 'creator.ID');
-        $this->assertMaximumLength($creatorDisplayName, 255, 'creator.displayName');
         $this->assertMaximumLength($departmentName, 255, 'department.NAME');
         $this->assertMaximumLength($departmentExternalId, 128, 'department.ID');
         if (strlen($testMethod) > 65535) {
@@ -62,6 +72,7 @@ final class LegacyRequestMapper
 
         return new LegacyRequestData(
             $legacyId,
+            $number,
             $productName,
             $manufacturer,
             $supplier,
@@ -69,8 +80,7 @@ final class LegacyRequestMapper
             $testMethod,
             $this->status($this->requiredString($details, 'status')),
             $this->date($this->requiredString($details, 'dateCreate')),
-            $creatorLegacyId,
-            $creatorDisplayName,
+            $creatorProfile,
             $departmentName,
             $this->count($details, 'supportingDocFiles'),
             $this->count($details, 'reportFiles'),
@@ -136,12 +146,12 @@ final class LegacyRequestMapper
     {
         return match ($status) {
             'Заявка зарегистрирована' => RequestStatus::Registered,
-            'Заявка в работе' => RequestStatus::InProgress,
-            'Работы приостановлены' => RequestStatus::Suspended,
+            'Заявка в работе', 'В работе' => RequestStatus::InProgress,
+            'Работы приостановлены', 'Приостановлено' => RequestStatus::Suspended,
             'Подготовка заключения' => RequestStatus::OpinionPreparation,
             'Контроль СБ' => RequestStatus::SecurityReview,
             'Выполнено', 'Заявка выполнена' => RequestStatus::Completed,
-            'Отказано' => RequestStatus::Rejected,
+            'Отказано', 'В проведении испытаний отказано' => RequestStatus::Rejected,
             'Заявка отозвана' => RequestStatus::Withdrawn,
             default => throw new UnexpectedValueException("Unknown legacy status: {$status}"),
         };
