@@ -145,6 +145,7 @@ test('заявка перемещается между персональным�
     await expectOk(await manager.post(`/api/v1/requests/${requestId}/executor`, {
       data: { executorId: 2, lockVersion: 1 },
     }))
+    await page.reload()
     await page.getByTitle('На главную').click()
     await expect(page.getByRole('row').filter({ hasText: marker })).toHaveCount(0)
 
@@ -156,6 +157,7 @@ test('заявка перемещается между персональным�
     await expectOk(await executor.post(`/api/v1/requests/${requestId}/start`, {
       data: { lockVersion: 2 },
     }))
+    await executorPage.reload()
     await executorPage.getByRole('button', { name: /Загрузить отчёт/ }).click()
     await expect(executorPage.getByRole('row').filter({ hasText: marker })).toBeVisible()
     await expectOk(await executor.post(`/api/v1/requests/${requestId}/report`, {
