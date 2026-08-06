@@ -6,7 +6,7 @@ export default defineConfig({
   test: {
     coverage: {
       provider: 'v8',
-      include: ['src/api.js', 'src/applicationDraftForm.js', 'src/applicationDraftStorage.js', 'src/bootstrap.js', 'src/confirmDialog.js', 'src/latestRequestGuard.js', 'src/registry.js', 'src/requestRegistryLoadLifecycle.js', 'dev/dev-tools.js'],
+      include: ['src/api.js', 'src/applicationDraftForm.js', 'src/applicationDraftStorage.js', 'src/bootstrap.js', 'src/confirmDialog.js', 'src/latestRequestGuard.js', 'src/registry.js', 'src/requestRegistryLoadLifecycle.js', 'dev/dev-tools.js', 'dev/review-guide.js'],
       reporter: ['text', 'json-summary'],
       thresholds: {
         lines: 80,

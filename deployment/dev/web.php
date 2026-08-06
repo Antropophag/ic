@@ -9,6 +9,8 @@ return [
             'rules' => [
                 'GET health/logging' => 'health/logging',
                 'GET api/v1/dev/users' => 'dev/users',
+                'GET api/v1/dev/review-feedback' => 'dev/review-feedback',
+                'POST api/v1/dev/review-feedback' => 'dev/create-review-feedback',
                 'POST api/v1/dev/seed-requests' => 'dev/seed-requests',
             ],
         ],

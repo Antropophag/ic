@@ -28,6 +28,16 @@ describe('request deep links', () => {
     expect(replaceState).not.toHaveBeenCalled()
   })
 
+  it('normalizes request links created from the review guide', () => {
+    const replaceState = vi.fn()
+    setRequestInUrl(12, {
+      history: { replaceState },
+      location: { href: 'https://portal.test/review-guide?source=guide' },
+    })
+
+    expect(replaceState).toHaveBeenCalledWith({}, '', '/?source=guide&request=12')
+  })
+
   it('loads a linked request directly when it is outside the registry result', async () => {
     const getRequest = vi.fn().mockResolvedValue({ item: { id: 501 }, history: [], comments: [], documents: [] })
 

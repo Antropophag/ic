@@ -1,9 +1,43 @@
 import { afterEach, expect, it, vi } from 'vitest'
-import { adminApi, authApi, hasCsrfToken, requestApi, setCsrfToken } from './api'
+import { adminApi, authApi, devApi, hasCsrfToken, requestApi, setCsrfToken } from './api'
 
 afterEach(() => {
   vi.unstubAllGlobals()
   setCsrfToken('')
+})
+
+it('creates and loads development review feedback', async () => {
+  const fetchMock = vi.fn()
+    .mockResolvedValueOnce(new Response('{"id":1}', { status: 201 }))
+    .mockResolvedValueOnce(new Response('{"items":[]}', { status: 200 }))
+  vi.stubGlobal('fetch', fetchMock)
+
+  await devApi.createReviewFeedback('Текст замечания', ['Проверка статуса'])
+  await devApi.reviewFeedback()
+
+  expect(fetchMock).toHaveBeenNthCalledWith(1, '/api/v1/dev/review-feedback', expect.objectContaining({
+    method: 'POST',
+    body: JSON.stringify({ body: 'Текст замечания', checklist: ['Проверка статуса'] }),
+  }))
+  expect(fetchMock).toHaveBeenNthCalledWith(2, '/api/v1/dev/review-feedback', expect.any(Object))
+})
+
+it('passes cancellation signals to development feedback requests', async () => {
+  const fetchMock = vi.fn()
+    .mockResolvedValueOnce(new Response('{"items":[]}', { status: 200 }))
+    .mockResolvedValueOnce(new Response('{"id":1}', { status: 201 }))
+  vi.stubGlobal('fetch', fetchMock)
+  const controller = new AbortController()
+
+  await devApi.reviewFeedback(controller.signal)
+  await devApi.createReviewFeedback('Текст', [], controller.signal)
+
+  expect(fetchMock).toHaveBeenNthCalledWith(1, '/api/v1/dev/review-feedback', expect.objectContaining({
+    signal: controller.signal,
+  }))
+  expect(fetchMock).toHaveBeenNthCalledWith(2, '/api/v1/dev/review-feedback', expect.objectContaining({
+    signal: controller.signal,
+  }))
 })
 
 it('loads the registry as JSON', async () => {

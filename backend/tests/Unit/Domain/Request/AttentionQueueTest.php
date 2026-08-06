@@ -19,7 +19,7 @@ final class AttentionQueueTest extends TestCase
                 'upload_report' => ['Загрузить отчёт', 'Загрузите отчёт о результатах испытаний в формате PDF.', [Role::IcExecutor, Role::IcManager, Role::LaboratoryManager]],
                 'claim_expert' => ['Взять заявку на экспертизу', 'Возьмите заявку в работу для подготовки заключения.', [Role::Expert]],
                 'publish_opinion' => ['Подготовить заключение', 'Подготовьте и опубликуйте экспертное заключение.', [Role::Expert]],
-                'security_decision' => ['Визировать протокол испытаний', 'Визируйте протокол испытаний либо верните заявку на доработку.', [Role::SecurityOfficer]],
+                'security_decision' => ['Визировать протокол испытаний', 'Завизируйте протокол испытаний либо верните заявку на доработку.', [Role::SecurityOfficer]],
             ],
             array_reduce(
                 AttentionQueue::cases(),
