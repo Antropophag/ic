@@ -139,18 +139,25 @@ test('заявка перемещается между персональным�
     await expect(dashboardHelpDialog).toContainText('Заявки, требующие внимания')
     await page.getByRole('button', { name: 'Закрыть справку' }).click()
     await expect(dashboardHelpDialog).toBeHidden()
-    await page.getByRole('button', { name: /Назначить исполнителя/ }).click()
+    const managerQueue = page.getByRole('button', { name: /Назначить исполнителя/ })
+    const managerCountBefore = Number(await managerQueue.locator('.attention-count').innerText())
+    await managerQueue.click()
     await page.getByRole('row').filter({ hasText: marker }).click()
 
     await expectOk(await manager.post(`/api/v1/requests/${requestId}/executor`, {
       data: { executorId: 2, lockVersion: 1 },
     }))
-    await page.reload()
     await Promise.all([
       page.waitForResponse(response => response.url().includes('/api/v1/requests/dashboard') && response.ok()),
       page.getByTitle('На главную').click(),
     ])
-    await expect(page.getByRole('row').filter({ hasText: marker })).toHaveCount(0)
+    if (managerCountBefore === 1) {
+      await expect(managerQueue).toHaveCount(0)
+    } else {
+      await expect(managerQueue.locator('.attention-count')).toHaveText(String(managerCountBefore - 1))
+      await managerQueue.click()
+      await expect(page.getByRole('row').filter({ hasText: marker })).toHaveCount(0)
+    }
 
     const executorPage = await context.newPage()
     await useTestIdentity(executorPage, 2)
