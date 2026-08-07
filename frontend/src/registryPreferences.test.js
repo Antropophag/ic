@@ -31,6 +31,18 @@ describe('registry preferences', () => {
     expect(writeNotificationCursor(17, 'broken', target)).toBe(false)
   })
 
+  it.each([
+    '9999-99-99T10:00:00.000000Z',
+    '2026-02-30T10:00:00.000000Z',
+    '2026-08-07T10:00',
+    '2026-08-07T10:00:00.badZ',
+  ])('rejects malformed notification cursor %s', value => {
+    const target = storage(value)
+    expect(readNotificationCursor(17, target)).toBe('')
+    expect(writeNotificationCursor(17, value, target)).toBe(false)
+    expect(target.setItem).not.toHaveBeenCalled()
+  })
+
   it('falls back safely when browser storage access is blocked', () => {
     const originalWindow = Object.getOwnPropertyDescriptor(globalThis, 'window')
     Object.defineProperty(globalThis, 'window', {

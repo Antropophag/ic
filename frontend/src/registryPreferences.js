@@ -25,17 +25,23 @@ export function notificationCursorKey(userId) {
   return `ic.requestRegistry.notifications.${userId}.v1`
 }
 
+function isValidNotificationCursor(value) {
+  if (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d{1,6})?Z$/.test(value || '')) return false
+  const timestamp = Date.parse(value)
+  return Number.isFinite(timestamp) && new Date(timestamp).toISOString().slice(0, 19) === value.slice(0, 19)
+}
+
 export function readNotificationCursor(userId, storage) {
   try {
     const value = (storage ?? window.localStorage).getItem(notificationCursorKey(userId))
-    return /^\d{4}-\d{2}-\d{2}T/.test(value || '') ? value : ''
+    return isValidNotificationCursor(value) ? value : ''
   } catch {
     return ''
   }
 }
 
 export function writeNotificationCursor(userId, value, storage) {
-  if (!/^\d{4}-\d{2}-\d{2}T/.test(value || '')) return false
+  if (!isValidNotificationCursor(value)) return false
   try {
     (storage ?? window.localStorage).setItem(notificationCursorKey(userId), value)
     return true
