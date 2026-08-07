@@ -206,7 +206,7 @@ onBeforeUnmount(() => {
               <button type="button" class="brand-mark-btn" title="На главную" :disabled="!selectedRequestId && !showAdmin && !showReviewGuide" @click="returnHome">
                 <svg class="brand-mark" width="48" height="48" viewBox="0 0 40 40" fill="none" aria-hidden="true"><rect x="2" y="2" width="36" height="36" rx="10" fill="currentColor" /><path d="M12 25a8 8 0 1 1 16 0" stroke="#fff" stroke-width="2" stroke-linecap="round" /><path d="M12 25h2M26 25h2M20 15v2" stroke="#fff" stroke-width="1.6" stroke-linecap="round" /><path d="M20 25l5-6.5" stroke="#fff" stroke-width="2" stroke-linecap="round" /><circle cx="20" cy="25" r="1.6" fill="#fff" /></svg>
               </button>
-              <div><p class="eyebrow">АО «ЩЛЗ» · Испытательный центр</p><h1>{{ showReviewGuide ? 'Гайд для предварительного ревью' : selectedRequestTitle ? `Заявка №${selectedRequestTitle.id} от ${selectedRequestTitle.date}` : selectedRequestId ? 'Заявка' : 'Заявки на проведение испытаний' }}</h1></div>
+              <div><p class="eyebrow">АО «ЩЛЗ» · Испытательный центр</p><h1>{{ showReviewGuide ? 'Обзор портала' : selectedRequestTitle ? `Заявка №${selectedRequestTitle.id} от ${selectedRequestTitle.date}` : selectedRequestId ? 'Заявка' : 'Заявки на проведение испытаний' }}</h1></div>
             </div>
             <div class="header-account">
               <div class="header-account-actions">
@@ -220,7 +220,7 @@ onBeforeUnmount(() => {
             </div>
           </div>
         </header>
-        <ReviewGuide v-if="showReviewGuide && ReviewGuide" @navigate="leaveReviewGuide" @seed-demo="requestDemoSeed" />
+        <ReviewGuide v-if="showReviewGuide && ReviewGuide" />
         <AdminPanel v-else-if="showAdmin" @close="showAdmin = false" @open-request="openAdminRequest" />
         <RequestDetails v-else-if="selectedRequestId" :request-id="selectedRequestId" :current-initials="currentInitials" :initial-warning="requestWarning" @loaded="selectedRequestTitle = $event" @updated="refreshRegistry" @close="closeRequest()" />
         <RequestRegistry
