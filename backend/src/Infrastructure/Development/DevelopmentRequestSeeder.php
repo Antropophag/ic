@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Infrastructure\Development;
 
 use App\Infrastructure\Document\DocumentStorage;
+use App\Infrastructure\Document\OpinionPdfRenderer;
 use Dompdf\Dompdf;
 use Dompdf\Options;
 use Yii;
@@ -107,7 +108,15 @@ final class DevelopmentRequestSeeder
                 }
                 if (in_array($fixture['status'], ['opinion_preparation', 'security_review', 'completed'], true)) {
                     $expert = $index % 2 === 0 ? $users['expert2'] : $users['expert'];
-                    $version = $this->insertAttachment($requestId, 'opinion', sprintf('Экспертное заключение %03d.pdf', $index + 1), 'application/pdf', $expert, $fixture['age'] - 4);
+                    $version = $this->insertAttachment(
+                        $requestId,
+                        'opinion',
+                        sprintf('Экспертное заключение %03d.pdf', $index + 1),
+                        'application/pdf',
+                        $expert,
+                        $fixture['age'] - 4,
+                        $this->opinionContent($index, $fixture, $expert, $fixture['age'] - 4),
+                    );
                     $newKeys[] = $version['key'];
                     ++$counts['documents'];
                     $opinionId = $this->insertOpinion($requestId, $version['id'], $expert, $fixture['age'] - 4);
@@ -288,9 +297,16 @@ final class DevelopmentRequestSeeder
     }
 
     /** @return array{id: int, key: string} */
-    private function insertAttachment(int $requestId, string $type, string $name, string $mimeType, int $userId, int $age): array
-    {
-        $content = $this->documentContent($name, $requestId);
+    private function insertAttachment(
+        int $requestId,
+        string $type,
+        string $name,
+        string $mimeType,
+        int $userId,
+        int $age,
+        ?string $content = null,
+    ): array {
+        $content ??= $this->documentContent($name, $requestId);
         $temporary = tempnam(sys_get_temp_dir(), 'ic-development-');
         if ($temporary === false || file_put_contents($temporary, $content) === false) {
             throw new \RuntimeException('Cannot create development attachment.');
@@ -354,6 +370,29 @@ final class DevelopmentRequestSeeder
         );
         $pdf->render();
         return $pdf->output();
+    }
+
+    /** @param array<string, mixed> $fixture */
+    private function opinionContent(int $index, array $fixture, int $expertId, int $age): string
+    {
+        $expert = $this->db->createCommand(
+            'SELECT display_name, position FROM {{%users}} WHERE id = :id',
+            [':id' => $expertId],
+        )->queryOne();
+        if ($expert === false) {
+            throw new \RuntimeException("Development expert '{$expertId}' is missing.");
+        }
+
+        return (new OpinionPdfRenderer())->render([
+            'number' => 1001 + $index,
+            'productName' => sprintf('%s — демо-серия %03d', $fixture['product'], $index + 1),
+            'manufacturer' => (string) $fixture['manufacturer'],
+            'supplier' => (string) $fixture['supplier'],
+            'expertName' => (string) $expert['display_name'],
+            'expertPosition' => (string) ($expert['position'] ?: 'Эксперт'),
+            'body' => 'По результатам демонстрационных испытаний образец соответствует требованиям программы.',
+            'date' => gmdate('d.m.Y', time() - (max(0, $age) * 86400)),
+        ]);
     }
 
     private function officeContent(string $extension, int $requestId): string
