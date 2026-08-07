@@ -99,6 +99,12 @@ final class RequestController extends ApiController
         return $this->query()->attentionDashboard($this->currentUserId());
     }
 
+    /** @return array{items: list<array<string, mixed>>} */
+    public function actionEvents(): array
+    {
+        return ['items' => $this->query()->recentEvents($this->currentUserId())];
+    }
+
     /** @return array{item: array<string, mixed>, history: list<array<string, mixed>>, comments: list<array<string, mixed>>, commentsPage: array{hasMore: bool, nextBeforeId: int|null}, documents: list<array<string, mixed>>} */
     public function actionView(int $id): array
     {

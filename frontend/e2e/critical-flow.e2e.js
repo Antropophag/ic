@@ -192,7 +192,7 @@ test('заявка перемещается между персональным�
     const securityPage = await context.newPage()
     await useTestIdentity(securityPage, 5)
     await securityPage.goto('/')
-    const securityQueue = securityPage.getByRole('button', { name: /Визировать протокол испытаний/ })
+    const securityQueue = securityPage.getByRole('button', { name: /Согласовать протокол испытаний/ })
     const securityCountBefore = Number(await securityQueue.locator('.attention-count').innerText())
     await securityQueue.click()
     await expect(securityPage.getByRole('row').filter({ hasText: marker })).toBeVisible()

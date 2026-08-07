@@ -71,8 +71,6 @@ export function renderUserSwitcher(browserWindow, document, users) {
   guideButton.addEventListener('click', () => {
     browserWindow.dispatchEvent(new CustomEvent(guideIsOpen ? 'ic:close-review-guide' : 'ic:open-review-guide'))
   })
-  panel.append(guideButton)
-
   if (users.find(user => String(user.id) === current)?.roles?.includes('administrator')) {
     const seedButton = document.createElement('button')
     seedButton.type = 'button'
@@ -83,6 +81,7 @@ export function renderUserSwitcher(browserWindow, document, users) {
     })
     panel.append(seedButton)
   }
+  panel.append(guideButton)
 
   const target = document.getElementById?.('ic-development-tools-slot') || document.body
   target.append(panel)

@@ -6,6 +6,7 @@ export function createRequestRegistryLoadLifecycle({
 } = {}) {
   const registryGuard = createLatestRequestGuard()
   const dashboardGuard = createLatestRequestGuard()
+  const notificationGuard = createLatestRequestGuard()
   const downloadGuard = createLatestRequestGuard()
   const createRequestGuard = createLatestRequestGuard()
   let reloadTimer = null
@@ -13,6 +14,7 @@ export function createRequestRegistryLoadLifecycle({
   return {
     registryGuard,
     dashboardGuard,
+    notificationGuard,
     downloadGuard,
     createRequestGuard,
     scheduleReload(callback, delay = 300) {
@@ -24,6 +26,7 @@ export function createRequestRegistryLoadLifecycle({
       reloadTimer = null
       registryGuard.invalidate()
       dashboardGuard.invalidate()
+      notificationGuard.invalidate()
       downloadGuard.invalidate()
       createRequestGuard.invalidate()
     },
