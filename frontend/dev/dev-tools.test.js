@@ -121,7 +121,7 @@ describe('standalone development tools', () => {
     ])
 
     expect(document.body.children[0].children[1].textContent).toBe('Заполнить данные')
-    expect(document.body.children[0].children[2].textContent).toBe('Гайд')
+    expect(document.body.children[0].children[2].textContent).toBe('Обзор')
 
     const second = browserEnvironment()
     second.browserWindow.localStorage.setItem('ic.dev.userId', '2')
@@ -141,9 +141,11 @@ describe('standalone development tools', () => {
       { id: 1, displayName: 'Manager', position: 'IC', roles: ['ic_manager'] },
     ])
 
-    document.body.children[0].children[1].dispatchEvent(new Event('click'))
+    const guideButton = document.body.children[0].children[1]
+    guideButton.dispatchEvent(new Event('click'))
 
     expect(opened).toHaveBeenCalledOnce()
+    expect(guideButton.textContent).toBe('Портал')
     expect(selectedUserId(browser)).toBe('1')
     expect(reload).not.toHaveBeenCalled()
   })
@@ -159,12 +161,45 @@ describe('standalone development tools', () => {
     ])
 
     const guideButton = document.body.children[0].children[1]
-    expect(guideButton.textContent).toBe('Вернуться в портал')
+    expect(guideButton.textContent).toBe('Портал')
     guideButton.dispatchEvent(new Event('click'))
 
     expect(closed).toHaveBeenCalledOnce()
+    expect(guideButton.textContent).toBe('Обзор')
     expect(selectedUserId(browser)).toBe('1')
     expect(reload).not.toHaveBeenCalled()
+  })
+
+  it('synchronizes the review button after browser history navigation', () => {
+    const { browserWindow: browser, document } = browserEnvironment()
+    browser.localStorage.setItem('ic.dev.userId', '1')
+    renderUserSwitcher(browser, document, [
+      { id: 1, displayName: 'Manager', position: 'IC', roles: ['ic_manager'] },
+    ])
+    const guideButton = document.body.children[0].children[1]
+
+    browser.location.href = 'http://localhost:5173/review-guide'
+    browser.dispatchEvent(new Event('popstate'))
+    expect(guideButton.textContent).toBe('Портал')
+
+    browser.location.href = 'http://localhost:5173/'
+    browser.dispatchEvent(new Event('popstate'))
+    expect(guideButton.textContent).toBe('Обзор')
+  })
+
+  it('replaces the previous switcher and its review navigation listeners', () => {
+    const { browserWindow: browser, document } = browserEnvironment()
+    browser.localStorage.setItem('ic.dev.userId', '1')
+    const users = [{ id: 1, displayName: 'Manager', position: 'IC', roles: ['ic_manager'] }]
+    renderUserSwitcher(browser, document, users)
+    const replacedButton = document.body.children[0].children[1]
+
+    renderUserSwitcher(browser, document, users)
+    browser.dispatchEvent(new CustomEvent('ic:open-review-guide'))
+
+    expect(document.body.children).toHaveLength(1)
+    expect(replacedButton.textContent).toBe('Обзор')
+    expect(document.body.children[0].children[1].textContent).toBe('Портал')
   })
 
   it('replaces an invalid persisted selection with the first available user', () => {
