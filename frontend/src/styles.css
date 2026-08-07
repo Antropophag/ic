@@ -64,7 +64,7 @@
 .registry .tabs button:not(.tabs-cta):hover{color:#243149}
 .registry .tabs button.active{color:#142033}
 .registry .tabs button:not(.tabs-cta):focus-visible{outline:2px solid var(--blue);outline-offset:-6px;border-radius:var(--radius-sm)}
-.registry .tab-count{min-width:22px;height:20px;display:inline-flex;align-items:center;justify-content:center;margin:0;padding:0 6px;border-radius:10px;background:#f0f2f5;color:#697588;font-size:12px;line-height:22px;font-variant-numeric:tabular-nums}
+.registry .tab-count{min-width:22px;height:20px;display:inline-flex;align-items:center;justify-content:center;margin:0;padding:0 6px;border-radius:10px;background:#f0f2f5;color:#697588;font-size:12px;line-height:20px;font-variant-numeric:tabular-nums}
 .registry .tabs button.active .tab-count{background:var(--blue-soft);color:var(--blue)}
 .registry .tabs-cta{flex:none;height:40px;min-height:40px;display:inline-flex;align-items:center;justify-content:center;gap:8px;margin:0;padding:0 18px;border-radius:20px;line-height:22px}
 .registry .tabs-cta svg{width:16px;height:16px;fill:none;stroke:currentcolor;stroke-width:1.7;stroke-linecap:round}
@@ -258,7 +258,7 @@
 .request-documents{max-height:none;overflow:visible}
 .request-documents-head{align-items:center;margin-bottom:6px}
 .request-documents-head h3{margin:0}
-.request-documents-head .request-document-count{height:20px;min-width:20px;display:inline-flex;align-items:center;justify-content:center;margin-left:4px;border-radius:10px;background:#eef0f4;padding:0 6px;color:rgba(11,22,35,.5);font-size:11px;line-height:22px;font-weight:400;vertical-align:middle}
+.request-documents-head .request-document-count{height:20px;min-width:20px;display:inline-flex;align-items:center;justify-content:center;margin-left:4px;border-radius:10px;background:#eef0f4;padding:0 6px;color:rgba(11,22,35,.5);font-size:11px;line-height:20px;font-weight:400;vertical-align:middle}
 .request-document-group{padding-top:8px}
 .request-document-group+.request-document-group{position:relative;margin-top:8px;padding-top:13px}
 .request-document-group+.request-document-group:before{content:"";position:absolute;top:0;left:8px;right:8px;height:1px;background:var(--line-soft)}

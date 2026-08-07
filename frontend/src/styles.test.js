@@ -19,6 +19,12 @@ describe('readable typography scale', () => {
     expect(compactStyles).toContain(
       '.request-page.entryp{display:block;margin-top:5px;overflow:visible;font-size:12px;line-height:18px',
     )
+    expect(compactStyles).toContain(
+      '.registry.tab-count{min-width:22px;height:20px;display:inline-flex;align-items:center;justify-content:center;margin:0;padding:06px;border-radius:10px;background:#f0f2f5;color:#697588;font-size:12px;line-height:20px',
+    )
+    expect(compactStyles).toContain(
+      '.request-documents-head.request-document-count{height:20px;min-width:20px;display:inline-flex;align-items:center;justify-content:center;margin-left:4px;border-radius:10px;background:#eef0f4;padding:06px;color:rgba(11,22,35,.5);font-size:11px;line-height:20px',
+    )
     expect(compactAdminStyles).toContain(
       '.admin-tabletd{height:52px;padding:7px14px;border-top:0;border-bottom:1pxsolidvar(--line-soft);color:#263348;font-size:13px;line-height:19px',
     )
