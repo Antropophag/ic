@@ -1,16 +1,19 @@
 import { createHash } from 'node:crypto'
-import { link, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
+import { link, mkdir, mkdtemp, readFile, rm, symlink, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
 import { afterEach, describe, expect, test, vi } from 'vitest'
 import {
   downloadResponse,
+  findLegacyDownloadLink,
   loadCheckpoint,
   normalizeFileUrl,
+  plusSubstitutionCandidates,
   parseArguments,
   readSnapshotFiles,
   assertOutsideGit,
   writePrivateJsonLines,
+  verifyWorkspace,
 } from './bitrix-files.mjs'
 
 const temporaryDirectories = []
@@ -42,6 +45,59 @@ describe('Bitrix file migration tooling', () => {
     expect(() => normalizeFileUrl('https://portal.example/other/file.pdf', 'portal.example')).toThrow(
       'outside the legacy file directory',
     )
+  })
+
+  test('removes legacy padding immediately before a file extension', () => {
+    expect(normalizeFileUrl(
+      'https://portal.example/docs/file/FilesProposalTest/4010101006Б    .tif',
+      'portal.example',
+    )).toBe('https://portal.example/docs/file/FilesProposalTest/4010101006%D0%91.tif')
+  })
+
+  test('restores three plus signs represented by legacy padding', () => {
+    expect(normalizeFileUrl(
+      'https://portal.example/docs/file/FilesProposalTest/0060700001Е    (1).tif',
+      'portal.example',
+    )).toBe('https://portal.example/docs/file/FilesProposalTest/0060700001%D0%95%2B%2B%2B%20(1).tif')
+  })
+
+  test('preserves unrelated runs of four spaces', () => {
+    expect(normalizeFileUrl(
+      'https://portal.example/docs/file/FilesProposalTest/report    final.pdf',
+      'portal.example',
+    )).toBe('https://portal.example/docs/file/FilesProposalTest/report%20%20%20%20final.pdf')
+  })
+
+  test('builds single-plus fallback candidates for legacy spaces', () => {
+    expect(plusSubstitutionCandidates(
+      'https://portal.example/docs/file/FilesProposalTest/one%20two%20three.pdf',
+    )).toEqual([
+      'https://portal.example/docs/file/FilesProposalTest/one%20two%20three.pdf',
+      'https://portal.example/docs/file/FilesProposalTest/one%2Btwo%20three.pdf',
+      'https://portal.example/docs/file/FilesProposalTest/one%20two%2Bthree.pdf',
+    ])
+  })
+
+  test('finds a legacy download link after a missing original URL', async () => {
+    const downloadLink = { waitFor: vi.fn().mockResolvedValue(undefined) }
+    const page = {
+      goto: vi.fn()
+        .mockResolvedValueOnce({ status: () => 404 })
+        .mockResolvedValueOnce({ status: () => 200 }),
+      url: vi.fn().mockReturnValue('https://portal.example/docs/file/FilesProposalTest/one%2Btwo.pdf'),
+      locator: vi.fn().mockReturnValue(downloadLink),
+    }
+
+    await expect(findLegacyDownloadLink(
+      page,
+      'https://portal.example/docs/file/FilesProposalTest/one%20two.pdf',
+      1_000,
+    )).resolves.toBe(downloadLink)
+    expect(page.goto).toHaveBeenNthCalledWith(2,
+      'https://portal.example/docs/file/FilesProposalTest/one%2Btwo.pdf',
+      { waitUntil: 'domcontentloaded', timeout: 1_000 },
+    )
+    expect(downloadLink.waitFor).toHaveBeenCalledWith({ state: 'attached', timeout: 1_000 })
   })
 
   test('verifies snapshot and deduplicates associations by source ID', async () => {
@@ -187,12 +243,91 @@ describe('Bitrix file migration tooling', () => {
       bytes: 10,
     })
   })
+
+  test('verifies snapshot associations, objects, and checkpoint hashes', async () => {
+    const { snapshot, workspace } = await validMigrationWorkspace()
+
+    await expect(verifyWorkspace(snapshot, workspace)).resolves.toEqual({
+      uniqueFiles: 1,
+      associations: 1,
+      verified: 1,
+    })
+
+    await writeFile(join(workspace, 'objects', '7'), 'corrupted')
+    await expect(verifyWorkspace(snapshot, workspace)).rejects.toThrow('integrity check failed')
+  })
+
+  test('rejects associations that do not match the snapshot', async () => {
+    const { snapshot, workspace } = await validMigrationWorkspace()
+    await writeFile(join(workspace, 'associations.jsonl'), '{"sourceFileId":"other"}\n')
+    await expect(verifyWorkspace(snapshot, workspace)).rejects.toThrow('associations do not match')
+  })
+
+  test.each([
+    ['missing', async (workspace) => rm(join(workspace, 'objects', '7'))],
+    ['extra', async (workspace) => writeFile(join(workspace, 'objects', '8'), 'extra')],
+  ])('rejects a %s workspace object', async (_case, mutate) => {
+    const { snapshot, workspace } = await validMigrationWorkspace()
+    await mutate(workspace)
+    await expect(verifyWorkspace(snapshot, workspace)).rejects.toThrow('objects do not match')
+  })
+
+  test.each([
+    ['missing', ''],
+    ['extra', `${checkpointRecord()}${JSON.stringify({ sourceFileId: '8', status: 'downloaded' })}\n`],
+  ])('rejects a %s checkpoint entry', async (_case, checkpoint) => {
+    const { snapshot, workspace } = await validMigrationWorkspace()
+    await writeFile(join(workspace, 'checkpoint.jsonl'), checkpoint)
+    await expect(verifyWorkspace(snapshot, workspace)).rejects.toThrow('checkpoint does not match')
+  })
+
+  test('rejects a checkpoint without downloaded status', async () => {
+    const { snapshot, workspace } = await validMigrationWorkspace()
+    await writeFile(join(workspace, 'checkpoint.jsonl'), checkpointRecord('failed'))
+    await expect(verifyWorkspace(snapshot, workspace)).rejects.toThrow('no successful checkpoint')
+  })
+
+  test('rejects symbolic links in the object workspace', async () => {
+    const { snapshot, workspace } = await validMigrationWorkspace()
+    const target = join(workspace, 'target')
+    await writeFile(target, 'historical document')
+    await rm(join(workspace, 'objects', '7'))
+    await symlink(target, join(workspace, 'objects', '7'))
+    await expect(verifyWorkspace(snapshot, workspace)).rejects.toThrow('not a regular file')
+  })
 })
 
 async function fixtureDirectory() {
   const directory = await mkdtemp(join(tmpdir(), 'ic-bitrix-files-'))
   temporaryDirectories.push(directory)
   return directory
+}
+
+async function validMigrationWorkspace() {
+  const snapshot = await fixtureDirectory()
+  const workspace = await fixtureDirectory()
+  const detailUrl = 'https://portal.example/docs/file/FilesProposalTest/file.pdf'
+  await writeSnapshot(snapshot, [element('10', [{ id: 7, name: 'file.pdf', detailURL: detailUrl }], [])])
+  await mkdir(join(workspace, 'objects'))
+  await writeFile(join(workspace, 'objects', '7'), 'historical document')
+  await writeFile(join(workspace, 'checkpoint.jsonl'), checkpointRecord())
+  await writePrivateJsonLines(join(workspace, 'associations.jsonl'), [{
+    requestNumber: '10',
+    documentType: 'supporting',
+    sourceFileId: '7',
+    originalName: 'file.pdf',
+  }])
+  return { snapshot, workspace }
+}
+
+function checkpointRecord(status = 'downloaded') {
+  const contents = 'historical document'
+  return `${JSON.stringify({
+    sourceFileId: '7',
+    status,
+    bytes: Buffer.byteLength(contents),
+    sha256: createHash('sha256').update(contents).digest('hex'),
+  })}\n`
 }
 
 function element(id, supporting, reports) {

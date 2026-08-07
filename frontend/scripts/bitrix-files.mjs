@@ -1,6 +1,6 @@
 import { createHash, randomUUID } from 'node:crypto'
 import { createReadStream, createWriteStream, existsSync } from 'node:fs'
-import { appendFile, chmod, link, mkdir, open, readFile, readdir, rename, rm, stat, writeFile } from 'node:fs/promises'
+import { appendFile, chmod, link, lstat, mkdir, open, readFile, readdir, rename, rm, stat, writeFile } from 'node:fs/promises'
 import { basename, dirname, join, resolve } from 'node:path'
 import { createInterface } from 'node:readline'
 import { Readable, Transform } from 'node:stream'
@@ -30,7 +30,12 @@ export function parseArguments(argv) {
 export function normalizeFileUrl(rawUrl, allowedHost) {
   // Legacy URLs contain unescaped file names; a literal # belongs to the path,
   // otherwise URL parsers silently treat the rest of the name as a fragment.
-  const url = new URL(rawUrl.replaceAll('#', '%23'))
+  // Two snapshot records also contain padding before the extension although
+  // the legacy storage path has no such padding and returns 404 when it is kept.
+  const correctedUrl = rawUrl
+    .replace(/\s+(\.[^./?#]+)$/u, '$1')
+    .replace('0060700001Е    (1).tif', '0060700001Е%2B%2B%2B (1).tif')
+  const url = new URL(correctedUrl.replaceAll('#', '%23'))
   if (url.protocol !== 'https:') {
     throw new Error('File URL must use HTTPS.')
   }
@@ -47,6 +52,19 @@ export function normalizeFileUrl(rawUrl, allowedHost) {
     throw new Error('File URL must not contain query parameters.')
   }
   return url.toString()
+}
+
+export function plusSubstitutionCandidates(normalizedUrl) {
+  const url = new URL(normalizedUrl)
+  const prefix = url.pathname.slice(0, url.pathname.lastIndexOf('/') + 1)
+  const name = decodeURIComponent(url.pathname.slice(prefix.length))
+  const candidates = [url.toString()]
+  for (let index = 0; index < name.length; ++index) {
+    if (name[index] !== ' ') continue
+    const candidateName = `${name.slice(0, index)}+${name.slice(index + 1)}`
+    candidates.push(`${url.origin}${prefix}${encodeURIComponent(candidateName)}`)
+  }
+  return candidates
 }
 
 export async function readSnapshotFiles(snapshotDirectory) {
@@ -214,12 +232,7 @@ async function download(snapshotDirectory, workspace, options) {
   const checkpointPath = join(workspace, 'checkpoint.jsonl')
   const associationsPath = join(workspace, 'associations.jsonl')
   await mkdir(objects, { recursive: true, mode: 0o700 })
-  await writePrivateJsonLines(associationsPath, source.associations.map((association) => ({
-    requestNumber: association.requestNumber,
-    documentType: association.documentType,
-    sourceFileId: association.sourceFileId,
-    originalName: association.originalName,
-  })))
+  await writePrivateJsonLines(associationsPath, associationRecords(source))
   const checkpoint = await loadCheckpoint(checkpointPath)
   const maxBytes = positiveInteger(options['max-bytes'] ?? String(DEFAULT_MAX_BYTES), 'max-bytes')
   const limit = positiveInteger(options.limit ?? String(source.uniqueFiles.length), 'limit')
@@ -275,12 +288,53 @@ async function download(snapshotDirectory, workspace, options) {
   process.stdout.write(`${JSON.stringify({ downloaded, skipped, failed, uniqueFiles: source.uniqueFiles.length })}\n`)
 }
 
+export async function verifyWorkspace(snapshotDirectory, workspace) {
+  const workspacePath = resolve(workspace)
+  assertOutsideGit(workspacePath)
+  const source = await readSnapshotFiles(snapshotDirectory)
+  const checkpoint = await loadCheckpoint(join(workspacePath, 'checkpoint.jsonl'))
+  const associationsPath = join(workspacePath, 'associations.jsonl')
+  const expectedAssociations = `${associationRecords(source).map((record) => JSON.stringify(record)).join('\n')}\n`
+  if (await readFile(associationsPath, 'utf8') !== expectedAssociations) {
+    throw new Error('Workspace associations do not match the snapshot.')
+  }
+
+  const objectsPath = join(workspacePath, 'objects')
+  const objectNames = (await readdir(objectsPath)).sort()
+  const expectedNames = source.uniqueFiles.map(({ sourceFileId }) => sourceFileId).sort()
+  if (JSON.stringify(objectNames) !== JSON.stringify(expectedNames)) {
+    throw new Error('Workspace objects do not match the snapshot file identifiers.')
+  }
+  if (JSON.stringify([...checkpoint.keys()].sort()) !== JSON.stringify(expectedNames)) {
+    throw new Error('Workspace checkpoint does not match the snapshot file identifiers.')
+  }
+  for (const file of source.uniqueFiles) {
+    const record = checkpoint.get(file.sourceFileId)
+    if (record?.status !== 'downloaded') {
+      throw new Error(`File ${file.sourceFileId} has no successful checkpoint.`)
+    }
+    await verifyDownloadedObject(join(objectsPath, file.sourceFileId), record)
+  }
+  return {
+    uniqueFiles: source.uniqueFiles.length,
+    associations: source.associations.length,
+    verified: source.uniqueFiles.length,
+  }
+}
+
+function associationRecords(source) {
+  return source.associations.map((association) => ({
+    requestNumber: association.requestNumber,
+    documentType: association.documentType,
+    sourceFileId: association.sourceFileId,
+    originalName: association.originalName,
+  }))
+}
+
 async function downloadWithBrowser(page, url, destination, maxBytes, timeout) {
   let browserDownload
   try {
-    await openLegacyFilePage(page, url, timeout)
-    const downloadLink = page.locator('a.disk-detail-sidebar-editor-item-download')
-    await downloadLink.waitFor({ state: 'attached', timeout })
+    const downloadLink = await findLegacyDownloadLink(page, url, timeout)
     const downloadPromise = page.waitForEvent('download', { timeout })
     await downloadLink.click({ force: true })
     browserDownload = await downloadPromise
@@ -309,16 +363,31 @@ async function downloadWithBrowser(page, url, destination, maxBytes, timeout) {
   }
 }
 
+export async function findLegacyDownloadLink(page, url, timeout) {
+  for (const candidate of plusSubstitutionCandidates(url)) {
+    const response = await openLegacyFilePage(page, candidate, timeout)
+    const downloadLink = page.locator('a.disk-detail-sidebar-editor-item-download')
+    if (response?.status() === 200) {
+      await downloadLink.waitFor({ state: 'attached', timeout })
+      return downloadLink
+    }
+    if (![403, 404].includes(response?.status())) {
+      throw new Error(`FILE_PAGE_HTTP_${response?.status() ?? 'UNKNOWN'}`)
+    }
+  }
+  throw new Error('FILE_PAGE_NOT_FOUND')
+}
+
 async function verifyBrowserFileAccess(page, url) {
-  await openLegacyFilePage(page, url, 30_000)
-  await page.locator('a.disk-detail-sidebar-editor-item-download').waitFor({ state: 'attached', timeout: 30_000 })
+  await findLegacyDownloadLink(page, url, 30_000)
 }
 
 async function openLegacyFilePage(page, url, timeout) {
-  await page.goto(url, { waitUntil: 'domcontentloaded', timeout })
+  const response = await page.goto(url, { waitUntil: 'domcontentloaded', timeout })
   if (page.url().includes('/oauth/authorize/')) {
     throw new Error('AUTH_REQUIRED: browser was redirected to OAuth.')
   }
+  return response
 }
 
 async function verifySnapshotFile(directory, manifest, name) {
@@ -339,10 +408,16 @@ async function verifyDownloadedObject(path, checkpoint) {
   if (!Number.isInteger(checkpoint.bytes) || typeof checkpoint.sha256 !== 'string') {
     throw new Error('Downloaded checkpoint has no integrity metadata.')
   }
-  const fileStat = await stat(path)
+  const fileStat = await lstat(path)
+  if (fileStat.isSymbolicLink() || !fileStat.isFile()) {
+    throw new Error(`Downloaded object is not a regular file: ${checkpoint.sourceFileId}.`)
+  }
+  if (fileStat.size !== checkpoint.bytes) {
+    throw new Error(`Downloaded object integrity check failed for ${checkpoint.sourceFileId}.`)
+  }
   const hash = createHash('sha256')
   for await (const chunk of createReadStream(path)) hash.update(chunk)
-  if (fileStat.size !== checkpoint.bytes || hash.digest('hex') !== checkpoint.sha256) {
+  if (hash.digest('hex') !== checkpoint.sha256) {
     throw new Error(`Downloaded object integrity check failed for ${checkpoint.sourceFileId}.`)
   }
 }
@@ -462,14 +537,15 @@ async function waitForEnter() {
 
 async function main() {
   const { command, options } = parseArguments(process.argv.slice(2))
-  if (!['auth', 'download'].includes(command)) {
-    throw new Error('Usage: bitrix-files <auth|download> --snapshot=PATH --workspace=PATH')
+  if (!['auth', 'download', 'verify'].includes(command)) {
+    throw new Error('Usage: bitrix-files <auth|download|verify> --snapshot=PATH --workspace=PATH')
   }
   if (!options.snapshot || !options.workspace) {
     throw new Error('--snapshot and --workspace are required.')
   }
   if (command === 'auth') await auth(options.snapshot, options.workspace)
-  else await download(options.snapshot, options.workspace, options)
+  else if (command === 'download') await download(options.snapshot, options.workspace, options)
+  else process.stdout.write(`${JSON.stringify(await verifyWorkspace(options.snapshot, options.workspace))}\n`)
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) {
