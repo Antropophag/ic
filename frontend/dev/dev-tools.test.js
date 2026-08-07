@@ -170,6 +170,37 @@ describe('standalone development tools', () => {
     expect(reload).not.toHaveBeenCalled()
   })
 
+  it('synchronizes the review button after browser history navigation', () => {
+    const { browserWindow: browser, document } = browserEnvironment()
+    browser.localStorage.setItem('ic.dev.userId', '1')
+    renderUserSwitcher(browser, document, [
+      { id: 1, displayName: 'Manager', position: 'IC', roles: ['ic_manager'] },
+    ])
+    const guideButton = document.body.children[0].children[1]
+
+    browser.location.href = 'http://localhost:5173/review-guide'
+    browser.dispatchEvent(new Event('popstate'))
+    expect(guideButton.textContent).toBe('Портал')
+
+    browser.location.href = 'http://localhost:5173/'
+    browser.dispatchEvent(new Event('popstate'))
+    expect(guideButton.textContent).toBe('Обзор')
+  })
+
+  it('removes review navigation listeners from a replaced switcher', () => {
+    const { browserWindow: browser, document } = browserEnvironment()
+    browser.localStorage.setItem('ic.dev.userId', '1')
+    const users = [{ id: 1, displayName: 'Manager', position: 'IC', roles: ['ic_manager'] }]
+    renderUserSwitcher(browser, document, users)
+    const replacedButton = document.body.children[0].children[1]
+
+    renderUserSwitcher(browser, document, users)
+    browser.dispatchEvent(new CustomEvent('ic:open-review-guide'))
+
+    expect(replacedButton.textContent).toBe('Обзор')
+    expect(document.body.children[1].children[1].textContent).toBe('Портал')
+  })
+
   it('replaces an invalid persisted selection with the first available user', () => {
     const { browserWindow: browser, document, reload } = browserEnvironment()
     browser.localStorage.setItem('ic.dev.userId', '999')

@@ -1,4 +1,5 @@
 const storageKey = 'ic.dev.userId'
+const guideNavigationControllers = new WeakMap()
 
 export function selectedUserId(browserWindow) {
   const value = browserWindow.localStorage.getItem(storageKey)
@@ -66,10 +67,17 @@ export function renderUserSwitcher(browserWindow, document, users) {
   const guideButton = document.createElement('button')
   guideButton.type = 'button'
   guideButton.className = 'development-tools-guide'
-  const guideIsOpen = new URL(browserWindow.location.href).pathname.replace(/\/+$/, '') === '/review-guide'
-  guideButton.textContent = guideIsOpen ? 'Портал' : 'Обзор'
-  browserWindow.addEventListener('ic:open-review-guide', () => { guideButton.textContent = 'Портал' })
-  browserWindow.addEventListener('ic:close-review-guide', () => { guideButton.textContent = 'Обзор' })
+  const syncGuideButton = (guideIsOpen = new URL(browserWindow.location.href).pathname.replace(/\/+$/, '') === '/review-guide') => {
+    guideButton.textContent = guideIsOpen ? 'Портал' : 'Обзор'
+  }
+  syncGuideButton()
+  guideNavigationControllers.get(browserWindow)?.abort()
+  const guideNavigationController = new AbortController()
+  guideNavigationControllers.set(browserWindow, guideNavigationController)
+  const listenerOptions = { signal: guideNavigationController.signal }
+  browserWindow.addEventListener('ic:open-review-guide', () => syncGuideButton(true), listenerOptions)
+  browserWindow.addEventListener('ic:close-review-guide', () => syncGuideButton(false), listenerOptions)
+  browserWindow.addEventListener('popstate', () => syncGuideButton(), listenerOptions)
   guideButton.addEventListener('click', () => {
     const currentlyOpen = new URL(browserWindow.location.href).pathname.replace(/\/+$/, '') === '/review-guide'
     browserWindow.dispatchEvent(new CustomEvent(currentlyOpen ? 'ic:close-review-guide' : 'ic:open-review-guide'))

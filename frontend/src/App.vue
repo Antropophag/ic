@@ -220,7 +220,7 @@ onBeforeUnmount(() => {
             </div>
           </div>
         </header>
-        <ReviewGuide v-if="showReviewGuide && ReviewGuide" @navigate="leaveReviewGuide" @seed-demo="requestDemoSeed" />
+        <ReviewGuide v-if="showReviewGuide && ReviewGuide" />
         <AdminPanel v-else-if="showAdmin" @close="showAdmin = false" @open-request="openAdminRequest" />
         <RequestDetails v-else-if="selectedRequestId" :request-id="selectedRequestId" :current-initials="currentInitials" :initial-warning="requestWarning" @loaded="selectedRequestTitle = $event" @updated="refreshRegistry" @close="closeRequest()" />
         <RequestRegistry
