@@ -179,6 +179,14 @@ it('loads an older comment page by cursor', async () => {
   expect(fetchMock).toHaveBeenCalledWith('/api/v1/requests/7/comments?beforeId=51', expect.any(Object))
 })
 
+it('loads recent request events', async () => {
+  const payload = { items: [{ id: 'comment-1' }] }
+  const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify(payload), { status: 200 }))
+  vi.stubGlobal('fetch', fetchMock)
+  await expect(requestApi.events()).resolves.toEqual(payload)
+  expect(fetchMock).toHaveBeenCalledWith('/api/v1/requests/events', expect.any(Object))
+})
+
 it('uploads a document as multipart data and downloads its bytes', async () => {
   const fetchMock = vi.fn()
     .mockResolvedValueOnce(new Response('{}', { status: 201 }))

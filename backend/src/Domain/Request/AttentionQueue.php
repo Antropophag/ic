@@ -21,7 +21,7 @@ enum AttentionQueue: string
             self::UploadReport => 'Загрузить отчёт',
             self::ClaimExpert => 'Взять заявку на экспертизу',
             self::PublishOpinion => 'Подготовить заключение',
-            self::SecurityDecision => 'Визировать протокол испытаний',
+            self::SecurityDecision => 'Согласовать протокол испытаний',
         };
     }
 
@@ -33,7 +33,7 @@ enum AttentionQueue: string
             self::UploadReport => 'Загрузите отчёт о результатах испытаний в формате PDF.',
             self::ClaimExpert => 'Возьмите заявку в работу для подготовки заключения.',
             self::PublishOpinion => 'Подготовьте и опубликуйте экспертное заключение.',
-            self::SecurityDecision => 'Завизируйте протокол испытаний либо верните заявку на доработку.',
+            self::SecurityDecision => 'Согласуйте протокол испытаний либо верните заявку на доработку.',
         };
     }
 
