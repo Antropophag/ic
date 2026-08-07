@@ -1,5 +1,7 @@
 import { defineConfig, devices } from '@playwright/test'
 
+const statefulTests = ['**/idempotency.e2e.js', '**/notifications.e2e.js']
+
 export default defineConfig({
   testDir: './e2e',
   testMatch: '**/*.e2e.js',
@@ -12,5 +14,18 @@ export default defineConfig({
     screenshot: 'only-on-failure',
     video: 'retain-on-failure',
   },
-  projects: [{ name: 'chromium', use: { ...devices['Desktop Chrome'] } }],
+  projects: [
+    {
+      name: 'chromium',
+      testIgnore: statefulTests,
+      use: { ...devices['Desktop Chrome'] },
+    },
+    {
+      name: 'stateful-chromium',
+      testMatch: statefulTests,
+      dependencies: ['chromium'],
+      workers: 1,
+      use: { ...devices['Desktop Chrome'] },
+    },
+  ],
 })
