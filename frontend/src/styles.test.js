@@ -8,27 +8,17 @@ const compactStyles = styles.replace(/\s+/g, '')
 const compactAdminStyles = adminStyles.replace(/\s+/g, '')
 const compactHelpStyles = helpStyles.replace(/\s+/g, '')
 
-describe('readable typography scale', () => {
-  it('keeps primary interface text at the enlarged scale', () => {
-    expect(compactStyles).toContain(
-      '.primary,.secondary,.upload{height:40px;min-height:40px;display:inline-flex;align-items:center;justify-content:center;gap:8px;border-radius:20px;padding:016px;font-size:14.5px;line-height:22px',
-    )
-    expect(compactStyles).toContain(
-      '.registryth{height:40px;padding:014px;border-bottom:1pxsolidvar(--line);background:var(--surface-subtle);color:#6f7b8e;font-size:11px;line-height:15.5px',
-    )
-    expect(compactStyles).toContain(
-      '.request-page.entryp{display:block;margin-top:5px;overflow:visible;font-size:12px;line-height:18px',
-    )
-    expect(compactStyles).toContain(
-      '.registry.tab-count{min-width:22px;height:20px;display:inline-flex;align-items:center;justify-content:center;margin:0;padding:06px;border-radius:10px;background:#f0f2f5;color:#697588;font-size:12px;line-height:20px',
-    )
-    expect(compactStyles).toContain(
-      '.request-documents-head.request-document-count{height:20px;min-width:20px;display:inline-flex;align-items:center;justify-content:center;margin-left:4px;border-radius:10px;background:#eef0f4;padding:06px;color:rgba(11,22,35,.5);font-size:11px;line-height:20px',
-    )
-    expect(compactAdminStyles).toContain(
-      '.admin-tabletd{height:52px;padding:7px14px;border-top:0;border-bottom:1pxsolidvar(--line-soft);color:#263348;font-size:13px;line-height:19px',
-    )
-    expect(compactHelpStyles).toContain('main>p:first-of-type{margin:0026px;color:var(--muted);font-size:14px;}')
+describe('default interface scale', () => {
+  it('matches 110% browser zoom and advances responsive thresholds accordingly', () => {
+    expect(compactStyles).toContain(':root{zoom:1.1;')
+    expect(compactStyles).toContain('@media(max-width:1298px)')
+    expect(compactStyles).toContain('@media(max-width:1078px)')
+    expect(compactStyles).toContain('@media(max-width:990px)')
+    expect(compactStyles).toContain('@media(max-width:770px)')
+    expect(compactAdminStyles).toContain('@media(max-width:1078px)')
+    expect(compactAdminStyles).toContain('@media(max-width:770px)')
+    expect(compactHelpStyles).toContain(':root{zoom:1.1;')
+    expect(compactHelpStyles).toContain('@media(max-width:550px)')
   })
 })
 
