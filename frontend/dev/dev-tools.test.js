@@ -121,7 +121,7 @@ describe('standalone development tools', () => {
     ])
 
     expect(document.body.children[0].children[1].textContent).toBe('Заполнить данные')
-    expect(document.body.children[0].children[2].textContent).toBe('Гайд')
+    expect(document.body.children[0].children[2].textContent).toBe('Обзор')
 
     const second = browserEnvironment()
     second.browserWindow.localStorage.setItem('ic.dev.userId', '2')
@@ -141,9 +141,11 @@ describe('standalone development tools', () => {
       { id: 1, displayName: 'Manager', position: 'IC', roles: ['ic_manager'] },
     ])
 
-    document.body.children[0].children[1].dispatchEvent(new Event('click'))
+    const guideButton = document.body.children[0].children[1]
+    guideButton.dispatchEvent(new Event('click'))
 
     expect(opened).toHaveBeenCalledOnce()
+    expect(guideButton.textContent).toBe('Портал')
     expect(selectedUserId(browser)).toBe('1')
     expect(reload).not.toHaveBeenCalled()
   })
@@ -159,10 +161,11 @@ describe('standalone development tools', () => {
     ])
 
     const guideButton = document.body.children[0].children[1]
-    expect(guideButton.textContent).toBe('Вернуться в портал')
+    expect(guideButton.textContent).toBe('Портал')
     guideButton.dispatchEvent(new Event('click'))
 
     expect(closed).toHaveBeenCalledOnce()
+    expect(guideButton.textContent).toBe('Обзор')
     expect(selectedUserId(browser)).toBe('1')
     expect(reload).not.toHaveBeenCalled()
   })
