@@ -2,24 +2,24 @@
 .admin-workspace{overflow:hidden;border-color:var(--line);border-radius:var(--radius-lg);box-shadow:0 1px 2px rgba(11,22,35,.025)}
 .admin-page .admin-workspace{padding:0}
 .admin-heading{min-height:72px;display:flex;align-items:center;justify-content:space-between;gap:24px;padding:14px 24px;border-bottom:1px solid var(--line-soft)}
-.admin-heading p{margin:0 0 3px;color:var(--muted);font-size:10px;line-height:14px;text-transform:uppercase;letter-spacing:.045em}
-.admin-heading h2{margin:0;color:#142033;font-size:20px;line-height:26px;font-weight:600;letter-spacing:-.01em}
-.admin-heading .secondary{height:36px;min-height:36px;border-radius:18px;padding:0 14px;font-size:12px;line-height:18px}
+.admin-heading p{margin:0 0 3px;color:var(--muted);font-size:11px;line-height:15.5px;text-transform:uppercase;letter-spacing:.045em}
+.admin-heading h2{margin:0;color:#142033;font-size:22px;line-height:28.5px;font-weight:600;letter-spacing:-.01em}
+.admin-heading .secondary{height:36px;min-height:36px;border-radius:18px;padding:0 14px;font-size:13px;line-height:20px}
 .admin-tabs{height:56px;display:flex;align-items:stretch;gap:28px;margin:0;padding:0 24px;border-bottom:1px solid var(--line)}
-.admin-tabs button{position:relative;height:56px;display:inline-flex;align-items:center;border:0;border-bottom:2px solid transparent;background:transparent;padding:0 2px;color:#657286;font-size:13px;line-height:18px;font-weight:500}
+.admin-tabs button{position:relative;height:56px;display:inline-flex;align-items:center;border:0;border-bottom:2px solid transparent;background:transparent;padding:0 2px;color:#657286;font-size:14.5px;line-height:20px;font-weight:500}
 .admin-tabs button:hover{color:#243149}.admin-tabs button.active{border-color:var(--blue);color:#142033}
 .admin-tabs button:focus-visible{outline:2px solid var(--blue);outline-offset:-6px;border-radius:var(--radius-sm)}
 .admin-panel-body{padding:14px 24px 24px}
 .admin-section,.admin-log{min-width:0}
 
 .admin-create-user{display:flex;align-items:end;gap:10px;flex-wrap:wrap;margin:0 -24px 14px;padding:12px 24px;border-top:1px solid var(--line-soft);border-bottom:1px solid var(--line-soft);background:var(--surface-subtle)}
-.admin-create-user label,.admin-filters label{display:grid;gap:5px;color:#657286;font-size:10px;line-height:14px}
-.admin-create-user input,.admin-create-user select,.admin-filters input,.admin-filters select{height:40px;border:0;border-radius:20px;background:#eef0f4;padding:0 14px;color:#263348;font-size:12px;line-height:18px}
+.admin-create-user label,.admin-filters label{display:grid;gap:5px;color:#657286;font-size:11px;line-height:15.5px}
+.admin-create-user input,.admin-create-user select,.admin-filters input,.admin-filters select{height:40px;border:0;border-radius:20px;background:#eef0f4;padding:0 14px;color:#263348;font-size:13px;line-height:20px}
 .admin-create-user input{width:220px}.admin-create-user select{width:220px}
 .admin-create-user input:hover,.admin-create-user select:hover,.admin-filters input:hover,.admin-filters select:hover{background:#e8ebf0}
 .admin-create-user input:focus-visible,.admin-create-user select:focus-visible,.admin-filters input:focus-visible,.admin-filters select:focus-visible{outline:2px solid var(--blue);outline-offset:2px;background:#fff}
 .admin-create-user .primary{height:40px;min-height:40px}
-.admin-section>.hint{max-width:900px;margin:0 0 14px;color:var(--muted);font-size:10px;line-height:16px}
+.admin-section>.hint{max-width:900px;margin:0 0 14px;color:var(--muted);font-size:11px;line-height:18px}
 
 .admin-filters{display:flex;align-items:end;gap:8px;flex-wrap:wrap;margin:0 -24px 16px;padding:12px 24px;border-top:1px solid var(--line-soft);border-bottom:1px solid var(--line-soft);background:var(--surface-subtle)}
 .admin-filters input,.admin-filters select{width:148px}
@@ -27,40 +27,40 @@
 
 .admin-table-wrap{min-height:0;overflow:auto;border:1px solid var(--line);border-radius:12px}
 .admin-table{min-width:920px;table-layout:auto}
-.admin-table th{height:40px;padding:0 14px;border-bottom:1px solid var(--line);background:var(--surface-subtle);color:#6f7b8e;font-size:10px;line-height:14px;letter-spacing:.035em;font-weight:600;vertical-align:middle}
-.admin-table td{height:52px;padding:7px 14px;border-top:0;border-bottom:1px solid var(--line-soft);color:#263348;font-size:12px;line-height:17px;vertical-align:middle}
+.admin-table th{height:40px;padding:0 14px;border-bottom:1px solid var(--line);background:var(--surface-subtle);color:#6f7b8e;font-size:11px;line-height:15.5px;letter-spacing:.035em;font-weight:600;vertical-align:middle}
+.admin-table td{height:52px;padding:7px 14px;border-top:0;border-bottom:1px solid var(--line-soft);color:#263348;font-size:13px;line-height:19px;vertical-align:middle}
 .admin-table tbody tr:last-child td{border-bottom:0}
 .admin-table tbody tr{background:#fff;transition:background-color .12s ease,box-shadow .12s ease}
 .admin-table tbody tr:hover{background:#f8f9fc}
 .admin-table tbody tr:focus{outline:0}.admin-table tbody tr:focus-visible{box-shadow:inset 0 0 0 2px var(--blue);background:var(--blue-soft)}
-.admin-table td small{margin-top:2px;color:#7a8698;font-size:10px;line-height:14px}
+.admin-table td small{margin-top:2px;color:#7a8698;font-size:11px;line-height:15.5px}
 .admin-log-table tbody tr{cursor:pointer}.admin-log-table tr.denied{background:#fffaf5}.admin-log-table tr.denied:hover{background:#fff6ed}
-.admin-person{display:flex;align-items:center;gap:9px;min-width:190px}.admin-person .avatar{width:30px;height:30px;font-size:9px}.admin-person b{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:11px;font-weight:500}
+.admin-person{display:flex;align-items:center;gap:9px;min-width:190px}.admin-person .avatar{width:30px;height:30px;font-size:10px}.admin-person b{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:12px;font-weight:500}
 .admin-email{max-width:240px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 
 .admin-roles{display:flex;align-items:center;gap:5px;flex-wrap:wrap;min-width:330px}
-.role-chip{height:28px;display:inline-flex;align-items:center;gap:4px;margin:0;border:1px solid #d1d8df;border-radius:14px;background:#fff;padding:0 4px 0 10px;color:#263348;font-size:10px;line-height:14px}
+.role-chip{height:28px;display:inline-flex;align-items:center;gap:4px;margin:0;border:1px solid #d1d8df;border-radius:14px;background:#fff;padding:0 4px 0 10px;color:#263348;font-size:11px;line-height:15.5px}
 .role-chip button{width:20px;height:20px;min-height:20px;display:grid;place-items:center;border:0;border-radius:10px;background:transparent;padding:0;color:#7a8698;line-height:0}
 .role-chip button:hover:not(:disabled){background:#eef0f4;color:#253d98}.role-chip button:focus-visible{outline:2px solid var(--blue);outline-offset:1px}
 .role-assign{height:32px;display:inline-flex;align-items:center;gap:5px;margin:0}
-.role-assign select{height:32px;min-width:148px;border:0;border-radius:16px;background:#eef0f4;padding:0 28px 0 10px;color:#536075;font-size:10px;line-height:14px}
+.role-assign select{height:32px;min-width:148px;border:0;border-radius:16px;background:#eef0f4;padding:0 28px 0 10px;color:#536075;font-size:11px;line-height:15.5px}
 .role-assign select:focus-visible{outline:2px solid var(--blue);outline-offset:2px}
 .role-assign button.secondary{width:32px;height:32px;min-height:32px;border-radius:16px;padding:0}
 
 .admin-link{border:0;border-radius:4px;background:transparent;padding:1px 2px;color:var(--blue);font-size:inherit;text-decoration:underline;text-decoration-thickness:1px;text-underline-offset:3px}
 .admin-link:hover{text-decoration-thickness:2px}.admin-link:focus-visible{outline:2px solid var(--blue);outline-offset:2px}
-.admin-more{text-align:center;padding:16px 0 0}.admin-more .secondary{height:36px;min-height:36px;border-radius:18px;font-size:12px}
+.admin-more{text-align:center;padding:16px 0 0}.admin-more .secondary{height:36px;min-height:36px;border-radius:18px;font-size:13px}
 
-.admin-state{min-height:56px;display:flex;align-items:center;justify-content:space-between;gap:16px;margin-bottom:14px;border-radius:12px;background:var(--blue-soft);padding:10px 14px;color:#29449f;font-size:12px;line-height:18px}
-.admin-state--error{background:#fff0ee;color:#b42318}.admin-state .secondary{height:32px;min-height:32px;flex:none;border-radius:16px;padding:0 12px;font-size:11px}
+.admin-state{min-height:56px;display:flex;align-items:center;justify-content:space-between;gap:16px;margin-bottom:14px;border-radius:12px;background:var(--blue-soft);padding:10px 14px;color:#29449f;font-size:13px;line-height:20px}
+.admin-state--error{background:#fff0ee;color:#b42318}.admin-state .secondary{height:32px;min-height:32px;flex:none;border-radius:16px;padding:0 12px;font-size:12px}
 .admin-empty{min-height:260px;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:36px 24px;text-align:center;color:var(--muted)}
 .admin-empty-icon{width:44px;height:44px;display:grid;place-items:center;border-radius:22px;background:#eef0f4;color:#778397}
-.admin-empty h3{margin:12px 0 4px;color:#283448;font-size:14px;line-height:20px;font-weight:600}.admin-empty p{margin:0;font-size:11px;line-height:16px}
+.admin-empty h3{margin:12px 0 4px;color:#283448;font-size:15.5px;line-height:22px;font-weight:600}.admin-empty p{margin:0;font-size:12px;line-height:18px}
 
 .admin-details{display:grid;grid-template-columns:150px minmax(0,1fr);gap:0;margin:0;border-top:1px solid var(--line-soft)}
 .admin-details dt,.admin-details dd{min-height:38px;margin:0;padding:9px 0;border-bottom:1px solid var(--line-soft)}
-.admin-details dt{padding-right:16px;color:var(--muted);font-size:10px;line-height:16px}
-.admin-details dd{overflow-wrap:anywhere;color:#263348;font-size:11px;line-height:17px}
+.admin-details dt{padding-right:16px;color:var(--muted);font-size:11px;line-height:18px}
+.admin-details dd{overflow-wrap:anywhere;color:#263348;font-size:12px;line-height:19px}
 .plain-error{white-space:pre-wrap}
 
 @media(max-width:980px){.admin-heading{padding:12px 18px}.admin-tabs{padding:0 18px;gap:20px;overflow-x:auto}.admin-panel-body{padding:14px 18px 18px}.admin-create-user,.admin-filters{margin-left:-18px;margin-right:-18px;padding-left:18px;padding-right:18px}}
