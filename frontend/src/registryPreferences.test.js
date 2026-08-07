@@ -43,6 +43,13 @@ describe('registry preferences', () => {
     expect(target.setItem).not.toHaveBeenCalled()
   })
 
+  it.each([null, 17, [], {}, Symbol('cursor')])('rejects non-string notification cursor', value => {
+    const target = storage(value)
+    expect(readNotificationCursor(17, target)).toBe('')
+    expect(writeNotificationCursor(17, value, target)).toBe(false)
+    expect(target.setItem).not.toHaveBeenCalled()
+  })
+
   it('falls back safely when browser storage access is blocked', () => {
     const originalWindow = Object.getOwnPropertyDescriptor(globalThis, 'window')
     Object.defineProperty(globalThis, 'window', {
