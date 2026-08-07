@@ -13,11 +13,13 @@ async function applyWhenCurrent(guard, token, response, state, key) {
 }
 
 describe('request registry load lifecycle', () => {
-  it('ignores list and dashboard responses that arrive after deactivation', async () => {
+  it('ignores list, dashboard and notification responses that arrive after deactivation', async () => {
     const lifecycle = createRequestRegistryLoadLifecycle()
-    const state = { registry: 'current registry', dashboard: 'current dashboard' }
+    const state = { registry: 'current registry', dashboard: 'current dashboard', notifications: 'current notifications' }
     const registryResponse = deferred()
     const dashboardResponse = deferred()
+    const notificationResponse = deferred()
+    const notificationCursorWrites = []
     const registryUpdate = applyWhenCurrent(
       lifecycle.registryGuard,
       lifecycle.registryGuard.begin(true),
@@ -32,13 +34,21 @@ describe('request registry load lifecycle', () => {
       state,
       'dashboard',
     )
+    const notificationToken = lifecycle.notificationGuard.begin(true)
+    const notificationUpdate = notificationResponse.promise.then(value => {
+      if (!lifecycle.notificationGuard.isCurrent(notificationToken, true)) return
+      state.notifications = value
+      notificationCursorWrites.push(value)
+    })
 
     lifecycle.deactivate()
     registryResponse.resolve('closed registry response')
     dashboardResponse.resolve('closed dashboard response')
-    await Promise.all([registryUpdate, dashboardUpdate])
+    notificationResponse.resolve('closed notification response')
+    await Promise.all([registryUpdate, dashboardUpdate, notificationUpdate])
 
-    expect(state).toEqual({ registry: 'current registry', dashboard: 'current dashboard' })
+    expect(state).toEqual({ registry: 'current registry', dashboard: 'current dashboard', notifications: 'current notifications' })
+    expect(notificationCursorWrites).toEqual([])
   })
 
   it('ignores responses from an earlier activation after reopening', async () => {

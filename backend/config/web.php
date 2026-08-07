@@ -22,6 +22,7 @@ $application = [
                 'POST api/v1/auth/logout' => 'auth/logout',
                 'GET api/v1/requests' => 'request/index',
                 'GET api/v1/requests/dashboard' => 'request/dashboard',
+                'GET api/v1/requests/events' => 'request/events',
                 'GET api/v1/requests/<id:\\d+>' => 'request/view',
                 'POST api/v1/requests/<id:\\d+>/comments' => 'request/add-comment',
                 'GET api/v1/requests/<id:\\d+>/comments' => 'request/comments',
