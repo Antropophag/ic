@@ -470,9 +470,11 @@ defineExpose({
 onMounted(() => {
   draftForm.restore();
   window.addEventListener("pagehide", draftForm.flushSave);
-  loadRequests();
-  loadDashboard();
-  loadNotifications();
+  if (props.active) {
+    loadRequests();
+    loadDashboard();
+    loadNotifications();
+  }
 });
 onBeforeUnmount(() => {
   window.removeEventListener("pagehide", draftForm.flushSave);
