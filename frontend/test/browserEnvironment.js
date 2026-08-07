@@ -23,7 +23,16 @@ class TestElement extends EventTarget {
   }
 
   append(...children) {
+    for (const child of children) {
+      Object.defineProperty(child, 'parentNode', { configurable: true, value: this, writable: true })
+    }
     this.children.push(...children)
+  }
+
+  remove() {
+    if (!this.parentNode) return
+    this.parentNode.children = this.parentNode.children.filter(child => child !== this)
+    this.parentNode = null
   }
 
   setAttribute(name, value) {

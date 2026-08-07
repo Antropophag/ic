@@ -1,4 +1,5 @@
 const storageKey = 'ic.dev.userId'
+const guideNavigationStates = new WeakMap()
 
 export function selectedUserId(browserWindow) {
   const value = browserWindow.localStorage.getItem(storageKey)
@@ -39,6 +40,10 @@ export function renderUserSwitcher(browserWindow, document, users) {
     return
   }
 
+  const previousGuideNavigation = guideNavigationStates.get(browserWindow)
+  previousGuideNavigation?.controller.abort()
+  previousGuideNavigation?.panel.remove()
+
   const panel = document.createElement('aside')
   panel.className = 'development-tools'
   panel.setAttribute('aria-label', 'Инструменты разработки')
@@ -66,10 +71,19 @@ export function renderUserSwitcher(browserWindow, document, users) {
   const guideButton = document.createElement('button')
   guideButton.type = 'button'
   guideButton.className = 'development-tools-guide'
-  const guideIsOpen = new URL(browserWindow.location.href).pathname.replace(/\/+$/, '') === '/review-guide'
-  guideButton.textContent = guideIsOpen ? 'Вернуться в портал' : 'Гайд'
+  const syncGuideButton = (guideIsOpen = new URL(browserWindow.location.href).pathname.replace(/\/+$/, '') === '/review-guide') => {
+    guideButton.textContent = guideIsOpen ? 'Портал' : 'Обзор'
+  }
+  syncGuideButton()
+  const guideNavigationController = new AbortController()
+  guideNavigationStates.set(browserWindow, { controller: guideNavigationController, panel })
+  const listenerOptions = { signal: guideNavigationController.signal }
+  browserWindow.addEventListener('ic:open-review-guide', () => syncGuideButton(true), listenerOptions)
+  browserWindow.addEventListener('ic:close-review-guide', () => syncGuideButton(false), listenerOptions)
+  browserWindow.addEventListener('popstate', () => syncGuideButton(), listenerOptions)
   guideButton.addEventListener('click', () => {
-    browserWindow.dispatchEvent(new CustomEvent(guideIsOpen ? 'ic:close-review-guide' : 'ic:open-review-guide'))
+    const currentlyOpen = new URL(browserWindow.location.href).pathname.replace(/\/+$/, '') === '/review-guide'
+    browserWindow.dispatchEvent(new CustomEvent(currentlyOpen ? 'ic:close-review-guide' : 'ic:open-review-guide'))
   })
   if (users.find(user => String(user.id) === current)?.roles?.includes('administrator')) {
     const seedButton = document.createElement('button')
