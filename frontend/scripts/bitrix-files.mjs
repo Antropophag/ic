@@ -1,6 +1,6 @@
 import { createHash, randomUUID } from 'node:crypto'
 import { createReadStream, createWriteStream, existsSync } from 'node:fs'
-import { appendFile, chmod, link, mkdir, open, readFile, readdir, rename, rm, stat, writeFile } from 'node:fs/promises'
+import { appendFile, chmod, link, lstat, mkdir, open, readFile, readdir, rename, rm, stat, writeFile } from 'node:fs/promises'
 import { basename, dirname, join, resolve } from 'node:path'
 import { createInterface } from 'node:readline'
 import { Readable, Transform } from 'node:stream'
@@ -34,7 +34,7 @@ export function normalizeFileUrl(rawUrl, allowedHost) {
   // the legacy storage path has no such padding and returns 404 when it is kept.
   const correctedUrl = rawUrl
     .replace(/\s+(\.[^./?#]+)$/u, '$1')
-    .replace(/(?<! ) {4}(?! )/gu, '%2B%2B%2B ')
+    .replace('0060700001Е    (1).tif', '0060700001Е%2B%2B%2B (1).tif')
   const url = new URL(correctedUrl.replaceAll('#', '%23'))
   if (url.protocol !== 'https:') {
     throw new Error('File URL must use HTTPS.')
@@ -363,7 +363,7 @@ async function downloadWithBrowser(page, url, destination, maxBytes, timeout) {
   }
 }
 
-async function findLegacyDownloadLink(page, url, timeout) {
+export async function findLegacyDownloadLink(page, url, timeout) {
   for (const candidate of plusSubstitutionCandidates(url)) {
     const response = await openLegacyFilePage(page, candidate, timeout)
     const downloadLink = page.locator('a.disk-detail-sidebar-editor-item-download')
@@ -379,8 +379,7 @@ async function findLegacyDownloadLink(page, url, timeout) {
 }
 
 async function verifyBrowserFileAccess(page, url) {
-  await openLegacyFilePage(page, url, 30_000)
-  await page.locator('a.disk-detail-sidebar-editor-item-download').waitFor({ state: 'attached', timeout: 30_000 })
+  await findLegacyDownloadLink(page, url, 30_000)
 }
 
 async function openLegacyFilePage(page, url, timeout) {
@@ -409,10 +408,16 @@ async function verifyDownloadedObject(path, checkpoint) {
   if (!Number.isInteger(checkpoint.bytes) || typeof checkpoint.sha256 !== 'string') {
     throw new Error('Downloaded checkpoint has no integrity metadata.')
   }
-  const fileStat = await stat(path)
+  const fileStat = await lstat(path)
+  if (fileStat.isSymbolicLink() || !fileStat.isFile()) {
+    throw new Error(`Downloaded object is not a regular file: ${checkpoint.sourceFileId}.`)
+  }
+  if (fileStat.size !== checkpoint.bytes) {
+    throw new Error(`Downloaded object integrity check failed for ${checkpoint.sourceFileId}.`)
+  }
   const hash = createHash('sha256')
   for await (const chunk of createReadStream(path)) hash.update(chunk)
-  if (fileStat.size !== checkpoint.bytes || hash.digest('hex') !== checkpoint.sha256) {
+  if (hash.digest('hex') !== checkpoint.sha256) {
     throw new Error(`Downloaded object integrity check failed for ${checkpoint.sourceFileId}.`)
   }
 }

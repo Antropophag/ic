@@ -195,8 +195,8 @@ Downloader:
 
 ```bash
 npm --prefix frontend run bitrix-files -- verify \
-  --snapshot=/srv/ic-migration/bitrix24/snapshot-YYYYMMDDTHHMMSSZ \
-  --workspace=/srv/ic-migration/bitrix24/files-YYYYMMDD
+  --snapshot="$BITRIX_SNAPSHOT_DIR" \
+  --workspace="$BITRIX_FILES_DIR"
 ```
 
 Команда требует точного совпадения всех записей `associations.jsonl` со
