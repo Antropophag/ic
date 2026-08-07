@@ -258,7 +258,7 @@ final class DevelopmentRequestSeederTest extends IntegrationTestCase
         foreach ($rows as $row) {
             $name = (string) $row['original_name'];
             $path = $storage->path((string) $row['storage_key']);
-            $content = file_get_contents($path);
+            $content = @file_get_contents($path);
             if ($content === false) {
                 self::fail("Cannot read generated development document: {$name}");
             }
