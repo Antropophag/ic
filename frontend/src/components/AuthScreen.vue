@@ -1,6 +1,7 @@
 <script setup>
 import { reactive, ref } from 'vue'
 import { authApi, hasCsrfToken, setCsrfToken } from '../api'
+import AetherRibbonMesh from './AetherRibbonMesh.vue'
 
 const emit = defineEmits(['authenticated'])
 const loginForm = reactive({ login: '', password: '' })
@@ -38,6 +39,7 @@ async function login() {
 
 <template>
   <div class="auth-screen">
+    <AetherRibbonMesh />
     <form class="auth-card" @submit.prevent="login">
       <svg class="brand-mark" width="48" height="48" viewBox="0 0 40 40" fill="none" aria-hidden="true">
         <rect x="2" y="2" width="36" height="36" rx="10" fill="currentColor" />
