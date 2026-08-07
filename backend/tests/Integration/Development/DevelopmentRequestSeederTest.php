@@ -6,6 +6,7 @@ namespace Tests\Integration\Development;
 
 use App\Infrastructure\Development\DevelopmentRequestSeeder;
 use App\Infrastructure\Document\DocumentStorage;
+use App\Infrastructure\Document\OfficeDocumentInspector;
 use App\Infrastructure\Request\RequestQuery;
 use Tests\Integration\IntegrationTestCase;
 use yii\db\IntegrityException;
@@ -203,6 +204,7 @@ final class DevelopmentRequestSeederTest extends IntegrationTestCase
                 . "AND (LOWER(v.original_name) NOT LIKE '%.pdf' OR v.mime_type <> 'application/pdf')",
             ),
         );
+        $this->assertGeneratedDocumentsAreReadable();
         self::assertSame(1, (int) $this->scalar('SELECT MIN(comment_count) FROM (SELECT COUNT(*) comment_count FROM {{%request_comments}} GROUP BY request_id) comments'));
         self::assertSame(4, (int) $this->scalar('SELECT MAX(comment_count) FROM (SELECT COUNT(*) comment_count FROM {{%request_comments}} GROUP BY request_id) comments'));
         self::assertGreaterThan(
@@ -242,6 +244,44 @@ final class DevelopmentRequestSeederTest extends IntegrationTestCase
             self::fail('The duplicate document title must violate the unique constraint.');
         } catch (IntegrityException) {
             self::assertCount(count($filesBefore), glob($this->storageRoot . '/*/*/*') ?: []);
+        }
+    }
+
+    private function assertGeneratedDocumentsAreReadable(): void
+    {
+        $storage = new DocumentStorage($this->storageRoot);
+        $rows = $this->db()->createCommand(
+            'SELECT d.document_type, v.original_name, v.mime_type, v.storage_key, v.size_bytes, v.sha256 '
+            . 'FROM {{%request_documents}} d JOIN {{%request_document_versions}} v ON v.document_id = d.id',
+        )->queryAll();
+
+        foreach ($rows as $row) {
+            $name = (string) $row['original_name'];
+            $path = $storage->path((string) $row['storage_key']);
+            $content = @file_get_contents($path);
+            if ($content === false) {
+                self::fail("Cannot read generated development document: {$name}");
+            }
+            self::assertNotFalse($content, $name);
+            self::assertSame((int) $row['size_bytes'], strlen($content), $name);
+            self::assertSame((string) $row['sha256'], hash('sha256', $content), $name);
+
+            $extension = strtolower((string) pathinfo($name, PATHINFO_EXTENSION));
+            match ($extension) {
+                'pdf' => self::assertStringStartsWith('%PDF-', $content, $name),
+                'png' => self::assertStringStartsWith("\x89PNG\r\n\x1a\n", $content, $name),
+                'jpg', 'jpeg' => self::assertStringStartsWith("\xff\xd8\xff", $content, $name),
+                'docx', 'xlsx' => self::assertSame(
+                    (string) $row['mime_type'],
+                    (new OfficeDocumentInspector())->normalizeMimeType($name, 'application/zip', $path),
+                    $name,
+                ),
+                default => self::fail('Unexpected development document extension: ' . $extension),
+            };
+
+            if ($row['document_type'] === 'opinion') {
+                self::assertGreaterThan(10_000, strlen($content), $name);
+            }
         }
     }
 }
