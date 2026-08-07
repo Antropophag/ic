@@ -1,5 +1,5 @@
 const storageKey = 'ic.dev.userId'
-const guideNavigationControllers = new WeakMap()
+const guideNavigationStates = new WeakMap()
 
 export function selectedUserId(browserWindow) {
   const value = browserWindow.localStorage.getItem(storageKey)
@@ -40,6 +40,10 @@ export function renderUserSwitcher(browserWindow, document, users) {
     return
   }
 
+  const previousGuideNavigation = guideNavigationStates.get(browserWindow)
+  previousGuideNavigation?.controller.abort()
+  previousGuideNavigation?.panel.remove()
+
   const panel = document.createElement('aside')
   panel.className = 'development-tools'
   panel.setAttribute('aria-label', 'Инструменты разработки')
@@ -71,9 +75,8 @@ export function renderUserSwitcher(browserWindow, document, users) {
     guideButton.textContent = guideIsOpen ? 'Портал' : 'Обзор'
   }
   syncGuideButton()
-  guideNavigationControllers.get(browserWindow)?.abort()
   const guideNavigationController = new AbortController()
-  guideNavigationControllers.set(browserWindow, guideNavigationController)
+  guideNavigationStates.set(browserWindow, { controller: guideNavigationController, panel })
   const listenerOptions = { signal: guideNavigationController.signal }
   browserWindow.addEventListener('ic:open-review-guide', () => syncGuideButton(true), listenerOptions)
   browserWindow.addEventListener('ic:close-review-guide', () => syncGuideButton(false), listenerOptions)

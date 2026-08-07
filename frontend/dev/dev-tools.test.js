@@ -187,7 +187,7 @@ describe('standalone development tools', () => {
     expect(guideButton.textContent).toBe('Обзор')
   })
 
-  it('removes review navigation listeners from a replaced switcher', () => {
+  it('replaces the previous switcher and its review navigation listeners', () => {
     const { browserWindow: browser, document } = browserEnvironment()
     browser.localStorage.setItem('ic.dev.userId', '1')
     const users = [{ id: 1, displayName: 'Manager', position: 'IC', roles: ['ic_manager'] }]
@@ -197,8 +197,9 @@ describe('standalone development tools', () => {
     renderUserSwitcher(browser, document, users)
     browser.dispatchEvent(new CustomEvent('ic:open-review-guide'))
 
+    expect(document.body.children).toHaveLength(1)
     expect(replacedButton.textContent).toBe('Обзор')
-    expect(document.body.children[1].children[1].textContent).toBe('Портал')
+    expect(document.body.children[0].children[1].textContent).toBe('Портал')
   })
 
   it('replaces an invalid persisted selection with the first available user', () => {
