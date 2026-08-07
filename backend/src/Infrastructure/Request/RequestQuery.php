@@ -20,24 +20,30 @@ final class RequestQuery
     public function recentEvents(int $actorId): array
     {
         return $this->db->createCommand(
-            "SELECT CONCAT('comment-', c.id) AS id, c.request_id AS requestId, "
+            "SELECT id, requestId, requestNumber, productName, type, title, authorName, "
+            . "DATE_FORMAT(occurredAtRaw, '%Y-%m-%dT%H:%i:%s.%fZ') AS occurredAt FROM ("
+            . 'SELECT * FROM ('
+            . "SELECT CONCAT('comment-', c.id) AS id, c.request_id AS requestId, "
             . "LPAD(CAST(r.number AS CHAR), 6, '0') AS requestNumber, r.product_name AS productName, "
             . "'comment' AS type, 'Новый комментарий' AS title, u.display_name AS authorName, "
-            . "DATE_FORMAT(c.created_at, '%Y-%m-%dT%H:%i:%s.%fZ') AS occurredAt "
+            . 'c.created_at AS occurredAtRaw, c.id AS sourceId '
             . 'FROM {{%request_comments}} c JOIN {{%requests}} r ON r.id = c.request_id '
             . 'JOIN {{%users}} u ON u.id = c.author_id WHERE c.author_id != :comment_actor '
-            . 'UNION ALL '
-            . "SELECT CONCAT('transition-', t.id), t.request_id, LPAD(CAST(r.number AS CHAR), 6, '0'), "
-            . "r.product_name, 'event', CASE t.action "
+            . 'ORDER BY c.created_at DESC, c.id DESC LIMIT 100) recent_comments '
+            . 'UNION ALL SELECT * FROM ('
+            . "SELECT CONCAT('transition-', t.id) AS id, t.request_id AS requestId, "
+            . "LPAD(CAST(r.number AS CHAR), 6, '0') AS requestNumber, r.product_name AS productName, "
+            . "'event' AS type, CASE t.action "
             . "WHEN 'start' THEN 'Заявка переведена в работу' WHEN 'suspend' THEN 'Работа приостановлена' "
             . "WHEN 'resume' THEN 'Работа возобновлена' WHEN 'upload_report' THEN 'Загружен отчёт испытаний' "
             . "WHEN 'publish_opinion' THEN 'Опубликовано экспертное заключение' "
             . "WHEN 'security_approve' THEN 'Заключение согласовано' WHEN 'security_return' THEN 'Заявка возвращена в работу' "
-            . "WHEN 'reject' THEN 'В испытаниях отказано' WHEN 'withdraw' THEN 'Заявка отозвана' ELSE 'Событие в заявке' END, "
-            . "u.display_name, DATE_FORMAT(t.created_at, '%Y-%m-%dT%H:%i:%s.%fZ') "
+            . "WHEN 'reject' THEN 'В испытаниях отказано' WHEN 'withdraw' THEN 'Заявка отозвана' ELSE 'Событие в заявке' END AS title, "
+            . 'u.display_name AS authorName, t.created_at AS occurredAtRaw, t.id AS sourceId '
             . 'FROM {{%request_transitions}} t JOIN {{%requests}} r ON r.id = t.request_id '
             . 'JOIN {{%users}} u ON u.id = t.actor_id WHERE t.actor_id != :transition_actor '
-            . 'ORDER BY occurredAt DESC, id DESC LIMIT 100',
+            . 'ORDER BY t.created_at DESC, t.id DESC LIMIT 100) recent_transitions'
+            . ') recent_events ORDER BY occurredAtRaw DESC, sourceId DESC, id DESC LIMIT 100',
             [':comment_actor' => $actorId, ':transition_actor' => $actorId],
         )->queryAll();
     }

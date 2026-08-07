@@ -177,6 +177,15 @@ final class AttentionDashboardTest extends IntegrationTestCase
             'rule_id' => 'WF-004',
             'created_at' => '2026-08-07 11:00:00.000000',
         ])->execute();
+        $this->db()->createCommand()->insert('{{%request_transitions}}', [
+            'request_id' => $requestId,
+            'actor_id' => $actor,
+            'from_status' => 'in_progress',
+            'to_status' => 'suspended',
+            'action' => 'suspend',
+            'rule_id' => 'WF-005',
+            'created_at' => '2026-08-07 12:00:00.000000',
+        ])->execute();
 
         $events = array_values(array_filter(
             (new RequestQuery($this->db()))->recentEvents($actor),

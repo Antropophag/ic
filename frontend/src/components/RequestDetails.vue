@@ -78,6 +78,7 @@ const executorsRequestGuard = createLatestRequestGuard()
 const expertsRequestGuard = createLatestRequestGuard()
 const actionRequestGuard = createLatestRequestGuard()
 const downloadRequestGuard = createLatestRequestGuard()
+const previewRequestGuard = createLatestRequestGuard()
 const departmentRequestGuard = createLatestRequestGuard()
 const confirmDialog = createConfirmDialog()
 const hasRequestContent = computed(() => Boolean(selected.value?.product))
@@ -405,11 +406,11 @@ async function openDocument(document) {
     return
   }
   previewWindow.opener = null
-  const token = downloadRequestGuard.begin(requestId)
+  const token = previewRequestGuard.begin(requestId)
   documentError.value = ''
   try {
     const blob = await requestApi.downloadDocument(document.versionId)
-    if (!downloadRequestGuard.isCurrent(token, selected.value?.backendId)) {
+    if (!previewRequestGuard.isCurrent(token, selected.value?.backendId)) {
       previewWindow.close()
       return
     }
@@ -418,7 +419,7 @@ async function openDocument(document) {
     window.setTimeout(() => URL.revokeObjectURL(url), 60_000)
   } catch {
     previewWindow.close()
-    if (downloadRequestGuard.isCurrent(token, selected.value?.backendId)) documentError.value = 'Не удалось открыть документ. Попробуйте скачать файл.'
+    if (previewRequestGuard.isCurrent(token, selected.value?.backendId)) documentError.value = 'Не удалось открыть документ. Попробуйте скачать файл.'
   }
 }
 
@@ -956,7 +957,7 @@ async function suspendOrResumeRequest(action) {
 
 
 function invalidateRequests() {
-  for (const guard of [detailRequestGuard, commentRequestGuard, commentsPageRequestGuard, documentRequestGuard, reportRequestGuard, opinionRequestGuard, securityRequestGuard, colorRequestGuard, rejectRequestGuard, withdrawRequestGuard, claimRequestGuard, reassignRequestGuard, deleteReportRequestGuard, suspendResumeRequestGuard, executorsRequestGuard, expertsRequestGuard, actionRequestGuard, downloadRequestGuard, departmentRequestGuard]) guard.invalidate()
+  for (const guard of [detailRequestGuard, commentRequestGuard, commentsPageRequestGuard, documentRequestGuard, reportRequestGuard, opinionRequestGuard, securityRequestGuard, colorRequestGuard, rejectRequestGuard, withdrawRequestGuard, claimRequestGuard, reassignRequestGuard, deleteReportRequestGuard, suspendResumeRequestGuard, executorsRequestGuard, expertsRequestGuard, actionRequestGuard, downloadRequestGuard, previewRequestGuard, departmentRequestGuard]) guard.invalidate()
 }
 
 function resetRequestLocalState() {

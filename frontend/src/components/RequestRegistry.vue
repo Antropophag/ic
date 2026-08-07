@@ -94,6 +94,7 @@ const registryLoadLifecycle = createRequestRegistryLoadLifecycle();
 const {
   registryGuard,
   dashboardGuard,
+  notificationGuard,
   downloadGuard,
   createRequestGuard,
 } = registryLoadLifecycle;
@@ -218,19 +219,22 @@ async function loadDashboard() {
 }
 
 async function loadNotifications() {
+  const token = notificationGuard.begin(true);
   notificationsLoading.value = true;
   try {
     const result = await requestApi.events();
+    if (!notificationGuard.isCurrent(token, props.active)) return;
     notificationItems.value = result.items || [];
     notificationsError.value = "";
     if (showNotifications.value) {
       await nextTick();
-      markNotificationsViewed();
+      if (notificationGuard.isCurrent(token, props.active) && showNotifications.value) markNotificationsViewed();
     }
   } catch {
+    if (!notificationGuard.isCurrent(token, props.active)) return;
     notificationsError.value = "Не удалось загрузить новые события.";
   } finally {
-    notificationsLoading.value = false;
+    if (notificationGuard.isCurrent(token, props.active)) notificationsLoading.value = false;
   }
 }
 
@@ -244,13 +248,19 @@ function markNotificationsViewed() {
 
 async function openNotifications() {
   showNotifications.value = true;
-  if (notificationsError.value) await loadNotifications();
+  if (!notificationItems.value.length || notificationsError.value) await loadNotifications();
   await nextTick();
-  if (!notificationsLoading.value) markNotificationsViewed();
+  if (showNotifications.value && !notificationsLoading.value) markNotificationsViewed();
+}
+
+function closeNotifications() {
+  showNotifications.value = false;
+  notificationsLoading.value = false;
+  notificationGuard.invalidate();
 }
 
 function selectNotification(item) {
-  showNotifications.value = false;
+  closeNotifications();
   emit('select-request', { backendId: Number(item.requestId), id: item.requestNumber });
 }
 
@@ -331,10 +341,13 @@ watch(
     if (active) {
       loadRequests();
       loadDashboard();
+      loadNotifications();
     }
     else {
       registryLoadLifecycle.deactivate();
       showCreate.value = false;
+      showNotifications.value = false;
+      notificationsLoading.value = false;
       closeDashboardHelp({ restoreFocus: false });
     }
   },
@@ -703,7 +716,7 @@ onBeforeUnmount(() => {
     </aside>
   </div>
   <AppModal
-    :open="active && showNotifications" title="Новые события в заявках" title-id="registry-notifications-title" size="medium" @close="showNotifications = false"
+    :open="active && showNotifications" title="Новые события в заявках" title-id="registry-notifications-title" size="medium" @close="closeNotifications"
   >
     <p v-if="notificationsLoading" class="notification-state" aria-live="polite">Загрузка событий…</p>
     <div v-else-if="notificationsError" class="notification-state error" role="alert"><span>{{ notificationsError }}</span><button type="button" class="secondary" @click="loadNotifications">Повторить</button></div>

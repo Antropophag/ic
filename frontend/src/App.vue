@@ -70,7 +70,7 @@ async function bootstrapAuth() {
 
 function openRequest(item, warning = '') {
   selectedRequestId.value = item.backendId
-  selectedRequestTitle.value = item
+  selectedRequestTitle.value = item.date ? item : null
   requestWarning.value = warning
   showAdmin.value = false
   setRequestInUrl(item.backendId, { push: true })
