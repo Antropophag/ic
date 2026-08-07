@@ -259,6 +259,9 @@ final class DevelopmentRequestSeederTest extends IntegrationTestCase
             $name = (string) $row['original_name'];
             $path = $storage->path((string) $row['storage_key']);
             $content = file_get_contents($path);
+            if ($content === false) {
+                self::fail("Cannot read generated development document: {$name}");
+            }
             self::assertNotFalse($content, $name);
             self::assertSame((int) $row['size_bytes'], strlen($content), $name);
             self::assertSame((string) $row['sha256'], hash('sha256', $content), $name);
