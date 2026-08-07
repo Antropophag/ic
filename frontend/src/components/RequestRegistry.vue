@@ -327,23 +327,16 @@ watch(query, () => {
 watch(draft, draftForm.scheduleSave, { deep: true, flush: "sync" });
 watch(draftFiles, draftForm.scheduleFilesSave, { flush: "sync" });
 watch(
-  () => props.refreshTrigger,
-  () => {
-    if (props.active) {
-      loadRequests();
-      loadDashboard();
-    }
-  },
-);
-watch(
-  () => props.active,
-  (active) => {
+  [() => props.refreshTrigger, () => props.active],
+  ([refreshTrigger, active], [previousRefreshTrigger, wasActive]) => {
     if (active) {
-      loadRequests();
-      loadDashboard();
-      loadNotifications();
+      if (!wasActive || refreshTrigger !== previousRefreshTrigger) {
+        loadRequests();
+        loadDashboard();
+      }
+      if (!wasActive) loadNotifications();
     }
-    else {
+    else if (wasActive) {
       registryLoadLifecycle.deactivate();
       showCreate.value = false;
       showNotifications.value = false;
@@ -470,9 +463,11 @@ defineExpose({
 onMounted(() => {
   draftForm.restore();
   window.addEventListener("pagehide", draftForm.flushSave);
-  loadRequests();
-  loadDashboard();
-  loadNotifications();
+  if (props.active) {
+    loadRequests();
+    loadDashboard();
+    loadNotifications();
+  }
 });
 onBeforeUnmount(() => {
   window.removeEventListener("pagehide", draftForm.flushSave);

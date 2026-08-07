@@ -222,14 +222,15 @@ onBeforeUnmount(() => {
         </header>
         <ReviewGuide v-if="showReviewGuide && ReviewGuide" />
         <AdminPanel v-else-if="showAdmin" @close="showAdmin = false" @open-request="openAdminRequest" />
-        <RequestDetails v-else-if="selectedRequestId" :request-id="selectedRequestId" :current-initials="currentInitials" :initial-warning="requestWarning" @loaded="selectedRequestTitle = $event" @updated="refreshRegistry" @close="closeRequest()" />
-        <RequestRegistry
-          v-else
-          :active="!showAdmin && !selectedRequestId"
-          :current-user-id="authUser.id"
-          :refresh-trigger="registryRefreshTrigger"
-          @select-request="openRequest"
-        />
+        <template v-else>
+          <RequestDetails v-if="selectedRequestId" :request-id="selectedRequestId" :current-initials="currentInitials" :initial-warning="requestWarning" @loaded="selectedRequestTitle = $event" @updated="refreshRegistry" @close="closeRequest()" />
+          <RequestRegistry
+            :active="!selectedRequestId"
+            :current-user-id="authUser.id"
+            :refresh-trigger="registryRefreshTrigger"
+            @select-request="openRequest"
+          />
+        </template>
       </main>
       <AppModal :open="showDemoSeedConfirm" title="Создать демонстрационные данные" title-id="demo-seed-title" description-id="demo-seed-description" size="small" alert :busy="demoSeedLoading" @close="showDemoSeedConfirm = false">
         <p id="demo-seed-description">Все существующие заявки, комментарии и файлы будут безвозвратно удалены и заменены демонстрационными данными. Пользователи не изменятся.</p>

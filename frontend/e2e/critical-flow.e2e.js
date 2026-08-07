@@ -155,7 +155,7 @@ test('заявка перемещается между персональным�
       await expect(managerQueue).toHaveCount(0)
     } else {
       await expect(managerQueue.locator('.attention-count')).toHaveText(String(managerCountBefore - 1))
-      await managerQueue.click()
+      await expect(managerQueue).toHaveAttribute('aria-pressed', 'true')
       await expect(page.getByRole('row').filter({ hasText: marker })).toHaveCount(0)
     }
 
@@ -208,6 +208,8 @@ test('заявка перемещается между персональным�
       await expect(securityQueue).toHaveCount(0)
     } else {
       await expect(securityQueue.locator('.attention-count')).toHaveText(String(securityCountBefore - 1))
+      await expect(securityQueue).toHaveAttribute('aria-pressed', 'true')
+      await expect(securityPage.getByRole('row').filter({ hasText: marker })).toHaveCount(0)
     }
   } finally {
     await Promise.all([initiator, manager, executor, expert].filter(Boolean).map(api => api.dispose()))
