@@ -149,6 +149,47 @@ final class AttentionDashboardTest extends IntegrationTestCase
         )['total']);
     }
 
+    public function testRecentEventsExcludeTheCurrentActorsOwnActionsAndKeepNewestFirst(): void
+    {
+        $actor = $this->createUser('events.actor', 'Текущий пользователь');
+        $author = $this->createUser('events.author', 'Автор события');
+        $request = $this->request($actor, 'с событиями');
+        $requestId = (int) $request['id'];
+
+        $this->db()->createCommand()->insert('{{%request_comments}}', [
+            'request_id' => $requestId,
+            'author_id' => $actor,
+            'body' => 'Собственный комментарий',
+            'created_at' => '2026-08-07 09:00:00.000000',
+        ])->execute();
+        $this->db()->createCommand()->insert('{{%request_comments}}', [
+            'request_id' => $requestId,
+            'author_id' => $author,
+            'body' => 'Чужой комментарий',
+            'created_at' => '2026-08-07 10:00:00.000000',
+        ])->execute();
+        $this->db()->createCommand()->insert('{{%request_transitions}}', [
+            'request_id' => $requestId,
+            'actor_id' => $author,
+            'from_status' => 'registered',
+            'to_status' => 'in_progress',
+            'action' => 'start',
+            'rule_id' => 'WF-004',
+            'created_at' => '2026-08-07 11:00:00.000000',
+        ])->execute();
+
+        $events = array_values(array_filter(
+            (new RequestQuery($this->db()))->recentEvents($actor),
+            static fn (array $event): bool => (int) $event['requestId'] === $requestId,
+        ));
+
+        self::assertCount(2, $events);
+        self::assertSame(['event', 'comment'], array_column($events, 'type'));
+        self::assertSame(['Заявка переведена в работу', 'Новый комментарий'], array_column($events, 'title'));
+        self::assertSame($requestId, (int) $events[0]['requestId']);
+        self::assertSame('Автор события', $events[0]['authorName']);
+    }
+
     private function roleUser(string $login, string $name, string $role): int
     {
         $id = $this->createUser($login, $name);

@@ -13,11 +13,17 @@ import { createApplicationDraftForm } from "../applicationDraftForm";
 import { createConfirmDialog } from "../confirmDialog";
 import { triggerBlobDownload } from "../download";
 import { createRequestRegistryLoadLifecycle } from "../requestRegistryLoadLifecycle";
+import {
+  REGISTRY_PAGE_SIZES,
+  readNotificationCursor,
+  readRegistryPageSize,
+  writeNotificationCursor,
+  writeRegistryPageSize,
+} from "../registryPreferences";
 import AppIcon from "./AppIcon.vue";
 import AppModal from "./AppModal.vue";
 import HelpArticle from "./HelpArticle.vue";
 import {
-  REGISTRY_PAGE_SIZE,
   REQUEST_STATUS_OPTIONS,
   avatarRoleClass,
   fromApi,
@@ -40,7 +46,7 @@ const ATTENTION_ICONS = Object.freeze({
   publish_opinion: "file-check",
   security_decision: "shield-check",
 });
-const PAGE_SIZE_OPTIONS = Object.freeze([10, 25, 50, 100]);
+const PAGE_SIZE_OPTIONS = REGISTRY_PAGE_SIZES;
 const activeTab = ref("active");
 const activeAttention = ref("");
 const attentionCategories = ref([]);
@@ -53,7 +59,12 @@ const query = ref("");
 const statusFilter = ref("");
 const sortDirection = ref("desc");
 const currentPage = ref(1);
-const pageSize = ref(REGISTRY_PAGE_SIZE);
+const pageSize = ref(readRegistryPageSize());
+const notificationItems = ref([]);
+const notificationsLoading = ref(true);
+const notificationsError = ref("");
+const showNotifications = ref(false);
+const notificationCursor = ref(readNotificationCursor(props.currentUserId));
 const requests = ref([]);
 const registryPage = reactive({
   total: 0,
@@ -135,6 +146,7 @@ const tabs = computed(() => [
   { id: "mine", label: "Мои заявки", count: registryPage.counts.mine },
 ]);
 const paged = computed(() => ({ items: requests.value, ...registryPage }));
+const newNotifications = computed(() => notificationItems.value.filter(item => !notificationCursor.value || item.occurredAt > notificationCursor.value));
 const pageNumbers = computed(() => {
   const visiblePages = Math.min(7, paged.value.pageCount);
   const firstPage = Math.max(
@@ -205,6 +217,43 @@ async function loadDashboard() {
   }
 }
 
+async function loadNotifications() {
+  notificationsLoading.value = true;
+  try {
+    const result = await requestApi.events();
+    notificationItems.value = result.items || [];
+    notificationsError.value = "";
+    if (showNotifications.value) {
+      await nextTick();
+      markNotificationsViewed();
+    }
+  } catch {
+    notificationsError.value = "Не удалось загрузить новые события.";
+  } finally {
+    notificationsLoading.value = false;
+  }
+}
+
+function markNotificationsViewed() {
+  const newest = notificationItems.value[0]?.occurredAt;
+  if (!notificationsError.value && newest) {
+    notificationCursor.value = newest;
+    writeNotificationCursor(props.currentUserId, newest);
+  }
+}
+
+async function openNotifications() {
+  showNotifications.value = true;
+  if (notificationsError.value) await loadNotifications();
+  await nextTick();
+  if (!notificationsLoading.value) markNotificationsViewed();
+}
+
+function selectNotification(item) {
+  showNotifications.value = false;
+  emit('select-request', { backendId: Number(item.requestId), id: item.requestNumber });
+}
+
 function selectAttention(categoryId) {
   activeAttention.value = activeAttention.value === categoryId ? "" : categoryId;
   activeTab.value = "all";
@@ -256,15 +305,6 @@ function commentAvatarClass(item) {
   return avatarRoleClass('employee')
 }
 
-function requestCountLabel(count) {
-  const mod100 = count % 100
-  const mod10 = count % 10
-  if (mod100 >= 11 && mod100 <= 14) return 'заявок'
-  if (mod10 === 1) return 'заявка'
-  if (mod10 >= 2 && mod10 <= 4) return 'заявки'
-  return 'заявок'
-}
-
 function reloadFirstPage() {
   currentPage.value = 1;
   loadRequests();
@@ -308,6 +348,7 @@ function goToPage(page) {
 function selectPageSize(size) {
   if (pageSize.value === size) return;
   pageSize.value = size;
+  writeRegistryPageSize(size);
   reloadFirstPage();
 }
 
@@ -418,6 +459,7 @@ onMounted(() => {
   window.addEventListener("pagehide", draftForm.flushSave);
   loadRequests();
   loadDashboard();
+  loadNotifications();
 });
 onBeforeUnmount(() => {
   window.removeEventListener("pagehide", draftForm.flushSave);
@@ -503,7 +545,9 @@ onBeforeUnmount(() => {
         <button v-if="query || statusFilter" type="button" class="toolbar-clear" @click="clearRegistryFilters">
           Сбросить
         </button>
-        <span class="toolbar-meta">{{ paged.total }} {{ requestCountLabel(paged.total) }}</span>
+        <button type="button" class="registry-notifications" :aria-label="newNotifications.length ? 'Есть новые события в заявках' : 'Новых событий в заявках нет'" @click="openNotifications">
+          <AppIcon name="bell" :size="18" /><span v-if="newNotifications.length" class="notification-dot" aria-hidden="true"></span>
+        </button>
       </div>
       <div class="table-wrap">
         <table>
@@ -549,8 +593,8 @@ onBeforeUnmount(() => {
             >
               <td class="number">{{ item.id }}</td>
               <td>{{ item.date }}</td>
-              <td>
-                <b>{{ item.product }}</b><small :title="item.supplier">{{ item.supplier }}</small>
+              <td class="registry-object-cell">
+                <span class="registry-object-tooltip app-tooltip" :data-tooltip="item.product" tabindex="0"><span class="registry-object">{{ item.product }}</span></span><small :title="item.supplier">{{ item.supplier }}</small>
               </td>
               <td>
                 {{ item.initiator
@@ -625,6 +669,13 @@ onBeforeUnmount(() => {
         </div>
       </div>
       <footer v-if="paged.total" class="pagination">
+        <span v-if="paged.pageCount > 1" class="pagination-pages"><button
+          :disabled="paged.page <= 1" aria-label="Предыдущая страница" @click="goToPage(paged.page - 1)"
+        ><AppIcon name="chevron-left" :size="16" /></button><button
+          v-for="page in pageNumbers" :key="page" :class="{ current: page === paged.page }" :aria-label="`Страница ${page}`" :aria-current="page === paged.page ? 'page' : undefined" @click="goToPage(page)"
+        >{{ page }}</button><button
+          :disabled="paged.page >= paged.pageCount" aria-label="Следующая страница" @click="goToPage(paged.page + 1)"
+        ><AppIcon name="chevron-right" :size="16" /></button></span>
         <span class="pagination-range">{{ (paged.page - 1) * pageSize + 1 }}–{{
           Math.min(paged.page * pageSize, paged.total)
         }}
@@ -641,26 +692,6 @@ onBeforeUnmount(() => {
             @click="selectPageSize(size)"
           >{{ size }}</button>
         </div>
-        <span v-if="paged.pageCount > 1" class="pagination-pages"><button
-          :disabled="paged.page <= 1"
-          @click="goToPage(paged.page - 1)"
-        >
-          <span class="visually-hidden">Предыдущая страница</span>
-          <AppIcon name="chevron-left" :size="16" /></button><button
-          v-for="page in pageNumbers"
-          :key="page"
-          :class="{ current: page === paged.page }"
-          :aria-label="`Страница ${page}`"
-          :aria-current="page === paged.page ? 'page' : undefined"
-          @click="goToPage(page)"
-        >
-          {{ page }}</button><button
-          :disabled="paged.page >= paged.pageCount"
-          @click="goToPage(paged.page + 1)"
-        >
-          <span class="visually-hidden">Следующая страница</span>
-          <AppIcon name="chevron-right" :size="16" />
-        </button></span><span v-else class="pagination-pages-placeholder" aria-hidden="true"></span>
       </footer>
     </div>
   </section>
@@ -671,6 +702,16 @@ onBeforeUnmount(() => {
       <HelpArticle src="/help/dashboard.html" />
     </aside>
   </div>
+  <AppModal
+    :open="active && showNotifications" title="Новые события в заявках" title-id="registry-notifications-title" size="medium" @close="showNotifications = false"
+  >
+    <p v-if="notificationsLoading" class="notification-state" aria-live="polite">Загрузка событий…</p>
+    <div v-else-if="notificationsError" class="notification-state error" role="alert"><span>{{ notificationsError }}</span><button type="button" class="secondary" @click="loadNotifications">Повторить</button></div>
+    <div v-else-if="!notificationItems.length" class="notification-empty"><AppIcon name="bell" :size="24" /><b>Новых событий нет</b><span>Здесь появятся изменения в доступных вам заявках.</span></div>
+    <ol v-else class="notification-list">
+      <li v-for="item in notificationItems" :key="item.id"><button type="button" @click="selectNotification(item)"><span class="notification-request">Заявка №{{ item.requestNumber }}</span><b>{{ item.title }}</b><span class="notification-product">{{ item.productName }}</span><small>{{ item.authorName || 'Автор не указан' }} · {{ new Date(item.occurredAt).toLocaleString('ru-RU') }}</small><AppIcon name="chevron-right" :size="16" /></button></li>
+    </ol>
+  </AppModal>
   <AppModal
     :open="active && showCreate"
     as="form"

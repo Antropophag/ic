@@ -397,6 +397,31 @@ async function downloadDocument(document) {
   }
 }
 
+async function openDocument(document) {
+  const requestId = selected.value.backendId
+  const previewWindow = window.open('', '_blank')
+  if (!previewWindow) {
+    documentError.value = 'Браузер заблокировал новую вкладку. Разрешите всплывающие окна или скачайте документ.'
+    return
+  }
+  previewWindow.opener = null
+  const token = downloadRequestGuard.begin(requestId)
+  documentError.value = ''
+  try {
+    const blob = await requestApi.downloadDocument(document.versionId)
+    if (!downloadRequestGuard.isCurrent(token, selected.value?.backendId)) {
+      previewWindow.close()
+      return
+    }
+    const url = URL.createObjectURL(blob)
+    previewWindow.location.replace(url)
+    window.setTimeout(() => URL.revokeObjectURL(url), 60_000)
+  } catch {
+    previewWindow.close()
+    if (downloadRequestGuard.isCurrent(token, selected.value?.backendId)) documentError.value = 'Не удалось открыть документ. Попробуйте скачать файл.'
+  }
+}
+
 async function addComment() {
   if (!commentDraft.value.trim()) {
     commentError.value = 'Введите текст комментария.'
@@ -1066,7 +1091,7 @@ onBeforeUnmount(() => {
               <div class="entry-body">
                 <div class="entry-head"><b>{{ entry.type === 'comment' ? entry.author : entry.actor }}</b><time>{{ entry.type === 'comment' ? entry.createdAt : entry.occurredAt }}</time></div>
                 <p>{{ entry.type === 'comment' ? entry.body : entry.description }}</p>
-                <button v-if="entry.versionId && entry.originalName" type="button" class="request-audit-file request-feed-file" :aria-label="`Скачать ${entry.originalName}`" @click="downloadDocument(entry)"><span class="request-file-thumb request-audit-file-thumb" aria-hidden="true"><span class="request-file-lines"></span><span class="request-file-type" :class="fileTypeClassFor(entry)">{{ fileExtensionFor(entry) }}</span></span><span><b :title="entry.originalName">{{ entry.originalName }}</b><small>Скачать вложение</small></span><span class="request-file-action" aria-hidden="true"><AppIcon name="download" :size="14" /></span></button>
+                <div v-if="entry.versionId && entry.originalName" class="request-audit-file request-feed-file"><button type="button" class="request-audit-file-open app-tooltip" data-tooltip="Открыть документ" :aria-label="`Открыть ${entry.originalName}`" @click="openDocument(entry)"><span class="request-file-thumb request-audit-file-thumb" aria-hidden="true"><span class="request-file-lines"></span><span class="request-file-type" :class="fileTypeClassFor(entry)">{{ fileExtensionFor(entry) }}</span></span><span><b :title="entry.originalName">{{ entry.originalName }}</b><small>Открыть вложение</small></span></button><button type="button" class="request-file-action app-tooltip" data-tooltip="Скачать документ" :aria-label="`Скачать ${entry.originalName}`" @click.stop="downloadDocument(entry)"><AppIcon name="download" :size="14" /></button></div>
               </div>
             </div>
           </div>
@@ -1080,7 +1105,7 @@ onBeforeUnmount(() => {
           <section class="request-security-section" aria-labelledby="security-control-title"><h3 id="security-control-title">Контроль СБ</h3><div class="request-security-status"><span class="security-mark-icon" :class="selected.securityMarkDisplay?.className" aria-hidden="true"><svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" focusable="false"><path :d="selected.securityMarkDisplay?.path" /></svg></span><span><b>{{ selected.securityMarkDisplay?.label }}</b><small>Статус проверки</small></span></div></section>
         </article>
         <article id="request-documents" class="card documents request-documents"><div class="section-title request-documents-head"><h3>Документы <span class="request-document-count" :aria-label="`Документов: ${selected.documents?.length || 0}`">{{ selected.documents?.length || 0 }}</span></h3><label v-if="selected.canUploadDocument" class="request-document-upload"><AppIcon v-if="!documentLoading" name="plus" :size="14" />{{ documentLoading ? 'Загрузка…' : 'Добавить' }}<input type="file" :disabled="documentLoading" accept=".pdf,.png,.jpg,.jpeg,.docx,.xlsx" @change="uploadDocument" /></label></div>
-          <section v-for="group in documentGroups" :key="group.key" class="request-document-group" :aria-labelledby="`document-group-${group.key}`"><h4 :id="`document-group-${group.key}`">{{ group.label }} <span>{{ group.items.length }}</span></h4><button v-for="document in group.items" :key="document.versionId" class="document-row request-file-card" :aria-label="`Скачать ${document.title}, версия ${document.version}`" @click="downloadDocument(document)"><span class="request-file-thumb" aria-hidden="true"><span class="request-file-lines"></span><span class="request-file-type" :class="fileTypeClassFor(document)">{{ fileExtensionFor(document) }}</span></span><span class="request-file-copy"><b :title="document.title">{{ document.title }}</b><small>Версия {{ document.version }} · {{ document.size }}</small><small>{{ document.createdAt }}</small></span><span class="request-file-action" aria-hidden="true"><AppIcon name="download" :size="14" /></span></button></section>
+          <section v-for="group in documentGroups" :key="group.key" class="request-document-group" :aria-labelledby="`document-group-${group.key}`"><h4 :id="`document-group-${group.key}`">{{ group.label }} <span>{{ group.items.length }}</span></h4><div v-for="document in group.items" :key="document.versionId" class="document-row request-file-card"><button type="button" class="request-file-open app-tooltip" data-tooltip="Открыть документ" :aria-label="`Открыть ${document.title}, версия ${document.version}`" @click="openDocument(document)"><span class="request-file-thumb" aria-hidden="true"><span class="request-file-lines"></span><span class="request-file-type" :class="fileTypeClassFor(document)">{{ fileExtensionFor(document) }}</span></span><span class="request-file-copy"><b :title="document.title">{{ document.title }}</b><small>Версия {{ document.version }} · {{ document.size }}</small><small>{{ document.createdAt }}</small></span></button><button type="button" class="request-file-action app-tooltip" data-tooltip="Скачать документ" :aria-label="`Скачать ${document.title}`" @click.stop="downloadDocument(document)"><AppIcon name="download" :size="14" /></button></div></section>
           <p v-if="!selected.documents?.length" class="placeholder-copy">Документов пока нет.</p>
           <p v-if="documentError" class="action-error">{{ documentError }}</p>
         </article>
@@ -1091,7 +1116,7 @@ onBeforeUnmount(() => {
     <aside ref="auditDrawer" class="request-drawer" role="dialog" aria-modal="true" aria-labelledby="audit-title" @keydown="handleAuditKeydown">
       <header class="request-drawer-head"><div><p>Заявка №{{ selected.id }}</p><h2 id="audit-title">История процесса</h2></div><button type="button" aria-label="Закрыть историю" @click="closeAuditDrawer"><AppIcon name="close" /></button></header>
       <div class="request-drawer-body">
-        <div v-for="entry in selected.history || []" :key="entry.id" class="request-audit-entry"><span class="request-audit-node" aria-hidden="true"></span><div><b>{{ entry.actor }}</b><p>{{ entry.description }}</p><time>{{ entry.occurredAt }}</time><button v-if="entry.versionId && entry.originalName" type="button" class="request-audit-file" :aria-label="`Скачать ${entry.originalName}`" @click="downloadDocument(entry)"><span class="request-file-thumb request-audit-file-thumb" aria-hidden="true"><span class="request-file-lines"></span><span class="request-file-type" :class="fileTypeClassFor(entry)">{{ fileExtensionFor(entry) }}</span></span><span><b :title="entry.originalName">{{ entry.originalName }}</b><small>Скачать вложение</small></span><span class="request-file-action" aria-hidden="true"><AppIcon name="download" :size="14" /></span></button></div></div>
+        <div v-for="entry in selected.history || []" :key="entry.id" class="request-audit-entry"><span class="request-audit-node" aria-hidden="true"></span><div><b>{{ entry.actor }}</b><p>{{ entry.description }}</p><time>{{ entry.occurredAt }}</time><div v-if="entry.versionId && entry.originalName" class="request-audit-file"><button type="button" class="request-audit-file-open app-tooltip" data-tooltip="Открыть документ" :aria-label="`Открыть ${entry.originalName}`" @click="openDocument(entry)"><span class="request-file-thumb request-audit-file-thumb" aria-hidden="true"><span class="request-file-lines"></span><span class="request-file-type" :class="fileTypeClassFor(entry)">{{ fileExtensionFor(entry) }}</span></span><span><b :title="entry.originalName">{{ entry.originalName }}</b><small>Открыть вложение</small></span></button><button type="button" class="request-file-action app-tooltip" data-tooltip="Скачать документ" :aria-label="`Скачать ${entry.originalName}`" @click.stop="downloadDocument(entry)"><AppIcon name="download" :size="14" /></button></div></div></div>
         <p v-if="!selected.history?.length" class="placeholder-copy">История процесса пока пуста.</p>
       </div>
     </aside>

@@ -24,5 +24,7 @@ defineProps({ name: { type: String, required: true }, size: { type: Number, defa
     <template v-else-if="name === 'shield-check'"><path d="M12 3 19 6v5c0 4.4-2.7 7.5-7 10-4.3-2.5-7-5.6-7-10V6z" /><path d="m9 12 2 2 4-4" /></template>
     <template v-else-if="name === 'return'"><path d="m9 7-5 5 5 5" /><path d="M4 12h9c4 0 6 2 6 6" /></template>
     <template v-else-if="name === 'building'"><path d="M5 21V5l7-2v18M12 8h7v13M3 21h18M8 8h1M8 12h1M8 16h1M15 11h1M15 15h1" /></template>
+    <template v-else-if="name === 'bell'"><path d="M18 9a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9M10 21h4" /></template>
+    <template v-else-if="name === 'external-link'"><path d="M14 5h5v5M19 5l-8 8" /><path d="M19 14v5H5V5h5" /></template>
   </svg>
 </template>

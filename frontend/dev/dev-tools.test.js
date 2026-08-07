@@ -120,8 +120,8 @@ describe('standalone development tools', () => {
       { id: 2, displayName: 'Employee', position: 'Engineer', roles: ['employee'] },
     ])
 
-    expect(document.body.children[0].children[1].textContent).toBe('Гайд')
-    expect(document.body.children[0].children[2].textContent).toBe('Заполнить данные')
+    expect(document.body.children[0].children[1].textContent).toBe('Заполнить данные')
+    expect(document.body.children[0].children[2].textContent).toBe('Гайд')
 
     const second = browserEnvironment()
     second.browserWindow.localStorage.setItem('ic.dev.userId', '2')

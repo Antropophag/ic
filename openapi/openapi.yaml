@@ -155,6 +155,26 @@ paths:
         '500':
           $ref: '#/components/responses/ServerError'
 
+  /api/v1/requests/events:
+    get:
+      tags: [Requests]
+      summary: Получить последние события в доступных заявках
+      description: Возвращает последние комментарии и изменения процесса, выполненные другими пользователями.
+      operationId: getRequestEvents
+      security:
+        - cookieSession: []
+      responses:
+        '200':
+          description: Последние события, новые сначала
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RequestEvents'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/ServerError'
+
   /api/v1/requests/{id}/comments:
     post:
       tags: [Requests]
@@ -388,6 +408,40 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/AttentionCategory'
+      additionalProperties: false
+    RequestEvents:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          maxItems: 100
+          items:
+            $ref: '#/components/schemas/RequestEvent'
+      additionalProperties: false
+    RequestEvent:
+      type: object
+      required: [id, requestId, requestNumber, productName, type, title, authorName, occurredAt]
+      properties:
+        id:
+          type: string
+        requestId:
+          type: integer
+        requestNumber:
+          type: string
+          pattern: '^\d{6}$'
+        productName:
+          type: string
+        type:
+          type: string
+          enum: [comment, event]
+        title:
+          type: string
+        authorName:
+          type: string
+        occurredAt:
+          type: string
+          format: date-time
       additionalProperties: false
     AttentionCategory:
       type: object

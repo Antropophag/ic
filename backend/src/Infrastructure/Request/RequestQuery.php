@@ -16,6 +16,32 @@ final class RequestQuery
     {
     }
 
+    /** @return list<array<string, mixed>> */
+    public function recentEvents(int $actorId): array
+    {
+        return $this->db->createCommand(
+            "SELECT CONCAT('comment-', c.id) AS id, c.request_id AS requestId, "
+            . "LPAD(CAST(r.number AS CHAR), 6, '0') AS requestNumber, r.product_name AS productName, "
+            . "'comment' AS type, 'Новый комментарий' AS title, u.display_name AS authorName, "
+            . "DATE_FORMAT(c.created_at, '%Y-%m-%dT%H:%i:%s.%fZ') AS occurredAt "
+            . 'FROM {{%request_comments}} c JOIN {{%requests}} r ON r.id = c.request_id '
+            . 'JOIN {{%users}} u ON u.id = c.author_id WHERE c.author_id != :comment_actor '
+            . 'UNION ALL '
+            . "SELECT CONCAT('transition-', t.id), t.request_id, LPAD(CAST(r.number AS CHAR), 6, '0'), "
+            . "r.product_name, 'event', CASE t.action "
+            . "WHEN 'start' THEN 'Заявка переведена в работу' WHEN 'suspend' THEN 'Работа приостановлена' "
+            . "WHEN 'resume' THEN 'Работа возобновлена' WHEN 'upload_report' THEN 'Загружен отчёт испытаний' "
+            . "WHEN 'publish_opinion' THEN 'Опубликовано экспертное заключение' "
+            . "WHEN 'security_approve' THEN 'Заключение согласовано' WHEN 'security_return' THEN 'Заявка возвращена в работу' "
+            . "WHEN 'reject' THEN 'В испытаниях отказано' WHEN 'withdraw' THEN 'Заявка отозвана' ELSE 'Событие в заявке' END, "
+            . "u.display_name, DATE_FORMAT(t.created_at, '%Y-%m-%dT%H:%i:%s.%fZ') "
+            . 'FROM {{%request_transitions}} t JOIN {{%requests}} r ON r.id = t.request_id '
+            . 'JOIN {{%users}} u ON u.id = t.actor_id WHERE t.actor_id != :transition_actor '
+            . 'ORDER BY occurredAt DESC, id DESC LIMIT 100',
+            [':comment_actor' => $actorId, ':transition_actor' => $actorId],
+        )->queryAll();
+    }
+
     /** @return array{items: list<array<string, mixed>>, total: int, page: int, pageSize: int, pageCount: int, counts: array{active: int, all: int, mine: int}} */
     public function findPage(
         int $actorId,
