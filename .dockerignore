@@ -5,6 +5,7 @@
 backend/vendor
 backend/runtime
 backend/build
+# Production has no deployment fragments; dev/test mount them through Compose.
 backend/deployment
 frontend/coverage
 frontend/playwright-report
