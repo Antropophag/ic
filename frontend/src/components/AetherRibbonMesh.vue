@@ -11,9 +11,16 @@ onMounted(() => {
 
   const motionQuery = window.matchMedia('(prefers-reduced-motion: reduce)')
   const pointer = { x: 0, y: 0, targetX: 0, targetY: 0 }
+  const layers = [
+    { count: 15, step: 5, offset: 0, frequency: 0.0035, amplitude: 52, speed: 1.05, alpha: 0.58, width: 1.35 },
+    { count: 9, step: 7, offset: 46, frequency: 0.0075, amplitude: 28, speed: 0.65, alpha: 0.2, width: 0.8 },
+  ]
+  let gradients = []
   let frame = 0
   let width = 0
   let height = 0
+  let originX = 0
+  let originY = 0
   let previousTime = performance.now()
   let time = 0
 
@@ -22,16 +29,26 @@ onMounted(() => {
     const dpr = Math.min(window.devicePixelRatio || 1, 2)
     width = bounds.width
     height = bounds.height
+    originX = bounds.left
+    originY = bounds.top
     element.width = Math.round(width * dpr)
     element.height = Math.round(height * dpr)
     context.setTransform(dpr, 0, 0, dpr, 0, 0)
+    gradients = layers.map(() => {
+      const gradient = context.createLinearGradient(0, 0, width, 0)
+      gradient.addColorStop(0, 'rgba(37, 61, 152, 0)')
+      gradient.addColorStop(0.42, 'rgba(37, 61, 152, 0.72)')
+      gradient.addColorStop(0.62, 'rgba(22, 39, 115, 0.68)')
+      gradient.addColorStop(1, 'rgba(9, 25, 43, 0)')
+      return gradient
+    })
     if (motionQuery.matches) draw(performance.now())
   }
 
   const movePointer = event => {
     const point = event.touches?.[0] || event
-    pointer.targetX = point.clientX - width / 2
-    pointer.targetY = point.clientY - height / 2
+    pointer.targetX = point.clientX - originX - width / 2
+    pointer.targetY = point.clientY - originY - height / 2
   }
 
   const resetPointer = () => {
@@ -54,18 +71,8 @@ onMounted(() => {
     pointer.y += (pointer.targetY - pointer.y) * interpolation
     context.clearRect(0, 0, width, height)
 
-    const layers = [
-      { count: 15, step: 5, offset: 0, frequency: 0.0035, amplitude: 52, speed: 1.05, alpha: 0.58, width: 1.35 },
-      { count: 9, step: 7, offset: 46, frequency: 0.0075, amplitude: 28, speed: 0.65, alpha: 0.2, width: 0.8 },
-    ]
-
-    for (const layer of layers) {
-      const gradient = context.createLinearGradient(0, 0, width, 0)
-      gradient.addColorStop(0, 'rgba(37, 61, 152, 0)')
-      gradient.addColorStop(0.42, 'rgba(37, 61, 152, 0.72)')
-      gradient.addColorStop(0.62, 'rgba(22, 39, 115, 0.68)')
-      gradient.addColorStop(1, 'rgba(9, 25, 43, 0)')
-      context.strokeStyle = gradient
+    for (const [layerIndex, layer] of layers.entries()) {
+      context.strokeStyle = gradients[layerIndex]
 
       for (let ribbon = 0; ribbon < layer.count; ribbon += 1) {
         const progress = ribbon / layer.count
@@ -105,22 +112,23 @@ onMounted(() => {
     cancelAnimationFrame(frame)
     if (!document.hidden) syncMotion()
   }
+  const resizeObserver = new ResizeObserver(resize)
 
   resize()
   syncMotion()
-  window.addEventListener('resize', resize)
+  resizeObserver.observe(element)
   window.addEventListener('mousemove', movePointer)
   window.addEventListener('touchmove', movePointer, { passive: true })
-  window.addEventListener('mouseleave', resetPointer)
+  document.documentElement.addEventListener('mouseleave', resetPointer)
   document.addEventListener('visibilitychange', syncVisibility)
   motionQuery.addEventListener('change', syncMotion)
 
   cleanup = () => {
     cancelAnimationFrame(frame)
-    window.removeEventListener('resize', resize)
+    resizeObserver.disconnect()
     window.removeEventListener('mousemove', movePointer)
     window.removeEventListener('touchmove', movePointer)
-    window.removeEventListener('mouseleave', resetPointer)
+    document.documentElement.removeEventListener('mouseleave', resetPointer)
     document.removeEventListener('visibilitychange', syncVisibility)
     motionQuery.removeEventListener('change', syncMotion)
   }
