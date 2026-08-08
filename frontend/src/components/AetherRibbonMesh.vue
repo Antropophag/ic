@@ -1,5 +1,6 @@
 <script setup>
 import { onBeforeUnmount, onMounted, ref } from 'vue'
+import { createAetherPointer } from '../aetherPointer'
 
 const canvas = ref(null)
 let cleanup = () => {}
@@ -10,17 +11,17 @@ onMounted(() => {
   if (!element || !context) return
 
   const motionQuery = window.matchMedia('(prefers-reduced-motion: reduce)')
-  const pointer = { x: 0, y: 0, targetX: 0, targetY: 0 }
+  const pointerTracker = createAetherPointer()
+  const pointer = pointerTracker.state
   const layers = [
     { count: 15, step: 5, offset: 0, frequency: 0.0035, amplitude: 52, speed: 1.05, alpha: 0.58, width: 1.35 },
     { count: 9, step: 7, offset: 46, frequency: 0.0075, amplitude: 28, speed: 0.65, alpha: 0.2, width: 0.8 },
   ]
   let gradients = []
   let frame = 0
+  let originFrame = 0
   let width = 0
   let height = 0
-  let originX = 0
-  let originY = 0
   let previousTime = performance.now()
   let time = 0
 
@@ -29,8 +30,7 @@ onMounted(() => {
     const dpr = Math.min(window.devicePixelRatio || 1, 2)
     width = bounds.width
     height = bounds.height
-    originX = bounds.left
-    originY = bounds.top
+    pointerTracker.resize(bounds)
     element.width = Math.round(width * dpr)
     element.height = Math.round(height * dpr)
     context.setTransform(dpr, 0, 0, dpr, 0, 0)
@@ -47,19 +47,21 @@ onMounted(() => {
 
   const movePointer = event => {
     const point = event.touches?.[0] || event
-    pointer.targetX = point.clientX - originX - width / 2
-    pointer.targetY = point.clientY - originY - height / 2
+    pointerTracker.move(point.clientX, point.clientY)
   }
 
   const resetPointer = () => {
-    pointer.targetX = 0
-    pointer.targetY = 0
+    pointerTracker.reset()
   }
 
   const refreshOrigin = () => {
-    const bounds = element.getBoundingClientRect()
-    originX = bounds.left
-    originY = bounds.top
+    originFrame = 0
+    pointerTracker.resize(element.getBoundingClientRect())
+  }
+
+  const scheduleOriginRefresh = () => {
+    if (originFrame) return
+    originFrame = requestAnimationFrame(refreshOrigin)
   }
 
   const noise = (x, elapsed, offset) => (
@@ -118,29 +120,32 @@ onMounted(() => {
     cancelAnimationFrame(frame)
     if (!document.hidden) syncMotion()
   }
-  const resizeObserver = new ResizeObserver(resize)
+  const resizeObserver = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(resize)
 
   resize()
   syncMotion()
-  resizeObserver.observe(element)
+  if (resizeObserver) resizeObserver.observe(element)
+  else window.addEventListener('resize', resize)
   window.addEventListener('mousemove', movePointer)
   window.addEventListener('touchmove', movePointer, { passive: true })
   window.addEventListener('touchend', resetPointer)
   window.addEventListener('touchcancel', resetPointer)
   document.documentElement.addEventListener('mouseleave', resetPointer)
-  document.addEventListener('scroll', refreshOrigin, true)
+  document.addEventListener('scroll', scheduleOriginRefresh, true)
   document.addEventListener('visibilitychange', syncVisibility)
   motionQuery.addEventListener('change', syncMotion)
 
   cleanup = () => {
     cancelAnimationFrame(frame)
-    resizeObserver.disconnect()
+    cancelAnimationFrame(originFrame)
+    if (resizeObserver) resizeObserver.disconnect()
+    else window.removeEventListener('resize', resize)
     window.removeEventListener('mousemove', movePointer)
     window.removeEventListener('touchmove', movePointer)
     window.removeEventListener('touchend', resetPointer)
     window.removeEventListener('touchcancel', resetPointer)
     document.documentElement.removeEventListener('mouseleave', resetPointer)
-    document.removeEventListener('scroll', refreshOrigin, true)
+    document.removeEventListener('scroll', scheduleOriginRefresh, true)
     document.removeEventListener('visibilitychange', syncVisibility)
     motionQuery.removeEventListener('change', syncMotion)
   }

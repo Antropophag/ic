@@ -78,7 +78,7 @@ describe('authentication ribbon background', () => {
 
   it('keeps reduced-motion and lifecycle safeguards in the animation component', () => {
     expect(ribbonMesh).toContain("matchMedia('(prefers-reduced-motion: reduce)')")
-    expect(ribbonMesh).toContain('new ResizeObserver(resize)')
+    expect(ribbonMesh).toContain("typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(resize)")
     expect(ribbonMesh).toContain("document.addEventListener('visibilitychange', syncVisibility)")
     expect(ribbonMesh).toContain('resizeObserver.disconnect()')
     expect(ribbonMesh).toContain('cancelAnimationFrame(frame)')
