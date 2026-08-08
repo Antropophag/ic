@@ -13,6 +13,7 @@ export function createAetherPointer() {
   return {
     state,
     move(x, y) {
+      if (!Number.isFinite(x) || !Number.isFinite(y)) return
       clientX = x
       clientY = y
       updateTarget()

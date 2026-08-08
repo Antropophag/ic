@@ -23,4 +23,13 @@ describe('aether pointer tracking', () => {
 
     expect(pointer.state).toMatchObject({ targetX: 0, targetY: 0 })
   })
+
+  it('ignores non-finite client coordinates', () => {
+    const pointer = createAetherPointer()
+    pointer.resize({ left: 0, top: 0, width: 400, height: 200 })
+    pointer.move(300, 150)
+    pointer.move(Number.NaN, undefined)
+
+    expect(pointer.state).toMatchObject({ targetX: 100, targetY: 50 })
+  })
 })
