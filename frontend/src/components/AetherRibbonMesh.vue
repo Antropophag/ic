@@ -56,6 +56,12 @@ onMounted(() => {
     pointer.targetY = 0
   }
 
+  const refreshOrigin = () => {
+    const bounds = element.getBoundingClientRect()
+    originX = bounds.left
+    originY = bounds.top
+  }
+
   const noise = (x, elapsed, offset) => (
     Math.sin(x * 0.0012 + elapsed * 0.25 + offset)
     + Math.cos(x * 0.0028 - elapsed * 0.4 + offset * 2)
@@ -119,7 +125,10 @@ onMounted(() => {
   resizeObserver.observe(element)
   window.addEventListener('mousemove', movePointer)
   window.addEventListener('touchmove', movePointer, { passive: true })
+  window.addEventListener('touchend', resetPointer)
+  window.addEventListener('touchcancel', resetPointer)
   document.documentElement.addEventListener('mouseleave', resetPointer)
+  document.addEventListener('scroll', refreshOrigin, true)
   document.addEventListener('visibilitychange', syncVisibility)
   motionQuery.addEventListener('change', syncMotion)
 
@@ -128,7 +137,10 @@ onMounted(() => {
     resizeObserver.disconnect()
     window.removeEventListener('mousemove', movePointer)
     window.removeEventListener('touchmove', movePointer)
+    window.removeEventListener('touchend', resetPointer)
+    window.removeEventListener('touchcancel', resetPointer)
     document.documentElement.removeEventListener('mouseleave', resetPointer)
+    document.removeEventListener('scroll', refreshOrigin, true)
     document.removeEventListener('visibilitychange', syncVisibility)
     motionQuery.removeEventListener('change', syncMotion)
   }

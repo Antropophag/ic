@@ -66,10 +66,14 @@ describe('registry row highlights', () => {
 
 describe('authentication ribbon background', () => {
   it('preserves the project background and does not block or clip the login form', () => {
+    const authScreenDeclarations = [...styles.matchAll(/\.auth-screen\s*\{([^}]*)\}/g)]
+      .map((match) => match[1])
+      .join(';')
+
     expect(authScreen).toContain('<AetherRibbonMesh />')
     expect(compactStyles).toContain('.auth-screen{position:relative;isolation:isolate;background:#f3f5f9}')
     expect(compactStyles).toContain('.aether-ribbon-mesh{position:absolute;z-index:-1;inset:0;width:100%;height:100%;pointer-events:none}')
-    expect(compactStyles).not.toContain('.auth-screen{position:relative;isolation:isolate;overflow:hidden')
+    expect(authScreenDeclarations).not.toMatch(/overflow(?:-[xy])?\s*:\s*(?:hidden|clip)/)
   })
 
   it('keeps reduced-motion and lifecycle safeguards in the animation component', () => {
