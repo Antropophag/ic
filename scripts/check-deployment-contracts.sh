@@ -140,6 +140,7 @@ set -e
 
 grep -q 'MAILPIT_BASE_URL must be provided' frontend/e2e/notifications.e2e.js
 grep -Fq 'COPY frontend/package*.json frontend/.npmrc ./' docker/frontend.Dockerfile
+grep -Fxq 'backend/deployment' .dockerignore
 
 # Production и development images должны содержать проверенный контракт и
 # локальные Swagger UI assets; каждый stage проверяется независимо.
