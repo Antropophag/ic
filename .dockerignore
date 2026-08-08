@@ -5,6 +5,7 @@
 backend/vendor
 backend/runtime
 backend/build
+backend/deployment
 frontend/coverage
 frontend/playwright-report
 frontend/test-results
