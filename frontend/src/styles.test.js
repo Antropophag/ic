@@ -4,6 +4,8 @@ import { describe, expect, it } from 'vitest'
 const styles = readFileSync(new URL('./styles.css', import.meta.url), 'utf8')
 const adminStyles = readFileSync(new URL('./admin.css', import.meta.url), 'utf8')
 const helpStyles = readFileSync(new URL('../public/help/help.css', import.meta.url), 'utf8')
+const authScreen = readFileSync(new URL('./components/AuthScreen.vue', import.meta.url), 'utf8')
+const ribbonMesh = readFileSync(new URL('./components/AetherRibbonMesh.vue', import.meta.url), 'utf8')
 const compactStyles = styles.replace(/\s+/g, '')
 const compactAdminStyles = adminStyles.replace(/\s+/g, '')
 const compactHelpStyles = helpStyles.replace(/\s+/g, '')
@@ -59,5 +61,26 @@ describe('registry row highlights', () => {
     expect(compactStyles).toContain(
       `.row-color-${color}:hover{background:linear-gradient(toright,${shade},#fff65%)}`,
     )
+  })
+})
+
+describe('authentication ribbon background', () => {
+  it('preserves the project background and does not block or clip the login form', () => {
+    const authScreenDeclarations = [...styles.matchAll(/\.auth-screen\s*\{([^}]*)\}/g)]
+      .map((match) => match[1])
+      .join(';')
+
+    expect(authScreen).toContain('<AetherRibbonMesh />')
+    expect(compactStyles).toContain('.auth-screen{position:relative;isolation:isolate;background:#f3f5f9}')
+    expect(compactStyles).toContain('.aether-ribbon-mesh{position:absolute;z-index:-1;inset:0;width:100%;height:100%;pointer-events:none}')
+    expect(authScreenDeclarations).not.toMatch(/overflow(?:-[xy])?\s*:\s*(?:hidden|clip)/)
+  })
+
+  it('keeps reduced-motion and lifecycle safeguards in the animation component', () => {
+    expect(ribbonMesh).toContain("matchMedia('(prefers-reduced-motion: reduce)')")
+    expect(ribbonMesh).toContain("typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(resize)")
+    expect(ribbonMesh).toContain("document.addEventListener('visibilitychange', syncVisibility)")
+    expect(ribbonMesh).toContain('resizeObserver.disconnect()')
+    expect(ribbonMesh).toContain('cancelAnimationFrame(frame)')
   })
 })
