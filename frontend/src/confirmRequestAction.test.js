@@ -18,6 +18,18 @@ describe('confirmRequestAction', () => {
     expect(execute).not.toHaveBeenCalled()
   })
 
+  it('cancels the action when the request version changes during confirmation', async () => {
+    let selected = { backendId: 17, lockVersion: 3 }
+    let resolveConfirmation
+    const ask = () => new Promise((resolve) => { resolveConfirmation = resolve })
+
+    const pending = confirmRequestAction(() => selected, ask)
+    selected = { backendId: 17, lockVersion: 4 }
+    resolveConfirmation({ reason: 'Причина действия' })
+
+    await expect(pending).resolves.toBeNull()
+  })
+
   it('returns the request context captured before confirmation', async () => {
     const selected = { backendId: 17, lockVersion: 3 }
 

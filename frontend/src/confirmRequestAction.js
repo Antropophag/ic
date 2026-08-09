@@ -5,8 +5,9 @@ export async function confirmRequestAction(getSelected, ask) {
   const requestId = selected.backendId
   const lockVersion = selected.lockVersion
   const confirmed = await ask()
+  const current = getSelected()
 
-  if (!confirmed || getSelected()?.backendId !== requestId) return null
+  if (!confirmed || current?.backendId !== requestId || current.lockVersion !== lockVersion) return null
 
   return { requestId, lockVersion, confirmed }
 }
