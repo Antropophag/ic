@@ -2,6 +2,13 @@
 import { onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { createAetherPointer } from '../aetherPointer'
 
+const COLOR_STOPS = [
+  [0, [37, 61, 152, 0], [180, 35, 24]],
+  [0.42, [37, 61, 152, 0.72], [194, 59, 59]],
+  [0.62, [22, 39, 115, 0.68], [135, 28, 28]],
+  [1, [9, 25, 43, 0], [67, 18, 18]],
+]
+
 const props = defineProps({
   error: { type: Boolean, default: false },
 })
@@ -31,21 +38,15 @@ onMounted(() => {
   let time = 0
   let errorProgress = props.error ? 1 : 0
   let errorTarget = errorProgress
+  let defaultGradient = null
+  let errorGradient = null
 
   const mix = (from, to, progress) => Math.round(from + (to - from) * progress)
 
-  const createGradient = () => {
+  const createGradient = progress => {
     const gradient = context.createLinearGradient(0, 0, width, 0)
-    const colorStops = [
-      [0, [37, 61, 152, 0]],
-      [0.42, [37, 61, 152, 0.72]],
-      [0.62, [22, 39, 115, 0.68]],
-      [1, [9, 25, 43, 0]],
-    ]
-    const errorColors = [[180, 35, 24], [194, 59, 59], [135, 28, 28], [67, 18, 18]]
-    colorStops.forEach(([position, [red, green, blue, alpha]], index) => {
-      const [errorRed, errorGreen, errorBlue] = errorColors[index]
-      gradient.addColorStop(position, `rgba(${mix(red, errorRed, errorProgress)}, ${mix(green, errorGreen, errorProgress)}, ${mix(blue, errorBlue, errorProgress)}, ${alpha})`)
+    COLOR_STOPS.forEach(([position, [red, green, blue, alpha], [errorRed, errorGreen, errorBlue]]) => {
+      gradient.addColorStop(position, `rgba(${mix(red, errorRed, progress)}, ${mix(green, errorGreen, progress)}, ${mix(blue, errorBlue, progress)}, ${alpha})`)
     })
     return gradient
   }
@@ -59,6 +60,8 @@ onMounted(() => {
     element.width = Math.round(width * dpr)
     element.height = Math.round(height * dpr)
     context.setTransform(dpr, 0, 0, dpr, 0, 0)
+    defaultGradient = createGradient(0)
+    errorGradient = createGradient(1)
     if (motionQuery.matches) draw(performance.now())
   }
 
@@ -91,12 +94,15 @@ onMounted(() => {
     previousTime = now
     if (!motionQuery.matches) time += delta * 0.7
     errorProgress += (errorTarget - errorProgress) * (1 - Math.exp(-6 * delta))
+    if (Math.abs(errorTarget - errorProgress) < 0.001) errorProgress = errorTarget
 
     const interpolation = 1 - Math.exp(-8 * delta)
     pointer.x += (pointer.targetX - pointer.x) * interpolation
     pointer.y += (pointer.targetY - pointer.y) * interpolation
     context.clearRect(0, 0, width, height)
-    const strokeGradient = createGradient()
+    const strokeGradient = errorProgress === 0
+      ? defaultGradient
+      : errorProgress === 1 ? errorGradient : createGradient(errorProgress)
 
     for (const layer of layers) {
       context.strokeStyle = strokeGradient
@@ -132,7 +138,10 @@ onMounted(() => {
   const syncMotion = () => {
     cancelAnimationFrame(frame)
     previousTime = performance.now()
-    if (motionQuery.matches) draw(previousTime)
+    if (motionQuery.matches) {
+      errorProgress = errorTarget
+      draw(previousTime)
+    }
     else frame = requestAnimationFrame(draw)
   }
   const syncVisibility = () => {

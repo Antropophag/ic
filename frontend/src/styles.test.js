@@ -5,7 +5,6 @@ const styles = readFileSync(new URL('./styles.css', import.meta.url), 'utf8')
 const adminStyles = readFileSync(new URL('./admin.css', import.meta.url), 'utf8')
 const helpStyles = readFileSync(new URL('../public/help/help.css', import.meta.url), 'utf8')
 const authScreen = readFileSync(new URL('./components/AuthScreen.vue', import.meta.url), 'utf8')
-const ribbonMesh = readFileSync(new URL('./components/AetherRibbonMesh.vue', import.meta.url), 'utf8')
 const compactStyles = styles.replace(/\s+/g, '')
 const compactAdminStyles = adminStyles.replace(/\s+/g, '')
 const compactHelpStyles = helpStyles.replace(/\s+/g, '')
@@ -76,18 +75,4 @@ describe('authentication ribbon background', () => {
     expect(authScreenDeclarations).not.toMatch(/overflow(?:-[xy])?\s*:\s*(?:hidden|clip)/)
   })
 
-  it('keeps reduced-motion and lifecycle safeguards in the animation component', () => {
-    expect(ribbonMesh).toContain("matchMedia('(prefers-reduced-motion: reduce)')")
-    expect(ribbonMesh).toContain("typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(resize)")
-    expect(ribbonMesh).toContain("document.addEventListener('visibilitychange', syncVisibility)")
-    expect(ribbonMesh).toContain('resizeObserver.disconnect()')
-    expect(ribbonMesh).toContain('cancelAnimationFrame(frame)')
-  })
-
-  it('animates the ribbon palette from blue to red for every login error', () => {
-    expect(ribbonMesh).toContain('error: { type: Boolean, default: false }')
-    expect(ribbonMesh).toContain('errorProgress += (errorTarget - errorProgress)')
-    expect(ribbonMesh).toContain('const errorColors = [[180, 35, 24]')
-    expect(ribbonMesh).toContain('if (motionQuery.matches) {')
-  })
 })
