@@ -15,7 +15,7 @@ use App\Infrastructure\Identity\LoginAuthenticator;
 use App\Infrastructure\Ldap\LdapConnectionException;
 use App\Infrastructure\Ldap\NativeLdapClient;
 use Yii;
-use yii\web\ServerErrorHttpException;
+use yii\web\HttpException;
 
 final class AuthController extends ApiController
 {
@@ -86,7 +86,7 @@ final class AuthController extends ApiController
             return ['errors' => ['login' => ['Учётная запись отключена в портале.']], 'ruleId' => $error->ruleId];
         } catch (LdapConnectionException $error) {
             Yii::error('LDAP connection failed during login: ' . $error->getMessage());
-            throw new ServerErrorHttpException('LDAP-сервер недоступен. Обратитесь к администратору.');
+            throw new HttpException(503, 'Сервер авторизации недоступен. Обратитесь в техническую поддержку.');
         }
 
         // Смена идентификатора сессии при входе — защита от session fixation.

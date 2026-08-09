@@ -1,6 +1,7 @@
 <script setup>
 import { reactive, ref } from 'vue'
 import { authApi, hasCsrfToken, setCsrfToken } from '../api'
+import { authErrorMessage } from '../authErrorMessage'
 import AetherRibbonMesh from './AetherRibbonMesh.vue'
 
 const emit = defineEmits(['authenticated'])
@@ -26,11 +27,7 @@ async function login() {
     loginForm.password = ''
     emit('authenticated', result.user)
   } catch (error) {
-    loginError.value = error.status === 401
-      ? 'Неверный логин или пароль.'
-      : error.status === 403
-        ? 'Учётная запись отключена в портале. Обратитесь к администратору.'
-        : 'Не удалось войти. Попробуйте ещё раз.'
+    loginError.value = authErrorMessage(error)
   } finally {
     loginLoading.value = false
   }
