@@ -268,7 +268,7 @@ final class DocumentRepository
     }
 
     /** @return array{status: string, lockVersion: int} */
-    public function deleteReport(int $requestId, int $expectedLockVersion, int $actorId): array
+    public function deleteReport(int $requestId, int $expectedLockVersion, int $actorId, string $reason): array
     {
         $transaction = $this->db->beginTransaction();
         try {
@@ -335,7 +335,7 @@ final class DocumentRepository
                 'entity_id' => $requestId,
                 'actor_id' => $actorId,
                 'rule_id' => 'DOC-011',
-                'payload_json' => ['document_id' => (int) $document['id']],
+                'payload_json' => ['document_id' => (int) $document['id'], 'reason' => $reason],
                 'created_at' => $now,
             ])->execute();
             $transaction->commit();

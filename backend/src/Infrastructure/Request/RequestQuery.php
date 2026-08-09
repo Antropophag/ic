@@ -463,7 +463,7 @@ final class RequestQuery
             . "WHEN 'request.expert_claimed' THEN 'claim_expert' "
             . "WHEN 'request.expert_reassigned' THEN 'reassign_expert' "
             . "WHEN 'request.department_changed' THEN 'change_department' ELSE 'delete_report' END AS action, NULL, NULL, "
-            . "a.rule_id, NULL, DATE_FORMAT(a.created_at, '%Y-%m-%dT%H:%i:%s.%fZ'), u.display_name, "
+            . "a.rule_id, CASE WHEN a.event_type = 'request.report_deleted' THEN JSON_UNQUOTE(JSON_EXTRACT(a.payload_json, '$.reason')) ELSE NULL END, DATE_FORMAT(a.created_at, '%Y-%m-%dT%H:%i:%s.%fZ'), u.display_name, "
             . "CASE WHEN a.event_type = 'request.department_changed' THEN JSON_UNQUOTE(JSON_EXTRACT(a.payload_json, '$.new_department_name')) "
             . "ELSE target_user.display_name END, NULL, NULL "
             . 'FROM {{%audit_events}} a '

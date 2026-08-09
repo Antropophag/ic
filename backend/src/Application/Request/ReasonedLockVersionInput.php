@@ -6,7 +6,7 @@ namespace App\Application\Request;
 
 use yii\base\Model;
 
-final class CancelRequestInput extends Model
+final class ReasonedLockVersionInput extends Model
 {
     public mixed $reason = null;
     public mixed $lockVersion = null;

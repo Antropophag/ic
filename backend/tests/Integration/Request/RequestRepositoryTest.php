@@ -142,7 +142,7 @@ final class RequestRepositoryTest extends IntegrationTestCase
 
         $repository = new RequestRepository($this->db());
         $this->expectException(ConcurrentRequestModification::class);
-        $repository->rejectRequest((int) $request['id'], (int) $request['lock_version'] + 1, $manager);
+        $repository->rejectRequest((int) $request['id'], (int) $request['lock_version'] + 1, $manager, 'Не соответствует требованиям');
     }
 
     public function testRejectByManagerTransitionsStatusAndWritesAudit(): void
@@ -153,7 +153,7 @@ final class RequestRepositoryTest extends IntegrationTestCase
         $request = $this->createRegisteredRequest($initiator, 'reject-audit');
 
         $repository = new RequestRepository($this->db());
-        $result = $repository->rejectRequest((int) $request['id'], (int) $request['lock_version'], $manager);
+        $result = $repository->rejectRequest((int) $request['id'], (int) $request['lock_version'], $manager, 'Не соответствует требованиям');
 
         self::assertSame('rejected', $result['status']);
         self::assertSame((int) $request['lock_version'] + 1, $result['lockVersion']);
@@ -163,6 +163,11 @@ final class RequestRepositoryTest extends IntegrationTestCase
             [':id' => $request['id']],
         );
         self::assertSame(1, (int) $auditCount);
+        $savedReason = $this->scalar(
+            "SELECT reason FROM {{%request_transitions}} WHERE request_id = :id AND action = 'reject'",
+            [':id' => $request['id']],
+        );
+        self::assertSame('Не соответствует требованиям', $savedReason);
     }
 
     public function testOnlyManagerCanReject(): void
@@ -173,7 +178,7 @@ final class RequestRepositoryTest extends IntegrationTestCase
 
         $repository = new RequestRepository($this->db());
         $this->expectException(RejectDenied::class);
-        $repository->rejectRequest((int) $request['id'], (int) $request['lock_version'], $employee);
+        $repository->rejectRequest((int) $request['id'], (int) $request['lock_version'], $employee, 'Не соответствует требованиям');
     }
 
     public function testOnlyInitiatorCanWithdraw(): void
@@ -184,7 +189,7 @@ final class RequestRepositoryTest extends IntegrationTestCase
 
         $repository = new RequestRepository($this->db());
         $this->expectException(WithdrawDenied::class);
-        $repository->withdrawRequest((int) $request['id'], (int) $request['lock_version'], $other);
+        $repository->withdrawRequest((int) $request['id'], (int) $request['lock_version'], $other, 'Заявка больше не актуальна');
     }
 
     public function testWithdrawIsBlockedAfterSecurityReview(): void
@@ -236,7 +241,7 @@ final class RequestRepositoryTest extends IntegrationTestCase
 
         $repository = new RequestRepository($this->db());
         $this->expectException(ConcurrentRequestModification::class);
-        $repository->withdrawRequest($requestId, (int) $request['lock_version'], $initiator);
+        $repository->withdrawRequest($requestId, (int) $request['lock_version'], $initiator, 'Заявка больше не актуальна');
     }
 
     public function testSuspendAndResumeTransitionStatus(): void
@@ -254,8 +259,13 @@ final class RequestRepositoryTest extends IntegrationTestCase
         $started = $repository->startRequest($requestId, (int) $request['lock_version'] + 1, $manager);
         self::assertSame('in_progress', $started['status']);
 
-        $suspended = $repository->suspendRequest($requestId, $started['lockVersion'], $executor);
+        $suspended = $repository->suspendRequest($requestId, $started['lockVersion'], $executor, 'Ожидание оборудования');
         self::assertSame('suspended', $suspended['status']);
+        $savedReason = $this->scalar(
+            "SELECT reason FROM {{%request_transitions}} WHERE request_id = :id AND action = 'suspend'",
+            [':id' => $requestId],
+        );
+        self::assertSame('Ожидание оборудования', $savedReason);
 
         $resumed = $repository->resumeRequest($requestId, $suspended['lockVersion'], $manager);
         self::assertSame('in_progress', $resumed['status']);
@@ -284,7 +294,7 @@ final class RequestRepositoryTest extends IntegrationTestCase
         $started = $repository->startRequest($requestId, (int) $request['lock_version'] + 1, $manager);
 
         $this->expectException(SuspendResumeDenied::class);
-        $repository->suspendRequest($requestId, $started['lockVersion'], $otherExecutor);
+        $repository->suspendRequest($requestId, $started['lockVersion'], $otherExecutor, 'Ожидание оборудования');
     }
 
     public function testSuspendFailsOnStaleLockVersion(): void
@@ -299,7 +309,7 @@ final class RequestRepositoryTest extends IntegrationTestCase
         $started = $repository->startRequest($requestId, (int) $request['lock_version'], $manager);
 
         $this->expectException(ConcurrentRequestModification::class);
-        $repository->suspendRequest($requestId, $started['lockVersion'] + 1, $manager);
+        $repository->suspendRequest($requestId, $started['lockVersion'] + 1, $manager, 'Ожидание оборудования');
     }
 
     public function testCanSuspendAndCanResumeFlagsInRegistry(): void
@@ -321,13 +331,13 @@ final class RequestRepositoryTest extends IntegrationTestCase
         $outsiderRow = self::findRow($this->findAll($outsider), $requestId);
         self::assertSame(0, (int) $outsiderRow['can_suspend']);
 
-        $repository->suspendRequest($requestId, $started['lockVersion'], $manager);
+        $repository->suspendRequest($requestId, $started['lockVersion'], $manager, 'Ожидание оборудования');
         $managerRowAfter = self::findRow($this->findAll($manager), $requestId);
         self::assertSame(0, (int) $managerRowAfter['can_suspend']);
         self::assertSame(1, (int) $managerRowAfter['can_resume']);
     }
 
-    public function testWithdrawSavesOptionalReason(): void
+    public function testWithdrawSavesRequiredReason(): void
     {
         $initiator = $this->createUser('dev.it.initiator-withdrawreason', 'Инициатор причины отзыва');
         $request = $this->createRegisteredRequest($initiator, 'withdraw-reason');

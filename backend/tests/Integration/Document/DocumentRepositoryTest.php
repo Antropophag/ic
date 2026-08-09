@@ -152,8 +152,14 @@ final class DocumentRepositoryTest extends IntegrationTestCase
         self::assertNull($outsiderUploadEvent[0]['versionId']);
         self::assertNull($outsiderUploadEvent[0]['originalName']);
 
-        $repository->deleteReport($requestId, (int) $result['lockVersion'], $executor);
+        $repository->deleteReport($requestId, (int) $result['lockVersion'], $executor, 'Загружена неверная версия');
         $historyAfterDeletion = (new RequestQuery($this->db()))->findDetails($requestId, $executor)['history'];
+        $deletionEvent = array_values(array_filter(
+            $historyAfterDeletion,
+            static fn (array $event): bool => $event['action'] === 'delete_report',
+        ));
+        self::assertCount(1, $deletionEvent);
+        self::assertSame('Загружена неверная версия', $deletionEvent[0]['reason']);
         $deletedUploadEvent = array_values(array_filter(
             $historyAfterDeletion,
             static fn (array $event): bool => $event['action'] === 'upload_report',
