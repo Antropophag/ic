@@ -610,7 +610,7 @@ onBeforeUnmount(() => {
               </td>
               <td>{{ item.executor }}</td>
               <td>
-                <span class="badge" :class="item.tone">{{ item.status }}</span>
+                <span class="badge" :class="item.tone">{{ item.compactStatus }}</span>
               </td>
               <td class="registry-indicator-cell">
                 <span
