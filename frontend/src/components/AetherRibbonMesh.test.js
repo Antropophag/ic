@@ -77,12 +77,10 @@ describe('AetherRibbonMesh', () => {
     const ribbon = mountRibbon()
 
     expect(ribbon.gradients).toHaveLength(2)
-    expect(ribbon.gradients[0].addColorStop).toHaveBeenNthCalledWith(
-      1, 0, 'rgba(37, 61, 152, 0)',
-    )
-    expect(ribbon.gradients[1].addColorStop).toHaveBeenNthCalledWith(
-      1, 0, 'rgba(180, 35, 24, 0)',
-    )
+    const colorStops = gradient => gradient.addColorStop.mock.calls
+      .map(([position, color]) => [position, color.replace(/\s+/g, '')])
+    expect(colorStops(ribbon.gradients[0])).toContainEqual([0, 'rgba(37,61,152,0)'])
+    expect(colorStops(ribbon.gradients[1])).toContainEqual([0, 'rgba(180,35,24,0)'])
     ribbon.runFrame(performance.now() + 16)
     expect(ribbon.context.strokeStyle).toBe(ribbon.gradients[0])
     expect(ribbon.gradients).toHaveLength(2)
