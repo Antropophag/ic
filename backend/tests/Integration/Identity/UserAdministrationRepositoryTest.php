@@ -73,7 +73,7 @@ final class UserAdministrationRepositoryTest extends IntegrationTestCase
             ++$deniedOperations;
         }
         try {
-            $repository->revokeRole($technicalId, $roleId, $admin);
+            $repository->revokeRole($technicalId, $roleId, $admin, 'Проверка защищённой учётной записи');
             self::fail('Expected revokeRole to reject the technical identity.');
         } catch (UserAdministrationTargetNotFound) {
             ++$deniedOperations;
@@ -139,7 +139,7 @@ final class UserAdministrationRepositoryTest extends IntegrationTestCase
         $roleId = (int) $this->scalar("SELECT id FROM {{%roles}} WHERE code = 'security_officer'");
         $repository = new UserAdministrationRepository($this->db());
 
-        $roles = $repository->revokeRole($target, $roleId, $admin);
+        $roles = $repository->revokeRole($target, $roleId, $admin, 'Смена обязанностей');
 
         self::assertSame([], $roles);
         $auditCount = $this->scalar(
@@ -147,6 +147,12 @@ final class UserAdministrationRepositoryTest extends IntegrationTestCase
             [':id' => $target],
         );
         self::assertSame(1, (int) $auditCount);
+        $payload = $this->scalar(
+            "SELECT payload_json FROM {{%audit_events}} WHERE event_type = 'user.role_revoked' AND entity_id = :id",
+            [':id' => $target],
+        );
+        $decodedPayload = is_array($payload) ? $payload : json_decode((string) $payload, true, 512, JSON_THROW_ON_ERROR);
+        self::assertSame('Смена обязанностей', $decodedPayload['reason']);
     }
 
     public function testRevokingAnUnassignedRoleIsNoop(): void
@@ -156,7 +162,7 @@ final class UserAdministrationRepositoryTest extends IntegrationTestCase
         $roleId = (int) $this->scalar("SELECT id FROM {{%roles}} WHERE code = 'administrator'");
         $repository = new UserAdministrationRepository($this->db());
 
-        $roles = $repository->revokeRole($target, $roleId, $admin);
+        $roles = $repository->revokeRole($target, $roleId, $admin, 'Смена обязанностей');
 
         self::assertSame([], $roles);
         $auditCount = $this->scalar(

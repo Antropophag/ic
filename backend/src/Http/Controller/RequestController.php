@@ -12,6 +12,7 @@ use App\Application\Request\AssignExecutorInput;
 use App\Application\Request\AssignExpertInput;
 use App\Application\Request\CancelRequestInput;
 use App\Application\Request\LockVersionInput;
+use App\Application\Request\ReasonedLockVersionInput;
 use App\Application\Request\PublishOpinionInput;
 use App\Application\Request\SecurityDecisionInput;
 use App\Application\Request\SetColorInput;
@@ -239,14 +240,14 @@ final class RequestController extends ApiController
     /** @return array<string, mixed> */
     public function actionDeleteReport(int $id): array
     {
-        $input = new LockVersionInput();
+        $input = new ReasonedLockVersionInput();
         if (($errors = $this->bodyValidationErrors($input)) !== null) {
             return $errors;
         }
 
         $actorId = $this->currentUserId();
         try {
-            return $this->documents()->deleteReport($id, (int) $input->lockVersion, $actorId);
+            return $this->documents()->deleteReport($id, (int) $input->lockVersion, $actorId, (string) $input->reason);
         } catch (RequestNotFound $error) {
             throw new NotFoundHttpException($error->getMessage());
         } catch (ReportDeletionDenied $error) {
@@ -533,14 +534,14 @@ final class RequestController extends ApiController
     /** @return array<string, mixed> */
     public function actionSuspend(int $id): array
     {
-        $input = new LockVersionInput();
+        $input = new ReasonedLockVersionInput();
         if (($errors = $this->bodyValidationErrors($input)) !== null) {
             return $errors;
         }
 
         $actorId = $this->currentUserId();
         try {
-            return $this->repository()->suspendRequest($id, (int) $input->lockVersion, $actorId);
+            return $this->repository()->suspendRequest($id, (int) $input->lockVersion, $actorId, (string) $input->reason);
         } catch (RequestNotFound $error) {
             throw new NotFoundHttpException($error->getMessage());
         } catch (SuspendResumeDenied $error) {
@@ -592,7 +593,7 @@ final class RequestController extends ApiController
                 $id,
                 (int) $input->lockVersion,
                 $actorId,
-                ($input->reason === null || $input->reason === '') ? null : (string) $input->reason,
+                (string) $input->reason,
             );
         } catch (RequestNotFound $error) {
             throw new NotFoundHttpException($error->getMessage());
@@ -619,7 +620,7 @@ final class RequestController extends ApiController
                 $id,
                 (int) $input->lockVersion,
                 $actorId,
-                ($input->reason === null || $input->reason === '') ? null : (string) $input->reason,
+                (string) $input->reason,
             );
         } catch (RequestNotFound $error) {
             throw new NotFoundHttpException($error->getMessage());

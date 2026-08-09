@@ -17,6 +17,7 @@ tags:
   - name: Health
   - name: Authentication
   - name: Requests
+  - name: Administration
 paths:
   /health/live:
     get:
@@ -301,6 +302,161 @@ paths:
         '500':
           $ref: '#/components/responses/ServerError'
 
+  /api/v1/requests/{id}/reject:
+    post:
+      tags: [Requests]
+      summary: Отказать в проведении испытаний с обязательной причиной
+      operationId: rejectRequest
+      security: [{cookieSession: [], csrfToken: []}]
+      parameters:
+        - $ref: '#/components/parameters/RequestId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        $ref: '#/components/requestBodies/ReasonedRequestCommand'
+      responses:
+        '200': {$ref: '#/components/responses/RequestCommandSucceeded'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '415': {$ref: '#/components/responses/UnsupportedMediaType'}
+        '422': {$ref: '#/components/responses/ValidationError'}
+        '500': {$ref: '#/components/responses/ServerError'}
+
+  /api/v1/requests/{id}/withdraw:
+    post:
+      tags: [Requests]
+      summary: Отозвать заявку с обязательной причиной
+      operationId: withdrawRequest
+      security: [{cookieSession: [], csrfToken: []}]
+      parameters:
+        - $ref: '#/components/parameters/RequestId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        $ref: '#/components/requestBodies/ReasonedRequestCommand'
+      responses:
+        '200': {$ref: '#/components/responses/RequestCommandSucceeded'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '415': {$ref: '#/components/responses/UnsupportedMediaType'}
+        '422': {$ref: '#/components/responses/ValidationError'}
+        '500': {$ref: '#/components/responses/ServerError'}
+
+  /api/v1/requests/{id}/suspend:
+    post:
+      tags: [Requests]
+      summary: Приостановить работу с обязательной причиной
+      operationId: suspendRequest
+      security: [{cookieSession: [], csrfToken: []}]
+      parameters:
+        - $ref: '#/components/parameters/RequestId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        $ref: '#/components/requestBodies/ReasonedRequestCommand'
+      responses:
+        '200': {$ref: '#/components/responses/RequestCommandSucceeded'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '415': {$ref: '#/components/responses/UnsupportedMediaType'}
+        '422': {$ref: '#/components/responses/ValidationError'}
+        '500': {$ref: '#/components/responses/ServerError'}
+
+  /api/v1/requests/{id}/report/delete:
+    post:
+      tags: [Requests]
+      summary: Удалить отчёт с обязательной причиной
+      operationId: deleteRequestReport
+      security: [{cookieSession: [], csrfToken: []}]
+      parameters:
+        - $ref: '#/components/parameters/RequestId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        $ref: '#/components/requestBodies/ReasonedRequestCommand'
+      responses:
+        '200': {$ref: '#/components/responses/RequestCommandSucceeded'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '415': {$ref: '#/components/responses/UnsupportedMediaType'}
+        '422': {$ref: '#/components/responses/ValidationError'}
+        '500': {$ref: '#/components/responses/ServerError'}
+
+  /api/v1/requests/{id}/security-decision:
+    post:
+      tags: [Requests]
+      summary: Принять решение контроля СБ
+      description: Причина обязательна для решения `return` и не требуется для `approve`.
+      operationId: decideRequestSecurity
+      security: [{cookieSession: [], csrfToken: []}]
+      parameters:
+        - $ref: '#/components/parameters/RequestId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SecurityDecisionInput'
+      responses:
+        '200': {$ref: '#/components/responses/RequestCommandSucceeded'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '415': {$ref: '#/components/responses/UnsupportedMediaType'}
+        '422': {$ref: '#/components/responses/ValidationError'}
+        '500': {$ref: '#/components/responses/ServerError'}
+
+  /api/v1/admin/users/{userId}/roles/{roleId}/revoke:
+    post:
+      tags: [Administration]
+      summary: Отозвать роль пользователя с обязательной причиной
+      operationId: revokeUserRole
+      security: [{cookieSession: [], csrfToken: []}]
+      parameters:
+        - name: userId
+          in: path
+          required: true
+          schema: {type: integer, minimum: 1}
+        - name: roleId
+          in: path
+          required: true
+          schema: {type: integer, minimum: 1}
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RevokeRoleInput'
+      responses:
+        '200':
+          description: Актуальный список ролей пользователя
+          headers:
+            Idempotency-Replayed: {$ref: '#/components/headers/IdempotencyReplayed'}
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RoleList'
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '415': {$ref: '#/components/responses/UnsupportedMediaType'}
+        '422': {$ref: '#/components/responses/ValidationError'}
+        '500': {$ref: '#/components/responses/ServerError'}
+
 components:
   securitySchemes:
     cookieSession:
@@ -326,6 +482,32 @@ components:
         type: string
         enum: ['true', 'false']
 
+  parameters:
+    RequestId:
+      name: id
+      in: path
+      required: true
+      description: Числовой идентификатор заявки
+      schema: {type: integer, minimum: 1}
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: true
+      description: Уникальный ключ намерения на 24 часа
+      schema:
+        type: string
+        minLength: 16
+        maxLength: 128
+        pattern: '^[A-Za-z0-9][A-Za-z0-9._:-]{15,127}$'
+
+  requestBodies:
+    ReasonedRequestCommand:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ReasonedLockVersionInput'
+
   responses:
     BadRequest:
       description: Некорректное JSON-тело или не прошедший CSRF token
@@ -339,6 +521,12 @@ components:
         application/json:
           schema:
             $ref: '#/components/schemas/HttpError'
+    Forbidden:
+      description: Текущему пользователю действие запрещено
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/HttpError'
     NotFound:
       description: Заявка не найдена
       content:
@@ -347,7 +535,7 @@ components:
             $ref: '#/components/schemas/HttpError'
     Conflict:
       description: |
-        Комментарий запрещён текущим состоянием заявки, ключ уже использован с
+        Действие запрещено текущим состоянием ресурса, ключ уже использован с
         другим телом или одновременный запрос не завершился за 30 секунд
       content:
         application/json:
@@ -373,6 +561,15 @@ components:
         application/json:
           schema:
             $ref: '#/components/schemas/HttpError'
+    RequestCommandSucceeded:
+      description: Команда выполнена или воспроизведена идемпотентно
+      headers:
+        Idempotency-Replayed:
+          $ref: '#/components/headers/IdempotencyReplayed'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/RequestCommandResult'
 
   schemas:
     Liveness:
@@ -606,6 +803,64 @@ components:
           type: string
           minLength: 1
           maxLength: 10000
+      additionalProperties: false
+    RequiredReason:
+      type: string
+      minLength: 1
+      maxLength: 5000
+      pattern: '.*\S.*'
+      description: Непустая после обрезки пробелов причина действия
+    ReasonedLockVersionInput:
+      type: object
+      required: [lockVersion, reason]
+      properties:
+        lockVersion: {type: integer, minimum: 1}
+        reason: {$ref: '#/components/schemas/RequiredReason'}
+      additionalProperties: false
+    SecurityDecisionInput:
+      oneOf:
+        - type: object
+          required: [decision, lockVersion]
+          properties:
+            decision: {type: string, enum: [approve]}
+            lockVersion: {type: integer, minimum: 1}
+            reason: {type: string, maxLength: 5000}
+          additionalProperties: false
+        - type: object
+          required: [decision, lockVersion, reason]
+          properties:
+            decision: {type: string, enum: [return]}
+            lockVersion: {type: integer, minimum: 1}
+            reason: {$ref: '#/components/schemas/RequiredReason'}
+          additionalProperties: false
+    RevokeRoleInput:
+      type: object
+      required: [reason]
+      properties:
+        reason: {$ref: '#/components/schemas/RequiredReason'}
+      additionalProperties: false
+    RequestCommandResult:
+      type: object
+      required: [status, lockVersion]
+      properties:
+        requestId: {type: integer, minimum: 1}
+        status: {$ref: '#/components/schemas/RequestStatus'}
+        lockVersion: {type: integer, minimum: 1}
+      additionalProperties: true
+    RoleList:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          items:
+            type: object
+            required: [id, code, name]
+            properties:
+              id: {type: integer, minimum: 1}
+              code: {type: string}
+              name: {type: string}
+            additionalProperties: false
       additionalProperties: false
     Comment:
       type: object
