@@ -86,7 +86,7 @@ final class AuthController extends ApiController
             return ['errors' => ['login' => ['Учётная запись отключена в портале.']], 'ruleId' => $error->ruleId];
         } catch (LdapConnectionException $error) {
             Yii::error('LDAP connection failed during login: ' . $error->getMessage());
-            throw new HttpException(503, 'Сервер авторизации недоступен. Подключитесь к рабочей сети или VPN и попробуйте ещё раз.');
+            throw new HttpException(503, 'Сервер авторизации недоступен. Обратитесь в техническую поддержку.');
         }
 
         // Смена идентификатора сессии при входе — защита от session fixation.
