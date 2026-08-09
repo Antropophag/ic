@@ -25,12 +25,17 @@ assert(api.info?.title && api.info?.version, 'OpenAPI info.title and info.versio
 assert(api.servers?.some(({ url }) => url === '/'), 'The same-origin server base path is required')
 assert(api.paths?.['/health/live']?.get, 'The public health operation is missing')
 const login = api.paths?.['/api/v1/auth/login']?.post
+const directoryUnavailableMessage = 'Сервер авторизации недоступен. Обратитесь в техническую поддержку.'
 assert(login, 'The login operation is missing')
 assert(login.responses?.['200'] && login.responses?.['503'],
   'The login operation must document success and directory unavailability')
+const directoryUnavailableSchema = api.components?.schemas?.DirectoryUnavailableError
 assert(
-  login.responses['503'].content?.['application/json']?.example?.message
-    === 'Сервер авторизации недоступен. Обратитесь в техническую поддержку.',
+  directoryUnavailableSchema?.properties?.message?.enum?.[0] === directoryUnavailableMessage,
+  'The login directory-unavailable schema must constrain the user-facing message',
+)
+assert(
+  login.responses['503'].content?.['application/json']?.example?.message === directoryUnavailableMessage,
   'The login directory-unavailable response must match the user-facing message',
 )
 assert(api.paths?.['/api/v1/requests']?.get, 'The protected request list operation is missing')
