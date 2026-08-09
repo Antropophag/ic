@@ -75,10 +75,12 @@ assert(api.components?.securitySchemes?.cookieSession?.in === 'cookie', 'Session
 assert(api.components?.securitySchemes?.csrfToken?.name === 'X-CSRF-Token', 'The actual CSRF header is required')
 assert(api.components?.schemas?.UserProfile?.nullable === true, 'The auth/me user profile must allow null')
 const requiredReason = api.components?.schemas?.RequiredReason
-assert(requiredReason?.pattern === '.*\\S.*',
-  'RequiredReason must reject values containing whitespace only')
+assert(typeof requiredReason?.pattern === 'string',
+  'RequiredReason must define a pattern for non-whitespace content')
 const requiredReasonPattern = new RegExp(requiredReason.pattern, 'u')
-assert(!requiredReasonPattern.test('   ') && requiredReasonPattern.test('Причина'),
+assert(!requiredReasonPattern.test('   ')
+  && requiredReasonPattern.test('Причина')
+  && requiredReasonPattern.test('Причина с пробелами'),
   'RequiredReason pattern must match the server-side trimmed-value validation')
 assert(ui.includes("url: '/api/openapi.yaml'"), 'Swagger UI must use the local specification')
 assert(ui.includes('supportedSubmitMethods: []'), 'Swagger Try it out must remain disabled')

@@ -5,6 +5,7 @@ import AppIcon from './AppIcon.vue'
 import AppModal from './AppModal.vue'
 import HelpArticle from './HelpArticle.vue'
 import { createConfirmDialog } from '../confirmDialog'
+import { confirmRequestAction } from '../confirmRequestAction'
 import { triggerBlobDownload } from '../download'
 import { createLatestRequestGuard } from '../latestRequestGuard'
 import { REQUEST_COLORS, avatarRoleClass, canStartNow, canSubmitComment, commentFromApi, documentFromApi, documentKind, fromApi, historyFromApi, initialsFor, newestFirstFeed, withoutStaleActions } from '../registry'
@@ -746,18 +747,21 @@ async function reassignExpert() {
 
 async function deleteReport() {
   if (deleteReportLoading.value) return
-  const confirmed = await confirmDialog.ask('Удалить загруженный отчёт испытаний? Отчёт и заключение по нему станут недоступны.', {
-    confirmLabel: 'Удалить',
-    danger: true,
-    reasonField: { required: true, placeholder: 'Опишите причину удаления отчёта' },
-  })
-  if (!confirmed) return
-  const requestId = selected.value.backendId
+  const context = await confirmRequestAction(
+    () => selected.value,
+    () => confirmDialog.ask('Удалить загруженный отчёт испытаний? Отчёт и заключение по нему станут недоступны.', {
+      confirmLabel: 'Удалить',
+      danger: true,
+      reasonField: { required: true, placeholder: 'Опишите причину удаления отчёта' },
+    }),
+  )
+  if (!context) return
+  const { requestId, lockVersion, confirmed } = context
   const requestToken = deleteReportRequestGuard.begin(requestId)
   deleteReportLoading.value = true
   deleteReportError.value = ''
   try {
-    await requestApi.deleteReport(requestId, selected.value.lockVersion, confirmed.reason)
+    await requestApi.deleteReport(requestId, lockVersion, confirmed.reason)
     if (!deleteReportRequestGuard.isCurrent(requestToken, selected.value?.backendId)) return
     try {
       await refreshSelected(requestId)
@@ -921,21 +925,24 @@ function handleStartClick() {
 async function suspendOrResumeRequest(action) {
   if (suspendResumeLoading.value) return
   const isSuspend = action === 'suspend'
-  const confirmed = await confirmDialog.ask(
-    isSuspend ? 'Приостановить работу по заявке?' : 'Возобновить работу по заявке?',
-    {
-      confirmLabel: isSuspend ? 'Приостановить' : 'Возобновить',
-      reasonField: isSuspend ? { required: true, placeholder: 'Опишите причину приостановки' } : null,
-    },
+  const context = await confirmRequestAction(
+    () => selected.value,
+    () => confirmDialog.ask(
+      isSuspend ? 'Приостановить работу по заявке?' : 'Возобновить работу по заявке?',
+      {
+        confirmLabel: isSuspend ? 'Приостановить' : 'Возобновить',
+        reasonField: isSuspend ? { required: true, placeholder: 'Опишите причину приостановки' } : null,
+      },
+    ),
   )
-  if (!confirmed) return
+  if (!context) return
 
-  const requestId = selected.value.backendId
+  const { requestId, lockVersion, confirmed } = context
   const requestToken = suspendResumeRequestGuard.begin(requestId)
   suspendResumeLoading.value = true
   suspendResumeError.value = ''
   try {
-    await (isSuspend ? requestApi.suspend(requestId, selected.value.lockVersion, confirmed.reason) : requestApi.resume(requestId, selected.value.lockVersion))
+    await (isSuspend ? requestApi.suspend(requestId, lockVersion, confirmed.reason) : requestApi.resume(requestId, lockVersion))
     if (!suspendResumeRequestGuard.isCurrent(requestToken, selected.value?.backendId)) return
     try {
       await refreshSelected(requestId)
