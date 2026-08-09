@@ -24,6 +24,15 @@ assert(api.openapi === '3.0.3', 'The supported OpenAPI version must remain expli
 assert(api.info?.title && api.info?.version, 'OpenAPI info.title and info.version are required')
 assert(api.servers?.some(({ url }) => url === '/'), 'The same-origin server base path is required')
 assert(api.paths?.['/health/live']?.get, 'The public health operation is missing')
+const login = api.paths?.['/api/v1/auth/login']?.post
+assert(login, 'The login operation is missing')
+assert(login.responses?.['200'] && login.responses?.['503'],
+  'The login operation must document success and directory unavailability')
+assert(
+  login.responses['503'].content?.['application/json']?.example?.message
+    === 'Сервер авторизации недоступен. Обратитесь в техническую поддержку.',
+  'The login directory-unavailable response must match the user-facing message',
+)
 assert(api.paths?.['/api/v1/requests']?.get, 'The protected request list operation is missing')
 
 const requestList = api.paths['/api/v1/requests'].get
