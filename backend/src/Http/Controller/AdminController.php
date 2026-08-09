@@ -8,6 +8,7 @@ use App\Application\Admin\ListAuditEventsInput;
 use App\Application\Admin\ListNotificationsInput;
 use App\Application\Identity\AssignRoleInput;
 use App\Application\Identity\CreateUserInput;
+use App\Application\Identity\RevokeRoleInput;
 use App\Domain\Identity\DuplicateAdLogin;
 use App\Domain\Identity\RoleManagementDenied;
 use App\Domain\Identity\RoleManagementPolicy;
@@ -133,13 +134,18 @@ final class AdminController extends ApiController
         return ['items' => $roles];
     }
 
-    /** @return array{items: list<array<string, mixed>>} */
+    /** @return array<string, mixed> */
     public function actionRevokeRole(int $userId, int $roleId): array
     {
         $actorId = $this->authorize();
 
+        $input = new RevokeRoleInput();
+        if (($errors = $this->bodyValidationErrors($input)) !== null) {
+            return $errors;
+        }
+
         try {
-            $roles = $this->repository()->revokeRole($userId, $roleId, $actorId);
+            $roles = $this->repository()->revokeRole($userId, $roleId, $actorId, (string) $input->reason);
         } catch (UserAdministrationTargetNotFound $error) {
             throw new NotFoundHttpException($error->getMessage());
         }

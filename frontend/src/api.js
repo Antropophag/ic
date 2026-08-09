@@ -134,10 +134,10 @@ export const requestApi = {
     body.append('file', file)
     return request(`/api/v1/requests/${requestId}/report`, { method: 'POST', body })
   },
-  deleteReport: (requestId, lockVersion) => request(`/api/v1/requests/${requestId}/report/delete`, {
+  deleteReport: (requestId, lockVersion, reason) => request(`/api/v1/requests/${requestId}/report/delete`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ lockVersion }),
+    body: JSON.stringify({ lockVersion, reason }),
   }),
   downloadDocument: async (versionId) => {
     const response = await fetch(`/api/v1/document-versions/${versionId}/download`, {
@@ -187,10 +187,10 @@ export const requestApi = {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ lockVersion }),
   }),
-  suspend: (requestId, lockVersion) => request(`/api/v1/requests/${requestId}/suspend`, {
+  suspend: (requestId, lockVersion, reason) => request(`/api/v1/requests/${requestId}/suspend`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ lockVersion }),
+    body: JSON.stringify({ lockVersion, reason }),
   }),
   resume: (requestId, lockVersion) => request(`/api/v1/requests/${requestId}/resume`, {
     method: 'POST',
@@ -255,8 +255,10 @@ export const adminApi = {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ roleId }),
   }),
-  revokeRole: (userId, roleId) => request(`/api/v1/admin/users/${userId}/roles/${roleId}/revoke`, {
+  revokeRole: (userId, roleId, reason) => request(`/api/v1/admin/users/${userId}/roles/${roleId}/revoke`, {
     method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ reason }),
   }),
 }
 

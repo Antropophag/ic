@@ -43,6 +43,50 @@ final class RequestControllerTest extends TestCase
         self::assertSame(422, Yii::$app->response->statusCode);
     }
 
+    public function testDeleteReportRequiresReason(): void
+    {
+        $controller = $this->controllerWithBody(['lockVersion' => 1]);
+
+        self::assertSame(
+            ['errors' => ['reason' => ['Reason cannot be blank.']]],
+            $controller->actionDeleteReport(10),
+        );
+        self::assertSame(422, Yii::$app->response->statusCode);
+    }
+
+    public function testSuspendRequiresReason(): void
+    {
+        $controller = $this->controllerWithBody(['lockVersion' => 1]);
+
+        self::assertSame(
+            ['errors' => ['reason' => ['Reason cannot be blank.']]],
+            $controller->actionSuspend(10),
+        );
+        self::assertSame(422, Yii::$app->response->statusCode);
+    }
+
+    public function testRejectRequiresReason(): void
+    {
+        $controller = $this->controllerWithBody(['lockVersion' => 1]);
+
+        self::assertSame(
+            ['errors' => ['reason' => ['Reason cannot be blank.']]],
+            $controller->actionReject(10),
+        );
+        self::assertSame(422, Yii::$app->response->statusCode);
+    }
+
+    public function testWithdrawRequiresReason(): void
+    {
+        $controller = $this->controllerWithBody(['lockVersion' => 1]);
+
+        self::assertSame(
+            ['errors' => ['reason' => ['Reason cannot be blank.']]],
+            $controller->actionWithdraw(10),
+        );
+        self::assertSame(422, Yii::$app->response->statusCode);
+    }
+
     /** @param array<string, mixed> $body */
     private function controllerWithBody(array $body): RequestController
     {

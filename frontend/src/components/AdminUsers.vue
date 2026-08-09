@@ -1,9 +1,11 @@
 <script setup>
 import { onBeforeUnmount, onMounted, reactive, ref } from 'vue'
 import { adminApi } from '../api'
+import { createConfirmDialog } from '../confirmDialog'
 import { createLatestRequestGuard } from '../latestRequestGuard'
 import { avatarRoleClass, initialsFor } from '../registry'
 import AppIcon from './AppIcon.vue'
+import AppModal from './AppModal.vue'
 
 const users = ref([])
 const roles = ref([])
@@ -19,6 +21,7 @@ const requestGuard = createLatestRequestGuard()
 const createUserGuard = createLatestRequestGuard()
 const roleActionTokens = new Map()
 const pendingRoleUsers = reactive(new Set())
+const confirmDialog = createConfirmDialog()
 let mounted = true
 
 async function load() {
@@ -105,6 +108,17 @@ async function assignRole(userId) {
 }
 
 async function revokeRole(userId, roleId) {
+  const user = users.value.find(item => item.id === userId)
+  const role = roles.value.find(item => item.id === roleId)
+  const confirmed = await confirmDialog.ask(
+    `Отозвать роль «${role?.name || ''}» у ${user?.displayName || user?.adLogin || 'пользователя'}?`,
+    {
+      confirmLabel: 'Отозвать роль',
+      danger: true,
+      reasonField: { required: true, placeholder: 'Опишите причину отзыва роли' },
+    },
+  )
+  if (!confirmed) return
   const key = `revoke:${userId}:${roleId}`
   if (pendingRoleUsers.has(userId)) return
   const token = Symbol(key)
@@ -112,7 +126,7 @@ async function revokeRole(userId, roleId) {
   pendingRoleUsers.add(userId)
   roleActionError.value = ''
   try {
-    const result = await adminApi.revokeRole(userId, roleId)
+    const result = await adminApi.revokeRole(userId, roleId, confirmed.reason)
     if (!mounted || roleActionTokens.get(userId) !== token) return
     updateRoles(userId, result.items)
   } catch {
@@ -125,6 +139,7 @@ async function revokeRole(userId, roleId) {
 onMounted(load)
 onBeforeUnmount(() => {
   mounted = false
+  confirmDialog.cancel()
   requestGuard.invalidate()
   createUserGuard.invalidate()
   roleActionTokens.clear()
@@ -150,4 +165,15 @@ onBeforeUnmount(() => {
     </div>
     <div v-else-if="!loading" class="admin-empty"><div class="admin-empty-icon" aria-hidden="true"><AppIcon name="search" :size="20" /></div><h3>Пользователей пока нет</h3><p>Добавьте профиль с помощью формы выше.</p></div>
   </section>
+  <AppModal :open="confirmDialog.state.open" title="Подтвердите действие" title-id="role-revoke-title" description-id="role-revoke-message" size="small" alert @close="confirmDialog.cancel">
+    <p id="role-revoke-message">{{ confirmDialog.state.message }}</p>
+    <label class="confirm-reason-field">
+      <span class="visually-hidden">Причина действия</span>
+      <textarea v-model="confirmDialog.state.reasonValue" :placeholder="confirmDialog.state.reasonField?.placeholder" maxlength="5000"></textarea>
+    </label>
+    <template #footer>
+      <button type="button" class="secondary" @click="confirmDialog.cancel">Отмена</button>
+      <button type="button" class="primary danger" :disabled="!confirmDialog.state.reasonValue.trim()" @click="confirmDialog.accept">{{ confirmDialog.state.confirmLabel }}</button>
+    </template>
+  </AppModal>
 </template>
