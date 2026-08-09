@@ -74,6 +74,12 @@ for (const status of ['400', '401', '404', '409', '415', '422']) {
 assert(api.components?.securitySchemes?.cookieSession?.in === 'cookie', 'Session auth must be cookie-based')
 assert(api.components?.securitySchemes?.csrfToken?.name === 'X-CSRF-Token', 'The actual CSRF header is required')
 assert(api.components?.schemas?.UserProfile?.nullable === true, 'The auth/me user profile must allow null')
+const requiredReason = api.components?.schemas?.RequiredReason
+assert(requiredReason?.pattern === '.*\\S.*',
+  'RequiredReason must reject values containing whitespace only')
+const requiredReasonPattern = new RegExp(requiredReason.pattern, 'u')
+assert(!requiredReasonPattern.test('   ') && requiredReasonPattern.test('Причина'),
+  'RequiredReason pattern must match the server-side trimmed-value validation')
 assert(ui.includes("url: '/api/openapi.yaml'"), 'Swagger UI must use the local specification')
 assert(ui.includes('supportedSubmitMethods: []'), 'Swagger Try it out must remain disabled')
 assert(!/https?:\/\//i.test(ui), 'Swagger UI must not load assets or contracts from the network')
