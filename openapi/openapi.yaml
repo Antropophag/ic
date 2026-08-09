@@ -58,6 +58,67 @@ paths:
         '500':
           $ref: '#/components/responses/ServerError'
 
+  /api/v1/auth/login:
+    post:
+      tags: [Authentication]
+      summary: Войти через LDAP или настроенную break-glass учётную запись
+      description: |
+        Создаёт серверную пользовательскую сессию. Ошибки учётных данных не
+        раскрывают, какой механизм аутентификации обработал логин. Недоступность
+        корпоративного каталога возвращается отдельно от неверных данных.
+      operationId: login
+      security:
+        - csrfToken: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginInput'
+      responses:
+        '200':
+          description: Пользователь аутентифицирован, session cookie создана
+          headers:
+            Set-Cookie:
+              description: Session/CSRF cookies с атрибутами, заданными Yii/PHP
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CurrentUserResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          description: Неверный логин или пароль
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthenticationError'
+        '403':
+          description: Учётная запись отключена в портале
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthenticationError'
+        '415':
+          $ref: '#/components/responses/UnsupportedMediaType'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+        '503':
+          description: Корпоративный каталог недоступен
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DirectoryUnavailableError'
+              example:
+                name: Service Unavailable
+                message: Сервер авторизации недоступен. Обратитесь в техническую поддержку.
+                code: 0
+                status: 503
+        '500':
+          $ref: '#/components/responses/ServerError'
+
   /api/v1/requests:
     get:
       tags: [Requests]
@@ -332,6 +393,51 @@ components:
         user:
           $ref: '#/components/schemas/UserProfile'
       additionalProperties: false
+    LoginInput:
+      type: object
+      required: [login, password]
+      properties:
+        login:
+          type: string
+          minLength: 1
+          maxLength: 128
+        password:
+          type: string
+          minLength: 1
+      additionalProperties: false
+    AuthenticationError:
+      type: object
+      required: [errors, ruleId]
+      properties:
+        errors:
+          type: object
+          required: [login]
+          properties:
+            login:
+              type: array
+              minItems: 1
+              items:
+                type: string
+          additionalProperties: false
+        ruleId:
+          type: string
+      additionalProperties: false
+    DirectoryUnavailableError:
+      type: object
+      required: [name, message, code, status]
+      properties:
+        name:
+          type: string
+          enum: [Service Unavailable]
+        message:
+          type: string
+          enum: [Сервер авторизации недоступен. Обратитесь в техническую поддержку.]
+        code:
+          type: integer
+        status:
+          type: integer
+          enum: [503]
+      additionalProperties: true
     UserProfile:
       type: object
       nullable: true
