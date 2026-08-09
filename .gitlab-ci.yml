@@ -25,7 +25,7 @@ check:
   image: node:22.23.0-bookworm
   services:
     - name: docker:29.0.0-dind
-      command: ["--tls=false"]
+      command: ["dockerd", "--tls=false", "--host=tcp://0.0.0.0:2375"]
   variables:
     DOCKER_HOST: tcp://docker:2375
     DOCKER_TLS_CERTDIR: ""
@@ -39,7 +39,7 @@ coverage:
   image: node:22.23.0-bookworm
   services:
     - name: docker:29.0.0-dind
-      command: ["--tls=false"]
+      command: ["dockerd", "--tls=false", "--host=tcp://0.0.0.0:2375"]
   variables:
     DOCKER_HOST: tcp://docker:2375
     DOCKER_TLS_CERTDIR: ""
@@ -50,7 +50,7 @@ e2e:
   image: mcr.microsoft.com/playwright:v1.62.0-noble
   services:
     - name: docker:29.0.0-dind
-      command: ["--tls=false"]
+      command: ["dockerd", "--tls=false", "--host=tcp://0.0.0.0:2375"]
   variables:
     DOCKER_HOST: tcp://docker:2375
     DOCKER_TLS_CERTDIR: ""
