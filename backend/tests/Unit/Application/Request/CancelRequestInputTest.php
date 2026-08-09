@@ -10,16 +10,16 @@ use PHPUnit\Framework\TestCase;
 
 final class CancelRequestInputTest extends TestCase
 {
-    public function testAcceptsLockVersionWithoutReason(): void
+    public function testRejectsMissingReason(): void
     {
         $input = new CancelRequestInput();
         $input->lockVersion = 1;
 
-        self::assertTrue($input->validate());
-        self::assertNull($input->reason);
+        self::assertFalse($input->validate());
+        self::assertArrayHasKey('reason', $input->errors);
     }
 
-    public function testTrimsOptionalReason(): void
+    public function testTrimsRequiredReason(): void
     {
         $input = new CancelRequestInput();
         $input->reason = '  reason  ';
@@ -27,6 +27,16 @@ final class CancelRequestInputTest extends TestCase
 
         self::assertTrue($input->validate());
         self::assertSame('reason', $input->reason);
+    }
+
+    public function testRejectsBlankReason(): void
+    {
+        $input = new CancelRequestInput();
+        $input->reason = '   ';
+        $input->lockVersion = 1;
+
+        self::assertFalse($input->validate());
+        self::assertArrayHasKey('reason', $input->errors);
     }
 
     public function testRejectsReasonLongerThanLimit(): void

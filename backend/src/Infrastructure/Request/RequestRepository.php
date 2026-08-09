@@ -904,7 +904,7 @@ final class RequestRepository
     }
 
     /** @return array{requestId: int, status: string, lockVersion: int} */
-    public function suspendRequest(int $requestId, int $expectedLockVersion, int $actorId): array
+    public function suspendRequest(int $requestId, int $expectedLockVersion, int $actorId, string $reason): array
     {
         return $this->transitionSuspendResume(
             $requestId,
@@ -912,6 +912,7 @@ final class RequestRepository
             $actorId,
             RequestAction::Suspend,
             'request.suspended',
+            $reason,
         );
     }
 
@@ -934,6 +935,7 @@ final class RequestRepository
         int $actorId,
         RequestAction $action,
         string $eventType,
+        ?string $reason = null,
     ): array {
         $transaction = $this->db->beginTransaction();
         try {
@@ -988,6 +990,7 @@ final class RequestRepository
                 'to_status' => $targetStatus->value,
                 'action' => $action->value,
                 'rule_id' => 'WF-005',
+                'reason' => $reason,
                 'created_at' => $now,
             ])->execute();
             $this->db->createCommand()->insert('{{%audit_events}}', [
@@ -1000,6 +1003,7 @@ final class RequestRepository
                     'from_status' => $currentStatus->value,
                     'to_status' => $targetStatus->value,
                     'lock_version' => $nextLockVersion,
+                    'reason' => $reason,
                 ],
                 'created_at' => $now,
             ])->execute();
@@ -1078,7 +1082,7 @@ final class RequestRepository
     }
 
     /** @return array{requestId: int, status: string, lockVersion: int} */
-    public function rejectRequest(int $requestId, int $expectedLockVersion, int $actorId, ?string $reason = null): array
+    public function rejectRequest(int $requestId, int $expectedLockVersion, int $actorId, string $reason): array
     {
         $transaction = $this->db->beginTransaction();
         try {
@@ -1187,7 +1191,7 @@ final class RequestRepository
     ];
 
     /** @return array{requestId: int, status: string, lockVersion: int} */
-    public function withdrawRequest(int $requestId, int $expectedLockVersion, int $actorId, ?string $reason = null): array
+    public function withdrawRequest(int $requestId, int $expectedLockVersion, int $actorId, string $reason): array
     {
         $transaction = $this->db->beginTransaction();
         try {

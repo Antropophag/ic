@@ -186,27 +186,35 @@ final class UserAdministrationRepository
     }
 
     /** @return list<array<string, mixed>> */
-    public function revokeRole(int $userId, int $roleId, int $actorId): array
+    public function revokeRole(int $userId, int $roleId, int $actorId, string $reason): array
     {
-        $this->assertUserIsManageable($userId);
-        $deleted = $this->db->createCommand()->delete(
-            '{{%user_roles}}',
-            ['user_id' => $userId, 'role_id' => $roleId],
-        )->execute();
+        $transaction = $this->db->beginTransaction();
+        try {
+            $this->assertUserIsManageable($userId);
+            $deleted = $this->db->createCommand()->delete(
+                '{{%user_roles}}',
+                ['user_id' => $userId, 'role_id' => $roleId],
+            )->execute();
 
-        if ($deleted > 0) {
-            $this->db->createCommand()->insert('{{%audit_events}}', [
-                'event_type' => 'user.role_revoked',
-                'entity_type' => 'user',
-                'entity_id' => $userId,
-                'actor_id' => $actorId,
-                'rule_id' => 'AUTH-007',
-                'payload_json' => ['role_id' => $roleId],
-                'created_at' => Clock::now(),
-            ])->execute();
+            if ($deleted > 0) {
+                $this->db->createCommand()->insert('{{%audit_events}}', [
+                    'event_type' => 'user.role_revoked',
+                    'entity_type' => 'user',
+                    'entity_id' => $userId,
+                    'actor_id' => $actorId,
+                    'rule_id' => 'AUTH-007',
+                    'payload_json' => ['role_id' => $roleId, 'reason' => $reason],
+                    'created_at' => Clock::now(),
+                ])->execute();
+            }
+
+            $roles = $this->rolesOf($userId);
+            $transaction->commit();
+            return $roles;
+        } catch (\Throwable $error) {
+            $transaction->rollBack();
+            throw $error;
         }
-
-        return $this->rolesOf($userId);
     }
 
     /** @return list<Role> */

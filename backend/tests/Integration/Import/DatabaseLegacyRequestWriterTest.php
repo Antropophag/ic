@@ -75,7 +75,7 @@ final class DatabaseLegacyRequestWriterTest extends IntegrationTestCase
 
         $transitionCount = $this->scalar(
             "SELECT COUNT(*) FROM {{%request_transitions}} WHERE request_id = :id "
-            . "AND action = 'import' AND rule_id = 'IMP-002' AND from_status IS NULL",
+            . "AND action = 'import' AND rule_id = 'IMP-002' AND from_status IS NULL AND reason IS NULL",
             [':id' => $requestId],
         );
         self::assertSame(1, (int) $transitionCount);
