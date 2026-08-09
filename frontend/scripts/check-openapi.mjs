@@ -30,9 +30,18 @@ assert(login, 'The login operation is missing')
 assert(login.responses?.['200'] && login.responses?.['503'],
   'The login operation must document success and directory unavailability')
 const directoryUnavailableSchema = api.components?.schemas?.DirectoryUnavailableError
+const directoryUnavailableResponseSchema = login.responses['503'].content?.['application/json']?.schema
 assert(
-  directoryUnavailableSchema?.properties?.message?.enum?.[0] === directoryUnavailableMessage,
-  'The login directory-unavailable schema must constrain the user-facing message',
+  directoryUnavailableResponseSchema?.$ref === '#/components/schemas/DirectoryUnavailableError'
+    || JSON.stringify(directoryUnavailableResponseSchema) === JSON.stringify(directoryUnavailableSchema),
+  'The login directory-unavailable response must use DirectoryUnavailableError',
+)
+const directoryUnavailableMessageEnum = directoryUnavailableSchema?.properties?.message?.enum
+assert(
+  Array.isArray(directoryUnavailableMessageEnum)
+    && directoryUnavailableMessageEnum.length === 1
+    && directoryUnavailableMessageEnum[0] === directoryUnavailableMessage,
+  'The login directory-unavailable schema must constrain one user-facing message',
 )
 assert(
   login.responses['503'].content?.['application/json']?.example?.message === directoryUnavailableMessage,
