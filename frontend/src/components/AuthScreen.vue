@@ -36,7 +36,7 @@ async function login() {
 
 <template>
   <div class="auth-screen">
-    <AetherRibbonMesh />
+    <AetherRibbonMesh :error="Boolean(loginError)" />
     <form class="auth-card" @submit.prevent="login">
       <svg class="brand-mark" width="48" height="48" viewBox="0 0 40 40" fill="none" aria-hidden="true">
         <rect x="2" y="2" width="36" height="36" rx="10" fill="currentColor" />

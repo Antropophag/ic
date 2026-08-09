@@ -70,7 +70,7 @@ describe('authentication ribbon background', () => {
       .map((match) => match[1])
       .join(';')
 
-    expect(authScreen).toContain('<AetherRibbonMesh />')
+    expect(authScreen).toContain('<AetherRibbonMesh :error="Boolean(loginError)" />')
     expect(compactStyles).toContain('.auth-screen{position:relative;isolation:isolate;background:#f3f5f9}')
     expect(compactStyles).toContain('.aether-ribbon-mesh{position:absolute;z-index:-1;inset:0;width:100%;height:100%;pointer-events:none}')
     expect(authScreenDeclarations).not.toMatch(/overflow(?:-[xy])?\s*:\s*(?:hidden|clip)/)
@@ -82,5 +82,12 @@ describe('authentication ribbon background', () => {
     expect(ribbonMesh).toContain("document.addEventListener('visibilitychange', syncVisibility)")
     expect(ribbonMesh).toContain('resizeObserver.disconnect()')
     expect(ribbonMesh).toContain('cancelAnimationFrame(frame)')
+  })
+
+  it('animates the ribbon palette from blue to red for every login error', () => {
+    expect(ribbonMesh).toContain('error: { type: Boolean, default: false }')
+    expect(ribbonMesh).toContain('errorProgress += (errorTarget - errorProgress)')
+    expect(ribbonMesh).toContain('const errorColors = [[180, 35, 24]')
+    expect(ribbonMesh).toContain('if (motionQuery.matches) {')
   })
 })

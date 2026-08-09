@@ -1,9 +1,15 @@
 <script setup>
-import { onBeforeUnmount, onMounted, ref } from 'vue'
+import { onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { createAetherPointer } from '../aetherPointer'
 
+const props = defineProps({
+  error: { type: Boolean, default: false },
+})
 const canvas = ref(null)
 let cleanup = () => {}
+let syncErrorState = () => {}
+
+watch(() => props.error, error => syncErrorState(error))
 
 onMounted(() => {
   const element = canvas.value
@@ -17,13 +23,32 @@ onMounted(() => {
     { count: 15, step: 5, offset: 0, frequency: 0.0035, amplitude: 52, speed: 1.05, alpha: 0.58, width: 1.35 },
     { count: 9, step: 7, offset: 46, frequency: 0.0075, amplitude: 28, speed: 0.65, alpha: 0.2, width: 0.8 },
   ]
-  let gradients = []
   let frame = 0
   let originFrame = 0
   let width = 0
   let height = 0
   let previousTime = performance.now()
   let time = 0
+  let errorProgress = props.error ? 1 : 0
+  let errorTarget = errorProgress
+
+  const mix = (from, to, progress) => Math.round(from + (to - from) * progress)
+
+  const createGradient = () => {
+    const gradient = context.createLinearGradient(0, 0, width, 0)
+    const colorStops = [
+      [0, [37, 61, 152, 0]],
+      [0.42, [37, 61, 152, 0.72]],
+      [0.62, [22, 39, 115, 0.68]],
+      [1, [9, 25, 43, 0]],
+    ]
+    const errorColors = [[180, 35, 24], [194, 59, 59], [135, 28, 28], [67, 18, 18]]
+    colorStops.forEach(([position, [red, green, blue, alpha]], index) => {
+      const [errorRed, errorGreen, errorBlue] = errorColors[index]
+      gradient.addColorStop(position, `rgba(${mix(red, errorRed, errorProgress)}, ${mix(green, errorGreen, errorProgress)}, ${mix(blue, errorBlue, errorProgress)}, ${alpha})`)
+    })
+    return gradient
+  }
 
   const resize = () => {
     const bounds = element.getBoundingClientRect()
@@ -34,14 +59,6 @@ onMounted(() => {
     element.width = Math.round(width * dpr)
     element.height = Math.round(height * dpr)
     context.setTransform(dpr, 0, 0, dpr, 0, 0)
-    gradients = layers.map(() => {
-      const gradient = context.createLinearGradient(0, 0, width, 0)
-      gradient.addColorStop(0, 'rgba(37, 61, 152, 0)')
-      gradient.addColorStop(0.42, 'rgba(37, 61, 152, 0.72)')
-      gradient.addColorStop(0.62, 'rgba(22, 39, 115, 0.68)')
-      gradient.addColorStop(1, 'rgba(9, 25, 43, 0)')
-      return gradient
-    })
     if (motionQuery.matches) draw(performance.now())
   }
 
@@ -73,14 +90,16 @@ onMounted(() => {
     const delta = Math.min((now - previousTime) / 1000, 0.1)
     previousTime = now
     if (!motionQuery.matches) time += delta * 0.7
+    errorProgress += (errorTarget - errorProgress) * (1 - Math.exp(-6 * delta))
 
     const interpolation = 1 - Math.exp(-8 * delta)
     pointer.x += (pointer.targetX - pointer.x) * interpolation
     pointer.y += (pointer.targetY - pointer.y) * interpolation
     context.clearRect(0, 0, width, height)
+    const strokeGradient = createGradient()
 
-    for (const [layerIndex, layer] of layers.entries()) {
-      context.strokeStyle = gradients[layerIndex]
+    for (const layer of layers) {
+      context.strokeStyle = strokeGradient
 
       for (let ribbon = 0; ribbon < layer.count; ribbon += 1) {
         const progress = ribbon / layer.count
@@ -120,6 +139,13 @@ onMounted(() => {
     cancelAnimationFrame(frame)
     if (!document.hidden) syncMotion()
   }
+  syncErrorState = error => {
+    errorTarget = error ? 1 : 0
+    if (motionQuery.matches) {
+      errorProgress = errorTarget
+      draw(performance.now())
+    }
+  }
   const resizeObserver = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(resize)
 
   resize()
@@ -136,6 +162,7 @@ onMounted(() => {
   motionQuery.addEventListener('change', syncMotion)
 
   cleanup = () => {
+    syncErrorState = () => {}
     cancelAnimationFrame(frame)
     cancelAnimationFrame(originFrame)
     if (resizeObserver) resizeObserver.disconnect()
