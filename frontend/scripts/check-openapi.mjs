@@ -33,7 +33,7 @@ const directoryUnavailableSchema = api.components?.schemas?.DirectoryUnavailable
 const directoryUnavailableResponseSchema = login.responses['503'].content?.['application/json']?.schema
 assert(
   directoryUnavailableResponseSchema?.$ref === '#/components/schemas/DirectoryUnavailableError'
-    || JSON.stringify(directoryUnavailableResponseSchema) === JSON.stringify(directoryUnavailableSchema),
+    || directoryUnavailableResponseSchema === directoryUnavailableSchema,
   'The login directory-unavailable response must use DirectoryUnavailableError',
 )
 const directoryUnavailableMessageEnum = directoryUnavailableSchema?.properties?.message?.enum
