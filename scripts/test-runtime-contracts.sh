@@ -130,7 +130,7 @@ csrf=$(csrf_token)
 outage_code=$(curl_with_timeout -sS -o /dev/null -w '%{http_code}' -b "$cookie_jar" -c "$cookie_jar" \
   -H "X-CSRF-Token: $csrf" -H 'Content-Type: application/json' \
   -d '{"login":"initiator","password":"TestPassword1!"}' "$base/api/v1/auth/login")
-[ "$outage_code" = 500 ]
+[ "$outage_code" = 503 ]
 $compose start ad
 attempt=0
 until csrf=$(csrf_token) && curl_with_timeout -fsS -b "$cookie_jar" -c "$cookie_jar" \
