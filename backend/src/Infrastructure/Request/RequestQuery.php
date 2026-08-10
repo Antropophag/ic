@@ -10,6 +10,14 @@ use yii\db\Connection;
 
 final class RequestQuery
 {
+    public function isArchived(int $requestId): bool
+    {
+        return (int) $this->db->createCommand(
+            'SELECT is_archived FROM {{%requests}} WHERE id = :id',
+            [':id' => $requestId],
+        )->queryScalar() === 1;
+    }
+
     private const LAST_COMMENT_PREVIEW_LENGTH = 500;
 
     public function __construct(private readonly Connection $db)

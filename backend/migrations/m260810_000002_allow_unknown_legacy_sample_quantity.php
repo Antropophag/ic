@@ -16,7 +16,7 @@ final class m260810_000002_allow_unknown_legacy_sample_quantity extends Migratio
         );
         $this->execute(
             'ALTER TABLE {{%requests}} ADD CONSTRAINT chk_requests_unknown_quantity_is_legacy '
-            . 'CHECK (sample_quantity IS NOT NULL OR (is_archived = 1 AND legacy_id IS NOT NULL))',
+            . "CHECK (sample_quantity IS NOT NULL OR (source = 'bitrix24' AND is_archived = 1 AND legacy_id IS NOT NULL))",
         );
     }
 
@@ -32,6 +32,7 @@ final class m260810_000002_allow_unknown_legacy_sample_quantity extends Migratio
         }
 
         $this->execute(
+            // Production and CI use MariaDB, whose supported syntax is DROP CONSTRAINT.
             'ALTER TABLE {{%requests}} DROP CONSTRAINT chk_requests_unknown_quantity_is_legacy',
         );
         $this->dropColumn('{{%requests}}', 'legacy_sample_quantity_raw');

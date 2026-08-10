@@ -85,6 +85,28 @@ final class LegacyRequestMapperTest extends TestCase
         self::assertSame(1, $request->comments[0]->fileCount);
     }
 
+    public function testDeduplicatesIdenticalLegacyComments(): void
+    {
+        $comment = $this->legacyComment();
+        $request = $this->mapper()->map($this->element([
+            'commentsInitiator' => [$comment, $comment],
+        ]), 114);
+
+        self::assertCount(1, $request->comments);
+    }
+
+    public function testRejectsConflictingDuplicateLegacyComments(): void
+    {
+        $comment = $this->legacyComment();
+        $conflict = $comment;
+        $conflict['text'] = 'Другой текст';
+
+        $this->expectExceptionMessage('Conflicting duplicate legacy comment ID');
+        $this->mapper()->map($this->element([
+            'commentsInitiator' => [$comment, $conflict],
+        ]), 114);
+    }
+
     public function testMapsStrictDateOnlyValueAtUtcMidnight(): void
     {
         $request = $this->mapper()->map($this->element(['dateCreate' => '2025-02-03']), 114);
@@ -393,6 +415,21 @@ final class LegacyRequestMapperTest extends TestCase
                 'creator' => ['ID' => '77'],
                 ...$overrides,
             ], JSON_THROW_ON_ERROR),
+        ];
+    }
+
+    /** @return array<string, mixed> */
+    private function legacyComment(): array
+    {
+        return [
+            'id' => '900',
+            'text' => 'Комментарий',
+            'dateCreated' => '03.02.2025 в 13:20',
+            'creator' => [
+                'ID' => '88', 'EMAIL' => 'petrov@example.test', 'NAME' => 'Пётр',
+                'LAST_NAME' => 'Петров', 'SECOND_NAME' => '', 'ACTIVE' => true, 'WORK_POSITION' => '',
+            ],
+            'files' => [],
         ];
     }
 

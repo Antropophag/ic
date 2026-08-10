@@ -21,6 +21,9 @@ final class BitrixArchiveFileImporter
     public function import(string $workspace, bool $apply = false): array
     {
         $workspace = rtrim($workspace, DIRECTORY_SEPARATOR);
+        if ($apply) {
+            $this->storage->assertWritable();
+        }
         $checkpoint = [];
         foreach ($this->jsonLines($workspace . '/checkpoint.jsonl') as $record) {
             $checkpoint[(string) ($record['sourceFileId'] ?? '')] = $record;
@@ -29,11 +32,16 @@ final class BitrixArchiveFileImporter
         foreach ($this->jsonLines($workspace . '/associations.jsonl') as $association) {
             ++$summary['records'];
             $legacyId = $this->associationId($association);
+            $this->assertMaximumLength($legacyId, 191, 'association legacy ID');
             if ($this->db->createCommand('SELECT 1 FROM {{%request_documents}} WHERE legacy_id = :id', [':id' => $legacyId])->queryScalar() !== false) {
                 ++$summary['skipped'];
                 continue;
             }
             $sourceFileId = (string) ($association['sourceFileId'] ?? '');
+            if (preg_match('/\A[0-9A-Za-z_-]+\z/D', $sourceFileId) !== 1) {
+                throw new RuntimeException("Unsafe source file identifier: {$sourceFileId}.");
+            }
+            $this->assertMaximumLength((string) ($association['originalName'] ?? ''), 255, 'original file name');
             $metadata = $checkpoint[$sourceFileId] ?? null;
             $object = $workspace . '/objects/' . $sourceFileId;
             if (
@@ -48,7 +56,10 @@ final class BitrixArchiveFileImporter
                 continue;
             }
             if ($apply) {
-                $this->write($association, $legacyId, $object, $metadata);
+                if (!$this->write($association, $legacyId, $object, $metadata)) {
+                    ++$summary['skipped'];
+                    continue;
+                }
             }
             ++$summary['created'];
         }
@@ -74,33 +85,43 @@ final class BitrixArchiveFileImporter
     /** @param array<string, mixed> $association
      *  @param array<string, mixed> $metadata
      */
-    private function write(array $association, string $legacyId, string $object, array $metadata): void
+    private function write(array $association, string $legacyId, string $object, array $metadata): bool
     {
-        $requestLegacyId = "bitrix24:{$this->listId}:" . (string) ($association['requestNumber'] ?? '');
-        $request = $this->db->createCommand(
-            'SELECT id, initiator_id, created_at FROM {{%requests}} WHERE legacy_id = :id AND is_archived = 1',
-            [':id' => $requestLegacyId],
-        )->queryOne();
-        if ($request === false) {
-            throw new RuntimeException("Archived request is missing for {$requestLegacyId}.");
-        }
-        $commentId = null;
-        $uploader = (int) $request['initiator_id'];
-        if (($association['documentType'] ?? null) === 'comment') {
-            $commentLegacyId = $this->commentLegacyId($association, $requestLegacyId);
-            $comment = $this->db->createCommand(
-                'SELECT id, author_id FROM {{%request_comments}} WHERE legacy_id = :id',
-                [':id' => $commentLegacyId],
-            )->queryOne();
-            if ($comment === false) {
-                throw new RuntimeException("Imported comment is missing for {$commentLegacyId}.");
-            }
-            $commentId = (int) $comment['id'];
-            $uploader = (int) $comment['author_id'];
-        }
         $transaction = $this->db->beginTransaction();
         $storageKey = null;
         try {
+            $requestLegacyId = "bitrix24:{$this->listId}:" . (string) ($association['requestNumber'] ?? '');
+            $request = $this->db->createCommand(
+                'SELECT id, initiator_id, created_at FROM {{%requests}} '
+                . 'WHERE legacy_id = :id AND is_archived = 1 FOR UPDATE',
+                [':id' => $requestLegacyId],
+            )->queryOne();
+            if ($request === false) {
+                throw new RuntimeException("Archived request is missing for {$requestLegacyId}.");
+            }
+            if (
+                $this->db->createCommand(
+                    'SELECT 1 FROM {{%request_documents}} WHERE legacy_id = :id',
+                    [':id' => $legacyId],
+                )->queryScalar() !== false
+            ) {
+                $transaction->commit();
+                return false;
+            }
+            $commentId = null;
+            $uploader = (int) $request['initiator_id'];
+            if (($association['documentType'] ?? null) === 'comment') {
+                $commentLegacyId = $this->commentLegacyId($association, $requestLegacyId);
+                $comment = $this->db->createCommand(
+                    'SELECT id, author_id FROM {{%request_comments}} WHERE legacy_id = :id AND request_id = :request_id',
+                    [':id' => $commentLegacyId, ':request_id' => (int) $request['id']],
+                )->queryOne();
+                if ($comment === false) {
+                    throw new RuntimeException("Imported comment is missing for {$commentLegacyId}.");
+                }
+                $commentId = (int) $comment['id'];
+                $uploader = (int) $comment['author_id'];
+            }
             $storageKey = $this->storage->store($object);
             $this->db->createCommand()->insert('{{%request_documents}}', [
                 'legacy_id' => $legacyId, 'title_discriminator' => $legacyId,
@@ -117,6 +138,7 @@ final class BitrixArchiveFileImporter
                 'uploaded_by' => $uploader, 'created_at' => (string) $request['created_at'],
             ])->execute();
             $transaction->commit();
+            return true;
         } catch (\Throwable $error) {
             $transaction->rollBack();
             if ($storageKey !== null) {
@@ -140,6 +162,13 @@ final class BitrixArchiveFileImporter
         return implode(':', ['bitrix24', 'file', (string) ($association['requestNumber'] ?? ''),
             (string) ($association['documentType'] ?? ''), (string) ($association['sourceCommentId'] ?? '-'),
             (string) ($association['sourceFileId'] ?? '')]);
+    }
+
+    private function assertMaximumLength(string $value, int $maximum, string $field): void
+    {
+        if (mb_strlen($value) > $maximum) {
+            throw new RuntimeException("Legacy {$field} exceeds {$maximum} characters.");
+        }
     }
 
     /** @return iterable<array<string, mixed>> */

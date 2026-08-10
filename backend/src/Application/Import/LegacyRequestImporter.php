@@ -31,7 +31,7 @@ final class LegacyRequestImporter
                 $request = $this->mapper->map($element, $listId);
             } catch (Throwable $error) {
                 ++$summary['invalid'];
-                $reason = $error->getMessage();
+                $reason = preg_replace('/\b\d+\b/u', '{id}', $error->getMessage()) ?? $error->getMessage();
                 $summary['invalidReasons'][$reason] = ($summary['invalidReasons'][$reason] ?? 0) + 1;
                 continue;
             }

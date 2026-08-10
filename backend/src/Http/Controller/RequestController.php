@@ -72,27 +72,22 @@ final class RequestController extends ApiController
             return false;
         }
 
+        return true;
+    }
+
+    public function bindActionParams($action, $params): array
+    {
+        $arguments = parent::bindActionParams($action, $params);
         $mutations = [
             'add-comment', 'upload-document', 'upload-report', 'delete-report', 'change-department',
             'set-color', 'assign-executor', 'claim-expert', 'reassign-expert', 'publish-opinion',
             'security-decision', 'start', 'suspend', 'resume', 'reject', 'withdraw',
         ];
-        if (in_array($action->id, $mutations, true)) {
-            $requestId = filter_var(Yii::$app->request->get('id'), FILTER_VALIDATE_INT);
-            if ($requestId !== false && $this->isArchived((int) $requestId)) {
-                throw new ConflictHttpException('Архивная заявка доступна только для просмотра.');
-            }
+        $requestId = $this->actionParams['id'] ?? null;
+        if (in_array($action->id, $mutations, true) && is_int($requestId) && $this->query()->isArchived($requestId)) {
+            throw new ConflictHttpException('Архивная заявка доступна только для просмотра.');
         }
-
-        return true;
-    }
-
-    private function isArchived(int $requestId): bool
-    {
-        return (int) Yii::$app->db->createCommand(
-            'SELECT is_archived FROM {{%requests}} WHERE id = :id',
-            [':id' => $requestId],
-        )->queryScalar() === 1;
+        return $arguments;
     }
 
     /** @return array<string, mixed> */

@@ -294,8 +294,15 @@ COMPOSE_ENV_FILE=.env.dev docker compose -p ic-dev --env-file .env.dev \
 и затем импорт бинарников:
 
 ```bash
-php yii bitrix/import-files --workspace=/export/files-YYYYMMDD
-php yii bitrix/import-files --workspace=/export/files-YYYYMMDD --apply=1
+COMPOSE_ENV_FILE=.env.prod docker compose -p ic-prod --env-file .env.prod \
+  -f compose.yaml run --rm --no-deps -v /srv/ic-migration/bitrix24:/export \
+  backend php yii bitrix/import-files --workspace=/export/files-YYYYMMDD \
+  --snapshot=/export/snapshot-YYYYMMDDTHHMMSSZ
+
+COMPOSE_ENV_FILE=.env.prod docker compose -p ic-prod --env-file .env.prod \
+  -f compose.yaml run --rm --no-deps -v /srv/ic-migration/bitrix24:/export \
+  backend php yii bitrix/import-files --workspace=/export/files-YYYYMMDD \
+  --snapshot=/export/snapshot-YYYYMMDDTHHMMSSZ --apply=1
 ```
 
 Каждая связь получает отдельный идемпотентный ключ; общий исходный бинарник может

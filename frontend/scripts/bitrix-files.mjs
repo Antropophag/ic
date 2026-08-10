@@ -108,7 +108,14 @@ export async function readSnapshotFiles(snapshotDirectory) {
       ['initiator', details.commentsInitiator ?? []],
       ['ic', details.commentsIC ?? []],
     ]) {
+      if (!Array.isArray(comments)) throw new Error(`comments${commentType} must be an array`)
       for (const [commentIndex, comment] of comments.entries()) {
+        if (!comment || typeof comment !== 'object' || Array.isArray(comment)) {
+          throw new Error(`comments${commentType}[${commentIndex}] must be an object`)
+        }
+        if (comment.files !== undefined && !Array.isArray(comment.files)) {
+          throw new Error(`comments${commentType}[${commentIndex}].files must be an array`)
+        }
         const commentId = comment.id === undefined || comment.id === null || comment.id === ''
           ? `index-${commentIndex}`
           : scalarString(comment.id, 'comment.id')

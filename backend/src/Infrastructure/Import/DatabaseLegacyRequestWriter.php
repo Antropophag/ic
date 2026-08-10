@@ -60,11 +60,13 @@ final class DatabaseLegacyRequestWriter implements LegacyRequestWriter
                 'updated_at' => $createdAt,
             ])->execute();
             $requestId = (int) $this->db->getLastInsertID();
+            $commentAuthorIds = [];
             foreach ($request->comments as $comment) {
+                $commentAuthorIds[$comment->creator->bitrixId] ??= $this->userId($comment->creator, null);
                 $this->db->createCommand()->upsert('{{%request_comments}}', [
                     'legacy_id' => $comment->legacyId,
                     'request_id' => $requestId,
-                    'author_id' => $this->userId($comment->creator, null),
+                    'author_id' => $commentAuthorIds[$comment->creator->bitrixId],
                     'body' => $comment->body,
                     'created_at' => $comment->createdAt->format('Y-m-d H:i:s.u'),
                 ], false)->execute();

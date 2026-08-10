@@ -45,8 +45,9 @@ final class LegacyRequestMapper
 
         $creator = is_array($details['creator'] ?? null) ? $details['creator'] : [];
         $department = is_array($details['department'] ?? null) ? $details['department'] : [];
-        $legacySampleQuantityRaw = is_string($details['countTestItems'] ?? null)
-            ? $details['countTestItems']
+        $rawQuantity = $details['countTestItems'] ?? null;
+        $legacySampleQuantityRaw = is_string($rawQuantity) || is_int($rawQuantity)
+            ? (string) $rawQuantity
             : null;
         $quantity = $this->quantity($legacySampleQuantityRaw)
             ?? ($this->sampleQuantityOverrides[$legacyId] ?? null);
@@ -110,6 +111,8 @@ final class LegacyRequestMapper
     private function comments(array $details, string $requestLegacyId): array
     {
         $result = [];
+        /** @var array<string, LegacyCommentData> $legacyComments */
+        $legacyComments = [];
         $userMapper = new LegacyUserMapper();
         foreach (['commentsInitiator', 'commentsIC'] as $group) {
             $comments = $details[$group] ?? [];
@@ -131,13 +134,21 @@ final class LegacyRequestMapper
                 $creatorId = $this->requiredString($creator, 'ID');
                 $legacyId = "{$requestLegacyId}:comment:{$group}:{$id}";
                 $this->assertMaximumLength($legacyId, 191, 'comment.legacyId');
-                $result[] = new LegacyCommentData(
+                $mappedComment = new LegacyCommentData(
                     $legacyId,
                     is_string($comment['text'] ?? null) ? trim($comment['text']) : '',
                     $this->commentDate($this->requiredString($comment, 'dateCreated')),
                     $userMapper->map($creator, $creatorId),
                     $this->count($comment, 'files'),
                 );
+                if (isset($legacyComments[$legacyId])) {
+                    if ($legacyComments[$legacyId] == $mappedComment) {
+                        continue;
+                    }
+                    throw new UnexpectedValueException("Conflicting duplicate legacy comment ID: {$legacyId}.");
+                }
+                $legacyComments[$legacyId] = $mappedComment;
+                $result[] = $mappedComment;
             }
         }
         return $result;

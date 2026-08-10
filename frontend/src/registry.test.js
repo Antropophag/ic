@@ -312,6 +312,8 @@ it('maps the latest document version without exposing its storage key', () => {
     mimeType: 'application/pdf', sizeBytes: 1500, sha256: 'a'.repeat(64),
     uploadedBy: 'Иван Иванов', createdAt: '2026-07-28T10:00:00Z',
   })).toMatchObject({ id: 4, documentType: 'attachment', versionId: 12, version: 2, size: '2 КБ' })
+  expect(documentFromApi({ id: '5', commentId: '42' }).commentId).toBe(42)
+  expect(documentFromApi({ id: '6' }).commentId).toBeNull()
 })
 
 it('maps mime types to a document kind for the file icon', () => {

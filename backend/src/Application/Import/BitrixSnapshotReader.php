@@ -35,11 +35,18 @@ final class BitrixSnapshotReader
         }
         $mapper = new LegacyUserMapper();
         $users = [];
-        foreach ($rawUsers as $rawUser) {
+        foreach ($rawUsers as $index => $rawUser) {
             if (!is_array($rawUser)) {
                 throw new RuntimeException('Snapshot user must be an object.');
             }
-            $id = (string) ($rawUser['ID'] ?? '');
+            $rawId = $rawUser['ID'] ?? null;
+            if ((!is_string($rawId) && !is_int($rawId)) || preg_match('/^\d+$/D', (string) $rawId) !== 1) {
+                throw new RuntimeException("Snapshot user ID at index {$index} must be a non-empty integer.");
+            }
+            $id = (string) $rawId;
+            if (isset($users[$id])) {
+                throw new RuntimeException("Duplicate snapshot user ID {$id} at index {$index}.");
+            }
             $users[$id] = $mapper->map($rawUser, $id);
         }
         $listId = filter_var($manifest['source']['listId'] ?? null, FILTER_VALIDATE_INT);
