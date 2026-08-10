@@ -83,10 +83,11 @@ erDiagram
         varchar(128) department_external_id
         varchar(32) department_source
         varchar(32) status
-        varchar(500) product_name
+        varchar(2000) product_name
         varchar(500) manufacturer
         varchar(500) supplier
-        int(11)_unsigned sample_quantity
+        int(11)_unsigned sample_quantity "NULL только для архивного импорта"
+        text legacy_sample_quantity_raw "NULL, исходное значение Б24"
         text test_method
         int(11)_unsigned revision
         int(11)_unsigned lock_version

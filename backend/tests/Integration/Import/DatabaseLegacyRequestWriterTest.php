@@ -9,6 +9,8 @@ use App\Application\Import\LegacyRequestData;
 use App\Application\Import\LegacyUserData;
 use App\Domain\Request\RequestStatus;
 use App\Infrastructure\Import\DatabaseLegacyRequestWriter;
+use App\Infrastructure\Import\LegacyProductNameSchemaGuard;
+use App\Infrastructure\Request\RequestQuery;
 use DateTimeImmutable;
 use Tests\Integration\IntegrationTestCase;
 
@@ -20,14 +22,18 @@ final class DatabaseLegacyRequestWriterTest extends IntegrationTestCase
         string $department = 'Лаборатория',
         ?string $departmentExternalId = null,
         bool $creatorActive = true,
+        ?int $sampleQuantity = 2,
+        ?string $legacySampleQuantityRaw = '2',
+        string $productName = 'Тестовое изделие',
     ): LegacyRequestData {
         return new LegacyRequestData(
             $legacyId,
             (int) substr($legacyId, (int) strrpos($legacyId, ':') + 1),
-            'Тестовое изделие',
+            $productName,
             'Тестовый завод',
             'Тестовый поставщик',
-            2,
+            $sampleQuantity,
+            $legacySampleQuantityRaw,
             'Метод испытаний',
             RequestStatus::Completed,
             new DateTimeImmutable('2024-01-01T12:00:00+00:00'),
@@ -106,6 +112,75 @@ final class DatabaseLegacyRequestWriterTest extends IntegrationTestCase
             [':legacy_id' => $legacyId],
         );
         self::assertSame(1, (int) $count);
+    }
+
+    public function testImportedRequestStoresUnknownQuantityAndOriginalValue(): void
+    {
+        $writer = new DatabaseLegacyRequestWriter($this->db());
+        $writer->write($this->request(
+            'bitrix24:114:512',
+            sampleQuantity: null,
+            legacySampleQuantityRaw: 'По 1 шт. каждого вида',
+        ));
+
+        $stored = $this->db()->createCommand(
+            'SELECT sample_quantity, legacy_sample_quantity_raw FROM {{%requests}} WHERE legacy_id = :id',
+            [':id' => 'bitrix24:114:512'],
+        )->queryOne();
+
+        self::assertNotFalse($stored);
+        self::assertNull($stored['sample_quantity']);
+        self::assertSame('По 1 шт. каждого вида', $stored['legacy_sample_quantity_raw']);
+
+        $requestId = (int) $this->scalar(
+            'SELECT id FROM {{%requests}} WHERE legacy_id = :id',
+            [':id' => 'bitrix24:114:512'],
+        );
+        $actorId = (int) $this->scalar("SELECT id FROM {{%users}} WHERE ad_login = 'user1595'");
+        $apiItem = (new RequestQuery($this->db()))->findDetails($requestId, $actorId)['item'];
+        self::assertNull($apiItem['sample_quantity']);
+        self::assertSame('По 1 шт. каждого вида', $apiItem['legacy_sample_quantity_raw']);
+    }
+
+    public function testImportedLongProductNameIsStoredAndReturnedInFull(): void
+    {
+        $name = str_repeat('Длинное наименование ', 86) . 'конец';
+        self::assertGreaterThan(1728, mb_strlen($name));
+        self::assertLessThanOrEqual(2000, mb_strlen($name));
+
+        $writer = new DatabaseLegacyRequestWriter($this->db());
+        $writer->write($this->request('bitrix24:114:513', productName: $name));
+
+        $requestId = (int) $this->scalar(
+            'SELECT id FROM {{%requests}} WHERE legacy_id = :id',
+            [':id' => 'bitrix24:114:513'],
+        );
+        $actorId = (int) $this->scalar("SELECT id FROM {{%users}} WHERE ad_login = 'user1595'");
+        $apiItem = (new RequestQuery($this->db()))->findDetails($requestId, $actorId)['item'];
+
+        self::assertSame($name, $apiItem['product_name']);
+    }
+
+    public function testProductNameMigrationRefusesLossyRollback(): void
+    {
+        $name = str_repeat('Я', 501);
+        (new DatabaseLegacyRequestWriter($this->db()))->write(
+            $this->request('bitrix24:114:514', productName: $name),
+        );
+        try {
+            LegacyProductNameSchemaGuard::assertCanRestoreLimit($this->db(), 500);
+            self::fail('Lossy rollback was not rejected.');
+        } catch (\RuntimeException $error) {
+            self::assertSame(
+                'Cannot restore VARCHAR(500) product_name while imported requests contain longer values.',
+                $error->getMessage(),
+            );
+        }
+
+        self::assertSame($name, $this->scalar(
+            'SELECT product_name FROM {{%requests}} WHERE legacy_id = :id',
+            [':id' => 'bitrix24:114:514'],
+        ));
     }
 
     public function testImportDoesNotMoveNumberSequenceBackwards(): void

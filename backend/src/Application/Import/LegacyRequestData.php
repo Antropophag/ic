@@ -15,7 +15,8 @@ final readonly class LegacyRequestData
         public string $productName,
         public string $manufacturer,
         public string $supplier,
-        public int $sampleQuantity,
+        public ?int $sampleQuantity,
+        public ?string $legacySampleQuantityRaw,
         public string $testMethod,
         public RequestStatus $status,
         public DateTimeImmutable $createdAt,
@@ -24,6 +25,8 @@ final readonly class LegacyRequestData
         public int $supportingDocumentCount,
         public int $reportCount,
         public ?string $departmentExternalId = null,
+        /** @var list<LegacyCommentData> */
+        public array $comments = [],
     ) {
     }
 }

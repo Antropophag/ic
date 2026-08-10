@@ -104,6 +104,36 @@ export async function readSnapshotFiles(snapshotDirectory) {
         })
       }
     }
+    for (const [commentType, comments] of [
+      ['initiator', details.commentsInitiator ?? []],
+      ['ic', details.commentsIC ?? []],
+    ]) {
+      if (!Array.isArray(comments)) throw new Error(`comments${commentType} must be an array`)
+      for (const [commentIndex, comment] of comments.entries()) {
+        if (!comment || typeof comment !== 'object' || Array.isArray(comment)) {
+          throw new Error(`comments${commentType}[${commentIndex}] must be an object`)
+        }
+        if (comment.files !== undefined && !Array.isArray(comment.files)) {
+          throw new Error(`comments${commentType}[${commentIndex}].files must be an array`)
+        }
+        const commentId = comment.id === undefined || comment.id === null || comment.id === ''
+          ? `index-${commentIndex}`
+          : scalarString(comment.id, 'comment.id')
+        for (const file of comment.files ?? []) {
+          const sourceFileId = scalarString(file.id, 'file.id')
+          if (!/^[0-9A-Za-z_-]+$/.test(sourceFileId)) throw new Error(`Unsafe source file identifier: ${sourceFileId}`)
+          associations.push({
+            requestNumber: scalarString(element.ID, 'element.ID'),
+            documentType: 'comment',
+            commentType,
+            sourceCommentId: commentId,
+            sourceFileId,
+            originalName: scalarString(file.name, 'file.name'),
+            detailUrl: scalarString(file.detailURL, 'file.detailURL'),
+          })
+        }
+      }
+    }
   }
   if (associations.length === 0) {
     throw new Error('Snapshot contains no file associations.')
@@ -323,12 +353,11 @@ export async function verifyWorkspace(snapshotDirectory, workspace) {
 }
 
 function associationRecords(source) {
-  return source.associations.map((association) => ({
-    requestNumber: association.requestNumber,
-    documentType: association.documentType,
-    sourceFileId: association.sourceFileId,
-    originalName: association.originalName,
-  }))
+  return source.associations.map((association) => {
+    const record = { ...association }
+    delete record.detailUrl
+    return record
+  })
 }
 
 async function downloadWithBrowser(page, url, destination, maxBytes, timeout) {
