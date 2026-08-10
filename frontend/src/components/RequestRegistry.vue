@@ -29,6 +29,8 @@ import {
   fromApi,
   initialsFor,
 } from "../registry";
+import { shlzStatusToneClass } from "../shlzRegistry";
+import { useUiMode } from "../uiMode";
 
 const props = defineProps({
   active: { type: Boolean, default: true },
@@ -38,6 +40,8 @@ const props = defineProps({
 const emit = defineEmits([
   "select-request",
 ]);
+const uiMode = useUiMode();
+const isShlzMode = uiMode.shlz;
 const ATTENTION_ICONS = Object.freeze({
   assign_executor: "user",
   start_or_resume_work: "play",
@@ -477,7 +481,7 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <section v-show="active" class="page screen-panel" :class="{ 'screen-panel--active': active }">
+  <section v-show="active" class="page screen-panel" :class="{ 'screen-panel--active': active, 'registry-shlz-demo shlz-scope': isShlzMode }">
     <section
       v-if="dashboardLoading || dashboardError || attentionCategories.length"
       class="attention-dashboard"
@@ -485,7 +489,7 @@ onBeforeUnmount(() => {
       :aria-busy="dashboardLoading"
     >
       <div class="attention-heading">
-        <div><h2 id="attention-title">Требуют вашего внимания <button ref="dashboardHelpTrigger" type="button" class="request-action-help attention-help" aria-label="Инструкция по заявкам, требующим внимания" title="Инструкция по заявкам, требующим внимания" @click="openDashboardHelp"><AppIcon name="help" :size="16" /></button></h2><p>Ваши текущие задачи по заявкам</p></div>
+        <div><h2 id="attention-title">Требуют вашего внимания <button ref="dashboardHelpTrigger" type="button" :class="isShlzMode ? 'attention-help shlz-button shlz-button--text shlz-button--sm shlz-button--icon' : 'request-action-help attention-help'" aria-label="Инструкция по заявкам, требующим внимания" title="Инструкция по заявкам, требующим внимания" @click="openDashboardHelp"><AppIcon name="help" :size="isShlzMode ? 24 : 16" :shlz="isShlzMode" /></button></h2><p>Ваши текущие задачи по заявкам</p></div>
         <button v-if="dashboardError" type="button" class="attention-retry" @click="loadDashboard">Повторить</button>
       </div>
       <p v-if="dashboardError" class="attention-error" role="alert">{{ dashboardError }}</p>
@@ -512,32 +516,46 @@ onBeforeUnmount(() => {
       <span>{{ registryError }}</span>
       <button type="button" @click="loadRequests">Повторить</button>
     </div>
-    <div class="card registry" :aria-busy="registryLoading">
+    <div class="card" :class="isShlzMode ? 'registry-surface shlz-surface' : 'registry'" :aria-busy="registryLoading">
       <span class="visually-hidden" aria-live="polite">{{ registryLoading ? "Загрузка реестра" : "Реестр загружен" }}</span>
-      <div class="registry-head">
-        <div class="tabs" role="tablist" aria-label="Представление реестра">
+      <div :class="isShlzMode ? 'registry-header' : 'registry-head'">
+        <div :class="isShlzMode ? 'registry-tabs shlz-tabs__list' : 'tabs'" role="tablist" aria-label="Представление реестра">
           <button
             v-for="tab in tabs"
             :key="tab.id"
-            :class="{ active: activeTab === tab.id }"
+            :class="isShlzMode ? 'shlz-tabs__tab' : { active: activeTab === tab.id }"
             role="tab"
             :aria-selected="activeTab === tab.id"
             @click="activeTab = tab.id"
           >
-            <span class="tab-label">{{ tab.label }}</span><span class="tab-count">{{ tab.count }}</span>
+            <span class="tab-label">{{ tab.label }}</span><span class="tab-count" :class="{ 'shlz-badge shlz-badge--neutral': isShlzMode }">{{ tab.count }}</span>
           </button>
         </div>
-        <button class="primary tabs-cta" @click="showCreate = true">
-          <AppIcon name="plus" :size="16" />
+        <button class="primary tabs-cta" :class="{ 'shlz-button shlz-button--primary': isShlzMode }" @click="showCreate = true">
+          <AppIcon name="plus" :size="16" :shlz="isShlzMode" />
           Новая заявка
         </button>
       </div>
-      <div class="toolbar">
-        <label class="search">
+      <div :class="isShlzMode ? 'registry-toolbar' : 'toolbar'">
+        <label v-if="isShlzMode" class="registry-search shlz-field shlz-field--medium">
+          <span class="shlz-field__control">
+            <AppIcon class="shlz-field__icon" name="search" :size="20" :shlz="true" />
+            <input v-model="query" class="shlz-input" type="search" placeholder="Поиск по заявкам" aria-label="Поиск по заявкам" />
+          </span>
+        </label>
+        <label v-else class="search">
           <AppIcon name="search" :size="17" />
           <input v-model="query" type="search" placeholder="Поиск по заявкам" aria-label="Поиск по заявкам" />
         </label>
-        <label class="status-filter">
+        <label v-if="isShlzMode" class="registry-status-filter shlz-field shlz-field--select shlz-field--medium">
+          <span class="shlz-field__control">
+            <select v-model="statusFilter" class="shlz-select" aria-label="Статус заявки">
+              <option value="">Все статусы</option>
+              <option v-for="status in REQUEST_STATUS_OPTIONS" :key="status.value" :value="status.value">{{ status.label }}</option>
+            </select>
+          </span>
+        </label>
+        <label v-else class="status-filter">
           <span class="visually-hidden">Статус заявки</span>
           <select v-model="statusFilter">
             <option value="">Все статусы</option>
@@ -550,19 +568,24 @@ onBeforeUnmount(() => {
             </option>
           </select>
         </label>
-        <button v-if="query || statusFilter" type="button" class="toolbar-clear" @click="clearRegistryFilters">
+        <button v-if="query || statusFilter" type="button" class="toolbar-clear" :class="{ 'shlz-button shlz-button--sm': isShlzMode }" @click="clearRegistryFilters">
           Сбросить
         </button>
-        <button type="button" class="registry-notifications" :aria-label="newNotifications.length ? 'Есть новые события в заявках' : 'Новых событий в заявках нет'" @click="openNotifications">
-          <AppIcon name="bell" :size="18" /><span v-if="newNotifications.length" class="notification-dot" aria-hidden="true"></span>
+        <button type="button" :class="isShlzMode ? 'registry-notification-action shlz-button shlz-button--sm shlz-button--icon' : 'registry-notifications'" :aria-label="newNotifications.length ? 'Есть новые события в заявках' : 'Новых событий в заявках нет'" @click="openNotifications">
+          <AppIcon name="bell" :size="18" :shlz="isShlzMode" /><span v-if="newNotifications.length" :class="isShlzMode ? 'registry-notification-dot shlz-badge-dot' : 'notification-dot'" aria-hidden="true"></span>
         </button>
       </div>
-      <div class="table-wrap">
-        <table>
-          <thead>
+      <div class="table-wrap" :class="{ 'shlz-table-wrap': isShlzMode }">
+        <table :class="{ 'shlz-table': isShlzMode }">
+          <colgroup v-if="isShlzMode">
+            <col class="registry-col-number" /><col class="registry-col-date" /><col class="registry-col-object" />
+            <col class="registry-col-initiator" /><col class="registry-col-executor" /><col class="registry-col-status" />
+            <col class="registry-col-security" /><col class="registry-col-comment" /><col class="registry-col-report" />
+          </colgroup>
+          <thead :class="{ 'shlz-table__head': isShlzMode }">
             <tr>
               <th
-                class="sortable"
+                class="sortable" :class="{ 'shlz-table__cell': isShlzMode }"
                 scope="col"
                 :aria-sort="sortDirection === 'desc' ? 'descending' : 'ascending'"
               >
@@ -571,48 +594,48 @@ onBeforeUnmount(() => {
                   class="sort-control"
                   @click="sortDirection = sortDirection === 'desc' ? 'asc' : 'desc'"
                 >
-                  <span>№ заявки</span><svg viewBox="0 0 16 16" aria-hidden="true" :class="{ ascending: sortDirection === 'asc' }"><path d="m5 6 3 3 3-3" /></svg>
+                  <span>№ заявки</span><AppIcon v-if="isShlzMode" :name="sortDirection === 'asc' ? 'sort-asc' : 'sort-desc'" :size="14" :shlz="true" /><svg v-else viewBox="0 0 16 16" aria-hidden="true" :class="{ ascending: sortDirection === 'asc' }"><path d="m5 6 3 3 3-3" /></svg>
                 </button>
               </th>
-              <th>Дата</th>
-              <th>Объект испытаний</th>
-              <th>Инициатор</th>
-              <th>Исполнитель</th>
-              <th>Статус</th>
-              <th>СБ</th>
-              <th class="registry-feed-cell">Комментарий</th>
-              <th class="registry-indicator-cell">Отчёт</th>
+              <th :class="{ 'shlz-table__cell': isShlzMode }">Дата</th>
+              <th :class="{ 'shlz-table__cell': isShlzMode }">Объект испытаний</th>
+              <th :class="{ 'shlz-table__cell': isShlzMode }">Инициатор</th>
+              <th :class="{ 'shlz-table__cell': isShlzMode }">Исполнитель</th>
+              <th :class="{ 'shlz-table__cell': isShlzMode }">Статус</th>
+              <th :class="{ 'shlz-table__cell shlz-table__cell--icon': isShlzMode }">СБ</th>
+              <th class="registry-feed-cell" :class="{ 'shlz-table__cell': isShlzMode }">Комментарий</th>
+              <th class="registry-indicator-cell" :class="{ 'shlz-table__cell shlz-table__cell--icon': isShlzMode }">Отчёт</th>
             </tr>
           </thead>
           <tbody v-if="registryLoading && !paged.items.length" aria-label="Загрузка заявок">
             <tr v-for="index in 7" :key="`skeleton-${index}`" class="registry-skeleton" aria-hidden="true">
-              <td v-for="cell in 9" :key="cell"><span /></td>
+              <td v-for="cell in 9" :key="cell" :class="{ 'shlz-table__cell': isShlzMode }"><span /></td>
             </tr>
           </tbody>
           <tbody v-else>
             <tr
               v-for="item in paged.items"
               :key="item.id"
-              :class="`row-color-${item.color}`"
+              :class="isShlzMode ? ['shlz-table__row', `registry-row-color-${item.color}`] : `row-color-${item.color}`"
               tabindex="0"
               @click="emit('select-request', item)"
               @keydown.enter="emit('select-request', item)"
               @keydown.space.prevent="emit('select-request', item)"
             >
-              <td class="number">{{ item.id }}</td>
-              <td>{{ item.date }}</td>
-              <td class="registry-object-cell">
+              <td class="number" :class="{ 'shlz-table__cell': isShlzMode }">{{ item.id }}</td>
+              <td :class="{ 'shlz-table__cell': isShlzMode }">{{ item.date }}</td>
+              <td class="registry-object-cell" :class="{ 'shlz-table__cell': isShlzMode }">
                 <span class="registry-object-tooltip app-tooltip" :data-tooltip="item.product" tabindex="0"><span class="registry-object">{{ item.product }}</span></span><small :title="item.supplier">{{ item.supplier }}</small>
               </td>
-              <td>
+              <td :class="{ 'shlz-table__cell': isShlzMode }">
                 {{ item.initiator
                 }}<small :title="item.department">{{ item.department }}</small>
               </td>
-              <td>{{ item.executor }}</td>
-              <td>
-                <span class="badge" :class="item.tone">{{ item.compactStatus }}</span>
+              <td :class="{ 'shlz-table__cell': isShlzMode }">{{ item.executor }}</td>
+              <td :class="{ 'shlz-table__cell': isShlzMode }">
+                <span :class="isShlzMode ? ['shlz-status', shlzStatusToneClass(item.tone)] : ['badge', item.tone]">{{ item.compactStatus }}</span>
               </td>
-              <td class="registry-indicator-cell">
+              <td class="registry-indicator-cell" :class="{ 'shlz-table__cell shlz-table__cell--icon': isShlzMode }">
                 <span
                   class="security-mark-icon"
                   :class="item.securityMarkDisplay?.className"
@@ -632,7 +655,7 @@ onBeforeUnmount(() => {
                 >
                   <path :d="item.securityMarkDisplay?.path" /></svg></span>
               </td>
-              <td class="registry-feed-cell">
+              <td class="registry-feed-cell" :class="{ 'shlz-table__cell': isShlzMode }">
                 <button
                   v-if="item.lastCommentAuthor"
                   type="button"
@@ -649,7 +672,7 @@ onBeforeUnmount(() => {
                   <span class="registry-comment-copy">{{ item.lastCommentBody }}</span>
                 </button><span v-else class="muted-dash">—</span>
               </td>
-              <td class="registry-indicator-cell">
+              <td class="registry-indicator-cell" :class="{ 'shlz-table__cell shlz-table__cell--icon': isShlzMode }">
                 <button
                   v-if="
                     item.hasReport &&
@@ -657,19 +680,22 @@ onBeforeUnmount(() => {
                       item.reportOriginalName
                   "
                   type="button"
-                  class="registry-report-icon"
+                  :class="isShlzMode ? 'registry-report-action shlz-button shlz-button--sm shlz-button--icon' : 'registry-report-icon'"
                   title="Скачать отчёт испытаний"
                   aria-label="Скачать отчёт испытаний"
                   @click.stop="downloadReport(item)"
                 >
-                  <AppIcon name="file" :size="16" />
-                  <span class="registry-report-download" aria-hidden="true"><AppIcon name="download" :size="9" /></span>
+                  <AppIcon v-if="isShlzMode" name="download" :size="16" :shlz="true" />
+                  <template v-else><AppIcon name="file" :size="16" /><span class="registry-report-download" aria-hidden="true"><AppIcon name="download" :size="9" /></span></template>
                 </button><span v-else class="muted-dash">—</span>
               </td>
             </tr>
           </tbody>
         </table>
-        <div v-if="!registryLoading && !registryError && !paged.total" class="empty">
+        <div v-if="isShlzMode && !registryLoading && !registryError && !paged.total" class="registry-empty">
+          <div class="shlz-empty-state shlz-empty-state--simple"><span class="shlz-empty-state__visual" aria-hidden="true"><AppIcon name="search" :size="32" :shlz="true" /></span><h3 class="shlz-empty-state__title">Ничего не найдено</h3></div>
+        </div>
+        <div v-else-if="!registryLoading && !registryError && !paged.total" class="empty">
           <div class="empty-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6" /><path d="m15 15 4 4" /></svg></div>
           <h3>Ничего не найдено</h3>
           <p>{{ query || statusFilter ? "Измените запрос или сбросьте фильтры." : "В этом представлении пока нет заявок." }}</p>

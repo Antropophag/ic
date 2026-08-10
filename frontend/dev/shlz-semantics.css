@@ -1,0 +1,15 @@
+/* IC product tones that do not have a public SHLZ status class. */
+[data-ui="shlz"] {
+  --ic-shlz-danger: var(--shlz-semantic-color-status-danger);
+  --ic-shlz-warning: var(--shlz-source-color-aditional-brown);
+}
+
+[data-ui="shlz"] .shlz-status--ic-danger {
+  color: var(--ic-shlz-danger);
+  background: var(--shlz-source-color-aditional-red-100-15);
+}
+
+[data-ui="shlz"] .shlz-status--ic-warning {
+  color: var(--ic-shlz-warning);
+  background: var(--shlz-source-color-aditional-brown-15);
+}
