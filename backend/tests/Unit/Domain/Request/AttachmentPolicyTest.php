@@ -12,6 +12,11 @@ use PHPUnit\Framework\TestCase;
 
 final class AttachmentPolicyTest extends TestCase
 {
+    public function testDefinesTwoHundredMebibyteLimit(): void
+    {
+        self::assertSame(200 * 1024 * 1024, AttachmentPolicy::MAX_SIZE_BYTES);
+    }
+
     #[DataProvider('openStatuses')]
     public function testAllowsUploadWhileDiscussionIsOpen(RequestStatus $status): void
     {
@@ -38,7 +43,11 @@ final class AttachmentPolicyTest extends TestCase
 
     public function testAcceptsMatchingExtensionMimeAndSize(): void
     {
-        (new AttachmentPolicy())->assertValidFile('Протокол.pdf', 'application/pdf', 1024);
+        (new AttachmentPolicy())->assertValidFile(
+            'Протокол.pdf',
+            'application/pdf',
+            AttachmentPolicy::MAX_SIZE_BYTES,
+        );
         self::addToAssertionCount(1);
     }
 

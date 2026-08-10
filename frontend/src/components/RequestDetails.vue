@@ -345,9 +345,9 @@ async function uploadReport(event) {
   } catch (error) {
     if (!reportRequestGuard.isCurrent(requestToken, selected.value?.backendId)) return
     reportError.value = error.status === 413
-      ? 'Файл слишком большой. Максимальный размер отчёта — 10 МБ.'
+      ? 'Файл слишком большой. Максимальный размер отчёта — 200 МБ.'
       : error.status === 422
-        ? 'Отчёт должен быть PDF-файлом размером до 10 МБ.'
+        ? 'Отчёт должен быть PDF-файлом размером до 200 МБ.'
         : error.status === 403
           ? 'Загрузить отчёт может назначенный исполнитель или руководитель.'
           : 'Не удалось загрузить отчёт.'
@@ -373,9 +373,9 @@ async function uploadDocument(event) {
   } catch (error) {
     if (!documentRequestGuard.isCurrent(requestToken, selected.value?.backendId)) return
     documentError.value = error.status === 413
-      ? 'Файл слишком большой. Максимальный размер — 10 МБ.'
+      ? 'Файл слишком большой. Максимальный размер — 200 МБ.'
       : error.status === 422
-        ? 'Разрешены PDF, PNG, JPG, DOCX и XLSX размером до 10 МБ.'
+        ? 'Разрешены PDF, PNG, JPG, DOCX и XLSX размером до 200 МБ.'
         : error.status === 409
           ? 'На текущем этапе загружать документы нельзя.'
           : 'Не удалось загрузить документ.'
