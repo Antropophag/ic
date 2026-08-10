@@ -9,6 +9,25 @@ describe('application bootstrap', () => {
     await expect(bootstrapApplication({ startApplication })).resolves.toBe('mounted')
 
     expect(startApplication).toHaveBeenCalledOnce()
+    expect(startApplication).toHaveBeenCalledWith(null)
+  })
+
+  it('loads an experimental UI before mounting the application', async () => {
+    const experimentalUi = { name: 'shlz' }
+    const calls = []
+
+    await bootstrapApplication({
+      loadExperimentalUi: async () => {
+        calls.push('ui')
+        return experimentalUi
+      },
+      startApplication: ui => {
+        calls.push('app')
+        expect(ui).toBe(experimentalUi)
+      },
+    })
+
+    expect(calls).toEqual(['ui', 'app'])
   })
 
   it('installs development identity before the first application request', async () => {

@@ -1,6 +1,7 @@
-export async function bootstrapApplication({ loadDevelopmentTools, startApplication }) {
+export async function bootstrapApplication({ loadDevelopmentTools, loadExperimentalUi, startApplication }) {
   if (loadDevelopmentTools) await loadDevelopmentTools()
-  return startApplication()
+  const experimentalUi = loadExperimentalUi ? await loadExperimentalUi() : null
+  return startApplication(experimentalUi)
 }
 
 export function developmentToolsLoader(browserWindow, document, importTools) {

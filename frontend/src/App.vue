@@ -10,6 +10,8 @@ import { createLatestRequestGuard } from './latestRequestGuard'
 import { requestIdFromLocation, setRequestInUrl } from './requestDeepLink'
 import { avatarRoleClass, initialsFor } from './registry'
 
+defineProps({ shlzMode: { type: Boolean, default: false } })
+
 const authLoading = ref(true)
 const authUser = ref(null)
 const selectedRequestId = ref(requestIdFromLocation())
@@ -195,7 +197,7 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <div class="shell">
+  <div class="shell" :data-ui="shlzMode ? 'shlz' : undefined">
     <div v-if="authLoading" class="auth-loading">Загрузка…</div>
     <AuthScreen v-else-if="!authUser" @authenticated="authUser = $event" />
     <template v-else>
