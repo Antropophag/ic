@@ -172,6 +172,19 @@
   place-items: center;
 }
 
+.registry-shlz-demo .registry-pagination {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--shlz-source-spacing-16);
+  padding: var(--shlz-source-spacing-8) var(--shlz-source-spacing-16);
+  border-block-start: 1px solid var(--shlz-semantic-color-border-default);
+}
+
+.registry-shlz-demo .registry-pagination__summary {
+  margin-inline-start: auto;
+}
+
 @media (max-width: 900px) {
   .registry-shlz-demo .registry-header {
     align-items: flex-start;
@@ -187,5 +200,10 @@
 
   .registry-shlz-demo .registry-toolbar {
     flex-wrap: wrap;
+  }
+
+  .registry-shlz-demo .registry-pagination__summary {
+    inline-size: 100%;
+    margin-inline-start: 0;
   }
 }

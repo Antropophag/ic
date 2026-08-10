@@ -5,6 +5,11 @@ import '@shlz/styles'
 import iconSpriteUrl from '@shlz/icons/sprite.svg?url'
 import './shlz-demo.css'
 
+export async function enhanceRegistryTooltips(scope) {
+  const { enhanceTooltips } = await import('@shlz/behaviors/tooltip')
+  return enhanceTooltips(scope)
+}
+
 export function createUiMode() {
-  return { iconSpriteUrl }
+  return { iconSpriteUrl, enhanceRegistryTooltips }
 }

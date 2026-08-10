@@ -30,7 +30,9 @@ import {
   initialsFor,
 } from "../registry";
 import { shlzStatusToneClass } from "../shlzRegistry";
+import { createShlzTooltipLifecycle } from "../shlzTooltipLifecycle";
 import { useUiMode } from "../uiMode";
+import RegistryPagination from "./RegistryPagination.vue";
 
 const props = defineProps({
   active: { type: Boolean, default: true },
@@ -42,6 +44,13 @@ const emit = defineEmits([
 ]);
 const uiMode = useUiMode();
 const isShlzMode = uiMode.shlz;
+const registryRoot = ref(null);
+const tooltipLifecycle = createShlzTooltipLifecycle({
+  enabled: () => isShlzMode,
+  root: () => registryRoot.value,
+  enhance: () => uiMode.enhanceRegistryTooltips,
+  afterRender: nextTick,
+});
 const ATTENTION_ICONS = Object.freeze({
   assign_executor: "user",
   start_or_resume_work: "play",
@@ -328,6 +337,7 @@ watch([activeTab, activeAttention, statusFilter, sortDirection], reloadFirstPage
 watch(query, () => {
   registryLoadLifecycle.scheduleReload(reloadFirstPage);
 });
+watch([requests, registryLoading], tooltipLifecycle.refresh, { flush: "post" });
 watch(draft, draftForm.scheduleSave, { deep: true, flush: "sync" });
 watch(draftFiles, draftForm.scheduleFilesSave, { flush: "sync" });
 watch(
@@ -477,11 +487,12 @@ onBeforeUnmount(() => {
   window.removeEventListener("pagehide", draftForm.flushSave);
   draftForm.dispose();
   registryLoadLifecycle.deactivate();
+  tooltipLifecycle.destroy();
 });
 </script>
 
 <template>
-  <section v-show="active" class="page screen-panel" :class="{ 'screen-panel--active': active, 'registry-shlz-demo shlz-scope': isShlzMode }">
+  <section v-show="active" ref="registryRoot" class="page screen-panel" :class="{ 'screen-panel--active': active, 'registry-shlz-demo shlz-scope': isShlzMode }">
     <section
       v-if="dashboardLoading || dashboardError || attentionCategories.length"
       class="attention-dashboard"
@@ -625,7 +636,21 @@ onBeforeUnmount(() => {
               <td class="number" :class="{ 'shlz-table__cell': isShlzMode }">{{ item.id }}</td>
               <td :class="{ 'shlz-table__cell': isShlzMode }">{{ item.date }}</td>
               <td class="registry-object-cell" :class="{ 'shlz-table__cell': isShlzMode }">
-                <span class="registry-object-tooltip app-tooltip" :data-tooltip="item.product" tabindex="0"><span class="registry-object">{{ item.product }}</span></span><small :title="item.supplier">{{ item.supplier }}</small>
+                <span
+                  class="registry-object-tooltip"
+                  :class="{ 'app-tooltip': !isShlzMode }"
+                  :data-tooltip="!isShlzMode ? item.product : undefined"
+                  :data-shlz-tooltip-trigger="isShlzMode ? `registry-object-${item.backendId}` : undefined"
+                  data-shlz-tooltip-placement="top"
+                  tabindex="0"
+                ><span class="registry-object">{{ item.product }}</span></span><span
+                  v-if="isShlzMode"
+                  :id="`registry-object-${item.backendId}`"
+                  class="shlz-tooltip"
+                  role="tooltip"
+                  data-shlz-tooltip
+                  hidden
+                >{{ item.product }}<span class="shlz-tooltip__arrow" aria-hidden="true"></span></span><small :title="item.supplier">{{ item.supplier }}</small>
               </td>
               <td :class="{ 'shlz-table__cell': isShlzMode }">
                 {{ item.initiator
@@ -702,7 +727,18 @@ onBeforeUnmount(() => {
           <button v-if="query || statusFilter" type="button" class="secondary empty-action" @click="clearRegistryFilters">Сбросить фильтры</button>
         </div>
       </div>
-      <footer v-if="paged.total" class="pagination">
+      <RegistryPagination
+        v-if="isShlzMode && paged.total"
+        :page="paged.page"
+        :page-count="paged.pageCount"
+        :page-numbers="pageNumbers"
+        :page-size="pageSize"
+        :page-sizes="PAGE_SIZE_OPTIONS"
+        :total="paged.total"
+        @page="goToPage"
+        @page-size="selectPageSize"
+      />
+      <footer v-else-if="paged.total" class="pagination">
         <span v-if="paged.pageCount > 1" class="pagination-pages"><button
           :disabled="paged.page <= 1" aria-label="Предыдущая страница" @click="goToPage(paged.page - 1)"
         ><AppIcon name="chevron-left" :size="16" /></button><button
