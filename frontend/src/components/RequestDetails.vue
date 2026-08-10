@@ -9,9 +9,13 @@ import { confirmRequestAction } from '../confirmRequestAction'
 import { triggerBlobDownload } from '../download'
 import { createLatestRequestGuard } from '../latestRequestGuard'
 import { REQUEST_COLORS, avatarRoleClass, canStartNow, canSubmitComment, commentFromApi, documentFromApi, documentKind, fromApi, historyFromApi, initialsFor, newestFirstFeed, withoutStaleActions } from '../registry'
+import { shlzStatusToneClass } from '../shlzRegistry'
+import { useUiMode } from '../uiMode'
 
 const props = defineProps({ requestId: { type: Number, required: true }, currentInitials: { type: String, default: '' }, initialWarning: { type: String, default: '' } })
 const emit = defineEmits(['loaded', 'unavailable', 'updated', 'close'])
+const uiMode = useUiMode()
+const isShlzMode = uiMode.shlz
 const selected = ref(null)
 const actionError = ref('')
 const actionLoading = ref(false)
@@ -1015,10 +1019,10 @@ onBeforeUnmount(() => {
 })
 </script>
 <template>
-  <section class="page request-page screen-panel" :class="{ 'screen-panel--active': hasRequestContent }">
+  <section class="page request-page screen-panel" :class="{ 'screen-panel--active': hasRequestContent, 'request-details-shlz-demo shlz-scope': isShlzMode }">
     <p v-if="detailLoading" class="detail-state">Загрузка данных заявки…</p>
     <p v-if="detailError" class="detail-state error">{{ detailError }}</p>
-    <article v-if="hasRequestContent && !detailError" class="card object-band request-entity-head">
+    <article v-if="hasRequestContent && !detailError" class="card object-band request-entity-head" :class="{ 'shlz-surface': isShlzMode }">
       <button type="button" class="request-corner-back" :class="`request-corner-${selected.color}`" aria-label="Вернуться к списку заявок" @click="emit('close')">
         <svg class="request-corner-shape" viewBox="0 0 52 52" aria-hidden="true">
           <path d="M15 1h31.5c4 0 5.9 4.8 3.1 7.6l-41 41C5.8 52.4 1 50.5 1 46.5V15C1 7.3 7.3 1 15 1Z" />
@@ -1027,7 +1031,7 @@ onBeforeUnmount(() => {
         <AppIcon class="request-corner-arrow" name="arrow-left" :size="16" />
       </button>
       <div class="object-status-row">
-        <span class="badge" :class="selected.tone">{{ selected.status }}</span>
+        <span :class="isShlzMode ? ['shlz-status', shlzStatusToneClass(selected.tone)] : ['badge', selected.tone]">{{ selected.status }}</span>
         <details v-if="selected.canSetColor" ref="colorMenu" class="request-color-control">
           <summary><span class="request-color-dot" :class="selected.color" aria-hidden="true"></span>Цвет</summary>
           <div class="request-color-menu" role="group" aria-label="Цвет заявки в реестре">
@@ -1051,7 +1055,7 @@ onBeforeUnmount(() => {
     </article>
     <div v-if="hasRequestContent && !detailError" class="request-grid">
       <div class="stack">
-        <section class="card process-section request-process" aria-labelledby="process-title">
+        <section class="card process-section request-process" :class="{ 'shlz-surface': isShlzMode }" aria-labelledby="process-title">
           <div class="section-title"><h3 id="process-title">Процесс заявки</h3><button ref="auditTrigger" type="button" class="request-text-button" @click="openAuditDrawer">Подробная история</button></div>
           <ol class="process-timeline">
             <li v-for="step in processSteps" :key="step.label" :class="step.state"><span class="process-node" aria-hidden="true"></span><b>{{ step.label }}</b><small>{{ step.state === 'current' ? 'Текущий этап' : step.state === 'done' ? 'Завершено' : 'Ожидается' }}</small></li>
@@ -1061,44 +1065,44 @@ onBeforeUnmount(() => {
               <div class="request-action-context"><span>Следующий шаг</span><b>{{ actionPrompt }}</b></div>
               <div class="request-action-bar">
                 <div v-if="selected.canAssignExecutor" class="request-action-group">
-                  <select v-model="executorChoice" :disabled="actionLoading" aria-label="Исполнитель ИЦ"><option value="">Выберите исполнителя</option><option v-for="executor in executors" :key="executor.id" :value="executor.id">{{ executor.displayName }}</option></select>
-                  <button type="button" :class="selected.executorId ? 'secondary' : 'primary'" :disabled="actionLoading || !executorChoice" @click="assignExecutor">{{ actionLoading ? 'Сохранение…' : (selected.executorId ? 'Переназначить' : 'Назначить') }}</button>
+                  <select v-model="executorChoice" :class="{ 'shlz-select shlz-input--sm': isShlzMode }" :disabled="actionLoading" aria-label="Исполнитель ИЦ"><option value="">Выберите исполнителя</option><option v-for="executor in executors" :key="executor.id" :value="executor.id">{{ executor.displayName }}</option></select>
+                  <button type="button" :class="isShlzMode ? ['shlz-button', 'shlz-button--sm', { 'shlz-button--primary': !selected.executorId }] : (selected.executorId ? 'secondary' : 'primary')" :disabled="actionLoading || !executorChoice" @click="assignExecutor">{{ actionLoading ? 'Сохранение…' : (selected.executorId ? 'Переназначить' : 'Назначить') }}</button>
                 </div>
                 <div v-if="selected.canStart || selected.canSuspend || selected.canResume" class="request-action-group">
-                  <button v-if="selected.canStart" type="button" :class="[selected.executorId ? 'primary' : 'secondary', { 'is-disabled': !canStartAction }]" :aria-disabled="!canStartAction" :disabled="actionLoading" @click="handleStartClick">{{ actionLoading ? 'Запуск…' : 'Начать работу' }}</button>
-                  <button v-else-if="selected.canSuspend" type="button" class="secondary" :disabled="suspendResumeLoading" @click="suspendOrResumeRequest('suspend')">{{ suspendResumeLoading ? 'Сохранение…' : 'Приостановить' }}</button>
-                  <button v-else-if="selected.canResume" type="button" class="primary" :disabled="suspendResumeLoading" @click="suspendOrResumeRequest('resume')">{{ suspendResumeLoading ? 'Сохранение…' : 'Возобновить' }}</button>
+                  <button v-if="selected.canStart" type="button" :class="isShlzMode ? ['shlz-button', 'shlz-button--sm', { 'shlz-button--primary': selected.executorId, 'is-disabled': !canStartAction }] : [selected.executorId ? 'primary' : 'secondary', { 'is-disabled': !canStartAction }]" :aria-disabled="!canStartAction" :disabled="actionLoading" @click="handleStartClick">{{ actionLoading ? 'Запуск…' : 'Начать работу' }}</button>
+                  <button v-else-if="selected.canSuspend" type="button" :class="isShlzMode ? 'shlz-button shlz-button--sm' : 'secondary'" :disabled="suspendResumeLoading" @click="suspendOrResumeRequest('suspend')">{{ suspendResumeLoading ? 'Сохранение…' : 'Приостановить' }}</button>
+                  <button v-else-if="selected.canResume" type="button" :class="isShlzMode ? 'shlz-button shlz-button--primary shlz-button--sm' : 'primary'" :disabled="suspendResumeLoading" @click="suspendOrResumeRequest('resume')">{{ suspendResumeLoading ? 'Сохранение…' : 'Возобновить' }}</button>
                 </div>
                 <div v-if="selected.canUploadReport || selected.canDeleteReport" class="request-action-group">
-                  <label v-if="selected.canUploadReport" class="primary upload-button">{{ reportLoading ? 'Загрузка…' : 'Загрузить отчёт' }}<input type="file" :disabled="reportLoading" accept=".pdf,application/pdf" @change="uploadReport" /></label>
-                  <button v-if="selected.canDeleteReport" type="button" class="secondary danger" :disabled="deleteReportLoading" @click="deleteReport">{{ deleteReportLoading ? 'Удаление…' : 'Удалить отчёт' }}</button>
+                  <label v-if="selected.canUploadReport" :class="isShlzMode ? 'shlz-button shlz-button--primary shlz-button--sm request-shlz-file-button' : 'primary upload-button'">{{ reportLoading ? 'Загрузка…' : 'Загрузить отчёт' }}<input type="file" :disabled="reportLoading" accept=".pdf,application/pdf" @change="uploadReport" /></label>
+                  <button v-if="selected.canDeleteReport" type="button" :class="isShlzMode ? 'shlz-button shlz-button--sm request-shlz-danger-button' : 'secondary danger'" :disabled="deleteReportLoading" @click="deleteReport">{{ deleteReportLoading ? 'Удаление…' : 'Удалить отчёт' }}</button>
                 </div>
-                <div v-if="selected.canClaimExpert" class="request-action-group"><button type="button" class="primary" :disabled="claimLoading" @click="claimExpert">{{ claimLoading ? 'Сохранение…' : 'Взять в работу' }}</button></div>
+                <div v-if="selected.canClaimExpert" class="request-action-group"><button type="button" :class="isShlzMode ? 'shlz-button shlz-button--primary shlz-button--sm' : 'primary'" :disabled="claimLoading" @click="claimExpert">{{ claimLoading ? 'Сохранение…' : 'Взять в работу' }}</button></div>
                 <div v-if="selected.canPublishOpinion || selected.canReassignExpert" class="request-action-group">
-                  <button v-if="selected.canPublishOpinion" type="button" class="primary" :disabled="opinionLoading" @click="openOpinionModal">Написать заключение</button>
-                  <select v-if="selected.canReassignExpert" v-model="expertChoice" :disabled="reassignLoading" aria-label="Новый эксперт"><option value="">Выберите эксперта</option><option v-for="expert in experts.filter(candidate => candidate.id !== selected.expertId)" :key="expert.id" :value="expert.id">{{ expert.displayName }}</option></select>
-                  <button v-if="selected.canReassignExpert" type="button" class="secondary" :disabled="reassignLoading || !expertChoice" @click="reassignExpert">{{ reassignLoading ? 'Передача…' : 'Передать' }}</button>
+                  <button v-if="selected.canPublishOpinion" type="button" :class="isShlzMode ? 'shlz-button shlz-button--primary shlz-button--sm' : 'primary'" :disabled="opinionLoading" @click="openOpinionModal">Написать заключение</button>
+                  <select v-if="selected.canReassignExpert" v-model="expertChoice" :class="{ 'shlz-select shlz-input--sm': isShlzMode }" :disabled="reassignLoading" aria-label="Новый эксперт"><option value="">Выберите эксперта</option><option v-for="expert in experts.filter(candidate => candidate.id !== selected.expertId)" :key="expert.id" :value="expert.id">{{ expert.displayName }}</option></select>
+                  <button v-if="selected.canReassignExpert" type="button" :class="isShlzMode ? 'shlz-button shlz-button--sm' : 'secondary'" :disabled="reassignLoading || !expertChoice" @click="reassignExpert">{{ reassignLoading ? 'Передача…' : 'Передать' }}</button>
                 </div>
                 <div v-if="selected.canSecurityDecide" class="request-action-group">
-                  <button type="button" class="primary" :disabled="securityLoading" @click="decideSecurity('approve')">{{ securityLoading ? 'Сохранение…' : 'Согласовать' }}</button>
-                  <button type="button" class="secondary" :disabled="securityLoading" @click="decideSecurity('return')">Вернуть в работу</button>
+                  <button type="button" :class="isShlzMode ? 'shlz-button shlz-button--primary shlz-button--sm' : 'primary'" :disabled="securityLoading" @click="decideSecurity('approve')">{{ securityLoading ? 'Сохранение…' : 'Согласовать' }}</button>
+                  <button type="button" :class="isShlzMode ? 'shlz-button shlz-button--sm' : 'secondary'" :disabled="securityLoading" @click="decideSecurity('return')">Вернуть в работу</button>
                 </div>
                 <div v-if="selected.canReject || selected.canWithdraw" class="request-action-group request-action-group--danger">
-                  <button v-if="selected.canReject" type="button" class="request-danger-action" :disabled="rejectLoading" @click="rejectRequest">{{ rejectLoading ? 'Сохранение…' : 'Отказать' }}</button>
-                  <button v-if="selected.canWithdraw" type="button" class="request-danger-action" :disabled="withdrawLoading" @click="withdrawRequest">{{ withdrawLoading ? 'Сохранение…' : 'Отозвать' }}</button>
+                  <button v-if="selected.canReject" type="button" :class="isShlzMode ? 'shlz-button shlz-button--sm request-shlz-danger-button' : 'request-danger-action'" :disabled="rejectLoading" @click="rejectRequest">{{ rejectLoading ? 'Сохранение…' : 'Отказать' }}</button>
+                  <button v-if="selected.canWithdraw" type="button" :class="isShlzMode ? 'shlz-button shlz-button--sm request-shlz-danger-button' : 'request-danger-action'" :disabled="withdrawLoading" @click="withdrawRequest">{{ withdrawLoading ? 'Сохранение…' : 'Отозвать' }}</button>
                 </div>
               </div>
-              <button v-if="actionHelp" ref="helpTrigger" type="button" class="request-action-help" :aria-label="actionHelp.label" :title="actionHelp.label" @click="openHelpDrawer"><AppIcon name="help" :size="16" /></button>
+              <button v-if="actionHelp" ref="helpTrigger" type="button" :class="isShlzMode ? 'request-help-action shlz-button shlz-button--text shlz-button--sm shlz-button--icon' : 'request-action-help'" :aria-label="actionHelp.label" :title="actionHelp.label" @click="openHelpDrawer"><AppIcon name="help" :size="isShlzMode ? 24 : 16" :shlz="isShlzMode" /></button>
             </div>
             <p v-if="selected.canStart && startHintRevealed && startHint" class="hero-hint">{{ startHint }}</p>
             <p v-for="(error, index) in [suspendResumeError, rejectError, reportError, deleteReportError, claimError, reassignError, securityError, withdrawError, actionError].filter(Boolean)" :key="`${index}-${error}`" class="action-error">{{ error }}</p>
           </div>
         </section>
 
-        <article id="request-comments" class="card feed request-comments">
+        <article id="request-comments" class="card feed request-comments" :class="{ 'shlz-surface': isShlzMode }">
           <div class="section-title"><h3>Лента</h3></div>
           <p v-if="commentError" class="action-error">{{ commentError }}</p>
-          <form v-if="canSubmitComment(selected, detailLoading)" class="comment-input request-comment-composer" @submit.prevent="addComment"><span class="avatar small">{{ currentInitials }}</span><input v-model="commentDraft" :disabled="commentLoading" maxlength="10000" placeholder="Оставьте комментарий…" /><button :disabled="commentLoading" aria-label="Отправить комментарий"><AppIcon name="send" :size="16" /></button></form>
+          <form v-if="canSubmitComment(selected, detailLoading)" class="comment-input request-comment-composer" :class="{ 'request-shlz-comment-composer': isShlzMode }" @submit.prevent="addComment"><span class="avatar small">{{ currentInitials }}</span><input v-model="commentDraft" :class="{ 'shlz-input shlz-input--sm': isShlzMode }" :disabled="commentLoading" maxlength="10000" placeholder="Оставьте комментарий…" /><button :class="{ 'shlz-button shlz-button--primary shlz-button--sm shlz-button--icon': isShlzMode }" :disabled="commentLoading" aria-label="Отправить комментарий"><AppIcon name="send" :size="16" :shlz="isShlzMode" /></button></form>
           <p v-else class="placeholder-copy request-comment-unavailable">На текущем этапе добавлять комментарии нельзя.</p>
           <div class="stream">
             <div v-for="entry in feed" :key="`${entry.type}-${entry.id}`" class="entry" :class="{ system: entry.type !== 'comment' }">
@@ -1116,13 +1120,13 @@ onBeforeUnmount(() => {
         </article>
       </div>
       <aside class="stack side-column">
-        <article class="card request-participants"><h3>Участники</h3>
+        <article class="card request-participants" :class="{ 'shlz-surface': isShlzMode }"><h3>Участники</h3>
           <div v-for="person in participants" :key="`${person.role}-${person.name}`" class="request-person-row"><span class="avatar small" :class="avatarRoleClass(person.roleCode)">{{ initialsFor(person.name) }}</span><span><b>{{ person.name }}</b><small>{{ person.role }}</small></span></div>
           <section class="request-security-section" aria-labelledby="security-control-title"><h3 id="security-control-title">Контроль СБ</h3><div class="request-security-status"><span class="security-mark-icon" :class="selected.securityMarkDisplay?.className" aria-hidden="true"><svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" focusable="false"><path :d="selected.securityMarkDisplay?.path" /></svg></span><span><b>{{ selected.securityMarkDisplay?.label }}</b><small>Статус проверки</small></span></div></section>
         </article>
-        <article id="request-documents" class="card documents request-documents"><div class="section-title request-documents-head"><h3>Документы <span class="request-document-count" :aria-label="`Документов: ${selected.documents?.length || 0}`">{{ selected.documents?.length || 0 }}</span></h3><label v-if="selected.canUploadDocument" class="request-document-upload"><AppIcon v-if="!documentLoading" name="plus" :size="14" />{{ documentLoading ? 'Загрузка…' : 'Добавить' }}<input type="file" :disabled="documentLoading" accept=".pdf,.png,.jpg,.jpeg,.docx,.xlsx" @change="uploadDocument" /></label></div>
+        <article id="request-documents" class="card documents request-documents" :class="{ 'shlz-surface': isShlzMode }"><div class="section-title request-documents-head"><h3>Документы <span class="request-document-count" :aria-label="`Документов: ${selected.documents?.length || 0}`">{{ selected.documents?.length || 0 }}</span></h3><label v-if="selected.canUploadDocument" :class="isShlzMode ? 'shlz-button shlz-button--text shlz-button--xs request-shlz-file-button' : 'request-document-upload'"><AppIcon v-if="!documentLoading" name="plus" :size="14" :shlz="isShlzMode" />{{ documentLoading ? 'Загрузка…' : 'Добавить' }}<input type="file" :disabled="documentLoading" accept=".pdf,.png,.jpg,.jpeg,.docx,.xlsx" @change="uploadDocument" /></label></div>
           <section v-for="group in documentGroups" :key="group.key" class="request-document-group" :aria-labelledby="`document-group-${group.key}`"><h4 :id="`document-group-${group.key}`">{{ group.label }} <span>{{ group.items.length }}</span></h4><div v-for="document in group.items" :key="document.versionId" class="document-row request-file-card"><button type="button" class="request-file-open app-tooltip" data-tooltip="Открыть документ" :aria-label="`Открыть ${document.title}, версия ${document.version}`" @click="openDocument(document)"><span class="request-file-thumb" aria-hidden="true"><span class="request-file-lines"></span><span class="request-file-type" :class="fileTypeClassFor(document)">{{ fileExtensionFor(document) }}</span></span><span class="request-file-copy"><b :title="document.title">{{ document.title }}</b><small>Версия {{ document.version }} · {{ document.size }}</small><small>{{ document.createdAt }}</small></span></button><button type="button" class="request-file-action app-tooltip" data-tooltip="Скачать документ" :aria-label="`Скачать ${document.title}`" @click.stop="downloadDocument(document)"><AppIcon name="download" :size="14" /></button></div></section>
-          <p v-if="!selected.documents?.length" class="placeholder-copy">Документов пока нет.</p>
+          <div v-if="isShlzMode && !selected.documents?.length" class="request-empty-state"><div class="shlz-empty-state shlz-empty-state--simple"><span class="shlz-empty-state__visual" aria-hidden="true"><AppIcon name="file" :size="32" :shlz="true" /></span><p class="shlz-empty-state__title">Документов пока нет.</p></div></div><p v-else-if="!selected.documents?.length" class="placeholder-copy">Документов пока нет.</p>
           <p v-if="documentError" class="action-error">{{ documentError }}</p>
         </article>
       </aside>

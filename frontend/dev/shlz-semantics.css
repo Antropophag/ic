@@ -13,3 +13,19 @@
   color: var(--ic-shlz-warning);
   background: var(--shlz-source-color-aditional-brown-15);
 }
+
+[data-ui="shlz"] .request-shlz-danger-button {
+  color: var(--ic-shlz-danger);
+  background: var(--shlz-semantic-color-surface-base);
+  border: 1px solid color-mix(in srgb, var(--ic-shlz-danger) 42%, transparent);
+}
+
+[data-ui="shlz"] .request-shlz-danger-button:hover:not(:disabled) {
+  color: var(--ic-shlz-danger);
+  background: var(--shlz-semantic-color-surface-base);
+  border-color: color-mix(in srgb, var(--ic-shlz-danger) 68%, transparent);
+}
+
+[data-ui="shlz"] .request-shlz-danger-button:focus-visible {
+  outline-color: var(--ic-shlz-danger);
+}

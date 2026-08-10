@@ -1,0 +1,84 @@
+/* IC request workspace composition around public SHLZ primitives. */
+.request-details-shlz-demo {
+  color: var(--shlz-semantic-color-text-primary);
+  background: transparent;
+}
+
+.request-details-shlz-demo .request-grid {
+  grid-template-columns: minmax(0, 1fr) 304px;
+  border-color: var(--shlz-semantic-color-border-default);
+}
+
+.request-details-shlz-demo .side-column,
+.request-details-shlz-demo .side-column > .card {
+  min-inline-size: 0;
+}
+
+.request-details-shlz-demo .request-process-action-main {
+  gap: var(--shlz-source-spacing-8);
+}
+
+.request-details-shlz-demo .request-action-context {
+  min-inline-size: 260px;
+  max-inline-size: none;
+  flex: 1 1 260px;
+}
+
+.request-details-shlz-demo .request-action-group {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--shlz-source-spacing-8);
+}
+
+.request-details-shlz-demo .request-action-group + .request-action-group {
+  padding-inline-start: 0;
+  border-inline-start: 0;
+}
+
+.request-details-shlz-demo .request-help-action {
+  position: absolute;
+  inset-block-start: 0;
+  inset-inline-end: 0;
+}
+
+.request-details-shlz-demo .request-shlz-comment-composer {
+  display: flex;
+  align-items: center;
+  gap: var(--shlz-source-spacing-8);
+  margin-block: 10px 4px;
+  padding-block: 10px 14px;
+  border-block-end: 1px solid var(--shlz-semantic-color-border-default);
+}
+
+.request-details-shlz-demo .request-shlz-comment-composer .shlz-input {
+  flex: 1 1 auto;
+}
+
+.request-details-shlz-demo .request-empty-state {
+  min-block-size: 120px;
+  display: grid;
+  place-items: center;
+  padding: var(--shlz-source-spacing-16);
+}
+
+[data-ui="shlz"] .request-shlz-file-button {
+  position: relative;
+  cursor: pointer;
+}
+
+[data-ui="shlz"] .request-shlz-file-button input {
+  position: absolute;
+  inline-size: 1px;
+  block-size: 1px;
+  margin: -1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+@media (max-width: 1298px) {
+  .request-details-shlz-demo .request-grid {
+    grid-template-columns: 1fr;
+  }
+}
