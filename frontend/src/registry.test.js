@@ -99,7 +99,17 @@ it('maps administrative department permission and its feed event', () => {
 })
 
 it('preserves an unknown status so API drift stays visible', () => {
-  expect(fromApi({ ...registered, status: 'new_status' }).status).toBe('new_status')
+  expect(fromApi({ ...registered, status: 'new_status' })).toMatchObject({
+    status: 'new_status',
+    compactStatus: 'new_status',
+  })
+})
+
+it('uses a compact rejected label in the registry without changing the business label', () => {
+  expect(fromApi({ ...registered, status: 'rejected' })).toMatchObject({
+    status: 'В проведении испытаний отказано',
+    compactStatus: 'Отказано',
+  })
 })
 
 it('maps the manual color mark for a manager', () => {

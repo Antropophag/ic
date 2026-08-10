@@ -17,6 +17,10 @@ const STATUS_LABELS = {
   withdrawn: 'Заявка отозвана',
 }
 
+const COMPACT_STATUS_LABELS = {
+  rejected: 'Отказано',
+}
+
 export const REQUEST_STATUS_OPTIONS = Object.entries(STATUS_LABELS).map(([value, label]) => ({ value, label }))
 
 const STATUS_TONES = {
@@ -79,6 +83,7 @@ export function fromApi(item) {
     canWithdraw: Boolean(Number(item.can_withdraw)),
     color: REQUEST_COLORS.includes(item.color) ? item.color : 'white',
     status: STATUS_LABELS[item.status] || item.status,
+    compactStatus: COMPACT_STATUS_LABELS[item.status] || STATUS_LABELS[item.status] || item.status,
     tone: STATUS_TONES[item.status] || 'blue',
     securityMark,
     // Вычисляется один раз при маппинге, а не при каждом обращении к
