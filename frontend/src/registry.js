@@ -44,6 +44,8 @@ export function fromApi(item) {
   const securityMark = item.security_mark === 'approve' || item.security_mark === 'return' ? item.security_mark : null
   return {
     backendId: Number(item.id),
+    isArchived: Boolean(Number(item.is_archived)),
+    source: item.source || 'local',
     id: String(item.number).padStart(6, '0'),
     date: new Date(item.created_at).toLocaleDateString('ru-RU'),
     initiator: item.initiator_name,
@@ -52,6 +54,7 @@ export function fromApi(item) {
     manufacturer: item.manufacturer,
     supplier: item.supplier,
     sampleQuantity: item.sample_quantity,
+    legacySampleQuantityRaw: item.legacy_sample_quantity_raw,
     testMethod: item.test_method,
     executor: item.executor_name || 'Не назначен',
     executorId: item.executor_id ? Number(item.executor_id) : null,
@@ -90,6 +93,16 @@ export function fromApi(item) {
     reportVersionId: item.report_version_id ? Number(item.report_version_id) : null,
     reportOriginalName: item.report_original_name || null,
   }
+}
+
+export function sampleQuantityDisplay(request) {
+  if (Number.isSafeInteger(request?.sampleQuantity) && request.sampleQuantity >= 1) {
+    return `${request.sampleQuantity} шт.`
+  }
+  if (request?.isArchived && typeof request.legacySampleQuantityRaw === 'string' && request.legacySampleQuantityRaw.trim() !== '') {
+    return request.legacySampleQuantityRaw
+  }
+  return '—'
 }
 
 export function withoutStaleActions(item) {
@@ -242,6 +255,7 @@ export function documentFromApi(item) {
     id: Number(item.id),
     title: item.title,
     documentType: item.documentType || 'attachment',
+    commentId: item.commentId ? Number(item.commentId) : null,
     versionId: Number(item.versionId),
     version: Number(item.version),
     originalName: item.originalName,

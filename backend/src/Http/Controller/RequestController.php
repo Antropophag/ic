@@ -68,8 +68,31 @@ final class RequestController extends ApiController
         // token-based auth без cookie) — вне dev включаем явно, иначе
         // LDAP-сессия (реальные cookie) останется без защиты от CSRF.
         $this->enableCsrfValidation = true;
+        if (!parent::beforeAction($action)) {
+            return false;
+        }
 
-        return parent::beforeAction($action);
+        $mutations = [
+            'add-comment', 'upload-document', 'upload-report', 'delete-report', 'change-department',
+            'set-color', 'assign-executor', 'claim-expert', 'reassign-expert', 'publish-opinion',
+            'security-decision', 'start', 'suspend', 'resume', 'reject', 'withdraw',
+        ];
+        if (in_array($action->id, $mutations, true)) {
+            $requestId = filter_var(Yii::$app->request->get('id'), FILTER_VALIDATE_INT);
+            if ($requestId !== false && $this->isArchived((int) $requestId)) {
+                throw new ConflictHttpException('Архивная заявка доступна только для просмотра.');
+            }
+        }
+
+        return true;
+    }
+
+    private function isArchived(int $requestId): bool
+    {
+        return (int) Yii::$app->db->createCommand(
+            'SELECT is_archived FROM {{%requests}} WHERE id = :id',
+            [':id' => $requestId],
+        )->queryScalar() === 1;
     }
 
     /** @return array<string, mixed> */

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { avatarRoleClass, buildFeed, canStartNow, canSubmitComment, commentFromApi, documentFromApi, documentKind, filterRequests, fromApi, historyFromApi, initialsFor, newestFirstFeed, paginate, securityMarkIcon, withoutStaleActions } from './registry'
+import { avatarRoleClass, buildFeed, canStartNow, canSubmitComment, commentFromApi, documentFromApi, documentKind, filterRequests, fromApi, historyFromApi, initialsFor, newestFirstFeed, paginate, sampleQuantityDisplay, securityMarkIcon, withoutStaleActions } from './registry'
 
 const registered = {
   id: 4,
@@ -56,6 +56,29 @@ it('maps the API contract to a registry row', () => {
     canSecurityDecide: false,
     canEditDepartment: false,
   })
+})
+
+it('shows the original Bitrix24 quantity when an archived exact quantity is unknown', () => {
+  const request = fromApi({
+    ...registered,
+    is_archived: 1,
+    sample_quantity: null,
+    legacy_sample_quantity_raw: 'По 1 шт. каждого вида',
+  })
+
+  expect(request.sampleQuantity).toBeNull()
+  expect(request.legacySampleQuantityRaw).toBe('По 1 шт. каждого вида')
+  expect(sampleQuantityDisplay(request)).toBe('По 1 шт. каждого вида')
+})
+
+it('keeps the normalized quantity display for regular and unambiguous archived requests', () => {
+  expect(sampleQuantityDisplay(fromApi(registered))).toBe('2 шт.')
+  expect(sampleQuantityDisplay(fromApi({
+    ...registered,
+    is_archived: 1,
+    sample_quantity: 5,
+    legacy_sample_quantity_raw: '5шт',
+  }))).toBe('5 шт.')
 })
 
 it('maps administrative department permission and its feed event', () => {

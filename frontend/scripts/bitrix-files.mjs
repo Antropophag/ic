@@ -104,6 +104,29 @@ export async function readSnapshotFiles(snapshotDirectory) {
         })
       }
     }
+    for (const [commentType, comments] of [
+      ['initiator', details.commentsInitiator ?? []],
+      ['ic', details.commentsIC ?? []],
+    ]) {
+      for (const [commentIndex, comment] of comments.entries()) {
+        const commentId = comment.id === undefined || comment.id === null || comment.id === ''
+          ? `index-${commentIndex}`
+          : scalarString(comment.id, 'comment.id')
+        for (const file of comment.files ?? []) {
+          const sourceFileId = scalarString(file.id, 'file.id')
+          if (!/^[0-9A-Za-z_-]+$/.test(sourceFileId)) throw new Error(`Unsafe source file identifier: ${sourceFileId}`)
+          associations.push({
+            requestNumber: scalarString(element.ID, 'element.ID'),
+            documentType: 'comment',
+            commentType,
+            sourceCommentId: commentId,
+            sourceFileId,
+            originalName: scalarString(file.name, 'file.name'),
+            detailUrl: scalarString(file.detailURL, 'file.detailURL'),
+          })
+        }
+      }
+    }
   }
   if (associations.length === 0) {
     throw new Error('Snapshot contains no file associations.')
@@ -323,12 +346,7 @@ export async function verifyWorkspace(snapshotDirectory, workspace) {
 }
 
 function associationRecords(source) {
-  return source.associations.map((association) => ({
-    requestNumber: association.requestNumber,
-    documentType: association.documentType,
-    sourceFileId: association.sourceFileId,
-    originalName: association.originalName,
-  }))
+  return source.associations.map(({ detailUrl, ...association }) => association)
 }
 
 async function downloadWithBrowser(page, url, destination, maxBytes, timeout) {

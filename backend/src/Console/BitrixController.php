@@ -5,8 +5,11 @@ declare(strict_types=1);
 namespace App\Console;
 
 use App\Application\Import\BitrixSnapshotInventory;
+use App\Application\Import\BitrixSnapshotReader;
+use App\Application\Import\LegacyCounterpartyOverrides;
 use App\Application\Import\LegacyRequestMapper;
 use App\Application\Import\LegacyRequestImporter;
+use App\Application\Import\LegacySampleQuantityOverrides;
 use App\Application\Import\LegacyUserData;
 use App\Application\Import\LegacyUserMapper;
 use App\Infrastructure\Bitrix\BitrixListClient;
@@ -16,6 +19,8 @@ use App\Infrastructure\Bitrix\BitrixUserClient;
 use App\Infrastructure\Bitrix\NativeBitrixTransport;
 use App\Infrastructure\Bitrix\PrivateJsonReportWriter;
 use App\Infrastructure\Import\DatabaseLegacyRequestWriter;
+use App\Infrastructure\Import\BitrixArchiveFileImporter;
+use App\Infrastructure\Document\DocumentStorage;
 use Throwable;
 use Yii;
 use yii\console\Controller;
@@ -27,15 +32,17 @@ final class BitrixController extends Controller
     public string $apply = '0';
     public string $output = '';
     public string $snapshot = '';
+    public string $workspace = '';
 
     public function options($actionID): array
     {
         $options = parent::options($actionID);
         return match ($actionID) {
-            'import' => [...$options, 'maxPages', 'apply'],
+            'import' => [...$options, 'snapshot', 'apply'],
             'inspect' => [...$options, 'maxPages'],
             'snapshot' => [...$options, 'maxPages', 'output'],
             'inventory' => [...$options, 'snapshot', 'output'],
+            'import-files' => [...$options, 'workspace', 'apply'],
             default => $options,
         };
     }
@@ -82,21 +89,35 @@ final class BitrixController extends Controller
 
     public function actionImport(): int
     {
-        if (!$this->validMaxPages()) {
-            return ExitCode::USAGE;
-        }
         if (!in_array($this->apply, ['0', '1'], true)) {
             $this->stderr("--apply accepts only 0 or 1; database was not changed.\n");
             return ExitCode::USAGE;
         }
+        if ($this->snapshot === '') {
+            $this->stderr("--snapshot is required; live Bitrix24 import is disabled.\n");
+            return ExitCode::USAGE;
+        }
 
         $shouldApply = $this->apply === '1';
-        $elements = iterator_to_array($this->client()->elements($this->maxPages), false);
-        $users = $this->usersForElements($elements);
-        $writer = $shouldApply ? new DatabaseLegacyRequestWriter(Yii::$app->db) : null;
-        $summary = (new LegacyRequestImporter(new LegacyRequestMapper($users)))->import(
+        $snapshot = (new BitrixSnapshotReader())->read($this->snapshot);
+        $elements = iterator_to_array($snapshot['elements'], false);
+        $users = $snapshot['users'];
+        $quantityOverrides = LegacySampleQuantityOverrides::load(
             $elements,
-            $this->listId(),
+            $snapshot['listId'],
+        )->quantities();
+        $counterpartyOverrides = LegacyCounterpartyOverrides::load(
+            $elements,
+            $snapshot['listId'],
+        )->values();
+        $writer = $shouldApply ? new DatabaseLegacyRequestWriter(Yii::$app->db) : null;
+        $summary = (new LegacyRequestImporter(new LegacyRequestMapper(
+            $users,
+            $quantityOverrides,
+            $counterpartyOverrides,
+        )))->import(
+            $elements,
+            $snapshot['listId'],
             $writer,
         );
         $result = [
@@ -139,6 +160,21 @@ final class BitrixController extends Controller
             'users' => $manifest['users'],
         ], JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR) . "\n");
         return ExitCode::OK;
+    }
+
+    public function actionImportFiles(): int
+    {
+        if ($this->workspace === '' || !in_array($this->apply, ['0', '1'], true)) {
+            $this->stderr("--workspace is required and --apply accepts only 0 or 1.\n");
+            return ExitCode::USAGE;
+        }
+        $summary = (new BitrixArchiveFileImporter(
+            Yii::$app->db,
+            new DocumentStorage(getenv('DOCUMENT_STORAGE_PATH') ?: '/app/storage/documents'),
+            $this->listId(),
+        ))->import($this->workspace, $this->apply === '1');
+        $this->stdout(json_encode(['mode' => $this->apply === '1' ? 'apply' : 'dry-run', ...$summary], JSON_PRETTY_PRINT | JSON_THROW_ON_ERROR) . "\n");
+        return $summary['unavailable'] === 0 && $summary['unmatched'] === 0 ? ExitCode::OK : ExitCode::DATAERR;
     }
 
     public function actionInventory(): int
