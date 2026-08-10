@@ -152,6 +152,9 @@
 @media (max-width:770px){.registry-head{padding:12px 14px 0}.registry .tabs{gap:14px;overflow-x:auto}.registry .tab-label{white-space:nowrap}.registry .toolbar{padding:10px 14px}.registry .search{width:100%;min-width:100%}.registry .status-filter,.registry .status-filter select{width:100%}}
 @media (max-width:770px){.attention-grid{grid-template-columns:1fr}.attention-dashboard{padding:12px}}
 
+/* Security marks use the status symbol alone; color carries the decision state. */
+.security-mark-icon:is(.security-mark--approve,.security-mark--return,.security-mark--pending){border-radius:0;background:transparent}
+
 /* Shared screen entrance keeps registry/details swaps calm without unmounting registry state. */
 @keyframes screen-enter{from{opacity:.35}to{opacity:1}}
 .screen-panel--active{animation:screen-enter .22s ease-out both}
@@ -354,3 +357,4 @@
 .registry th:last-child{width:5%;white-space:nowrap;overflow-wrap:normal}
 .registry .pagination-pages{display:inline-flex;align-items:center;gap:6px;line-height:0}
 .registry .pagination-pages button{flex:0 0 34px;margin-left:0;vertical-align:middle}
+.registry .pagination-page-number{width:100%;height:100%;display:grid;place-items:center;line-height:1}

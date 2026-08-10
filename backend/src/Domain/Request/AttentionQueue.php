@@ -29,7 +29,7 @@ enum AttentionQueue: string
     {
         return match ($this) {
             self::AssignExecutor => 'Назначьте ответственного за проведение испытаний.',
-            self::StartOrResumeWork => 'Начните работу по зарегистрированным заявкам или возобновите приостановленные.',
+            self::StartOrResumeWork => 'Начните или возобновите работу по заявке.',
             self::UploadReport => 'Загрузите отчёт о результатах испытаний в формате PDF.',
             self::ClaimExpert => 'Возьмите заявку в работу для подготовки заключения.',
             self::PublishOpinion => 'Подготовьте и опубликуйте экспертное заключение.',
