@@ -16,6 +16,11 @@
   },
   "dependencies": {
     "@fontsource/fira-sans": "^5.3.0",
+    "@fontsource/golos-text": "^5.2.6",
+    "@shlz/behaviors": "file:vendor/shlz-behaviors-0.1.0.tgz",
+    "@shlz/icons": "file:vendor/shlz-icons-0.1.0.tgz",
+    "@shlz/styles": "file:vendor/shlz-styles-0.1.0.tgz",
+    "@shlz/tokens": "file:vendor/shlz-tokens-0.1.0.tgz",
     "@vitejs/plugin-vue": "latest",
     "swagger-ui-dist": "5.32.12",
     "vite": "latest",
