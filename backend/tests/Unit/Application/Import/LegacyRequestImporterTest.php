@@ -27,7 +27,32 @@ final class LegacyRequestImporterTest extends TestCase
             'invalid' => 1,
             'created' => 0,
             'skipped' => 0,
+            'deferred' => 0,
+            'comments' => 0,
+            'commentFiles' => 0,
+            'invalidReasons' => ['Legacy creator ID is required.' => 1],
         ], $summary);
+    }
+
+    public function testDefersNonTerminalRequestsWithoutWriting(): void
+    {
+        $writer = new class () implements LegacyRequestWriter {
+            public int $calls = 0;
+            public function write(LegacyRequestData $request): LegacyImportOutcome
+            {
+                ++$this->calls;
+                return LegacyImportOutcome::Created;
+            }
+        };
+        $element = $this->element('3');
+        $details = json_decode($element['DETAIL_TEXT'], true, 512, JSON_THROW_ON_ERROR);
+        $details['status'] = 'В работе';
+        $element['DETAIL_TEXT'] = json_encode($details, JSON_THROW_ON_ERROR | JSON_UNESCAPED_UNICODE);
+
+        $summary = (new LegacyRequestImporter($this->mapper()))->import([$element], 114, $writer);
+
+        self::assertSame(1, $summary['deferred']);
+        self::assertSame(0, $writer->calls);
     }
 
     public function testApplyCountsCreatedAndIdempotentlySkippedRecords(): void

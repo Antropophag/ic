@@ -10,6 +10,14 @@ use yii\db\Connection;
 
 final class RequestQuery
 {
+    public function isArchived(int $requestId): bool
+    {
+        return (int) $this->db->createCommand(
+            'SELECT is_archived FROM {{%requests}} WHERE id = :id',
+            [':id' => $requestId],
+        )->queryScalar() === 1;
+    }
+
     private const LAST_COMMENT_PREVIEW_LENGTH = 500;
 
     public function __construct(private readonly Connection $db)
@@ -101,8 +109,9 @@ final class RequestQuery
         $safePage = min($page, $pageCount);
 
         $items = $this->db->createCommand(
-            'SELECT r.id, r.number, r.status, r.color, r.product_name, r.manufacturer, '
-            . 'r.supplier, r.sample_quantity, r.test_method, r.lock_version AS lockVersion, r.created_at, '
+            'SELECT r.id, r.number, r.status, r.color, r.source, r.is_archived, r.product_name, r.manufacturer, '
+            . 'r.supplier, r.sample_quantity, r.legacy_sample_quantity_raw, r.test_method, '
+            . 'r.lock_version AS lockVersion, r.created_at, '
             . "u.display_name AS initiator_name, COALESCE(r.department_name, 'Подразделение не указано') AS department, "
             . 'executor.id AS executor_id, executor.display_name AS executor_name, '
             . 'expert.id AS expert_id, expert.display_name AS expert_name, '
@@ -250,6 +259,17 @@ final class RequestQuery
                 ':offset' => ($safePage - 1) * $pageSize,
             ], $filterParams),
         )->queryAll();
+        foreach ($items as &$archiveItem) {
+            if ((int) $archiveItem['is_archived'] !== 1) {
+                continue;
+            }
+            foreach (array_keys($archiveItem) as $key) {
+                if (str_starts_with($key, 'can_')) {
+                    $archiveItem[$key] = 0;
+                }
+            }
+        }
+        unset($archiveItem);
 
         $counts = $this->db->createCommand(
             "SELECT SUM(r.status IN ('registered', 'in_progress', 'suspended', 'opinion_preparation', 'security_review')) AS active, "
@@ -307,8 +327,9 @@ final class RequestQuery
     public function findDetails(int $requestId, int $actorId): array
     {
         $item = $this->db->createCommand(
-            'SELECT r.id, r.number, r.status, r.color, r.product_name, r.manufacturer, '
-            . 'r.supplier, r.sample_quantity, r.test_method, r.lock_version AS lockVersion, '
+            'SELECT r.id, r.number, r.status, r.color, r.source, r.is_archived, r.product_name, r.manufacturer, '
+            . 'r.supplier, r.sample_quantity, r.legacy_sample_quantity_raw, r.test_method, '
+            . 'r.lock_version AS lockVersion, '
             . "r.created_at, r.updated_at, u.display_name AS initiator_name, "
             . "COALESCE(r.department_name, 'Подразделение не указано') AS department, "
             . "(EXISTS(SELECT 1 FROM {{%users}} department_actor JOIN {{%user_roles}} department_ur "
@@ -432,6 +453,13 @@ final class RequestQuery
         if ($item === false) {
             throw new RequestNotFound('Request not found');
         }
+        if ((int) $item['is_archived'] === 1) {
+            foreach (array_keys($item) as $key) {
+                if (str_starts_with($key, 'can_')) {
+                    $item[$key] = 0;
+                }
+            }
+        }
 
         $history = $this->db->createCommand(
             'SELECT t.id, \'transition\' AS kind, t.action, t.from_status AS fromStatus, '
@@ -498,7 +526,7 @@ final class RequestQuery
         $commentsPage = $this->queryCommentsPage($requestId, null);
 
         $documents = $this->db->createCommand(
-            'SELECT d.id, d.document_type AS documentType, d.title, v.id AS versionId, v.version, v.original_name AS originalName, '
+            'SELECT d.id, d.comment_id AS commentId, d.document_type AS documentType, d.title, v.id AS versionId, v.version, v.original_name AS originalName, '
             . 'v.mime_type AS mimeType, v.size_bytes AS sizeBytes, v.sha256, '
             . "DATE_FORMAT(v.created_at, '%Y-%m-%dT%H:%i:%s.%fZ') AS createdAt, "
             . 'u.display_name AS uploadedBy FROM {{%request_documents}} d '

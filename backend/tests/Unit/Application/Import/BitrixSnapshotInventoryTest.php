@@ -104,6 +104,84 @@ final class BitrixSnapshotInventoryTest extends TestCase
         self::assertSame([[11, 11]], $gaps['ranges']);
     }
 
+    public function testReportsMalformedDetailsAndNumberEdgeCasesWithoutLeakingValues(): void
+    {
+        $snapshot = $this->snapshot([$this->element('10', '10', 'Выполнено')]);
+        $elements = [
+            ['ID' => '', 'NAME' => '', 'PROPERTY_648' => 'not-a-list', 'DETAIL_TEXT' => null],
+            ['ID' => '20', 'NAME' => 'not-a-number', 'DETAIL_TEXT' => '{'],
+            ['ID' => '20', 'NAME' => '9223372036854775808', 'DETAIL_TEXT' => json_encode([
+                'status' => '',
+                'requestNumber' => 'invalid',
+                'supportingDocFiles' => 'not-a-list',
+                'reportFiles' => [['id' => 1]],
+            ], JSON_THROW_ON_ERROR)],
+        ];
+        $this->replaceSnapshotFile(
+            $snapshot,
+            'elements.jsonl',
+            implode('', array_map(static fn (array $element): string => json_encode($element, JSON_THROW_ON_ERROR) . "\n", $elements)),
+            count($elements),
+        );
+
+        $report = (new BitrixSnapshotInventory())->inspect($snapshot);
+
+        self::assertSame(['line:1', '20'], $report['details']['invalidElementIds']);
+        self::assertSame([20], $report['elementIds']['duplicates']);
+        self::assertSame(1, $report['numberCandidates']['NAME']['empty']);
+        self::assertSame(1, $report['numberCandidates']['NAME']['nonNumeric']);
+        self::assertFalse($report['numberCandidates']['NAME']['gaps']['available']);
+        self::assertSame('maximum exceeds the platform integer range', $report['numberCandidates']['NAME']['gaps']['reason']);
+        self::assertSame(1, $report['migrationEligibility']['deferred']['records']);
+    }
+
+    public function testRejectsUnsupportedManifest(): void
+    {
+        $snapshot = $this->snapshot([$this->element('10', '10', 'Выполнено')]);
+        $manifest = json_decode((string) file_get_contents($snapshot . '/manifest.json'), true, 512, JSON_THROW_ON_ERROR);
+        $manifest['complete'] = false;
+        file_put_contents($snapshot . '/manifest.json', json_encode($manifest, JSON_THROW_ON_ERROR));
+
+        $this->expectExceptionMessage('unsupported or incomplete');
+        (new BitrixSnapshotInventory())->inspect($snapshot);
+    }
+
+    public function testRejectsInvalidElementJsonAfterIntegrityVerification(): void
+    {
+        $snapshot = $this->snapshot([$this->element('10', '10', 'Выполнено')]);
+        $this->replaceSnapshotFile($snapshot, 'elements.jsonl', "{\n", 1);
+
+        $this->expectExceptionMessage('Invalid JSON on snapshot line 1');
+        (new BitrixSnapshotInventory())->inspect($snapshot);
+    }
+
+    public function testRejectsNonObjectElementAfterIntegrityVerification(): void
+    {
+        $snapshot = $this->snapshot([$this->element('10', '10', 'Выполнено')]);
+        $this->replaceSnapshotFile($snapshot, 'elements.jsonl', "null\n", 1);
+
+        $this->expectExceptionMessage('Snapshot line 1 is not an object');
+        (new BitrixSnapshotInventory())->inspect($snapshot);
+    }
+
+    public function testRejectsInvalidFieldsJsonAfterIntegrityVerification(): void
+    {
+        $snapshot = $this->snapshot([$this->element('10', '10', 'Выполнено')]);
+        $this->replaceSnapshotFile($snapshot, 'fields.json', '{', 1);
+
+        $this->expectExceptionMessage('Invalid JSON in');
+        (new BitrixSnapshotInventory())->inspect($snapshot);
+    }
+
+    public function testRejectsNonObjectFieldsJsonAfterIntegrityVerification(): void
+    {
+        $snapshot = $this->snapshot([$this->element('10', '10', 'Выполнено')]);
+        $this->replaceSnapshotFile($snapshot, 'fields.json', 'null', 1);
+
+        $this->expectExceptionMessage('is not an object');
+        (new BitrixSnapshotInventory())->inspect($snapshot);
+    }
+
     /** @param array<string, mixed> $detailOverrides
      *  @param mixed $property648
      *  @return array<string, mixed>
@@ -158,6 +236,19 @@ final class BitrixSnapshotInventoryTest extends TestCase
             114,
         );
         return $snapshot;
+    }
+
+    private function replaceSnapshotFile(string $snapshot, string $file, string $contents, int $records): void
+    {
+        file_put_contents($snapshot . '/' . $file, $contents);
+        $manifestPath = $snapshot . '/manifest.json';
+        $manifest = json_decode((string) file_get_contents($manifestPath), true, 512, JSON_THROW_ON_ERROR);
+        $manifest['records'] = $records;
+        $manifest['files'][$file] = [
+            'bytes' => strlen($contents),
+            'sha256' => hash('sha256', $contents),
+        ];
+        file_put_contents($manifestPath, json_encode($manifest, JSON_THROW_ON_ERROR));
     }
 
     private function removeDirectory(string $directory): void
