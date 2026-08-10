@@ -346,7 +346,11 @@ export async function verifyWorkspace(snapshotDirectory, workspace) {
 }
 
 function associationRecords(source) {
-  return source.associations.map(({ detailUrl, ...association }) => association)
+  return source.associations.map((association) => {
+    const record = { ...association }
+    delete record.detailUrl
+    return record
+  })
 }
 
 async function downloadWithBrowser(page, url, destination, maxBytes, timeout) {

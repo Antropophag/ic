@@ -115,6 +115,24 @@ final class LegacyRequestMapperTest extends TestCase
         ]), 114);
     }
 
+    public function testRejectsLegacyRequestIdOutsidePositiveIntegerRange(): void
+    {
+        $element = $this->element();
+        $element['ID'] = '999999999999999999999999999999';
+
+        $this->expectExceptionMessage('Legacy request ID must fit a positive integer.');
+        $this->mapper()->map($element, 114);
+    }
+
+    public function testRejectsNonNumericStructuredCreatorFallback(): void
+    {
+        $element = $this->element(['creator' => null]);
+        $element['CREATED_BY'] = 'system';
+
+        $this->expectExceptionMessage('Legacy creator ID must be numeric.');
+        $this->mapper()->map($element, 114);
+    }
+
     public function testRejectsNonStringRequestFields(): void
     {
         $this->expectException(UnexpectedValueException::class);
