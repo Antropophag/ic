@@ -1,9 +1,40 @@
 <script setup>
-defineProps({ name: { type: String, required: true }, size: { type: Number, default: 18 } })
+import { computed } from 'vue'
+import { useUiMode } from '../uiMode'
+
+const SHLZ_ICONS = Object.freeze({
+  close: 'close',
+  plus: 'plus',
+  'arrow-left': 'arrow-left',
+  'chevron-left': 'chevron-left-small',
+  'chevron-right': 'chevron-right-small',
+  download: 'download',
+  search: 'search',
+  file: 'document-paper-2-lines',
+  user: 'user',
+  trash: 'trash',
+  'external-link': 'external-link',
+  'sort-asc': 'sort-asc',
+  'sort-desc': 'sort-desc',
+  send: 'reply-share-right',
+  help: 'info-circle',
+  history: 'loop-direction-repeat-circle-horizontal',
+})
+
+const props = defineProps({
+  name: { type: String, required: true },
+  size: { type: Number, default: 18 },
+  shlz: { type: Boolean, default: false },
+})
+const uiMode = useUiMode()
+const shlzIconName = computed(() => uiMode.shlz && props.shlz ? SHLZ_ICONS[props.name] : null)
 </script>
 
 <template>
-  <svg class="app-icon" :width="size" :height="size" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">
+  <svg v-if="shlzIconName" class="app-icon shlz-icon shlz-icon--inherit" :width="size" :height="size" :style="{ inlineSize: `${size}px`, blockSize: `${size}px` }" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+    <use :href="`${uiMode.iconSpriteUrl}#shlz-icon-${shlzIconName}`" />
+  </svg>
+  <svg v-else class="app-icon" :width="size" :height="size" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">
     <template v-if="name === 'close'"><path d="m7 7 10 10M17 7 7 17" /></template>
     <template v-else-if="name === 'plus'"><path d="M12 5v14M5 12h14" /></template>
     <template v-else-if="name === 'arrow-left'"><path d="m10 6-6 6 6 6M4 12h16" /></template>
@@ -26,5 +57,7 @@ defineProps({ name: { type: String, required: true }, size: { type: Number, defa
     <template v-else-if="name === 'building'"><path d="M5 21V5l7-2v18M12 8h7v13M3 21h18M8 8h1M8 12h1M8 16h1M15 11h1M15 15h1" /></template>
     <template v-else-if="name === 'bell'"><path d="M18 9a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9M10 21h4" /></template>
     <template v-else-if="name === 'external-link'"><path d="M14 5h5v5M19 5l-8 8" /><path d="M19 14v5H5V5h5" /></template>
+    <template v-else-if="name === 'sort-desc'"><path d="m7 9 5 5 5-5" /></template>
+    <template v-else-if="name === 'sort-asc'"><path d="m7 15 5-5 5 5" /></template>
   </svg>
 </template>
