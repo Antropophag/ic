@@ -1459,7 +1459,8 @@ final class RequestRepository
     {
         return $this->db->createCommand(
             'SELECT id, number, legacy_id, initiator_id, status, product_name, manufacturer, supplier, '
-            . 'sample_quantity, test_method, revision, lock_version, color, department_name AS department, '
+            . 'sample_quantity, legacy_sample_quantity_raw, test_method, revision, lock_version, color, '
+            . 'department_name AS department, '
             . 'created_at, updated_at FROM {{%requests}} WHERE id = :id',
             [':id' => $id],
         )->queryOne();

@@ -7,7 +7,11 @@ namespace Tests\Unit\Http\Controller;
 use App\Http\Controller\RequestController;
 use PHPUnit\Framework\TestCase;
 use Yii;
+use yii\db\Command;
+use yii\db\Connection;
+use yii\base\InlineAction;
 use yii\web\Application;
+use yii\web\ConflictHttpException;
 use yii\web\Request;
 
 final class RequestControllerTest extends TestCase
@@ -85,6 +89,20 @@ final class RequestControllerTest extends TestCase
             $controller->actionWithdraw(10),
         );
         self::assertSame(422, Yii::$app->response->statusCode);
+    }
+
+    public function testArchivedMutationGuardChecksStringRouteId(): void
+    {
+        $controller = $this->controllerWithBody([]);
+        $command = $this->createMock(Command::class);
+        $command->expects(self::once())->method('queryScalar')->willReturn('1');
+        $db = $this->createMock(Connection::class);
+        $db->expects(self::once())->method('createCommand')->willReturn($command);
+        Yii::$app->set('db', $db);
+        $action = new InlineAction('start', $controller, 'actionStart');
+
+        $this->expectException(ConflictHttpException::class);
+        $controller->bindActionParams($action, ['id' => '10']);
     }
 
     /** @param array<string, mixed> $body */
