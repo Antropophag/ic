@@ -68,8 +68,26 @@ final class RequestController extends ApiController
         // token-based auth без cookie) — вне dev включаем явно, иначе
         // LDAP-сессия (реальные cookie) останется без защиты от CSRF.
         $this->enableCsrfValidation = true;
+        if (!parent::beforeAction($action)) {
+            return false;
+        }
 
-        return parent::beforeAction($action);
+        return true;
+    }
+
+    public function bindActionParams($action, $params): array
+    {
+        $arguments = parent::bindActionParams($action, $params);
+        $mutations = [
+            'add-comment', 'upload-document', 'upload-report', 'delete-report', 'change-department',
+            'set-color', 'assign-executor', 'claim-expert', 'reassign-expert', 'publish-opinion',
+            'security-decision', 'start', 'suspend', 'resume', 'reject', 'withdraw',
+        ];
+        $requestId = filter_var($params['id'] ?? null, FILTER_VALIDATE_INT, ['options' => ['min_range' => 1]]);
+        if (in_array($action->id, $mutations, true) && $requestId !== false && $this->query()->isArchived($requestId)) {
+            throw new ConflictHttpException('Архивная заявка доступна только для просмотра.');
+        }
+        return $arguments;
     }
 
     /** @return array<string, mixed> */

@@ -30,7 +30,7 @@ final class DatabaseLegacyRequestWriter implements LegacyRequestWriter
                 return LegacyImportOutcome::Skipped;
             }
 
-            $initiatorId = $this->initiatorId($request);
+            $initiatorId = $this->userId($request->creator, $request->department);
             $this->db->createCommand(
                 'UPDATE {{%request_number_sequence}} '
                 . 'SET value = GREATEST(value, :number) WHERE id = 1',
@@ -41,6 +41,8 @@ final class DatabaseLegacyRequestWriter implements LegacyRequestWriter
             $this->db->createCommand()->insert('{{%requests}}', [
                 'number' => $request->number,
                 'legacy_id' => $request->legacyId,
+                'source' => 'bitrix24',
+                'is_archived' => true,
                 'initiator_id' => $initiatorId,
                 'department_name' => $request->department !== '' ? $request->department : null,
                 'department_external_id' => $request->departmentExternalId,
@@ -52,11 +54,23 @@ final class DatabaseLegacyRequestWriter implements LegacyRequestWriter
                 'manufacturer' => $request->manufacturer,
                 'supplier' => $request->supplier,
                 'sample_quantity' => $request->sampleQuantity,
+                'legacy_sample_quantity_raw' => $request->legacySampleQuantityRaw,
                 'test_method' => $request->testMethod,
                 'created_at' => $createdAt,
                 'updated_at' => $createdAt,
             ])->execute();
             $requestId = (int) $this->db->getLastInsertID();
+            $commentAuthorIds = [];
+            foreach ($request->comments as $comment) {
+                $commentAuthorIds[$comment->creator->bitrixId] ??= $this->userId($comment->creator, null);
+                $this->db->createCommand()->upsert('{{%request_comments}}', [
+                    'legacy_id' => $comment->legacyId,
+                    'request_id' => $requestId,
+                    'author_id' => $commentAuthorIds[$comment->creator->bitrixId],
+                    'body' => $comment->body,
+                    'created_at' => $comment->createdAt->format('Y-m-d H:i:s.u'),
+                ], false)->execute();
+            }
             $this->db->createCommand()->insert('{{%request_transitions}}', [
                 'request_id' => $requestId,
                 'actor_id' => $initiatorId,
@@ -97,9 +111,9 @@ final class DatabaseLegacyRequestWriter implements LegacyRequestWriter
         )->queryScalar() !== false;
     }
 
-    private function initiatorId(LegacyRequestData $request): int
+    private function userId(\App\Application\Import\LegacyUserData $user, ?string $department): int
     {
-        $login = $request->creator->adLogin;
+        $login = $user->adLogin;
         $now = Clock::now();
         $existing = $this->db->createCommand(
             'SELECT id FROM {{%users}} WHERE ad_login = :login FOR UPDATE',
@@ -109,11 +123,11 @@ final class DatabaseLegacyRequestWriter implements LegacyRequestWriter
         if ($created) {
             $created = $this->db->createCommand()->upsert('{{%users}}', [
                 'ad_login' => $login,
-                'display_name' => $request->creator->displayName,
-                'email' => $request->creator->email,
-                'position' => $request->creator->position,
-                'department' => $request->department !== '' ? $request->department : null,
-                'is_active' => $request->creator->active,
+                'display_name' => $user->displayName,
+                'email' => $user->email,
+                'position' => $user->position,
+                'department' => $department !== null && $department !== '' ? $department : null,
+                'is_active' => $user->active,
                 'created_at' => $now,
                 'updated_at' => $now,
             ], false)->execute() === 1;
@@ -128,7 +142,7 @@ final class DatabaseLegacyRequestWriter implements LegacyRequestWriter
         // Existing local identity wins: import must not activate, deactivate,
         // or overwrite a profile that may already have been synchronized from AD.
         $userId = (int) $existing;
-        if ($created && $request->creator->active) {
+        if ($created && $user->active) {
             $roleId = $this->db->createCommand("SELECT id FROM {{%roles}} WHERE code = 'employee'")->queryScalar();
             if ($roleId === false) {
                 throw new \RuntimeException('Required employee role is not available; run migrations first.');
