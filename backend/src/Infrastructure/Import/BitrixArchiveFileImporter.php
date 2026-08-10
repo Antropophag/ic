@@ -110,10 +110,12 @@ final class BitrixArchiveFileImporter
             }
             $commentId = null;
             $uploader = (int) $request['initiator_id'];
+            $createdAt = (string) $request['created_at'];
             if (($association['documentType'] ?? null) === 'comment') {
                 $commentLegacyId = $this->commentLegacyId($association, $requestLegacyId);
                 $comment = $this->db->createCommand(
-                    'SELECT id, author_id FROM {{%request_comments}} WHERE legacy_id = :id AND request_id = :request_id',
+                    'SELECT id, author_id, created_at FROM {{%request_comments}} '
+                    . 'WHERE legacy_id = :id AND request_id = :request_id',
                     [':id' => $commentLegacyId, ':request_id' => (int) $request['id']],
                 )->queryOne();
                 if ($comment === false) {
@@ -121,13 +123,14 @@ final class BitrixArchiveFileImporter
                 }
                 $commentId = (int) $comment['id'];
                 $uploader = (int) $comment['author_id'];
+                $createdAt = (string) $comment['created_at'];
             }
             $storageKey = $this->storage->store($object);
             $this->db->createCommand()->insert('{{%request_documents}}', [
                 'legacy_id' => $legacyId, 'title_discriminator' => $legacyId,
                 'request_id' => (int) $request['id'], 'comment_id' => $commentId,
                 'document_type' => (string) $association['documentType'], 'title' => (string) $association['originalName'],
-                'created_by' => $uploader, 'created_at' => (string) $request['created_at'],
+                'created_by' => $uploader, 'created_at' => $createdAt,
             ])->execute();
             $documentId = (int) $this->db->getLastInsertID();
             $this->db->createCommand()->insert('{{%request_document_versions}}', [
@@ -135,7 +138,7 @@ final class BitrixArchiveFileImporter
                 'original_name' => (string) $association['originalName'],
                 'mime_type' => (string) ($metadata['mime'] ?? 'application/octet-stream'),
                 'size_bytes' => (int) $metadata['bytes'], 'sha256' => (string) $metadata['sha256'],
-                'uploaded_by' => $uploader, 'created_at' => (string) $request['created_at'],
+                'uploaded_by' => $uploader, 'created_at' => $createdAt,
             ])->execute();
             $transaction->commit();
             return true;
