@@ -116,6 +116,21 @@ describe('Bitrix file migration tooling', () => {
     expect(result.allowedHost).toBe('portal.example')
   })
 
+  test('includes files attached to legacy comments', async () => {
+    const directory = await fixtureDirectory()
+    const details = {
+      supportingDocFiles: [], reportFiles: [],
+      commentsInitiator: [{ id: '51', files: [{ id: 9, name: 'comment.pdf', detailURL: 'https://portal.example/docs/file/FilesProposalTest/comment.pdf' }] }],
+    }
+    await writeSnapshot(directory, [{ ID: '10', DETAIL_TEXT: JSON.stringify(details) }])
+
+    const result = await readSnapshotFiles(directory)
+
+    expect(result.associations[0]).toMatchObject({
+      requestNumber: '10', documentType: 'comment', commentType: 'initiator', sourceCommentId: '51', sourceFileId: '9',
+    })
+  })
+
   test('rejects unsafe file identifiers and malformed detail JSON', async () => {
     const unsafe = await fixtureDirectory()
     await writeSnapshot(unsafe, [element('10', [{ id: '../escape', name: 'x', detailURL: 'https://portal.example/docs/file/FilesProposalTest/x' }], [])])
