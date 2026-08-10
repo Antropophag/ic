@@ -185,7 +185,7 @@ final class RequestController extends ApiController
         $file = UploadedFile::getInstanceByName('file');
         if ($file === null || $file->error !== UPLOAD_ERR_OK) {
             Yii::$app->response->statusCode = 422;
-            return ['errors' => ['file' => ['Выберите файл размером не более 10 МБ.']]];
+            return ['errors' => ['file' => ['Выберите файл размером не более 200 МБ.']]];
         }
         $size = filesize($file->tempName);
         $mimeType = mime_content_type($file->tempName);
@@ -224,7 +224,7 @@ final class RequestController extends ApiController
         if ($file === null || $file->error !== UPLOAD_ERR_OK) {
             $this->recordRejectedReportSafely($id, $actorId, 'DOC-002A');
             Yii::$app->response->statusCode = 422;
-            return ['errors' => ['file' => ['Выберите PDF-файл размером не более 10 МБ.']]];
+            return ['errors' => ['file' => ['Выберите PDF-файл размером не более 200 МБ.']]];
         }
         $size = filesize($file->tempName);
         $mimeType = mime_content_type($file->tempName);
@@ -249,7 +249,7 @@ final class RequestController extends ApiController
             $this->recordRejectedReportSafely($id, $actorId, $error->ruleId);
             if ($error->ruleId === 'DOC-002A') {
                 Yii::$app->response->statusCode = 422;
-                return ['errors' => ['file' => ['Отчёт должен быть PDF-файлом размером не более 10 МБ.']]];
+                return ['errors' => ['file' => ['Отчёт должен быть PDF-файлом размером не более 200 МБ.']]];
             }
             throw new ForbiddenHttpException($error->getMessage());
         }

@@ -410,7 +410,7 @@ async function performCreateRequest() {
     } catch (error) {
       if (!isCurrent()) return;
       failedFiles.push(
-        `${file.name} (${error.status === 413 ? "файл слишком большой, максимум 10 МБ" : error.status === 422 ? "недопустимый формат или размер" : "ошибка загрузки"})`,
+        `${file.name} (${error.status === 413 ? "файл слишком большой, максимум 200 МБ" : error.status === 422 ? "недопустимый формат или размер" : "ошибка загрузки"})`,
       );
     }
   }

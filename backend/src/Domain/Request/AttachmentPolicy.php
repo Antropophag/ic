@@ -6,7 +6,7 @@ namespace App\Domain\Request;
 
 final class AttachmentPolicy
 {
-    public const MAX_SIZE_BYTES = 10 * 1024 * 1024;
+    public const MAX_SIZE_BYTES = 200 * 1024 * 1024;
 
     /** @var array<string, list<string>> */
     private const ALLOWED_TYPES = [

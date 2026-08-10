@@ -161,6 +161,9 @@ for stage in production development; do
 done
 grep -Fq 'location = /api/openapi.yaml' docker/nginx/default.conf
 grep -Fq 'location ^~ /api/docs/' docker/nginx/default.conf
+grep -Fq 'client_max_body_size 256m;' docker/nginx/default.conf
+grep -Fxq 'upload_max_filesize=200M' docker/php/uploads.ini
+grep -Fxq 'post_max_size=210M' docker/php/uploads.ini
 
 # Validate the exact direct-Compose entry points without relying on local
 # untracked deployment env files or exposing their secrets.
