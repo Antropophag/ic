@@ -4,9 +4,11 @@ import { requestApi } from '../api'
 import AppIcon from './AppIcon.vue'
 import AppModal from './AppModal.vue'
 import HelpArticle from './HelpArticle.vue'
+import ShlzFileRow from './ShlzFileRow.vue'
 import { createConfirmDialog } from '../confirmDialog'
 import { confirmRequestAction } from '../confirmRequestAction'
 import { triggerBlobDownload } from '../download'
+import { fileVisualKey } from '../fileVisual'
 import { createLatestRequestGuard } from '../latestRequestGuard'
 import { REQUEST_COLORS, avatarRoleClass, canStartNow, canSubmitComment, commentFromApi, documentFromApi, documentKind, fromApi, historyFromApi, initialsFor, newestFirstFeed, withoutStaleActions } from '../registry'
 import { shlzStatusToneClass } from '../shlzRegistry'
@@ -264,6 +266,18 @@ function fileTypeClassFor(document) {
   if (['docx', 'doc', 'rtf'].includes(extension)) return 'docx'
   if (['png', 'jpg', 'jpeg', 'webp', 'gif'].includes(extension)) return 'image'
   return documentKind(document.mimeType).className
+}
+
+function shlzFileIconUrlFor(document) {
+  return uiMode.fileIconUrls?.[fileVisualKey(document)] || uiMode.fileIconUrls?.generic || ''
+}
+
+function documentCompactMeta(document) {
+  return `Вер. ${document.version} · ${document.createdAt}`
+}
+
+function documentFullMeta(document) {
+  return `Версия ${document.version} · ${document.size} · ${document.createdAt}`
 }
 async function loadRequestDetails(item) {
   const requestToken = detailRequestGuard.begin(item.backendId)
@@ -1125,7 +1139,7 @@ onBeforeUnmount(() => {
           <section class="request-security-section" aria-labelledby="security-control-title"><h3 id="security-control-title">Контроль СБ</h3><div class="request-security-status"><span class="security-mark-icon" :class="selected.securityMarkDisplay?.className" aria-hidden="true"><svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" focusable="false"><path :d="selected.securityMarkDisplay?.path" /></svg></span><span><b>{{ selected.securityMarkDisplay?.label }}</b><small>Статус проверки</small></span></div></section>
         </article>
         <article id="request-documents" class="card documents request-documents" :class="{ 'shlz-surface': isShlzMode }"><div class="section-title request-documents-head"><h3>Документы <span class="request-document-count" :aria-label="`Документов: ${selected.documents?.length || 0}`">{{ selected.documents?.length || 0 }}</span></h3><label v-if="selected.canUploadDocument" :class="isShlzMode ? 'shlz-button shlz-button--text shlz-button--xs request-shlz-file-button' : 'request-document-upload'"><AppIcon v-if="!documentLoading" name="plus" :size="14" :shlz="isShlzMode" />{{ documentLoading ? 'Загрузка…' : 'Добавить' }}<input type="file" :disabled="documentLoading" accept=".pdf,.png,.jpg,.jpeg,.docx,.xlsx" @change="uploadDocument" /></label></div>
-          <section v-for="group in documentGroups" :key="group.key" class="request-document-group" :aria-labelledby="`document-group-${group.key}`"><h4 :id="`document-group-${group.key}`">{{ group.label }} <span>{{ group.items.length }}</span></h4><div v-for="document in group.items" :key="document.versionId" class="document-row request-file-card"><button type="button" class="request-file-open app-tooltip" data-tooltip="Открыть документ" :aria-label="`Открыть ${document.title}, версия ${document.version}`" @click="openDocument(document)"><span class="request-file-thumb" aria-hidden="true"><span class="request-file-lines"></span><span class="request-file-type" :class="fileTypeClassFor(document)">{{ fileExtensionFor(document) }}</span></span><span class="request-file-copy"><b :title="document.title">{{ document.title }}</b><small>Версия {{ document.version }} · {{ document.size }}</small><small>{{ document.createdAt }}</small></span></button><button type="button" class="request-file-action app-tooltip" data-tooltip="Скачать документ" :aria-label="`Скачать ${document.title}`" @click.stop="downloadDocument(document)"><AppIcon name="download" :size="14" /></button></div></section>
+          <section v-for="group in documentGroups" :key="group.key" class="request-document-group" :aria-labelledby="`document-group-${group.key}`"><h4 :id="`document-group-${group.key}`">{{ group.label }} <span>{{ group.items.length }}</span></h4><template v-for="document in group.items" :key="document.versionId"><ShlzFileRow v-if="isShlzMode" :icon-url="shlzFileIconUrlFor(document)" :title="document.title" :meta="documentCompactMeta(document)" :meta-title="documentFullMeta(document)" :open-label="`Открыть ${document.title}, версия ${document.version}`" :download-label="`Скачать ${document.title}`" @open="openDocument(document)" @download="downloadDocument(document)" /><div v-else class="document-row request-file-card"><button type="button" class="request-file-open app-tooltip" data-tooltip="Открыть документ" :aria-label="`Открыть ${document.title}, версия ${document.version}`" @click="openDocument(document)"><span class="request-file-thumb" aria-hidden="true"><span class="request-file-lines"></span><span class="request-file-type" :class="fileTypeClassFor(document)">{{ fileExtensionFor(document) }}</span></span><span class="request-file-copy"><b :title="document.title">{{ document.title }}</b><small>Версия {{ document.version }} · {{ document.size }}</small><small>{{ document.createdAt }}</small></span></button><button type="button" class="request-file-action app-tooltip" data-tooltip="Скачать документ" :aria-label="`Скачать ${document.title}`" @click.stop="downloadDocument(document)"><AppIcon name="download" :size="14" /></button></div></template></section>
           <div v-if="isShlzMode && !selected.documents?.length" class="request-empty-state"><div class="shlz-empty-state shlz-empty-state--simple"><span class="shlz-empty-state__visual" aria-hidden="true"><AppIcon name="file" :size="32" :shlz="true" /></span><p class="shlz-empty-state__title">Документов пока нет.</p></div></div><p v-else-if="!selected.documents?.length" class="placeholder-copy">Документов пока нет.</p>
           <p v-if="documentError" class="action-error">{{ documentError }}</p>
         </article>

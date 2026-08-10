@@ -62,6 +62,18 @@
   padding: var(--shlz-source-spacing-16);
 }
 
+.request-details-shlz-demo .request-document-group .shlz-file-row + .shlz-file-row {
+  margin-block-start: var(--shlz-source-spacing-4);
+}
+
+[data-ui="shlz"] button.shlz-file-row__primary {
+  padding: 0;
+  text-align: start;
+  background: transparent;
+  border: 0;
+  cursor: pointer;
+}
+
 [data-ui="shlz"] .request-shlz-file-button {
   position: relative;
   cursor: pointer;
