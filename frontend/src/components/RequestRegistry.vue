@@ -681,7 +681,7 @@ onBeforeUnmount(() => {
           :disabled="paged.page <= 1" aria-label="Предыдущая страница" @click="goToPage(paged.page - 1)"
         ><AppIcon name="chevron-left" :size="16" /></button><button
           v-for="page in pageNumbers" :key="page" :class="{ current: page === paged.page }" :aria-label="`Страница ${page}`" :aria-current="page === paged.page ? 'page' : undefined" @click="goToPage(page)"
-        >{{ page }}</button><button
+        ><span class="pagination-page-number">{{ page }}</span></button><button
           :disabled="paged.page >= paged.pageCount" aria-label="Следующая страница" @click="goToPage(paged.page + 1)"
         ><AppIcon name="chevron-right" :size="16" /></button></span>
         <span class="pagination-range">{{ (paged.page - 1) * pageSize + 1 }}–{{
