@@ -779,7 +779,7 @@ components:
         Первая формализованная часть строки реестра. Дополнительные исторические
         поля ответа пока не зафиксированы схемой и будут покрываться постепенно.
       type: object
-      required: [id, number, status, product_name, lockVersion, department]
+      required: [id, number, status, source, is_archived, product_name, sample_quantity, legacy_sample_quantity_raw, lockVersion, department]
       properties:
         id:
           type: integer
@@ -787,6 +787,21 @@ components:
           type: integer
         status:
           $ref: '#/components/schemas/RequestStatus'
+        source:
+          type: string
+          enum: [local, bitrix24]
+        is_archived:
+          type: integer
+          enum: [0, 1]
+        sample_quantity:
+          type: integer
+          minimum: 1
+          nullable: true
+          description: Точное количество образцов; null допустим только для архивной импортированной заявки
+        legacy_sample_quantity_raw:
+          type: string
+          nullable: true
+          description: Исходное значение количества из Битрикс24 без смысловой нормализации
         product_name:
           type: string
         lockVersion:
