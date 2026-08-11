@@ -5,6 +5,8 @@ declare(strict_types=1);
 namespace Tests\Integration\Document;
 
 use App\Application\Request\CreateRequestInput;
+use App\Domain\Request\ConcurrentRequestModification;
+use App\Domain\Request\ReportDeletionDenied;
 use App\Domain\Request\ReportDenied;
 use App\Domain\Request\RequestNotFound;
 use App\Infrastructure\Clock;
@@ -202,6 +204,111 @@ final class DocumentRepositoryTest extends IntegrationTestCase
         $repository = new DocumentRepository($this->db(), $this->storage());
         $this->expectException(ReportDenied::class);
         $repository->uploadReport((int) $request['id'], $outsider, $file['name'], $file['mime'], $file['size'], $file['path']);
+    }
+
+    public function testManagerCanDeleteReportAndReturnRequestToWork(): void
+    {
+        $initiator = $this->createUser('dev.it.doc.delete-manager-initiator', 'Инициатор');
+        $executor = $this->createUser('dev.it.doc.delete-manager-executor', 'Исполнитель');
+        $manager = $this->createUser('dev.it.doc.delete-manager', 'Руководитель ИЦ');
+        $this->grantRole($manager, 'ic_manager');
+        $request = $this->createInProgressRequestWithExecutor($initiator, $executor, 'delete-by-manager');
+        $requestId = (int) $request['id'];
+        $repository = new DocumentRepository($this->db(), $this->storage());
+        $file = $this->tempPdf();
+        $uploaded = $repository->uploadReport(
+            $requestId,
+            $executor,
+            $file['name'],
+            $file['mime'],
+            $file['size'],
+            $file['path'],
+        );
+
+        $deleted = $repository->deleteReport($requestId, (int) $uploaded['lockVersion'], $manager, 'Исправление отчёта');
+
+        self::assertSame('in_progress', $deleted['status']);
+        self::assertSame(0, (int) $this->scalar(
+            "SELECT COUNT(*) FROM {{%request_documents}} WHERE request_id = :id "
+            . "AND document_type = 'report' AND deleted_at IS NULL",
+            [':id' => $requestId],
+        ));
+    }
+
+    public function testUnrelatedEmployeeCannotDeleteReport(): void
+    {
+        $initiator = $this->createUser('dev.it.doc.delete-denied-initiator', 'Инициатор');
+        $executor = $this->createUser('dev.it.doc.delete-denied-executor', 'Исполнитель');
+        $outsider = $this->createUser('dev.it.doc.delete-denied-outsider', 'Посторонний сотрудник');
+        $request = $this->createInProgressRequestWithExecutor($initiator, $executor, 'delete-denied');
+        $requestId = (int) $request['id'];
+        $repository = new DocumentRepository($this->db(), $this->storage());
+        $file = $this->tempPdf();
+        $uploaded = $repository->uploadReport(
+            $requestId,
+            $executor,
+            $file['name'],
+            $file['mime'],
+            $file['size'],
+            $file['path'],
+        );
+
+        try {
+            $repository->deleteReport($requestId, (int) $uploaded['lockVersion'], $outsider, 'Нет полномочий');
+            self::fail('Report deletion by an unrelated employee must be denied.');
+        } catch (ReportDeletionDenied) {
+            self::assertSame('opinion_preparation', $this->scalar(
+                'SELECT status FROM {{%requests}} WHERE id = :id',
+                [':id' => $requestId],
+            ));
+            self::assertSame(1, (int) $this->scalar(
+                "SELECT COUNT(*) FROM {{%request_documents}} WHERE request_id = :id "
+                . "AND document_type = 'report' AND deleted_at IS NULL",
+                [':id' => $requestId],
+            ));
+        }
+    }
+
+    public function testStaleLockVersionDoesNotPartiallyDeleteReport(): void
+    {
+        $initiator = $this->createUser('dev.it.doc.delete-stale-initiator', 'Инициатор');
+        $executor = $this->createUser('dev.it.doc.delete-stale-executor', 'Исполнитель');
+        $request = $this->createInProgressRequestWithExecutor($initiator, $executor, 'delete-stale');
+        $requestId = (int) $request['id'];
+        $repository = new DocumentRepository($this->db(), $this->storage());
+        $file = $this->tempPdf();
+        $uploaded = $repository->uploadReport(
+            $requestId,
+            $executor,
+            $file['name'],
+            $file['mime'],
+            $file['size'],
+            $file['path'],
+        );
+
+        try {
+            $repository->deleteReport($requestId, (int) $uploaded['lockVersion'] - 1, $executor, 'Устаревшая версия');
+            self::fail('Report deletion with a stale lock version must be rejected.');
+        } catch (ConcurrentRequestModification) {
+            $requestAfterConflict = $this->db()->createCommand(
+                'SELECT status, lock_version FROM {{%requests}} WHERE id = :id',
+                [':id' => $requestId],
+            )->queryOne();
+            self::assertSame('opinion_preparation', $requestAfterConflict['status']);
+            self::assertSame((int) $uploaded['lockVersion'], (int) $requestAfterConflict['lock_version']);
+            self::assertSame(1, (int) $this->scalar(
+                "SELECT COUNT(*) FROM {{%request_documents}} document "
+                . "JOIN {{%request_document_versions}} version ON version.document_id = document.id "
+                . "WHERE document.request_id = :id AND document.document_type = 'report' "
+                . 'AND document.deleted_at IS NULL AND version.deleted_at IS NULL',
+                [':id' => $requestId],
+            ));
+            self::assertSame(0, (int) $this->scalar(
+                "SELECT COUNT(*) FROM {{%audit_events}} WHERE entity_type = 'request' AND entity_id = :id "
+                . "AND event_type = 'request.report_deleted'",
+                [':id' => $requestId],
+            ));
+        }
     }
 
     public function testSecondReportUploadCreatesNewVersionWithoutRepeatingStatusTransition(): void
