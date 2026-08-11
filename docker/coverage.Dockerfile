@@ -6,7 +6,7 @@ ARG XDEBUG_VERSION=3.5.3
 # hadolint ignore=DL3018,SC2086
 RUN apk add --no-cache freetype-dev libjpeg-turbo-dev libpng-dev libxml2-dev libzip-dev oniguruma-dev openldap-dev \
     && docker-php-ext-configure gd --with-freetype --with-jpeg \
-    && docker-php-ext-install dom gd ldap mbstring pdo_mysql zip \
+    && docker-php-ext-install dom gd ldap mbstring pcntl pdo_mysql zip \
     && apk add --no-cache --virtual .coverage-build-deps $PHPIZE_DEPS linux-headers \
     && pecl install "xdebug-${XDEBUG_VERSION}" \
     && docker-php-ext-enable xdebug \

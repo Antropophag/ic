@@ -24,6 +24,10 @@ services:
       dockerfile: docker/backend.Dockerfile
       target: production
     env_file: ${COMPOSE_ENV_FILE:?COMPOSE_ENV_FILE must select .env.dev or .env.prod}
+    environment:
+      APP_VERSION: ${APP_VERSION:-}
+      APP_COMMIT_SHA: ${APP_COMMIT_SHA:-}
+      APP_BUILD_TIMESTAMP: ${APP_BUILD_TIMESTAMP:-}
     depends_on:
       mariadb:
         condition: service_healthy
@@ -41,6 +45,10 @@ services:
       dockerfile: docker/backend.Dockerfile
       target: production
     env_file: ${COMPOSE_ENV_FILE:?COMPOSE_ENV_FILE must select .env.dev or .env.prod}
+    environment:
+      APP_VERSION: ${APP_VERSION:-}
+      APP_COMMIT_SHA: ${APP_COMMIT_SHA:-}
+      APP_BUILD_TIMESTAMP: ${APP_BUILD_TIMESTAMP:-}
     depends_on:
       mariadb:
         condition: service_healthy

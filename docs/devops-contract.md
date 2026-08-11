@@ -28,6 +28,9 @@ Production Compose содержит `frontend`, `backend`, `scheduler` и `maria
 `frontend` принимает HTTP, раздаёт production bundle и проксирует `/api` и
 `/health` в PHP-FPM. Используются только project `ic-prod`, `compose.yaml` и
 `.env.prod`; `.env.example` остаётся шаблоном без секретов.
+Backend runtime требует `ext-pcntl`: административная LDAP StartTLS probe
+использует process alarm, чтобы гарантированно завершаться по timeout. Штатный
+backend image устанавливает и проверяет это расширение при build.
 
 ```sh
 cp .env.example .env.prod
@@ -206,6 +209,9 @@ Docker Compose и Podman Compose равноправны. Makefile определ
 После изменения `.env.prod` нужно снова выполнить `make prod-up`, а после изменения
 `.env.dev` — `make dev-up`: соответствующие контейнеры будут пересозданы с
 новым environment. Обычный restart контейнера env-файл не перечитывает.
+`APP_VERSION`, `APP_COMMIT_SHA` и `APP_BUILD_TIMESTAMP` описывают собранный
+artifact и могут быть переданы deployment-командой поверх env-файла. Их
+автоматическое формирование CI/CD в текущий контракт не входит.
 Разные project names исключают управление чужими контейнерами и orphan
 warnings между окружениями. Env-файлы являются источником Compose metadata:
 production использует `COMPOSE_PROJECT_NAME=ic-prod`, `COMPOSE_FILE=compose.yaml`

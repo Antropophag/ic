@@ -15,6 +15,19 @@ use Symfony\Component\Mime\Email;
 
 final class Mailer
 {
+    public function checkConnection(): void
+    {
+        $transport = $this->transport();
+        if (!$transport instanceof SmtpTransport) {
+            throw new RuntimeException('Configured mail transport is not SMTP');
+        }
+        try {
+            $transport->start();
+        } finally {
+            $transport->stop();
+        }
+    }
+
     public function send(int $requestId, string $toEmail, string $toName, string $subject, string $body): void
     {
         $transport = $this->transport();
