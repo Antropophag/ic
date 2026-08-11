@@ -227,6 +227,7 @@ onBeforeUnmount(() => {
           <RequestRegistry
             :active="!selectedRequestId"
             :current-user-id="authUser.id"
+            :current-user-roles="currentProfile.roles"
             :refresh-trigger="registryRefreshTrigger"
             @select-request="openRequest"
           />

@@ -374,7 +374,7 @@ final class RequestRepositoryTest extends IntegrationTestCase
     public function testRegistryIsFilteredAndPaginatedOnServer(): void
     {
         $initiator = $this->createUser('dev.it.registry-page', 'Инициатор пагинации');
-        $other = $this->createUser('dev.it.registry-other', 'Другой инициатор');
+        $other = $this->createUser('dev.it.registry-other', 'Инициатор пагинации');
         $first = $this->createRegisteredRequest($initiator, 'уникальный насос');
         $this->createRegisteredRequest($initiator, 'уникальный насос второй');
         $this->createRegisteredRequest($other, 'постороннее изделие');
