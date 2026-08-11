@@ -320,6 +320,7 @@ final class DocumentRepository
             ], ['id' => (int) $document['id']])->execute();
             $nextLockVersion = $expectedLockVersion + 1;
             $updated = $this->db->createCommand()->update('{{%requests}}', [
+                'status' => RequestStatus::InProgress->value,
                 'lock_version' => $nextLockVersion,
                 'updated_at' => $now,
             ], [
@@ -328,6 +329,19 @@ final class DocumentRepository
             ])->execute();
             if ($updated !== 1) {
                 throw new ConcurrentRequestModification();
+            }
+            $status = RequestStatus::from((string) $request['status']);
+            if ($status !== RequestStatus::InProgress) {
+                $this->db->createCommand()->insert('{{%request_transitions}}', [
+                    'request_id' => $requestId,
+                    'actor_id' => $actorId,
+                    'from_status' => $status->value,
+                    'to_status' => RequestStatus::InProgress->value,
+                    'action' => 'delete_report',
+                    'rule_id' => 'DOC-011',
+                    'reason' => $reason,
+                    'created_at' => $now,
+                ])->execute();
             }
             $this->db->createCommand()->insert('{{%audit_events}}', [
                 'event_type' => 'request.report_deleted',
@@ -340,7 +354,7 @@ final class DocumentRepository
             ])->execute();
             $transaction->commit();
 
-            return ['status' => (string) $request['status'], 'lockVersion' => $nextLockVersion];
+            return ['status' => RequestStatus::InProgress->value, 'lockVersion' => $nextLockVersion];
         } catch (\Throwable $error) {
             $transaction->rollBack();
             throw $error;

@@ -514,6 +514,9 @@ final class RequestQuery
             . "WHERE a.entity_type = 'request' AND a.entity_id = :audit_request_id "
             . "AND a.event_type IN ('request.executor_assigned', 'request.expert_claimed', "
             . "'request.expert_reassigned', 'request.report_deleted', 'request.department_changed') "
+            . "AND (a.event_type <> 'request.report_deleted' OR NOT EXISTS (SELECT 1 FROM {{%request_transitions}} deletion_transition "
+            . "WHERE deletion_transition.request_id = a.entity_id AND deletion_transition.action = 'delete_report' "
+            . 'AND deletion_transition.created_at = a.created_at)) '
             . 'ORDER BY occurredAt DESC, kind DESC, id DESC',
             [
                 ':transition_request_id' => $requestId,

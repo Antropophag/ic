@@ -152,7 +152,29 @@ final class DocumentRepositoryTest extends IntegrationTestCase
         self::assertNull($outsiderUploadEvent[0]['versionId']);
         self::assertNull($outsiderUploadEvent[0]['originalName']);
 
-        $repository->deleteReport($requestId, (int) $result['lockVersion'], $executor, 'Загружена неверная версия');
+        $this->db()->createCommand()->update('{{%requests}}', [
+            'status' => 'completed',
+        ], ['id' => $requestId])->execute();
+        $deletion = $repository->deleteReport(
+            $requestId,
+            (int) $result['lockVersion'],
+            $executor,
+            'Загружена неверная версия',
+        );
+        self::assertSame('in_progress', $deletion['status']);
+        self::assertSame('in_progress', $this->scalar(
+            'SELECT status FROM {{%requests}} WHERE id = :id',
+            [':id' => $requestId],
+        ));
+        $deletionTransition = $this->db()->createCommand(
+            "SELECT from_status, to_status, rule_id, reason FROM {{%request_transitions}} "
+            . "WHERE request_id = :id AND action = 'delete_report'",
+            [':id' => $requestId],
+        )->queryOne();
+        self::assertSame('completed', $deletionTransition['from_status']);
+        self::assertSame('in_progress', $deletionTransition['to_status']);
+        self::assertSame('DOC-011', $deletionTransition['rule_id']);
+        self::assertSame('Загружена неверная версия', $deletionTransition['reason']);
         $historyAfterDeletion = (new RequestQuery($this->db()))->findDetails($requestId, $executor)['history'];
         $deletionEvent = array_values(array_filter(
             $historyAfterDeletion,
