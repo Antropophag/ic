@@ -154,15 +154,35 @@ final class DocumentRepositoryTest extends IntegrationTestCase
         self::assertNull($outsiderUploadEvent[0]['versionId']);
         self::assertNull($outsiderUploadEvent[0]['originalName']);
 
+    }
+
+    public function testDeletingReportFromCompletedRequestReturnsItToWorkAndWritesTransition(): void
+    {
+        $initiator = $this->createUser('dev.it.doc.delete-completed-initiator', 'Инициатор');
+        $executor = $this->createUser('dev.it.doc.delete-completed-executor', 'Исполнитель');
+        $request = $this->createInProgressRequestWithExecutor($initiator, $executor, 'delete-completed');
+        $requestId = (int) $request['id'];
+        $repository = new DocumentRepository($this->db(), $this->storage());
+        $file = $this->tempPdf();
+        $uploaded = $repository->uploadReport(
+            $requestId,
+            $executor,
+            $file['name'],
+            $file['mime'],
+            $file['size'],
+            $file['path'],
+        );
         $this->db()->createCommand()->update('{{%requests}}', [
             'status' => 'completed',
         ], ['id' => $requestId])->execute();
+
         $deletion = $repository->deleteReport(
             $requestId,
-            (int) $result['lockVersion'],
+            (int) $uploaded['lockVersion'],
             $executor,
             'Загружена неверная версия',
         );
+
         self::assertSame('in_progress', $deletion['status']);
         self::assertSame('in_progress', $this->scalar(
             'SELECT status FROM {{%requests}} WHERE id = :id',
