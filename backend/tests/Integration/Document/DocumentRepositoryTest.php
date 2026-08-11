@@ -327,6 +327,11 @@ final class DocumentRepositoryTest extends IntegrationTestCase
                 . "AND event_type = 'request.report_deleted'",
                 [':id' => $requestId],
             ));
+            self::assertSame(0, (int) $this->scalar(
+                "SELECT COUNT(*) FROM {{%request_transitions}} WHERE request_id = :id "
+                . "AND action = 'delete_report'",
+                [':id' => $requestId],
+            ));
         }
     }
 
