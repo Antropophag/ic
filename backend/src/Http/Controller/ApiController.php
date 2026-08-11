@@ -24,7 +24,7 @@ abstract class ApiController extends Controller
     public function runAction($id, $params = []): mixed
     {
         $request = Yii::$app->request;
-        if ($request->method !== 'POST' || !$this->requiresIdempotency()) {
+        if ($request->method !== 'POST' || !$this->requiresIdempotency((string) $id)) {
             return parent::runAction($id, $params);
         }
 
@@ -70,7 +70,7 @@ abstract class ApiController extends Controller
         return $result['body'];
     }
 
-    protected function requiresIdempotency(): bool
+    protected function requiresIdempotency(string $actionId): bool
     {
         return true;
     }
