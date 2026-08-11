@@ -71,10 +71,11 @@ final class CurrentUser
         try {
             (new UserActivityRecorder($this->db))->recordActivity($userId, $knownActivityAt);
         } catch (\Throwable $error) {
-            Yii::warning(
-                'Failed to update authenticated user activity (' . $error::class . ')',
-                __METHOD__,
-            );
+            Yii::warning([
+                'event' => 'user_activity_timestamp_update_failed',
+                'user_id' => $userId,
+                'error_class' => $error::class,
+            ], __METHOD__);
         }
     }
 }

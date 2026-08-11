@@ -27,10 +27,11 @@ final class UserActivityRecorder
                 ['id' => $userId],
             )->execute();
         } catch (\Throwable $error) {
-            Yii::warning(
-                'Failed to update authenticated user login time (' . $error::class . ')',
-                __METHOD__,
-            );
+            Yii::warning([
+                'event' => 'user_login_timestamp_update_failed',
+                'user_id' => $userId,
+                'error_class' => $error::class,
+            ], __METHOD__);
         }
     }
 

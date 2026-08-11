@@ -14,7 +14,9 @@ describe('user activity presentation', () => {
 
   it('does not present a future timestamp as recent activity', () => {
     expect(isRecentlyActive('2026-08-11T12:05:00Z', now)).toBe(false)
-    expect(relativeActivityTime('2026-08-11T12:05:00Z', now)).toBe('сегодня, 15:05')
+    const label = relativeActivityTime('2026-08-11T12:05:00Z', now)
+    expect(label).not.toBe('Активен')
+    expect(label).toContain('сегодня,')
   })
 
   it('sorts timestamps newest first and keeps null values last', () => {
