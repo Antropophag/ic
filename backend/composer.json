@@ -6,12 +6,14 @@
   "require": {
     "php": "^8.3",
     "ext-dom": "*",
+    "ext-gd": "*",
     "ext-json": "*",
     "ext-ldap": "*",
     "ext-mbstring": "*",
     "ext-pdo": "*",
     "ext-zip": "*",
     "dompdf/dompdf": "^3.1",
+    "phpoffice/phpword": "^1.4",
     "symfony/mailer": "^7.0",
     "yiisoft/yii2": "^2.0"
   },

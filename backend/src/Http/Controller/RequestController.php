@@ -4,6 +4,9 @@ declare(strict_types=1);
 
 namespace App\Http\Controller;
 
+use App\Application\Document\TestActDocumentService;
+use App\Application\Document\TestActConfigurationError;
+use App\Application\Document\TestActInput;
 use App\Application\Request\CreateRequestInput;
 use App\Application\Request\ChangeDepartmentInput;
 use App\Application\Request\ListRequestsInput;
@@ -41,6 +44,7 @@ use App\Infrastructure\Document\DocumentRepository;
 use App\Infrastructure\Document\DocumentStorage;
 use App\Infrastructure\Document\OfficeDocumentInspector;
 use App\Infrastructure\Document\OpinionPdfRenderer;
+use App\Infrastructure\Document\TestActDocumentGenerator;
 use App\Infrastructure\Request\RequestQuery;
 use App\Infrastructure\Request\RequestRepository;
 use Yii;
@@ -54,6 +58,13 @@ use yii\web\UploadedFile;
 
 final class RequestController extends ApiController
 {
+    protected function requiresIdempotency(string $actionId): bool
+    {
+        // Generating a draft is a read-only binary response. The JSON idempotency store cannot
+        // persist a DOCX response and no domain state needs duplicate-request protection here.
+        return $actionId !== 'generate-test-act';
+    }
+
     public function behaviors(): array
     {
         $behaviors = parent::behaviors();
@@ -275,6 +286,44 @@ final class RequestController extends ApiController
             $this->recordRejectedReportDeletionSafely($id, $actorId, $error->ruleId);
             throw new ConflictHttpException($error->getMessage());
         }
+    }
+
+    /** @return array<string, mixed> */
+    public function actionPrepareTestAct(int $id): array
+    {
+        try {
+            return $this->testActDocuments()->prepare($id, $this->currentUserId());
+        } catch (RequestNotFound $error) {
+            throw new NotFoundHttpException($error->getMessage());
+        } catch (ReportDenied $error) {
+            throw new ForbiddenHttpException($error->getMessage());
+        } catch (TestActConfigurationError $error) {
+            throw new ConflictHttpException($error->getMessage());
+        }
+    }
+
+    /** @return Response|array<string, mixed> */
+    public function actionGenerateTestAct(int $id): Response|array
+    {
+        $input = new TestActInput();
+        if (($errors = $this->bodyValidationErrors($input)) !== null) {
+            return $errors;
+        }
+
+        try {
+            $document = $this->testActDocuments()->generate($id, $this->currentUserId(), $input);
+        } catch (RequestNotFound $error) {
+            throw new NotFoundHttpException($error->getMessage());
+        } catch (ReportDenied $error) {
+            throw new ForbiddenHttpException($error->getMessage());
+        } catch (TestActConfigurationError $error) {
+            throw new ConflictHttpException($error->getMessage());
+        }
+
+        return Yii::$app->response->sendContentAsFile($document->content, $document->fileName, [
+            'mimeType' => $document->mimeType,
+            'inline' => false,
+        ]);
     }
 
     public function actionDownloadDocument(int $id): Response
@@ -837,6 +886,11 @@ final class RequestController extends ApiController
     private function documents(): DocumentRepository
     {
         return new DocumentRepository(Yii::$app->db, $this->storage());
+    }
+
+    private function testActDocuments(): TestActDocumentService
+    {
+        return new TestActDocumentService(Yii::$app->db, new TestActDocumentGenerator());
     }
 
     private function storage(): DocumentStorage

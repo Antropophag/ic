@@ -105,6 +105,15 @@ final class RequestControllerTest extends TestCase
         $controller->bindActionParams($action, ['id' => '10']);
     }
 
+    public function testOnlyReadOnlyDocxGenerationSkipsJsonIdempotencyStore(): void
+    {
+        $controller = $this->controllerWithBody([]);
+        $method = new \ReflectionMethod($controller, 'requiresIdempotency');
+
+        self::assertFalse($method->invoke($controller, 'generate-test-act'));
+        self::assertTrue($method->invoke($controller, 'start'));
+    }
+
     /** @param array<string, mixed> $body */
     private function controllerWithBody(array $body): RequestController
     {

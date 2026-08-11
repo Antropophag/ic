@@ -4,8 +4,9 @@ ARG XDEBUG_VERSION=3.5.3
 
 # Build-only packages follow the pinned Alpine base repository as one set.
 # hadolint ignore=DL3018,SC2086
-RUN apk add --no-cache libxml2-dev libzip-dev oniguruma-dev openldap-dev \
-    && docker-php-ext-install dom ldap mbstring pdo_mysql zip \
+RUN apk add --no-cache freetype-dev libjpeg-turbo-dev libpng-dev libxml2-dev libzip-dev oniguruma-dev openldap-dev \
+    && docker-php-ext-configure gd --with-freetype --with-jpeg \
+    && docker-php-ext-install dom gd ldap mbstring pdo_mysql zip \
     && apk add --no-cache --virtual .coverage-build-deps $PHPIZE_DEPS linux-headers \
     && pecl install "xdebug-${XDEBUG_VERSION}" \
     && docker-php-ext-enable xdebug \

@@ -19,7 +19,7 @@ use yii\web\HttpException;
 
 final class AuthController extends ApiController
 {
-    protected function requiresIdempotency(): bool
+    protected function requiresIdempotency(string $actionId): bool
     {
         return false;
     }

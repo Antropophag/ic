@@ -25,6 +25,10 @@ const documentLoading = ref(false)
 const documentError = ref('')
 const reportLoading = ref(false)
 const reportError = ref('')
+const showTestActModal = ref(false)
+const testActDraft = ref({ documentType: 'test_act', actNumber: '', actDate: '', basis: '', result: '', sampleName: '', testMethod: '', requestNumber: null })
+const testActLoading = ref(false)
+const testActError = ref('')
 const executors = ref([])
 const executorChoice = ref('')
 const experts = ref([])
@@ -66,6 +70,7 @@ const commentRequestGuard = createLatestRequestGuard()
 const commentsPageRequestGuard = createLatestRequestGuard()
 const documentRequestGuard = createLatestRequestGuard()
 const reportRequestGuard = createLatestRequestGuard()
+const testActRequestGuard = createLatestRequestGuard()
 const opinionRequestGuard = createLatestRequestGuard()
 const securityRequestGuard = createLatestRequestGuard()
 const colorRequestGuard = createLatestRequestGuard()
@@ -90,7 +95,7 @@ const documentGroups = computed(() => {
     { key: 'attachment', label: 'Сопроводительные документы', items: documents.filter(document => !['report', 'opinion'].includes(document.documentType)) },
     { key: 'report', label: 'Отчётные документы', items: documents.filter(document => document.documentType === 'report') },
     { key: 'opinion', label: 'Экспертное заключение', items: documents.filter(document => document.documentType === 'opinion') },
-  ].filter(group => group.items.length)
+  ].filter(group => group.items.length || (group.key === 'report' && selected.value?.canUploadReport))
 })
 const participants = computed(() => {
   if (!selected.value) return []
@@ -355,6 +360,48 @@ async function uploadReport(event) {
     if (reportRequestGuard.isCurrent(requestToken, selected.value?.backendId)) {
       reportLoading.value = false
     }
+  }
+}
+
+async function openTestActModal() {
+  const requestId = selected.value.backendId
+  const token = testActRequestGuard.begin(requestId)
+  testActLoading.value = true
+  testActError.value = ''
+  showTestActModal.value = true
+  try {
+    const draft = await requestApi.prepareTestAct(requestId)
+    if (!testActRequestGuard.isCurrent(token, selected.value?.backendId)) return
+    testActDraft.value = { ...draft, documentType: 'test_act', result: '' }
+  } catch (error) {
+    if (!testActRequestGuard.isCurrent(token, selected.value?.backendId)) return
+    testActError.value = error.status === 403
+      ? 'Сформировать акт может назначенный исполнитель или руководитель.'
+      : 'Не удалось подготовить данные акта.'
+  } finally {
+    if (testActRequestGuard.isCurrent(token, selected.value?.backendId)) testActLoading.value = false
+  }
+}
+
+async function generateTestAct() {
+  const requestId = selected.value.backendId
+  const token = testActRequestGuard.begin(requestId)
+  testActLoading.value = true
+  testActError.value = ''
+  try {
+    const { actNumber, actDate, basis, result, requestNumber } = testActDraft.value
+    const blob = await requestApi.generateTestAct(requestId, { actNumber, actDate, basis, result })
+    if (!testActRequestGuard.isCurrent(token, selected.value?.backendId)) return
+    triggerBlobDownload(blob, `Акт_испытаний_заявка_${requestNumber}.docx`)
+    showTestActModal.value = false
+  } catch (error) {
+    if (!testActRequestGuard.isCurrent(token, selected.value?.backendId)) return
+    testActError.value = error.payload?.errors?.result?.[0]
+      || error.payload?.errors?.actDate?.[0]
+      || (error.status === 403 ? 'У вас больше нет права формировать акт по этой заявке.' : error.message)
+      || 'Не удалось сформировать DOCX.'
+  } finally {
+    if (testActRequestGuard.isCurrent(token, selected.value?.backendId)) testActLoading.value = false
   }
 }
 
@@ -972,7 +1019,7 @@ async function suspendOrResumeRequest(action) {
 
 
 function invalidateRequests() {
-  for (const guard of [detailRequestGuard, commentRequestGuard, commentsPageRequestGuard, documentRequestGuard, reportRequestGuard, opinionRequestGuard, securityRequestGuard, colorRequestGuard, rejectRequestGuard, withdrawRequestGuard, claimRequestGuard, reassignRequestGuard, deleteReportRequestGuard, suspendResumeRequestGuard, executorsRequestGuard, expertsRequestGuard, actionRequestGuard, downloadRequestGuard, previewRequestGuard, departmentRequestGuard]) guard.invalidate()
+  for (const guard of [detailRequestGuard, commentRequestGuard, commentsPageRequestGuard, documentRequestGuard, reportRequestGuard, testActRequestGuard, opinionRequestGuard, securityRequestGuard, colorRequestGuard, rejectRequestGuard, withdrawRequestGuard, claimRequestGuard, reassignRequestGuard, deleteReportRequestGuard, suspendResumeRequestGuard, executorsRequestGuard, expertsRequestGuard, actionRequestGuard, downloadRequestGuard, previewRequestGuard, departmentRequestGuard]) guard.invalidate()
 }
 
 function resetRequestLocalState() {
@@ -980,6 +1027,7 @@ function resetRequestLocalState() {
   commentDraft.value = ''
   opinionDraft.value = ''
   showOpinionModal.value = false
+  showTestActModal.value = false
   showHelpDrawer.value = false
   departmentDraft.value = ''
   showDepartmentModal.value = false
@@ -988,14 +1036,14 @@ function resetRequestLocalState() {
   expertChoice.value = ''
 
   for (const error of [
-    detailError, commentError, documentError, reportError, opinionError,
+    detailError, commentError, documentError, reportError, testActError, opinionError,
     securityError, colorError, rejectError, withdrawError, claimError,
     reassignError, deleteReportError, suspendResumeError, departmentError,
   ]) error.value = ''
 
   for (const loading of [
     actionLoading, detailLoading, commentLoading, olderCommentsLoading,
-    documentLoading, reportLoading, opinionLoading, securityLoading,
+    documentLoading, reportLoading, testActLoading, opinionLoading, securityLoading,
     colorLoading, rejectLoading, withdrawLoading, claimLoading,
     reassignLoading, deleteReportLoading, suspendResumeLoading, departmentLoading,
   ]) loading.value = false
@@ -1121,7 +1169,7 @@ onBeforeUnmount(() => {
           <section class="request-security-section" aria-labelledby="security-control-title"><h3 id="security-control-title">Контроль СБ</h3><div class="request-security-status"><span class="security-mark-icon" :class="selected.securityMarkDisplay?.className" aria-hidden="true"><svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" focusable="false"><path :d="selected.securityMarkDisplay?.path" /></svg></span><span><b>{{ selected.securityMarkDisplay?.label }}</b><small>Статус проверки</small></span></div></section>
         </article>
         <article id="request-documents" class="card documents request-documents"><div class="section-title request-documents-head"><h3>Документы <span class="request-document-count" :aria-label="`Документов: ${selected.documents?.length || 0}`">{{ selected.documents?.length || 0 }}</span></h3><label v-if="selected.canUploadDocument" class="request-document-upload"><AppIcon v-if="!documentLoading" name="plus" :size="14" />{{ documentLoading ? 'Загрузка…' : 'Добавить' }}<input type="file" :disabled="documentLoading" accept=".pdf,.png,.jpg,.jpeg,.docx,.xlsx" @change="uploadDocument" /></label></div>
-          <section v-for="group in documentGroups" :key="group.key" class="request-document-group" :aria-labelledby="`document-group-${group.key}`"><h4 :id="`document-group-${group.key}`">{{ group.label }} <span>{{ group.items.length }}</span></h4><div v-for="document in group.items" :key="document.versionId" class="document-row request-file-card"><button type="button" class="request-file-open app-tooltip" data-tooltip="Открыть документ" :aria-label="`Открыть ${document.title}, версия ${document.version}`" @click="openDocument(document)"><span class="request-file-thumb" aria-hidden="true"><span class="request-file-lines"></span><span class="request-file-type" :class="fileTypeClassFor(document)">{{ fileExtensionFor(document) }}</span></span><span class="request-file-copy"><b :title="document.title">{{ document.title }}</b><small>Версия {{ document.version }} · {{ document.size }}</small><small>{{ document.createdAt }}</small></span></button><button type="button" class="request-file-action app-tooltip" data-tooltip="Скачать документ" :aria-label="`Скачать ${document.title}`" @click.stop="downloadDocument(document)"><AppIcon name="download" :size="14" /></button></div></section>
+          <section v-for="group in documentGroups" :key="group.key" class="request-document-group" :aria-labelledby="`document-group-${group.key}`"><h4 :id="`document-group-${group.key}`"><span class="request-document-group-label">{{ group.label }} <span>{{ group.items.length }}</span></span><button v-if="group.key === 'report' && selected.canUploadReport" type="button" class="request-document-group-action app-tooltip app-tooltip-left" data-tooltip="Сформировать шаблон отчётного документа" aria-label="Сформировать шаблон отчётного документа" :disabled="testActLoading" @click="openTestActModal"><AppIcon name="magic-wand" :size="17" /></button></h4><div v-for="document in group.items" :key="document.versionId" class="document-row request-file-card"><button type="button" class="request-file-open app-tooltip" data-tooltip="Открыть документ" :aria-label="`Открыть ${document.title}, версия ${document.version}`" @click="openDocument(document)"><span class="request-file-thumb" aria-hidden="true"><span class="request-file-lines"></span><span class="request-file-type" :class="fileTypeClassFor(document)">{{ fileExtensionFor(document) }}</span></span><span class="request-file-copy"><b :title="document.title">{{ document.title }}</b><small>Версия {{ document.version }} · {{ document.size }}</small><small>{{ document.createdAt }}</small></span></button><button type="button" class="request-file-action app-tooltip" data-tooltip="Скачать документ" :aria-label="`Скачать ${document.title}`" @click.stop="downloadDocument(document)"><AppIcon name="download" :size="14" /></button></div></section>
           <p v-if="!selected.documents?.length" class="placeholder-copy">Документов пока нет.</p>
           <p v-if="documentError" class="action-error">{{ documentError }}</p>
         </article>
@@ -1162,6 +1210,32 @@ onBeforeUnmount(() => {
         :disabled="confirmDialog.state.reasonField?.required && !confirmDialog.state.reasonValue.trim()"
         @click="confirmDialog.accept"
       >{{ confirmDialog.state.confirmLabel }}</button>
+    </template>
+  </AppModal>
+
+  <AppModal :open="showTestActModal" as="form" title="Сформировать шаблон документа" subtitle="Экспериментальная функция" title-id="test-act-modal-title" size="large" :busy="testActLoading" @close="showTestActModal = false" @submit="generateTestAct">
+    <div class="test-act-document-type">
+      <span id="test-document-type-label">Тип документа</span>
+      <div class="test-document-tabs" role="tablist" aria-labelledby="test-document-type-label">
+        <button type="button" role="tab" :aria-selected="testActDraft.documentType === 'test_act'" class="active" :disabled="testActLoading" @click="testActDraft.documentType = 'test_act'"><span>Акт испытаний</span><small>DOCX</small></button>
+        <button type="button" role="tab" aria-selected="false" disabled><span>Протокол испытаний</span><span class="test-document-tab-meta"><small>DOCX</small><small class="test-document-soon">Скоро</small></span></button>
+      </div>
+    </div>
+    <div class="fact-list opinion-summary test-act-summary">
+      <div class="fact wide"><span>Наименование образца</span><b>{{ testActDraft.sampleName || '—' }}</b></div>
+      <div class="fact wide"><span>Программа / метод испытаний</span><b>{{ testActDraft.testMethod || '—' }}</b></div>
+    </div>
+    <div class="form-grid test-act-fields">
+      <label>Номер акта<input v-model.trim="testActDraft.actNumber" :disabled="testActLoading" maxlength="100" required /></label>
+      <label>Дата акта<input v-model.trim="testActDraft.actDate" :disabled="testActLoading" maxlength="10" placeholder="дд.мм.гггг" required /></label>
+      <label class="wide">Основание проведения испытаний<input v-model.trim="testActDraft.basis" :disabled="testActLoading" maxlength="1000" required /></label>
+      <label class="wide">Результат испытаний<textarea v-model.trim="testActDraft.result" :disabled="testActLoading" maxlength="20000" required placeholder="Опишите фактический результат испытаний"></textarea></label>
+    </div>
+    <p class="placeholder-copy">Черновик скачивается для редактирования в Word и не становится итоговым отчётом заявки.</p>
+    <p v-if="testActError" class="action-error">{{ testActError }}</p>
+    <template #footer>
+      <button type="button" class="secondary" :disabled="testActLoading" @click="showTestActModal = false">Отмена</button>
+      <button class="primary" :disabled="testActLoading || !testActDraft.actNumber.trim() || !testActDraft.actDate.trim() || !testActDraft.basis.trim() || !testActDraft.result.trim()">{{ testActLoading ? 'Формирование…' : 'Сформировать шаблон' }}</button>
     </template>
   </AppModal>
 
