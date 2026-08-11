@@ -390,6 +390,57 @@ paths:
         '422': {$ref: '#/components/responses/ValidationError'}
         '500': {$ref: '#/components/responses/ServerError'}
 
+  /api/v1/requests/{id}/report-document-drafts/test-act:
+    get:
+      tags: [Requests]
+      summary: Подготовить автозаполненные данные черновика акта испытаний
+      operationId: prepareTestActDraft
+      security: [{cookieSession: []}]
+      parameters:
+        - $ref: '#/components/parameters/RequestId'
+      responses:
+        '200':
+          description: Актуальные данные заявки и значения по умолчанию
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/TestActPreparation'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '500': {$ref: '#/components/responses/ServerError'}
+    post:
+      tags: [Requests]
+      summary: Сформировать редактируемый DOCX-черновик акта испытаний
+      description: Не изменяет заявку и не создаёт версию итогового отчётного документа.
+      operationId: generateTestActDraft
+      security: [{cookieSession: [], csrfToken: []}]
+      parameters:
+        - $ref: '#/components/parameters/RequestId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/TestActInput'}
+      responses:
+        '200':
+          description: DOCX-черновик акта испытаний
+          headers:
+            Content-Disposition:
+              description: Имя скачиваемого файла
+              schema: {type: string}
+          content:
+            application/vnd.openxmlformats-officedocument.wordprocessingml.document:
+              schema: {type: string, format: binary}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '415': {$ref: '#/components/responses/UnsupportedMediaType'}
+        '422': {$ref: '#/components/responses/ValidationError'}
+        '500': {$ref: '#/components/responses/ServerError'}
+
   /api/v1/requests/{id}/security-decision:
     post:
       tags: [Requests]
@@ -967,6 +1018,29 @@ components:
           type: string
           minLength: 1
           maxLength: 10000
+      additionalProperties: false
+    TestActPreparation:
+      type: object
+      required: [documentType, actNumber, actDate, sampleName, basis, testMethod, requestNumber, approverName, contactEmail]
+      properties:
+        documentType: {type: string, enum: [test_act]}
+        actNumber: {type: string, maxLength: 100}
+        actDate: {type: string, pattern: '^\d{2}\.\d{2}\.\d{4}$'}
+        sampleName: {type: string}
+        basis: {type: string, maxLength: 1000}
+        testMethod: {type: string}
+        requestNumber: {type: integer, minimum: 1}
+        approverName: {type: string, minLength: 1}
+        contactEmail: {type: string, format: email}
+      additionalProperties: false
+    TestActInput:
+      type: object
+      required: [actNumber, actDate, basis, result]
+      properties:
+        actNumber: {type: string, minLength: 1, maxLength: 100, pattern: '.*\S.*'}
+        actDate: {type: string, pattern: '^\d{2}\.\d{2}\.\d{4}$'}
+        basis: {type: string, minLength: 1, maxLength: 1000, pattern: '.*\S.*'}
+        result: {type: string, minLength: 1, maxLength: 20000, pattern: '.*\S.*'}
       additionalProperties: false
     RequiredReason:
       type: string
