@@ -26,5 +26,6 @@ defineProps({ name: { type: String, required: true }, size: { type: Number, defa
     <template v-else-if="name === 'building'"><path d="M5 21V5l7-2v18M12 8h7v13M3 21h18M8 8h1M8 12h1M8 16h1M15 11h1M15 15h1" /></template>
     <template v-else-if="name === 'bell'"><path d="M18 9a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9M10 21h4" /></template>
     <template v-else-if="name === 'external-link'"><path d="M14 5h5v5M19 5l-8 8" /><path d="M19 14v5H5V5h5" /></template>
+    <template v-else-if="name === 'magic-wand'"><path class="magic-wand-stick" d="m5 19 9.4-9.4 2 2L7 21H5z" /><path class="magic-wand-spark magic-wand-spark--large" d="m16 3 .65 1.35L18 5l-1.35.65L16 7l-.65-1.35L14 5l1.35-.65z" /><path class="magic-wand-spark magic-wand-spark--small" d="m20 8 .4.85.85.4-.85.4-.4.85-.4-.85-.85-.4.85-.4zM9 4l.35.7.7.35-.7.35L9 6.1l-.35-.7-.7-.35.7-.35z" /></template>
   </svg>
 </template>

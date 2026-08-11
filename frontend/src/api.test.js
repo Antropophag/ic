@@ -233,6 +233,31 @@ it('uploads a test report through the dedicated endpoint', async () => {
   }))
 })
 
+it('prepares and downloads a test act draft through the report-document resource', async () => {
+  const prepared = { documentType: 'test_act', actNumber: '42', requestNumber: 42 }
+  const fetchMock = vi.fn()
+    .mockResolvedValueOnce(new Response(JSON.stringify(prepared), { status: 200 }))
+    .mockResolvedValueOnce(new Response('docx', { status: 200 }))
+  vi.stubGlobal('fetch', fetchMock)
+  setCsrfToken('csrf-test')
+
+  await expect(requestApi.prepareTestAct(7)).resolves.toEqual(prepared)
+  await expect(requestApi.generateTestAct(7, {
+    actNumber: '42', actDate: '11.08.2026', basis: 'Заявка № 42', result: 'Соответствует',
+  })).resolves.toBeInstanceOf(Blob)
+
+  expect(fetchMock).toHaveBeenNthCalledWith(1, '/api/v1/requests/7/report-document-drafts/test-act', expect.any(Object))
+  expect(fetchMock).toHaveBeenNthCalledWith(2, '/api/v1/requests/7/report-document-drafts/test-act', expect.objectContaining({
+    method: 'POST',
+    headers: expect.objectContaining({
+      'Content-Type': 'application/json',
+      'X-CSRF-Token': 'csrf-test',
+    }),
+    body: JSON.stringify({ actNumber: '42', actDate: '11.08.2026', basis: 'Заявка № 42', result: 'Соответствует' }),
+  }))
+  expect(fetchMock.mock.calls[1][1].headers.Accept).toBeUndefined()
+})
+
 it('sends creation data as JSON', async () => {
   const fetchMock = vi.fn().mockResolvedValue(new Response('{}', { status: 201 }))
   vi.stubGlobal('fetch', fetchMock)
