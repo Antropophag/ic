@@ -153,7 +153,6 @@ final class DocumentRepositoryTest extends IntegrationTestCase
         ));
         self::assertNull($outsiderUploadEvent[0]['versionId']);
         self::assertNull($outsiderUploadEvent[0]['originalName']);
-
     }
 
     public function testDeletingReportFromCompletedRequestReturnsItToWorkAndWritesTransition(): void
