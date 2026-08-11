@@ -16,7 +16,9 @@ final class TestActInput extends Model
     public function rules(): array
     {
         return [
-            [['actNumber', 'actDate', 'basis', 'result'], 'filter', 'filter' => 'trim'],
+            [['actNumber', 'actDate', 'basis', 'result'], 'filter',
+                'filter' => static fn (mixed $value): mixed => is_string($value) ? trim($value) : $value,
+            ],
             [['actNumber', 'actDate', 'basis', 'result'], 'required'],
             ['actNumber', 'string', 'max' => 100],
             ['actDate', 'date', 'format' => 'php:d.m.Y', 'locale' => 'ru_RU', 'timeZone' => 'Europe/Moscow'],
