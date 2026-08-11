@@ -62,10 +62,10 @@ final class BreakGlassLoginTest extends IntegrationTestCase
         $overview = (new AdminController('admin', Yii::$app))->actionSystemOverview();
         self::assertSame('operational', $overview['services']['database']['status']);
         self::assertSame('error', $overview['services']['ldap']['status']);
-        self::assertSame('unused.invalid:389', $overview['services']['ldap']['details']['Сервер']);
-        self::assertArrayHasKey('Сервер', $overview['services']['smtp']['details']);
-        self::assertArrayHasKey('Путь', $overview['services']['storage']['details']);
-        self::assertStringNotContainsString((string) getenv('DB_PASSWORD'), json_encode($overview, JSON_THROW_ON_ERROR));
+        self::assertSame('unused.invalid:389', $overview['services']['ldap']['details']['endpoint']);
+        self::assertArrayHasKey('endpoint', $overview['services']['smtp']['details']);
+        self::assertArrayHasKey('path', $overview['services']['storage']['details']);
+        self::assertStringNotContainsString('synthetic smtp password', json_encode($overview, JSON_THROW_ON_ERROR));
         $payload = $this->scalar(
             "SELECT payload_json FROM {{%audit_events}} WHERE event_type = 'authentication.break_glass_succeeded' "
             . 'AND actor_id = :actor_id',
@@ -101,6 +101,66 @@ final class BreakGlassLoginTest extends IntegrationTestCase
         (new AdminController('admin', Yii::$app))->actionSystemOverview();
     }
 
+    public function testMissingServiceConfigurationDoesNotHideIndependentResults(): void
+    {
+        $this->configureEnvironment();
+        $this->createApplication(self::LOGIN, self::PASSWORD);
+        (new AuthController('auth', Yii::$app))->actionLogin();
+        putenv('LDAP_HOST');
+        putenv('SMTP_HOST');
+
+        $overview = (new AdminController('admin', Yii::$app))->actionSystemOverview();
+
+        self::assertSame('operational', $overview['services']['database']['status']);
+        self::assertSame('error', $overview['services']['ldap']['status']);
+        self::assertSame('error', $overview['services']['smtp']['status']);
+        self::assertSame('Not configured', $overview['services']['ldap']['details']['endpoint']);
+        self::assertSame('Not configured', $overview['services']['smtp']['details']['endpoint']);
+    }
+
+    public function testLdapStartTlsProbeReturnsAfterBoundedTimeout(): void
+    {
+        $server = stream_socket_server('tcp://127.0.0.1:0', $errorCode, $errorMessage);
+        self::assertIsResource($server, $errorMessage);
+        $address = stream_socket_get_name($server, false);
+        self::assertIsString($address);
+        $port = (int) substr($address, (int) strrpos($address, ':') + 1);
+        $childPid = pcntl_fork();
+        self::assertGreaterThanOrEqual(0, $childPid);
+        if ($childPid === 0) {
+            for ($connectionNumber = 0; $connectionNumber < 2; ++$connectionNumber) {
+                $connection = stream_socket_accept($server, 10);
+                if (is_resource($connection)) {
+                    if ($connectionNumber === 1) {
+                        sleep(15);
+                    }
+                    fclose($connection);
+                }
+            }
+            fclose($server);
+            exit(0);
+        }
+
+        try {
+            $this->configureEnvironment();
+            putenv('LDAP_HOST=127.0.0.1');
+            putenv("LDAP_PORT={$port}");
+            putenv('LDAP_USE_TLS=true');
+            $this->createApplication(self::LOGIN, self::PASSWORD);
+            (new AuthController('auth', Yii::$app))->actionLogin();
+            $startedAt = microtime(true);
+
+            $overview = (new AdminController('admin', Yii::$app))->actionSystemOverview();
+
+            self::assertSame('error', $overview['services']['ldap']['status']);
+            self::assertLessThan(8.0, microtime(true) - $startedAt);
+        } finally {
+            fclose($server);
+            posix_kill($childPid, SIGTERM);
+            pcntl_waitpid($childPid, $status);
+        }
+    }
+
     private function configureEnvironment(): void
     {
         $values = [
@@ -111,6 +171,12 @@ final class BreakGlassLoginTest extends IntegrationTestCase
             'LDAP_DOMAIN' => 'unused.invalid',
             'LDAP_BASE_DN' => 'DC=unused,DC=invalid',
             'LDAP_USE_TLS' => 'false',
+            'SMTP_HOST' => 'smtp.invalid',
+            'SMTP_PORT' => '2525',
+            'SMTP_USERNAME' => 'synthetic@example.invalid',
+            'SMTP_PASSWORD' => 'synthetic smtp password',
+            'SMTP_SECURE' => 'none',
+            'MAIL_FROM_ADDRESS' => 'sender@example.invalid',
         ];
         foreach ($values as $name => $value) {
             $this->originalEnvironment[$name] = getenv($name);

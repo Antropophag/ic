@@ -501,9 +501,10 @@ it('lists admin users and roles', async () => {
 })
 
 it('loads admin system overview', async () => {
-  const fetchMock = vi.fn().mockResolvedValue(new Response('{}', { status: 200 }))
+  const payload = { application: { name: 'ИЦ' }, services: {}, checkedAt: '2026-08-11T15:42:15Z' }
+  const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify(payload), { status: 200 }))
   vi.stubGlobal('fetch', fetchMock)
-  await adminApi.systemOverview()
+  await expect(adminApi.systemOverview()).resolves.toEqual(payload)
   expect(fetchMock).toHaveBeenCalledWith('/api/v1/admin/system-overview', expect.any(Object))
 })
 
