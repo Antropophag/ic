@@ -5,6 +5,7 @@ import AppIcon from './AppIcon.vue'
 const props = defineProps({
   open: { type: Boolean, required: true },
   title: { type: String, default: '' },
+  subtitle: { type: String, default: '' },
   titleId: { type: String, required: true },
   descriptionId: { type: String, default: undefined },
   size: { type: String, default: 'medium' },
@@ -80,7 +81,7 @@ onBeforeUnmount(() => {
       @submit.prevent="emit('submit', $event)"
     >
       <header v-if="title" class="modal-head">
-        <div class="modal-heading"><slot name="eyebrow" /><h2 :id="titleId">{{ title }}</h2></div>
+        <div class="modal-heading"><slot name="eyebrow" /><h2 :id="titleId">{{ title }}</h2><small v-if="subtitle" class="modal-subtitle">{{ subtitle }}</small></div>
         <button type="button" aria-label="Закрыть" :disabled="busy" @click="requestClose"><AppIcon name="close" /></button>
       </header>
       <div class="modal-body"><slot /></div>
