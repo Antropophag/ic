@@ -7,6 +7,7 @@ namespace App\Infrastructure\Identity;
 use App\Infrastructure\Clock;
 use DateTimeImmutable;
 use DateTimeZone;
+use Yii;
 use yii\db\Connection;
 
 final class UserActivityRecorder
@@ -19,11 +20,18 @@ final class UserActivityRecorder
 
     public function recordLogin(int $userId): void
     {
-        $this->db->createCommand()->update(
-            '{{%users}}',
-            ['last_login_at' => Clock::now()],
-            ['id' => $userId],
-        )->execute();
+        try {
+            $this->db->createCommand()->update(
+                '{{%users}}',
+                ['last_login_at' => Clock::now()],
+                ['id' => $userId],
+            )->execute();
+        } catch (\Throwable $error) {
+            Yii::warning(
+                'Failed to update authenticated user login time (' . $error::class . ')',
+                __METHOD__,
+            );
+        }
     }
 
     public function recordActivity(int $userId, ?string $knownActivityAt): void

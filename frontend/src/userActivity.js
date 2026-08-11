@@ -34,9 +34,9 @@ export function isRecentlyActive(value, now = Date.now()) {
 export function relativeActivityTime(value, now = Date.now(), emptyLabel = 'Нет активности', recentLabel = 'Активен') {
   if (!value) return emptyLabel
   const timestamp = new Date(value).getTime()
-  const elapsed = Math.max(0, now - timestamp)
-  if (elapsed <= RECENT_ACTIVITY_MS) return recentLabel
-  if (elapsed < 60 * 60 * 1000) return `${Math.max(1, Math.floor(elapsed / 60000))} мин назад`
+  const elapsed = now - timestamp
+  if (elapsed >= 0 && elapsed <= RECENT_ACTIVITY_MS) return recentLabel
+  if (elapsed > 0 && elapsed < 60 * 60 * 1000) return `${Math.max(1, Math.floor(elapsed / 60000))} мин назад`
   if (dateKeyFormatter.format(timestamp) === dateKeyFormatter.format(now)) {
     return `сегодня, ${timeFormatter.format(timestamp)}`
   }

@@ -10,6 +10,7 @@ use App\Infrastructure\Identity\BreakGlassAuthenticator;
 use App\Infrastructure\Identity\BreakGlassConfiguration;
 use App\Infrastructure\Identity\BreakGlassIdentityProvisioner;
 use App\Infrastructure\Identity\CurrentUser;
+use App\Infrastructure\Identity\UserActivityRecorder;
 use Tests\Integration\IntegrationTestCase;
 use Yii;
 use yii\web\Application;
@@ -91,11 +92,15 @@ final class BreakGlassLoginTest extends IntegrationTestCase
             ['last_activity_at' => $staleActivityAt],
             ['id' => $userId],
         )->execute();
+        $activityCutoff = (new \DateTimeImmutable('now', new \DateTimeZone('UTC')))
+            ->modify('-' . UserActivityRecorder::ACTIVITY_THROTTLE_SECONDS . ' seconds')
+            ->format('Y-m-d H:i:s.u');
         self::assertSame($userId, (new CurrentUser($this->db()))->id(Yii::$app->request));
-        self::assertNotSame($staleActivityAt, $this->scalar(
+        $updatedActivityAt = (string) $this->scalar(
             'SELECT last_activity_at FROM {{%users}} WHERE id = :id',
             [':id' => $userId],
-        ));
+        );
+        self::assertGreaterThan($activityCutoff, $updatedActivityAt);
         self::assertSame($userId, $response['user']['id']);
         self::assertSame(['administrator'], $response['user']['roles']);
 

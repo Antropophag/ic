@@ -12,6 +12,11 @@ describe('user activity presentation', () => {
     expect(isRecentlyActive('2026-08-11T11:49:59Z', now)).toBe(false)
   })
 
+  it('does not present a future timestamp as recent activity', () => {
+    expect(isRecentlyActive('2026-08-11T12:05:00Z', now)).toBe(false)
+    expect(relativeActivityTime('2026-08-11T12:05:00Z', now)).toBe('сегодня, 15:05')
+  })
+
   it('sorts timestamps newest first and keeps null values last', () => {
     const users = [
       { id: 1, displayName: 'Без входа', lastLoginAt: null },
