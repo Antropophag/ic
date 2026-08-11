@@ -93,7 +93,7 @@ final class AdminController extends ApiController
                 $version = Yii::$app->db->createCommand('SELECT VERSION()')->queryScalar();
                 return [
                     'База данных' => is_string($database) ? $database : 'Не определена',
-                    'Сервер' => is_string($version) ? $version : 'Не определён',
+                    'Версия СУБД' => is_string($version) ? $version : 'Не определена',
                 ];
             },
             'ldap' => static function () use ($ldapHost, $ldapPort, $ldapUseTls): array {

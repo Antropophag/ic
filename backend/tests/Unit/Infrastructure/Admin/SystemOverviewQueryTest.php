@@ -21,7 +21,7 @@ final class SystemOverviewQueryTest extends TestCase
             ['name' => 'ИЦ', 'version' => '1', 'commitSha' => null, 'builtAt' => null],
             $details,
             [
-                'database' => static fn (): array => ['Сервер' => 'MariaDB 11.4'],
+                'database' => static fn (): array => ['Версия СУБД' => 'MariaDB 11.4'],
                 'smtp' => static fn (): never => throw new \RuntimeException('password=secret'),
                 'storage' => static fn (): array => [],
                 'ldap' => static fn (): array => [],
@@ -31,7 +31,7 @@ final class SystemOverviewQueryTest extends TestCase
         self::assertSame('error', $result['services']['smtp']['status']);
         self::assertSame('operational', $result['services']['storage']['status']);
         self::assertSame('operational', $result['services']['ldap']['status']);
-        self::assertSame('MariaDB 11.4', $result['services']['database']['details']['Сервер']);
+        self::assertSame('MariaDB 11.4', $result['services']['database']['details']['Версия СУБД']);
         self::assertSame($details['ldap'], $result['services']['ldap']['details']);
         self::assertSame('Соединение установлено', $result['services']['ldap']['message']);
         self::assertStringNotContainsString('secret', json_encode($result, JSON_THROW_ON_ERROR));
