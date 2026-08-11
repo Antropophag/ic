@@ -588,9 +588,35 @@ components:
       type: object
       required: [application, services, checkedAt]
       properties:
-        application: {type: object, additionalProperties: true}
-        services: {type: object, additionalProperties: true}
+        application:
+          type: object
+          required: [name, version, commitSha, builtAt]
+          properties:
+            name: {type: string}
+            version: {type: string, nullable: true}
+            commitSha: {type: string, nullable: true}
+            builtAt: {type: string, format: date-time, nullable: true}
+          additionalProperties: false
+        services:
+          type: object
+          required: [database, ldap, smtp, storage]
+          properties:
+            database: {$ref: '#/components/schemas/SystemServiceStatus'}
+            ldap: {$ref: '#/components/schemas/SystemServiceStatus'}
+            smtp: {$ref: '#/components/schemas/SystemServiceStatus'}
+            storage: {$ref: '#/components/schemas/SystemServiceStatus'}
+          additionalProperties: false
         checkedAt: {type: string, format: date-time}
+      additionalProperties: false
+    SystemServiceStatus:
+      type: object
+      required: [status, message, details]
+      properties:
+        status: {type: string, enum: [operational, error]}
+        message: {type: string}
+        details:
+          type: object
+          additionalProperties: {type: string}
       additionalProperties: false
     Liveness:
       type: object

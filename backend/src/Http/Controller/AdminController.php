@@ -61,17 +61,63 @@ final class AdminController extends ApiController
     {
         $this->authorize();
         $storagePath = getenv('DOCUMENT_STORAGE_PATH') ?: '/app/storage/documents';
+        $ldapHost = $this->requiredEnvironmentValue('LDAP_HOST');
+        $ldapPort = $this->environmentPort('LDAP_PORT', 389);
+        $ldapUseTls = strtolower($this->environmentValue('LDAP_USE_TLS') ?? 'false') === 'true';
+        $smtpHost = $this->requiredEnvironmentValue('SMTP_HOST');
+        $smtpPort = $this->environmentPort('SMTP_PORT', 587);
         return (new SystemOverviewQuery([
             'name' => 'Регистратор заявок на проведение испытаний',
-            'version' => $this->env('APP_VERSION'), 'commitSha' => $this->env('APP_COMMIT_SHA'),
-            'builtAt' => $this->env('APP_BUILD_TIMESTAMP'),
+            'version' => $this->environmentValue('APP_VERSION'),
+            'commitSha' => $this->environmentValue('APP_COMMIT_SHA'),
+            'builtAt' => $this->environmentValue('APP_BUILD_TIMESTAMP'),
         ], [
-            'database' => fn (): mixed => Yii::$app->db->createCommand('SELECT 1')->queryScalar(),
-            'smtp' => static function (): void {
-                (new Mailer())->checkConnection();
+            'database' => [],
+            'ldap' => [
+                'Сервер' => "{$ldapHost}:{$ldapPort}",
+                'Домен' => $this->requiredEnvironmentValue('LDAP_DOMAIN'),
+                'Base DN' => $this->requiredEnvironmentValue('LDAP_BASE_DN'),
+                'Защита соединения' => $ldapUseTls ? 'StartTLS' : 'Без TLS',
+            ],
+            'smtp' => [
+                'Сервер' => "{$smtpHost}:{$smtpPort}",
+                'Защита соединения' => $this->smtpSecurityLabel(),
+                'Отправитель' => $this->requiredEnvironmentValue('MAIL_FROM_ADDRESS'),
+            ],
+            'storage' => [
+                'Путь' => $storagePath,
+            ],
+        ], [
+            'database' => static function (): array {
+                $database = Yii::$app->db->createCommand('SELECT DATABASE()')->queryScalar();
+                $version = Yii::$app->db->createCommand('SELECT VERSION()')->queryScalar();
+                return [
+                    'База данных' => is_string($database) ? $database : 'Не определена',
+                    'Сервер' => is_string($version) ? $version : 'Не определён',
+                ];
             },
-            'storage' => static function () use ($storagePath): void {
+            'ldap' => static function () use ($ldapHost, $ldapPort, $ldapUseTls): array {
+                $socket = @fsockopen(hostname: $ldapHost, port: $ldapPort, timeout: 5.0);
+                if ($socket === false) {
+                    throw new \RuntimeException('LDAP endpoint is unreachable');
+                }
+                fclose($socket);
+                if ($ldapUseTls) {
+                    $connection = ldap_connect("ldap://{$ldapHost}:{$ldapPort}");
+                    if ($connection === false || !@ldap_start_tls($connection)) {
+                        throw new \RuntimeException('LDAP StartTLS negotiation failed');
+                    }
+                }
+                return [];
+            },
+            'smtp' => static function (): array {
+                (new Mailer())->checkConnection();
+                return [];
+            },
+            'storage' => function () use ($storagePath): array {
                 (new DocumentStorage($storagePath))->assertWritable();
+                $freeBytes = disk_free_space($storagePath);
+                return ['Свободно' => is_float($freeBytes) ? $this->formatBytes($freeBytes) : 'Не удалось определить'];
             },
         ]))->read();
     }
@@ -255,9 +301,42 @@ final class AdminController extends ApiController
     {
         return new NotificationQuery(Yii::$app->db);
     }
-    private function env(string $name): ?string
+    private function environmentValue(string $name): ?string
     {
         $value = getenv($name);
         return $value === false || trim($value) === '' ? null : trim($value);
+    }
+    private function requiredEnvironmentValue(string $name): string
+    {
+        return $this->environmentValue($name)
+            ?? throw new \RuntimeException("Required environment variable {$name} is missing");
+    }
+    private function environmentPort(string $name, int $default): int
+    {
+        $value = $this->environmentValue($name) ?? (string) $default;
+        $port = filter_var($value, FILTER_VALIDATE_INT, ['options' => ['min_range' => 1, 'max_range' => 65535]]);
+        if ($port === false) {
+            throw new \RuntimeException("Environment variable {$name} must be a valid TCP port");
+        }
+        return $port;
+    }
+    private function smtpSecurityLabel(): string
+    {
+        return match (strtolower($this->environmentValue('SMTP_SECURE') ?? 'tls')) {
+            'tls' => 'STARTTLS',
+            'ssl' => 'TLS',
+            'none' => 'Без TLS',
+            default => 'Неизвестно',
+        };
+    }
+    private function formatBytes(float $bytes): string
+    {
+        $units = ['Б', 'КБ', 'МБ', 'ГБ', 'ТБ'];
+        $index = 0;
+        while ($bytes >= 1024 && $index < count($units) - 1) {
+            $bytes /= 1024;
+            ++$index;
+        }
+        return number_format($bytes, $index === 0 ? 0 : 1, ',', ' ') . ' ' . $units[$index];
     }
 }

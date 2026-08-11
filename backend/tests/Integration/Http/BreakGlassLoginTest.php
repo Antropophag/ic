@@ -61,7 +61,11 @@ final class BreakGlassLoginTest extends IntegrationTestCase
         self::assertArrayHasKey('items', $adminResponse);
         $overview = (new AdminController('admin', Yii::$app))->actionSystemOverview();
         self::assertSame('operational', $overview['services']['database']['status']);
-        self::assertSame('unavailable', $overview['services']['ldap']['status']);
+        self::assertSame('error', $overview['services']['ldap']['status']);
+        self::assertSame('unused.invalid:389', $overview['services']['ldap']['details']['Сервер']);
+        self::assertArrayHasKey('Сервер', $overview['services']['smtp']['details']);
+        self::assertArrayHasKey('Путь', $overview['services']['storage']['details']);
+        self::assertStringNotContainsString((string) getenv('DB_PASSWORD'), json_encode($overview, JSON_THROW_ON_ERROR));
         $payload = $this->scalar(
             "SELECT payload_json FROM {{%audit_events}} WHERE event_type = 'authentication.break_glass_succeeded' "
             . 'AND actor_id = :actor_id',
