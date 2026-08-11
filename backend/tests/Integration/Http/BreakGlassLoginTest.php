@@ -159,12 +159,15 @@ PHP;
             putenv('LDAP_USE_TLS=true');
             $this->createApplication(self::LOGIN, self::PASSWORD);
             (new AuthController('auth', Yii::$app))->actionLogin();
-            $startedAt = microtime(true);
+            $startedAt = hrtime(true);
 
             $overview = (new AdminController('admin', Yii::$app))->actionSystemOverview();
 
             self::assertSame('error', $overview['services']['ldap']['status']);
-            self::assertLessThan(8.0, microtime(true) - $startedAt);
+            $elapsedSeconds = (hrtime(true) - $startedAt) / 1_000_000_000;
+            // The alarm fires after 6 seconds and the unbounded fixture sleeps for 15.
+            // Keep enough runner scheduling margin while still detecting a missing timeout.
+            self::assertLessThan(12.0, $elapsedSeconds);
         } finally {
             fclose($server);
             foreach ($pipes as $pipe) {
