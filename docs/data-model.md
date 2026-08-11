@@ -172,6 +172,8 @@ erDiagram
         varchar(255) position
         varchar(255) department
         tinyint(1) is_active
+        datetime(6) last_login_at
+        datetime(6) last_activity_at
         datetime(6) created_at
         datetime(6) updated_at
     }

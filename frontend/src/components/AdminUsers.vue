@@ -1,11 +1,12 @@
 <script setup>
-import { onBeforeUnmount, onMounted, reactive, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, reactive, ref } from 'vue'
 import { adminApi } from '../api'
 import { createConfirmDialog } from '../confirmDialog'
 import { createLatestRequestGuard } from '../latestRequestGuard'
 import { avatarRoleClass, initialsFor } from '../registry'
 import AppIcon from './AppIcon.vue'
 import AppModal from './AppModal.vue'
+import { absoluteActivityTime, isRecentlyActive, relativeActivityTime, sortUsersBy } from '../userActivity'
 
 const users = ref([])
 const roles = ref([])
@@ -17,12 +18,19 @@ const createUserLoading = ref(false)
 const createUserError = ref('')
 const roleChoiceByUser = reactive({})
 const roleActionError = ref('')
+const sortOrder = ref('name')
+const serverNow = ref(Date.now())
+const localCheckedAt = ref(Date.now())
+const currentTime = ref(Date.now())
 const requestGuard = createLatestRequestGuard()
 const createUserGuard = createLatestRequestGuard()
 const roleActionTokens = new Map()
 const pendingRoleUsers = reactive(new Set())
 const confirmDialog = createConfirmDialog()
 let mounted = true
+let clockTimer
+const sortedUsers = computed(() => sortUsersBy(users.value, sortOrder.value))
+const effectiveNow = computed(() => serverNow.value + Math.max(0, currentTime.value - localCheckedAt.value))
 
 async function load() {
   loading.value = true
@@ -32,6 +40,9 @@ async function load() {
     const [usersResult, rolesResult] = await Promise.all([adminApi.users(), adminApi.roles()])
     if (!requestGuard.isCurrent(token, true)) return
     users.value = Array.isArray(usersResult.items) ? usersResult.items : []
+    serverNow.value = usersResult.checkedAt ? new Date(usersResult.checkedAt).getTime() : Date.now()
+    localCheckedAt.value = Date.now()
+    currentTime.value = localCheckedAt.value
     roles.value = Array.isArray(rolesResult.items) ? rolesResult.items : []
   } catch {
     if (requestGuard.isCurrent(token, true)) error.value = 'Не удалось загрузить список пользователей.'
@@ -137,12 +148,14 @@ async function revokeRole(userId, roleId) {
 }
 
 onMounted(load)
+onMounted(() => { clockTimer = window.setInterval(() => { currentTime.value = Date.now() }, 60000) })
 onBeforeUnmount(() => {
   mounted = false
   confirmDialog.cancel()
   requestGuard.invalidate()
   createUserGuard.invalidate()
   roleActionTokens.clear()
+  window.clearInterval(clockTimer)
 })
 </script>
 
@@ -158,9 +171,10 @@ onBeforeUnmount(() => {
     <p v-if="createUserError" class="action-error">{{ createUserError }}</p>
     <p class="hint">Профиль получит выбранную и базовую роли. При первом входе через LDAP портал найдёт его по логину и обновит отображаемое имя данными из AD.</p>
     <p v-if="roleActionError" class="action-error">{{ roleActionError }}</p>
+    <div v-if="!loading && users.length" class="admin-user-tools"><label>Сортировка<select v-model="sortOrder"><option value="name">По имени</option><option value="lastActivityAt">По последней активности</option><option value="lastLoginAt">По последнему входу</option></select></label><span>«Активен» означает запрос к порталу за последние 10 минут.</span></div>
     <div v-if="!loading && users.length" class="table-wrap admin-table-wrap">
-      <table class="admin-table"><thead><tr><th>Пользователь</th><th>Логин AD</th><th>Электронная почта</th><th>Состояние</th><th>Роли</th></tr></thead><tbody>
-        <tr v-for="user in users" :key="user.id"><td><div class="admin-person"><span class="avatar small" :class="userAvatarClass(user)">{{ initialsFor(user.displayName) }}</span><b>{{ user.displayName }}</b></div></td><td>{{ user.adLogin }}</td><td class="admin-email" :title="user.email || ''">{{ user.email || '—' }}</td><td><span class="badge" :class="user.isActive ? 'green' : 'gray'">{{ user.isActive ? 'Активен' : 'Отключён' }}</span></td><td><div class="admin-roles"><span v-for="role in user.roles" :key="role.id" class="role-chip">{{ role.name }}<button type="button" title="Отозвать роль" :aria-label="`Отозвать роль ${role.name} у ${user.displayName || user.adLogin}`" :disabled="pendingRoleUsers.has(user.id)" @click="revokeRole(user.id, role.id)"><AppIcon name="close" :size="12" /></button></span><span class="role-assign"><select v-model="roleChoiceByUser[user.id]" :disabled="pendingRoleUsers.has(user.id)" :aria-label="`Новая роль для ${user.displayName || user.adLogin}`"><option value="">Добавить роль…</option><option v-for="role in roles" :key="role.id" :value="role.id">{{ role.name }}</option></select><button type="button" class="secondary" :aria-label="`Назначить выбранную роль пользователю ${user.displayName || user.adLogin}`" :disabled="pendingRoleUsers.has(user.id)" @click="assignRole(user.id)"><AppIcon name="plus" :size="14" /></button></span></div></td></tr>
+      <table class="admin-table admin-users-table"><thead><tr><th>Пользователь</th><th>Логин AD</th><th>Электронная почта</th><th>Состояние</th><th>Использование</th><th>Роли</th></tr></thead><tbody>
+        <tr v-for="user in sortedUsers" :key="user.id"><td><div class="admin-person"><span class="avatar small" :class="userAvatarClass(user)">{{ initialsFor(user.displayName) }}</span><b>{{ user.displayName }}</b></div></td><td>{{ user.adLogin }}</td><td class="admin-email" :title="user.email || ''">{{ user.email || '—' }}</td><td><span class="badge" :class="user.isActive ? 'green' : 'gray'">{{ user.isActive ? 'Включена' : 'Отключена' }}</span></td><td><div class="admin-usage"><span :class="{ 'admin-usage-active': isRecentlyActive(user.lastActivityAt, effectiveNow) }" :title="absoluteActivityTime(user.lastActivityAt)">{{ relativeActivityTime(user.lastActivityAt, effectiveNow) }}</span><small :title="absoluteActivityTime(user.lastLoginAt)">Вход: {{ relativeActivityTime(user.lastLoginAt, effectiveNow, 'Не входил', 'сейчас').toLowerCase() }}</small></div></td><td><div class="admin-roles"><span v-for="role in user.roles" :key="role.id" class="role-chip">{{ role.name }}<button type="button" title="Отозвать роль" :aria-label="`Отозвать роль ${role.name} у ${user.displayName || user.adLogin}`" :disabled="pendingRoleUsers.has(user.id)" @click="revokeRole(user.id, role.id)"><AppIcon name="close" :size="12" /></button></span><span class="role-assign"><select v-model="roleChoiceByUser[user.id]" :disabled="pendingRoleUsers.has(user.id)" :aria-label="`Новая роль для ${user.displayName || user.adLogin}`"><option value="">Добавить роль…</option><option v-for="role in roles" :key="role.id" :value="role.id">{{ role.name }}</option></select><button type="button" class="secondary" :aria-label="`Назначить выбранную роль пользователю ${user.displayName || user.adLogin}`" :disabled="pendingRoleUsers.has(user.id)" @click="assignRole(user.id)"><AppIcon name="plus" :size="14" /></button></span></div></td></tr>
       </tbody></table>
     </div>
     <div v-else-if="!loading" class="admin-empty"><div class="admin-empty-icon" aria-hidden="true"><AppIcon name="search" :size="20" /></div><h3>Пользователей пока нет</h3><p>Добавьте профиль с помощью формы выше.</p></div>
