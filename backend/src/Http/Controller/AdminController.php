@@ -17,6 +17,9 @@ use App\Infrastructure\Identity\CurrentUser;
 use App\Infrastructure\Identity\UserAdministrationRepository;
 use App\Infrastructure\Admin\AuditQuery;
 use App\Infrastructure\Admin\NotificationQuery;
+use App\Infrastructure\Admin\SystemOverviewQuery;
+use App\Infrastructure\Document\DocumentStorage;
+use App\Infrastructure\Notification\Mailer;
 use InvalidArgumentException;
 use Yii;
 use yii\web\ConflictHttpException;
@@ -52,6 +55,91 @@ final class AdminController extends ApiController
     {
         $this->authorize();
         return ['items' => $this->repository()->listRoles()];
+    }
+    /** @return array<string, mixed> */
+    public function actionSystemOverview(): array
+    {
+        $this->authorize();
+        $storagePath = getenv('DOCUMENT_STORAGE_PATH') ?: '/app/storage/documents';
+        $ldapHost = $this->environmentValue('LDAP_HOST');
+        $ldapPort = $this->environmentValue('LDAP_PORT') ?? '389';
+        $ldapUseTls = strtolower($this->environmentValue('LDAP_USE_TLS') ?? 'false') === 'true';
+        $smtpHost = $this->environmentValue('SMTP_HOST');
+        $smtpPort = $this->environmentValue('SMTP_PORT') ?? '587';
+        return (new SystemOverviewQuery([
+            'name' => 'Регистратор заявок на проведение испытаний',
+            'version' => $this->environmentValue('APP_VERSION'),
+            'commitSha' => $this->environmentValue('APP_COMMIT_SHA'),
+            'builtAt' => $this->environmentValue('APP_BUILD_TIMESTAMP'),
+        ], [
+            'database' => [],
+            'ldap' => [
+                'endpoint' => $ldapHost === null ? 'Not configured' : "{$ldapHost}:{$ldapPort}",
+                'domain' => $this->environmentValue('LDAP_DOMAIN') ?? 'Not configured',
+                'baseDn' => $this->environmentValue('LDAP_BASE_DN') ?? 'Not configured',
+                'transportSecurity' => $ldapUseTls ? 'StartTLS' : 'None',
+            ],
+            'smtp' => [
+                'endpoint' => $smtpHost === null ? 'Not configured' : "{$smtpHost}:{$smtpPort}",
+                'transportSecurity' => $smtpHost === null ? 'Not configured' : $this->smtpSecurityLabel(),
+                'sender' => $this->environmentValue('MAIL_FROM_ADDRESS') ?? 'Not configured',
+            ],
+            'storage' => [
+                'path' => $storagePath,
+            ],
+        ], [
+            'database' => static function (): array {
+                $database = Yii::$app->db->createCommand('SELECT DATABASE()')->queryScalar();
+                $version = Yii::$app->db->createCommand('SELECT VERSION()')->queryScalar();
+                return [
+                    'databaseName' => is_string($database) ? $database : 'Unknown',
+                    'databaseVersion' => is_string($version) ? $version : 'Unknown',
+                ];
+            },
+            'ldap' => function () use ($ldapUseTls): array {
+                $host = $this->requiredEnvironmentValue('LDAP_HOST');
+                $port = $this->environmentPort('LDAP_PORT', 389);
+                $this->requiredEnvironmentValue('LDAP_DOMAIN');
+                $this->requiredEnvironmentValue('LDAP_BASE_DN');
+                $this->runWithTimeout(static function () use ($host, $port, $ldapUseTls): void {
+                    $socket = @fsockopen(hostname: $host, port: $port, timeout: 5.0);
+                    if ($socket === false) {
+                        throw new \RuntimeException('LDAP endpoint is unreachable');
+                    }
+                    fclose($socket);
+                    if (!$ldapUseTls) {
+                        return;
+                    }
+                    $connection = @ldap_connect($host, $port);
+                    if ($connection === false) {
+                        throw new \RuntimeException('LDAP connection failed');
+                    }
+                    ldap_set_option($connection, LDAP_OPT_PROTOCOL_VERSION, 3);
+                    ldap_set_option($connection, LDAP_OPT_REFERRALS, 0);
+                    ldap_set_option($connection, LDAP_OPT_NETWORK_TIMEOUT, 5);
+                    try {
+                        if (!@ldap_start_tls($connection)) {
+                            throw new \RuntimeException('LDAP StartTLS negotiation failed');
+                        }
+                    } finally {
+                        @ldap_unbind($connection);
+                    }
+                }, 6);
+                return [];
+            },
+            'smtp' => function (): array {
+                $this->requiredEnvironmentValue('SMTP_HOST');
+                $this->environmentPort('SMTP_PORT', 587);
+                $this->requiredEnvironmentValue('MAIL_FROM_ADDRESS');
+                (new Mailer())->checkConnection();
+                return [];
+            },
+            'storage' => function () use ($storagePath): array {
+                (new DocumentStorage($storagePath))->assertWritable();
+                $freeBytes = disk_free_space($storagePath);
+                return ['freeSpace' => is_float($freeBytes) ? $this->formatBytes($freeBytes) : 'Unknown'];
+            },
+        ]))->read();
     }
 
     /** @return array<string, mixed> */
@@ -232,5 +320,68 @@ final class AdminController extends ApiController
     private function notificationQuery(): NotificationQuery
     {
         return new NotificationQuery(Yii::$app->db);
+    }
+    private function environmentValue(string $name): ?string
+    {
+        $value = getenv($name);
+        return $value === false || trim($value) === '' ? null : trim($value);
+    }
+    private function requiredEnvironmentValue(string $name): string
+    {
+        return $this->environmentValue($name)
+            ?? throw new \RuntimeException("Required environment variable {$name} is missing");
+    }
+    private function environmentPort(string $name, int $default): int
+    {
+        $value = $this->environmentValue($name) ?? (string) $default;
+        $port = filter_var($value, FILTER_VALIDATE_INT, ['options' => ['min_range' => 1, 'max_range' => 65535]]);
+        if ($port === false) {
+            throw new \RuntimeException("Environment variable {$name} must be a valid TCP port");
+        }
+        return $port;
+    }
+    private function smtpSecurityLabel(): string
+    {
+        return match (strtolower($this->environmentValue('SMTP_SECURE') ?? 'tls')) {
+            'tls' => 'STARTTLS',
+            'ssl' => 'TLS',
+            'none' => 'None',
+            default => 'Unknown',
+        };
+    }
+    private function runWithTimeout(callable $operation, int $seconds): void
+    {
+        if (
+            !function_exists('pcntl_alarm')
+            || !function_exists('pcntl_signal')
+            || !function_exists('pcntl_signal_get_handler')
+            || !function_exists('pcntl_async_signals')
+        ) {
+            throw new \RuntimeException('LDAP probe requires ext-pcntl for a bounded timeout');
+        }
+        $previousHandler = pcntl_signal_get_handler(SIGALRM);
+        $previousAsyncSignals = pcntl_async_signals();
+        pcntl_async_signals(true);
+        pcntl_signal(SIGALRM, static function (): never {
+            throw new \RuntimeException('LDAP probe timed out');
+        }, false);
+        pcntl_alarm($seconds);
+        try {
+            $operation();
+        } finally {
+            pcntl_alarm(0);
+            pcntl_signal(SIGALRM, $previousHandler);
+            pcntl_async_signals($previousAsyncSignals);
+        }
+    }
+    private function formatBytes(float $bytes): string
+    {
+        $units = ['Б', 'КБ', 'МБ', 'ГБ', 'ТБ'];
+        $index = 0;
+        while ($bytes >= 1024 && $index < count($units) - 1) {
+            $bytes /= 1024;
+            ++$index;
+        }
+        return number_format($bytes, $index === 0 ? 0 : 1, ',', ' ') . ' ' . $units[$index];
     }
 }
