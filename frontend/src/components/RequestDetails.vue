@@ -383,6 +383,12 @@ async function openTestActModal() {
   }
 }
 
+function closeTestActModal() {
+  testActRequestGuard.invalidate()
+  testActLoading.value = false
+  showTestActModal.value = false
+}
+
 async function generateTestAct() {
   const requestId = selected.value.backendId
   const token = testActRequestGuard.begin(requestId)
@@ -393,7 +399,7 @@ async function generateTestAct() {
     const blob = await requestApi.generateTestAct(requestId, { actNumber, actDate, basis, result })
     if (!testActRequestGuard.isCurrent(token, selected.value?.backendId)) return
     triggerBlobDownload(blob, `Акт_испытаний_заявка_${requestNumber}.docx`)
-    showTestActModal.value = false
+    closeTestActModal()
   } catch (error) {
     if (!testActRequestGuard.isCurrent(token, selected.value?.backendId)) return
     testActError.value = error.payload?.errors?.result?.[0]
@@ -1213,7 +1219,7 @@ onBeforeUnmount(() => {
     </template>
   </AppModal>
 
-  <AppModal :open="showTestActModal" as="form" title="Сформировать шаблон документа" subtitle="Экспериментальная функция" title-id="test-act-modal-title" size="large" :busy="testActLoading" @close="showTestActModal = false" @submit="generateTestAct">
+  <AppModal :open="showTestActModal" as="form" title="Сформировать шаблон документа" subtitle="Экспериментальная функция" title-id="test-act-modal-title" size="large" :busy="testActLoading" @close="closeTestActModal" @submit="generateTestAct">
     <div class="test-act-document-type">
       <span id="test-document-type-label">Тип документа</span>
       <div class="test-document-tabs" role="tablist" aria-labelledby="test-document-type-label">
@@ -1234,7 +1240,7 @@ onBeforeUnmount(() => {
     <p class="placeholder-copy">Черновик скачивается для редактирования в Word и не становится итоговым отчётом заявки.</p>
     <p v-if="testActError" class="action-error">{{ testActError }}</p>
     <template #footer>
-      <button type="button" class="secondary" :disabled="testActLoading" @click="showTestActModal = false">Отмена</button>
+      <button type="button" class="secondary" :disabled="testActLoading" @click="closeTestActModal">Отмена</button>
       <button class="primary" :disabled="testActLoading || !testActDraft.actNumber.trim() || !testActDraft.actDate.trim() || !testActDraft.basis.trim() || !testActDraft.result.trim()">{{ testActLoading ? 'Формирование…' : 'Сформировать шаблон' }}</button>
     </template>
   </AppModal>

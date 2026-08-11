@@ -61,7 +61,7 @@ final class TestActDocumentServiceTest extends IntegrationTestCase
         self::assertStringStartsWith('PK', $document->content);
     }
 
-    public function testUnrelatedEmployeeCannotPrepareOrGenerateAct(): void
+    public function testUnrelatedEmployeeCannotPrepareAct(): void
     {
         [$requestId] = $this->inProgressRequest('prepare.denied');
         $outsider = $this->createUser('test.act.prepare.outsider', 'Посторонний сотрудник');

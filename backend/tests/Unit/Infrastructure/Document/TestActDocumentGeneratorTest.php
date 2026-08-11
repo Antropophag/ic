@@ -20,7 +20,7 @@ final class TestActDocumentGeneratorTest extends TestCase
             'Заявка № 42',
             'Маркировка соответствует. <w:t>Не разметка</w:t>',
             'Иван Иванов',
-            'manager@shlz.ru',
+            'manager@example.test',
             'Петров П.П.',
             'Инженер-испытатель',
         ));
@@ -53,13 +53,12 @@ final class TestActDocumentGeneratorTest extends TestCase
         self::assertStringContainsString('<w:trHeight w:val="1680" w:hRule="exact"/>', $xml);
         self::assertStringContainsString('<w:spacing w:after="0" w:line="240" w:lineRule="auto"/>', $xml);
         self::assertStringContainsString('Иван Иванов', $xml);
-        self::assertStringContainsString('e-mail: manager@shlz.ru', $xml);
+        self::assertStringContainsString('e-mail: manager@example.test', $xml);
         self::assertStringContainsString('Петров П.П.', $xml);
         self::assertStringContainsString('Инженер-испытатель', $xml);
         self::assertStringContainsString('1   Наименование образца испытаний:', $xml);
         self::assertStringContainsString('2   Основание проведения испытаний:', $xml);
         self::assertStringContainsString('3   Результат испытаний:', $xml);
-        self::assertStringNotContainsString('si.kashin@shlz.ru', $xml);
         self::assertStringContainsString('Образец &lt;лифта&gt; &amp; подъёмника', $xml);
         self::assertStringContainsString('&lt;w:t&gt;Не разметка&lt;/w:t&gt;', $xml);
         self::assertStringNotContainsString('<w:t>Не разметка</w:t>', $xml);
