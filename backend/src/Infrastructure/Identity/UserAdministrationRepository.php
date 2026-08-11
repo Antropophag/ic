@@ -22,7 +22,8 @@ final class UserAdministrationRepository
     {
         $users = $this->db->createCommand(
             'SELECT id, ad_login AS adLogin, display_name AS displayName, email, '
-            . 'department, position, is_active AS isActive FROM {{%users}} ORDER BY display_name',
+            . 'department, position, is_active AS isActive, last_login_at AS lastLoginAt, '
+            . 'last_activity_at AS lastActivityAt FROM {{%users}} ORDER BY display_name',
         )->queryAll();
 
         $roleRows = $this->db->createCommand(
@@ -48,6 +49,8 @@ final class UserAdministrationRepository
                 'department' => $user['department'],
                 'position' => $user['position'],
                 'isActive' => (bool) $user['isActive'],
+                'lastLoginAt' => self::isoTimestamp($user['lastLoginAt']),
+                'lastActivityAt' => self::isoTimestamp($user['lastActivityAt']),
                 'roles' => $rolesByUser[$userId] ?? [],
             ];
         }, $users);
@@ -127,6 +130,8 @@ final class UserAdministrationRepository
                 'department' => null,
                 'position' => null,
                 'isActive' => true,
+                'lastLoginAt' => null,
+                'lastActivityAt' => null,
                 'roles' => $this->rolesOf($userId),
             ];
             $transaction->commit();
@@ -250,5 +255,14 @@ final class UserAdministrationRepository
             . 'JOIN {{%roles}} r ON r.id = ur.role_id WHERE ur.user_id = :id ORDER BY r.id',
             [':id' => $userId],
         )->queryAll();
+    }
+
+    private static function isoTimestamp(mixed $value): ?string
+    {
+        if (!is_string($value) || $value === '') {
+            return null;
+        }
+
+        return str_replace(' ', 'T', $value) . 'Z';
     }
 }

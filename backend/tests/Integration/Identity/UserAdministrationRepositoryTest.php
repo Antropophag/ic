@@ -14,6 +14,24 @@ use Tests\Integration\IntegrationTestCase;
 
 final class UserAdministrationRepositoryTest extends IntegrationTestCase
 {
+    public function testListUsersReturnsOperationalTimestampsAndNullForNeverLoggedInUser(): void
+    {
+        $neverLoggedIn = $this->createUser('never.logged.in', 'Никогда не входил');
+        $activeUser = $this->createUser('recent.user', 'Недавний пользователь');
+        $this->db()->createCommand()->update('{{%users}}', [
+            'last_login_at' => '2026-08-11 08:00:00.000000',
+            'last_activity_at' => '2026-08-11 08:05:00.000000',
+        ], ['id' => $activeUser])->execute();
+
+        $users = (new UserAdministrationRepository($this->db()))->listUsers();
+        $byId = array_column($users, null, 'id');
+
+        self::assertNull($byId[$neverLoggedIn]['lastLoginAt']);
+        self::assertNull($byId[$neverLoggedIn]['lastActivityAt']);
+        self::assertSame('2026-08-11T08:00:00.000000Z', $byId[$activeUser]['lastLoginAt']);
+        self::assertSame('2026-08-11T08:05:00.000000Z', $byId[$activeUser]['lastActivityAt']);
+    }
+
     public function testCreatePlaceholderCreatesActiveUserWithBaseRole(): void
     {
         // AUTH-002/AUTH-007: pre-provisioning приводит к тому же исходному
@@ -26,6 +44,8 @@ final class UserAdministrationRepositoryTest extends IntegrationTestCase
         self::assertSame('kashin', $user['adLogin']);
         self::assertSame('Сергей Кашин', $user['displayName']);
         self::assertTrue($user['isActive']);
+        self::assertNull($user['lastLoginAt']);
+        self::assertNull($user['lastActivityAt']);
         self::assertSame(['employee'], array_column($user['roles'], 'code'));
 
         $auditCount = $this->scalar(

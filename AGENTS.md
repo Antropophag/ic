@@ -145,6 +145,13 @@
 - Escalate scope only when the original objective cannot be met within current boundaries.
 - Document why an exception to an established repository pattern is necessary.
 
+### Forge-specific merge requests
+
+- Write every merge request as a self-contained change for the forge where it is opened.
+- For GitLab merge requests, provide a complete standalone description of the goal, implementation, validation, risks, and rollback.
+- Do not describe a GitLab merge request as an analogue, copy, mirror, or port of a pull request from another forge.
+- Do not include links or references to GitHub pull requests in GitLab merge request titles or descriptions unless the user explicitly requests them.
+
 ## Validation Checklist
 
 - [ ] The requested behavior works through the intended entry point.

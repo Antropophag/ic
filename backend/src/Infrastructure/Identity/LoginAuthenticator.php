@@ -9,6 +9,7 @@ final readonly class LoginAuthenticator
     public function __construct(
         private BreakGlassAuthenticator $breakGlass,
         private LdapAuthenticator $ldap,
+        private UserActivityRecorder $activity,
     ) {
     }
 
@@ -21,13 +22,15 @@ final readonly class LoginAuthenticator
     ): array {
         if ($this->breakGlass->handles($login)) {
             $this->breakGlass->reportInvalidConfiguration($ip, $userAgent);
-            return $this->breakGlass->authenticate($login, $password, $ip, $userAgent);
-        }
-        if (hash_equals(BreakGlassAuthenticator::TECHNICAL_LOGIN, $login)) {
+            $result = $this->breakGlass->authenticate($login, $password, $ip, $userAgent);
+        } elseif (hash_equals(BreakGlassAuthenticator::TECHNICAL_LOGIN, $login)) {
             $this->breakGlass->reportInvalidConfiguration($ip, $userAgent);
             throw new AuthenticationDenied('AUTH-006');
+        } else {
+            $result = $this->ldap->authenticate($login, $password);
         }
+        $this->activity->recordLogin($result['id']);
 
-        return $this->ldap->authenticate($login, $password);
+        return $result;
     }
 }

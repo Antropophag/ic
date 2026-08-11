@@ -515,10 +515,11 @@ it('logs out with a plain POST', async () => {
 })
 
 it('lists admin users and roles', async () => {
-  const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({ items: [] }), { status: 200 }))
+  const payload = { items: [{ id: 7, lastLoginAt: null, lastActivityAt: '2026-08-11T12:00:00Z' }], checkedAt: '2026-08-11T12:01:00Z' }
+  const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify(payload), { status: 200 }))
   vi.stubGlobal('fetch', fetchMock)
 
-  await adminApi.users()
+  await expect(adminApi.users()).resolves.toEqual(payload)
   await adminApi.roles()
 
   expect(fetchMock).toHaveBeenCalledWith('/api/v1/admin/users', expect.any(Object))
