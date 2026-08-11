@@ -10,6 +10,7 @@ use App\Infrastructure\Identity\BreakGlassConfiguration;
 use App\Infrastructure\Identity\BreakGlassIdentityProvisioner;
 use App\Infrastructure\Identity\LdapAuthenticator;
 use App\Infrastructure\Identity\LoginAuthenticator;
+use App\Infrastructure\Identity\UserActivityRecorder;
 use App\Infrastructure\Ldap\LdapClient;
 use App\Infrastructure\Ldap\LdapConnectionException;
 use App\Infrastructure\Ldap\LdapProfile;
@@ -37,6 +38,10 @@ final class BreakGlassAuthenticatorTest extends IntegrationTestCase
 
         self::assertSame('Иван Иванов', $result['displayName']);
         self::assertSame([['login' => 'ivanov', 'password' => 'ldap-password']], $ldap->calls);
+        self::assertNotNull($this->scalar(
+            'SELECT last_login_at FROM {{%users}} WHERE id = :id',
+            [':id' => $result['id']],
+        ));
     }
 
     public function testSuccessfulBreakGlassAuthenticationDoesNotCallLdapAndHasAdministratorAccess(): void
@@ -53,6 +58,10 @@ final class BreakGlassAuthenticatorTest extends IntegrationTestCase
         self::assertSame('administrator', $this->scalar(
             'SELECT r.code FROM {{%user_roles}} ur JOIN {{%roles}} r ON r.id = ur.role_id '
             . 'WHERE ur.user_id = :id',
+            [':id' => $result['id']],
+        ));
+        self::assertNotNull($this->scalar(
+            'SELECT last_login_at FROM {{%users}} WHERE id = :id',
             [':id' => $result['id']],
         ));
 
@@ -88,6 +97,10 @@ final class BreakGlassAuthenticatorTest extends IntegrationTestCase
         self::assertStringNotContainsString('do-not-record-me', $serialized);
         self::assertStringNotContainsString($hash, $serialized);
         self::assertSame('invalid_credentials', $this->payload($event)['reason']);
+        self::assertNull($this->scalar(
+            'SELECT last_login_at FROM {{%users}} WHERE ad_login = :login',
+            [':login' => BreakGlassAuthenticator::TECHNICAL_LOGIN],
+        ));
     }
 
     public function testDifferentlyCasedLoginIsLdapOnly(): void
@@ -326,6 +339,7 @@ final class BreakGlassAuthenticatorTest extends IntegrationTestCase
         return new LoginAuthenticator(
             new BreakGlassAuthenticator($this->db(), $configuration),
             new LdapAuthenticator($this->db(), $ldap),
+            new UserActivityRecorder($this->db()),
         );
     }
 

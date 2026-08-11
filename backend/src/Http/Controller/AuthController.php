@@ -12,6 +12,7 @@ use App\Infrastructure\Identity\BreakGlassConfiguration;
 use App\Infrastructure\Identity\CurrentUser;
 use App\Infrastructure\Identity\LdapAuthenticator;
 use App\Infrastructure\Identity\LoginAuthenticator;
+use App\Infrastructure\Identity\UserActivityRecorder;
 use App\Infrastructure\Ldap\LdapConnectionException;
 use App\Infrastructure\Ldap\NativeLdapClient;
 use Yii;
@@ -141,6 +142,7 @@ final class AuthController extends ApiController
         return new LoginAuthenticator(
             new BreakGlassAuthenticator(Yii::$app->db, BreakGlassConfiguration::fromEnvironment()),
             new LdapAuthenticator(Yii::$app->db, $client),
+            new UserActivityRecorder(Yii::$app->db),
         );
     }
 

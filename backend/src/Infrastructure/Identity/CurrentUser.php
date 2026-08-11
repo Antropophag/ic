@@ -22,7 +22,9 @@ final class CurrentUser
         if (is_string($identityHeader) && $this->allowsIdentityHeader($identityHeader)) {
             $header = $request->headers->get($identityHeader);
             $id = filter_var($header, FILTER_VALIDATE_INT);
-            if ($id !== false && $id > 0 && $this->isActive($id)) {
+            $identity = $id !== false && $id > 0 ? $this->activeIdentity($id) : null;
+            if ($identity !== null) {
+                $this->recordActivityBestEffort($id, $identity['lastActivityAt']);
                 return $id;
             }
         }
@@ -32,7 +34,9 @@ final class CurrentUser
             // AUTH-003 проверяется на каждый запрос, а не только при входе —
             // отключение локального профиля должно немедленно обрывать уже
             // открытую сессию, а не только блокировать следующий логин.
-            if ($this->isActive($sessionUserId)) {
+            $identity = $this->activeIdentity($sessionUserId);
+            if ($identity !== null) {
+                $this->recordActivityBestEffort($sessionUserId, $identity['lastActivityAt']);
                 return $sessionUserId;
             }
         }
@@ -40,14 +44,18 @@ final class CurrentUser
         throw new UnauthorizedHttpException('Authentication required');
     }
 
-    private function isActive(int $userId): bool
+    /** @return array{lastActivityAt: string|null}|null */
+    private function activeIdentity(int $userId): ?array
     {
-        $isActive = $this->db->createCommand(
-            'SELECT is_active FROM {{%users}} WHERE id = :id',
+        $row = $this->db->createCommand(
+            'SELECT is_active AS isActive, last_activity_at AS lastActivityAt FROM {{%users}} WHERE id = :id',
             [':id' => $userId],
-        )->queryScalar();
+        )->queryOne();
 
-        return $isActive !== false && (bool) $isActive;
+        if ($row === false || !(bool) $row['isActive']) {
+            return null;
+        }
+        return ['lastActivityAt' => is_string($row['lastActivityAt']) ? $row['lastActivityAt'] : null];
     }
 
     private function allowsIdentityHeader(string $identityHeader): bool
@@ -56,5 +64,18 @@ final class CurrentUser
 
         return is_string($database)
             && DatabasePurpose::allowsIdentityHeader($database, $identityHeader);
+    }
+
+    private function recordActivityBestEffort(int $userId, ?string $knownActivityAt): void
+    {
+        try {
+            (new UserActivityRecorder($this->db))->recordActivity($userId, $knownActivityAt);
+        } catch (\Throwable $error) {
+            Yii::warning([
+                'event' => 'user_activity_timestamp_update_failed',
+                'user_id' => $userId,
+                'error_class' => $error::class,
+            ], __METHOD__);
+        }
     }
 }

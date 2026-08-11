@@ -360,6 +360,9 @@ test('администратор управляет ролями и возвра
   await page.getByRole('tab', { name: 'Пользователи и роли' }).click()
   await expect(page.getByRole('tab', { name: 'Пользователи и роли' })).toHaveAttribute('aria-selected', 'true')
   await expect(page.getByRole('cell', { name: 'ЕВ Елена Васильева', exact: true })).toBeVisible()
+  await expect(page.getByRole('columnheader', { name: 'Использование' })).toBeVisible()
+  await expect(page.getByText('«Активен» означает запрос к порталу за последние 10 минут.')).toBeVisible()
+  await expect(page.locator('.admin-usage-active').first()).toBeVisible()
 
   await page.getByRole('button', { name: 'К реестру' }).click()
   await expect(page.getByRole('tab', { name: 'Пользователи и роли' })).toHaveCount(0)
