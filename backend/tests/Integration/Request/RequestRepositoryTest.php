@@ -377,7 +377,7 @@ final class RequestRepositoryTest extends IntegrationTestCase
         $other = $this->createUser('dev.it.registry-other', 'Инициатор пагинации');
         $first = $this->createRegisteredRequest($initiator, 'уникальный насос');
         $this->createRegisteredRequest($initiator, 'уникальный насос второй');
-        $this->createRegisteredRequest($other, 'постороннее изделие');
+        $this->createRegisteredRequest($other, 'уникальный насос другого инициатора');
 
         $page = (new RequestQuery($this->db()))->findPage(
             $initiator,

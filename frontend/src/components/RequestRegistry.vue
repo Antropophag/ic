@@ -335,6 +335,7 @@ watch(query, () => {
 watch(canUsePersonalRequests, allowed => {
   if (allowed) return;
   if (activeTab.value === "mine") activeTab.value = "active";
+  createRequestGuard.invalidate();
   showCreate.value = false;
 });
 watch(draft, draftForm.scheduleSave, { deep: true, flush: "sync" });
