@@ -10,6 +10,7 @@ use App\Infrastructure\Identity\BreakGlassAuthenticator;
 use App\Infrastructure\Identity\BreakGlassConfiguration;
 use App\Infrastructure\Identity\BreakGlassIdentityProvisioner;
 use App\Infrastructure\Identity\CurrentUser;
+use App\Infrastructure\Identity\UserActivityRecorder;
 use Tests\Integration\IntegrationTestCase;
 use Yii;
 use yii\web\Application;
@@ -61,6 +62,45 @@ final class BreakGlassLoginTest extends IntegrationTestCase
         self::assertSame($userId, Yii::$app->session->get('userId'));
         self::assertNotSame($oldSessionId, Yii::$app->session->id);
         self::assertSame($userId, (new CurrentUser($this->db()))->id(Yii::$app->request));
+        $activityAt = $this->scalar(
+            'SELECT last_activity_at FROM {{%users}} WHERE id = :id',
+            [':id' => $userId],
+        );
+        self::assertNotNull($this->scalar(
+            'SELECT last_login_at FROM {{%users}} WHERE id = :id',
+            [':id' => $userId],
+        ));
+        self::assertNotNull($activityAt);
+
+        $recentActivityAt = (new \DateTimeImmutable('now', new \DateTimeZone('UTC')))
+            ->modify('-4 minutes')->format('Y-m-d H:i:s.u');
+        $this->db()->createCommand()->update(
+            '{{%users}}',
+            ['last_activity_at' => $recentActivityAt],
+            ['id' => $userId],
+        )->execute();
+        self::assertSame($userId, (new CurrentUser($this->db()))->id(Yii::$app->request));
+        self::assertSame($recentActivityAt, $this->scalar(
+            'SELECT last_activity_at FROM {{%users}} WHERE id = :id',
+            [':id' => $userId],
+        ));
+
+        $staleActivityAt = (new \DateTimeImmutable('now', new \DateTimeZone('UTC')))
+            ->modify('-6 minutes')->format('Y-m-d H:i:s.u');
+        $this->db()->createCommand()->update(
+            '{{%users}}',
+            ['last_activity_at' => $staleActivityAt],
+            ['id' => $userId],
+        )->execute();
+        $activityCutoff = (new \DateTimeImmutable('now', new \DateTimeZone('UTC')))
+            ->modify('-' . UserActivityRecorder::ACTIVITY_THROTTLE_SECONDS . ' seconds')
+            ->format('Y-m-d H:i:s.u');
+        self::assertSame($userId, (new CurrentUser($this->db()))->id(Yii::$app->request));
+        $updatedActivityAt = (string) $this->scalar(
+            'SELECT last_activity_at FROM {{%users}} WHERE id = :id',
+            [':id' => $userId],
+        );
+        self::assertGreaterThan($activityCutoff, $updatedActivityAt);
         self::assertSame($userId, $response['user']['id']);
         self::assertSame(['administrator'], $response['user']['roles']);
 
@@ -95,6 +135,11 @@ final class BreakGlassLoginTest extends IntegrationTestCase
             'ruleId' => 'AUTH-001',
         ], $response);
         self::assertNull(Yii::$app->session->get('userId'));
+        self::assertNull((new AuthController('auth', Yii::$app))->actionMe()['user']);
+        self::assertNull($this->scalar(
+            'SELECT last_activity_at FROM {{%users}} WHERE ad_login = :login',
+            [':login' => BreakGlassAuthenticator::TECHNICAL_LOGIN],
+        ));
     }
 
     public function testNonAdministratorCannotReadSystemOverview(): void
@@ -106,6 +151,18 @@ final class BreakGlassLoginTest extends IntegrationTestCase
         Yii::$app->session->set('userId', $userId);
         $this->expectException(ForbiddenHttpException::class);
         (new AdminController('admin', Yii::$app))->actionSystemOverview();
+    }
+
+    public function testNonAdministratorCannotReadUsersActivity(): void
+    {
+        $this->configureEnvironment();
+        $this->createApplication('employee', 'unused');
+        $userId = $this->createUser('activity.employee', 'Обычный сотрудник');
+        $this->grantRole($userId, 'employee');
+        Yii::$app->session->set('userId', $userId);
+
+        $this->expectException(ForbiddenHttpException::class);
+        (new AdminController('admin', Yii::$app))->actionUsers();
     }
 
     public function testMissingServiceConfigurationDoesNotHideIndependentResults(): void

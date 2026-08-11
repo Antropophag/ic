@@ -19,6 +19,7 @@ use App\Infrastructure\Admin\AuditQuery;
 use App\Infrastructure\Admin\NotificationQuery;
 use App\Infrastructure\Admin\SystemOverviewQuery;
 use App\Infrastructure\Document\DocumentStorage;
+use App\Infrastructure\Clock;
 use App\Infrastructure\Notification\Mailer;
 use InvalidArgumentException;
 use Yii;
@@ -43,11 +44,14 @@ final class AdminController extends ApiController
         return parent::beforeAction($action);
     }
 
-    /** @return array{items: list<array<string, mixed>>} */
+    /** @return array{items: list<array<string, mixed>>, checkedAt: string} */
     public function actionUsers(): array
     {
         $this->authorize();
-        return ['items' => $this->repository()->listUsers()];
+        return [
+            'items' => $this->repository()->listUsers(),
+            'checkedAt' => str_replace(' ', 'T', Clock::now()) . 'Z',
+        ];
     }
 
     /** @return array{items: list<array<string, mixed>>} */

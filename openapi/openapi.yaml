@@ -468,6 +468,23 @@ paths:
         '422': {$ref: '#/components/responses/ValidationError'}
         '500': {$ref: '#/components/responses/ServerError'}
 
+  /api/v1/admin/users:
+    get:
+      tags: [Administration]
+      summary: Получить пользователей с эксплуатационными timestamps
+      operationId: listAdminUsers
+      security: [{cookieSession: []}]
+      responses:
+        '200':
+          description: Пользователи, роли и время проверки ответа
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminUsersResponse'
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '500': {$ref: '#/components/responses/ServerError'}
+
   /api/v1/admin/users/{userId}/roles/{roleId}/revoke:
     post:
       tags: [Administration]
@@ -803,6 +820,44 @@ components:
           type: array
           items:
             type: string
+      additionalProperties: false
+    AdminUsersResponse:
+      type: object
+      required: [items, checkedAt]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/AdminUser'
+        checkedAt:
+          type: string
+          format: date-time
+      additionalProperties: false
+    AdminUser:
+      type: object
+      required: [id, adLogin, displayName, email, department, position, isActive, lastLoginAt, lastActivityAt, roles]
+      properties:
+        id: {type: integer, minimum: 1}
+        adLogin: {type: string}
+        displayName: {type: string}
+        email: {type: string, nullable: true}
+        department: {type: string, nullable: true}
+        position: {type: string, nullable: true}
+        isActive: {type: boolean}
+        lastLoginAt: {type: string, format: date-time, nullable: true}
+        lastActivityAt: {type: string, format: date-time, nullable: true}
+        roles:
+          type: array
+          items:
+            $ref: '#/components/schemas/AdminRole'
+      additionalProperties: false
+    AdminRole:
+      type: object
+      required: [id, code, name]
+      properties:
+        id: {type: integer, minimum: 1}
+        code: {type: string}
+        name: {type: string}
       additionalProperties: false
     RequestStatus:
       type: string
