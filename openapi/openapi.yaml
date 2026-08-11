@@ -457,6 +457,18 @@ paths:
         '422': {$ref: '#/components/responses/ValidationError'}
         '500': {$ref: '#/components/responses/ServerError'}
 
+  /api/v1/admin/system-overview:
+    get:
+      tags: [Administration]
+      summary: Получить состояние приложения и основных зависимостей
+      operationId: getAdminSystemOverview
+      security: [{cookieSession: []}]
+      responses:
+        '200':
+          description: Независимые результаты безопасных read-only проверок
+          content: {application/json: {schema: {$ref: '#/components/schemas/SystemOverview'}}}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
 components:
   securitySchemes:
     cookieSession:
@@ -572,6 +584,14 @@ components:
             $ref: '#/components/schemas/RequestCommandResult'
 
   schemas:
+    SystemOverview:
+      type: object
+      required: [application, services, checkedAt]
+      properties:
+        application: {type: object, additionalProperties: true}
+        services: {type: object, additionalProperties: true}
+        checkedAt: {type: string, format: date-time}
+      additionalProperties: false
     Liveness:
       type: object
       required: [status]

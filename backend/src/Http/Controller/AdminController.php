@@ -17,6 +17,9 @@ use App\Infrastructure\Identity\CurrentUser;
 use App\Infrastructure\Identity\UserAdministrationRepository;
 use App\Infrastructure\Admin\AuditQuery;
 use App\Infrastructure\Admin\NotificationQuery;
+use App\Infrastructure\Admin\SystemOverviewQuery;
+use App\Infrastructure\Document\DocumentStorage;
+use App\Infrastructure\Notification\Mailer;
 use InvalidArgumentException;
 use Yii;
 use yii\web\ConflictHttpException;
@@ -52,6 +55,25 @@ final class AdminController extends ApiController
     {
         $this->authorize();
         return ['items' => $this->repository()->listRoles()];
+    }
+    /** @return array<string, mixed> */
+    public function actionSystemOverview(): array
+    {
+        $this->authorize();
+        $storagePath = getenv('DOCUMENT_STORAGE_PATH') ?: '/app/storage/documents';
+        return (new SystemOverviewQuery([
+            'name' => 'Регистратор заявок на проведение испытаний',
+            'version' => $this->env('APP_VERSION'), 'commitSha' => $this->env('APP_COMMIT_SHA'),
+            'builtAt' => $this->env('APP_BUILD_TIMESTAMP'),
+        ], [
+            'database' => fn (): mixed => Yii::$app->db->createCommand('SELECT 1')->queryScalar(),
+            'smtp' => static function (): void {
+                (new Mailer())->checkConnection();
+            },
+            'storage' => static function () use ($storagePath): void {
+                (new DocumentStorage($storagePath))->assertWritable();
+            },
+        ]))->read();
     }
 
     /** @return array<string, mixed> */
@@ -232,5 +254,10 @@ final class AdminController extends ApiController
     private function notificationQuery(): NotificationQuery
     {
         return new NotificationQuery(Yii::$app->db);
+    }
+    private function env(string $name): ?string
+    {
+        $value = getenv($name);
+        return $value === false || trim($value) === '' ? null : trim($value);
     }
 }

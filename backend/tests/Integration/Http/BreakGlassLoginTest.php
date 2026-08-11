@@ -15,6 +15,7 @@ use Yii;
 use yii\web\Application;
 use yii\web\Request;
 use yii\web\Session;
+use yii\web\ForbiddenHttpException;
 
 final class BreakGlassLoginTest extends IntegrationTestCase
 {
@@ -58,6 +59,9 @@ final class BreakGlassLoginTest extends IntegrationTestCase
 
         $adminResponse = (new AdminController('admin', Yii::$app))->actionUsers();
         self::assertArrayHasKey('items', $adminResponse);
+        $overview = (new AdminController('admin', Yii::$app))->actionSystemOverview();
+        self::assertSame('operational', $overview['services']['database']['status']);
+        self::assertSame('unavailable', $overview['services']['ldap']['status']);
         $payload = $this->scalar(
             "SELECT payload_json FROM {{%audit_events}} WHERE event_type = 'authentication.break_glass_succeeded' "
             . 'AND actor_id = :actor_id',
@@ -80,6 +84,17 @@ final class BreakGlassLoginTest extends IntegrationTestCase
             'ruleId' => 'AUTH-001',
         ], $response);
         self::assertNull(Yii::$app->session->get('userId'));
+    }
+
+    public function testNonAdministratorCannotReadSystemOverview(): void
+    {
+        $this->configureEnvironment();
+        $this->createApplication('employee', 'unused');
+        $userId = $this->createUser('overview.employee', 'Обычный сотрудник');
+        $this->grantRole($userId, 'employee');
+        Yii::$app->session->set('userId', $userId);
+        $this->expectException(ForbiddenHttpException::class);
+        (new AdminController('admin', Yii::$app))->actionSystemOverview();
     }
 
     private function configureEnvironment(): void
