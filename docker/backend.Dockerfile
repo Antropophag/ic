@@ -1,11 +1,11 @@
 FROM docker.io/library/composer:2.8.10 AS vendor-dependencies
 WORKDIR /build
 COPY backend/composer.json backend/composer.lock ./
-# ext-ldap не собран в этот образ (он только для резолва зависимостей, не
+# ext-ldap и ext-pcntl не собраны в этот образ (он только для резолва зависимостей, не
 # рантайм) — реальная проверка расширений идёт ниже, platform_check.php уже
-# внутри целевого php:8.3-fpm-alpine с установленным ldap.
+# внутри целевого php:8.3-fpm-alpine с установленными ldap и pcntl.
 RUN composer install --no-dev --no-interaction --no-progress --prefer-dist \
-    --no-autoloader --ignore-platform-req=ext-ldap
+    --no-autoloader --ignore-platform-req=ext-ldap --ignore-platform-req=ext-pcntl
 
 FROM vendor-dependencies AS vendor
 COPY backend/src ./src
@@ -13,7 +13,7 @@ RUN composer dump-autoload --no-dev --no-interaction --classmap-authoritative
 
 FROM vendor-dependencies AS vendor-test-dependencies
 RUN composer install --no-interaction --no-progress --prefer-dist \
-    --no-autoloader --ignore-platform-req=ext-ldap
+    --no-autoloader --ignore-platform-req=ext-ldap --ignore-platform-req=ext-pcntl
 
 FROM vendor-test-dependencies AS vendor-test
 COPY backend/src ./src

@@ -241,6 +241,7 @@ export const devApi = {
 }
 
 export const adminApi = {
+  systemOverview: signal => request('/api/v1/admin/system-overview', { signal }),
   users: () => request('/api/v1/admin/users'),
   roles: () => request('/api/v1/admin/roles'),
   auditEvents: params => request(`/api/v1/admin/audit-events${queryString(params)}`),

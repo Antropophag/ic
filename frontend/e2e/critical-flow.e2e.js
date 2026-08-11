@@ -354,6 +354,10 @@ test('администратор управляет ролями и возвра
   await useTestIdentity(page, 6)
   await page.goto('/')
   await page.getByRole('button', { name: 'Администрирование' }).click()
+  await expect(page.getByRole('tab', { name: 'Обзор' })).toHaveAttribute('aria-selected', 'true')
+  await expect(page.locator('.admin-service-head').getByText('База данных', { exact: true })).toBeVisible()
+  await expect(page.locator('.admin-service-head').getByText('Файловое хранилище', { exact: true })).toBeVisible()
+  await page.getByRole('tab', { name: 'Пользователи и роли' }).click()
   await expect(page.getByRole('tab', { name: 'Пользователи и роли' })).toHaveAttribute('aria-selected', 'true')
   await expect(page.getByRole('cell', { name: 'ЕВ Елена Васильева', exact: true })).toBeVisible()
 
