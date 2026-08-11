@@ -81,7 +81,7 @@ final class AdminController extends ApiController
             ],
             'smtp' => [
                 'endpoint' => $smtpHost === null ? 'Not configured' : "{$smtpHost}:{$smtpPort}",
-                'transportSecurity' => $this->smtpSecurityLabel(),
+                'transportSecurity' => $smtpHost === null ? 'Not configured' : $this->smtpSecurityLabel(),
                 'sender' => $this->environmentValue('MAIL_FROM_ADDRESS') ?? 'Not configured',
             ],
             'storage' => [

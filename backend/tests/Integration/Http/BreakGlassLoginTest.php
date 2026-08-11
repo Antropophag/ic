@@ -24,6 +24,7 @@ final class BreakGlassLoginTest extends IntegrationTestCase
 
     /** @var array<string, string|false> */
     private array $originalEnvironment = [];
+    private ?string $storagePath = null;
 
     protected function tearDown(): void
     {
@@ -32,11 +33,17 @@ final class BreakGlassLoginTest extends IntegrationTestCase
             Yii::$app->errorHandler->unregister();
             Yii::$app = null;
         }
-        foreach ($this->originalEnvironment as $name => $value) {
-            putenv($value === false ? $name : "{$name}={$value}");
+        try {
+            foreach ($this->originalEnvironment as $name => $value) {
+                putenv($value === false ? $name : "{$name}={$value}");
+            }
+            if ($this->storagePath !== null && is_dir($this->storagePath)) {
+                $this->removeDirectory($this->storagePath);
+            }
+        } finally {
+            unset($_SERVER['REMOTE_ADDR'], $_SERVER['HTTP_USER_AGENT']);
+            parent::tearDown();
         }
-        unset($_SERVER['REMOTE_ADDR'], $_SERVER['HTTP_USER_AGENT']);
-        parent::tearDown();
     }
 
     public function testBreakGlassLoginCreatesOrdinaryAdministratorSession(): void
@@ -116,6 +123,7 @@ final class BreakGlassLoginTest extends IntegrationTestCase
         self::assertSame('error', $overview['services']['smtp']['status']);
         self::assertSame('Not configured', $overview['services']['ldap']['details']['endpoint']);
         self::assertSame('Not configured', $overview['services']['smtp']['details']['endpoint']);
+        self::assertSame('Not configured', $overview['services']['smtp']['details']['transportSecurity']);
     }
 
     public function testLdapStartTlsProbeReturnsAfterBoundedTimeout(): void
@@ -125,21 +133,24 @@ final class BreakGlassLoginTest extends IntegrationTestCase
         $address = stream_socket_get_name($server, false);
         self::assertIsString($address);
         $port = (int) substr($address, (int) strrpos($address, ':') + 1);
-        $childPid = pcntl_fork();
-        self::assertGreaterThanOrEqual(0, $childPid);
-        if ($childPid === 0) {
-            for ($connectionNumber = 0; $connectionNumber < 2; ++$connectionNumber) {
-                $connection = stream_socket_accept($server, 10);
-                if (is_resource($connection)) {
-                    if ($connectionNumber === 1) {
-                        sleep(15);
-                    }
-                    fclose($connection);
-                }
-            }
-            fclose($server);
-            exit(0);
+        $serverCode = <<<'PHP'
+$server = fopen('php://fd/3', 'r+');
+for ($connectionNumber = 0; $connectionNumber < 2; ++$connectionNumber) {
+    $connection = stream_socket_accept($server, 10);
+    if (is_resource($connection)) {
+        if ($connectionNumber === 1) {
+            sleep(15);
         }
+        fclose($connection);
+    }
+}
+PHP;
+        $process = proc_open(
+            [PHP_BINARY, '-r', $serverCode],
+            [0 => ['pipe', 'r'], 1 => ['pipe', 'w'], 2 => ['pipe', 'w'], 3 => $server],
+            $pipes,
+        );
+        self::assertIsResource($process);
 
         try {
             $this->configureEnvironment();
@@ -156,13 +167,18 @@ final class BreakGlassLoginTest extends IntegrationTestCase
             self::assertLessThan(8.0, microtime(true) - $startedAt);
         } finally {
             fclose($server);
-            posix_kill($childPid, SIGTERM);
-            pcntl_waitpid($childPid, $status);
+            foreach ($pipes as $pipe) {
+                fclose($pipe);
+            }
+            proc_terminate($process);
+            proc_close($process);
         }
     }
 
     private function configureEnvironment(): void
     {
+        $this->storagePath = sys_get_temp_dir() . '/ic-system-overview-' . bin2hex(random_bytes(8));
+        mkdir($this->storagePath, 0700, true);
         $values = [
             'BREAK_GLASS_LOGIN' => self::LOGIN,
             'BREAK_GLASS_PASSWORD_HASH' => password_hash(self::PASSWORD, PASSWORD_DEFAULT),
@@ -177,6 +193,7 @@ final class BreakGlassLoginTest extends IntegrationTestCase
             'SMTP_PASSWORD' => 'synthetic smtp password',
             'SMTP_SECURE' => 'none',
             'MAIL_FROM_ADDRESS' => 'sender@example.invalid',
+            'DOCUMENT_STORAGE_PATH' => $this->storagePath,
         ];
         foreach ($values as $name => $value) {
             $this->originalEnvironment[$name] = getenv($name);
@@ -186,6 +203,22 @@ final class BreakGlassLoginTest extends IntegrationTestCase
             $this->db(),
             BreakGlassConfiguration::fromEnvironment(),
         ))->provision();
+    }
+
+    private function removeDirectory(string $directory): void
+    {
+        foreach (scandir($directory) ?: [] as $entry) {
+            if ($entry === '.' || $entry === '..') {
+                continue;
+            }
+            $path = $directory . DIRECTORY_SEPARATOR . $entry;
+            if (is_dir($path)) {
+                $this->removeDirectory($path);
+            } else {
+                unlink($path);
+            }
+        }
+        rmdir($directory);
     }
 
     private function createApplication(string $login, string $password): void
