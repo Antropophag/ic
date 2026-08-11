@@ -13,6 +13,7 @@ import { createApplicationDraftForm } from "../applicationDraftForm";
 import { createConfirmDialog } from "../confirmDialog";
 import { triggerBlobDownload } from "../download";
 import { createRequestRegistryLoadLifecycle } from "../requestRegistryLoadLifecycle";
+import { canCreateRequest } from "../requestPermissions";
 import {
   REGISTRY_PAGE_SIZES,
   readNotificationCursor,
@@ -33,6 +34,7 @@ import {
 const props = defineProps({
   active: { type: Boolean, default: true },
   currentUserId: { type: Number, required: true },
+  currentUserRoles: { type: Array, default: () => [] },
   refreshTrigger: { type: Number, default: 0 },
 });
 const emit = defineEmits([
@@ -141,11 +143,17 @@ async function clearCreateDraft() {
   resetCreateForm({ removeStored: true });
 }
 
-const tabs = computed(() => [
-  { id: "active", label: "Активные заявки", count: registryPage.counts.active },
-  { id: "all", label: "Все заявки", count: registryPage.counts.all },
-  { id: "mine", label: "Мои заявки", count: registryPage.counts.mine },
-]);
+const canUsePersonalRequests = computed(() => canCreateRequest(props.currentUserRoles));
+const tabs = computed(() => {
+  const items = [
+    { id: "active", label: "Активные заявки", count: registryPage.counts.active },
+    { id: "all", label: "Все заявки", count: registryPage.counts.all },
+  ];
+  if (canUsePersonalRequests.value) {
+    items.push({ id: "mine", label: "Мои заявки", count: registryPage.counts.mine });
+  }
+  return items;
+});
 const paged = computed(() => ({ items: requests.value, ...registryPage }));
 const newNotifications = computed(() => notificationItems.value.filter(item => !notificationCursor.value || item.occurredAt > notificationCursor.value));
 const pageNumbers = computed(() => {
@@ -324,6 +332,12 @@ watch([activeTab, activeAttention, statusFilter, sortDirection], reloadFirstPage
 watch(query, () => {
   registryLoadLifecycle.scheduleReload(reloadFirstPage);
 });
+watch(canUsePersonalRequests, allowed => {
+  if (allowed) return;
+  if (activeTab.value === "mine") activeTab.value = "active";
+  createRequestGuard.invalidate();
+  showCreate.value = false;
+});
 watch(draft, draftForm.scheduleSave, { deep: true, flush: "sync" });
 watch(draftFiles, draftForm.scheduleFilesSave, { flush: "sync" });
 watch(
@@ -457,7 +471,7 @@ async function performCreateRequest() {
 
 defineExpose({
   openCreate: () => {
-    showCreate.value = true;
+    if (canUsePersonalRequests.value) showCreate.value = true;
   },
 });
 onMounted(() => {
@@ -527,7 +541,7 @@ onBeforeUnmount(() => {
             <span class="tab-label">{{ tab.label }}</span><span class="tab-count">{{ tab.count }}</span>
           </button>
         </div>
-        <button class="primary tabs-cta" @click="showCreate = true">
+        <button v-if="canUsePersonalRequests" class="primary tabs-cta" @click="showCreate = true">
           <AppIcon name="plus" :size="16" />
           Новая заявка
         </button>
@@ -721,7 +735,7 @@ onBeforeUnmount(() => {
     </ol>
   </AppModal>
   <AppModal
-    :open="active && showCreate"
+    :open="active && canUsePersonalRequests && showCreate"
     as="form"
     title="Заявка на проведение испытаний"
     title-id="create-request-title"
