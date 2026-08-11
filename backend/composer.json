@@ -9,6 +9,7 @@
     "ext-json": "*",
     "ext-ldap": "*",
     "ext-mbstring": "*",
+    "ext-pcntl": "*",
     "ext-pdo": "*",
     "ext-zip": "*",
     "dompdf/dompdf": "^3.1",

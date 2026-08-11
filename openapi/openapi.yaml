@@ -457,6 +457,18 @@ paths:
         '422': {$ref: '#/components/responses/ValidationError'}
         '500': {$ref: '#/components/responses/ServerError'}
 
+  /api/v1/admin/system-overview:
+    get:
+      tags: [Administration]
+      summary: Получить состояние приложения и основных зависимостей
+      operationId: getAdminSystemOverview
+      security: [{cookieSession: []}]
+      responses:
+        '200':
+          description: Независимые результаты безопасных read-only проверок
+          content: {application/json: {schema: {$ref: '#/components/schemas/SystemOverview'}}}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
 components:
   securitySchemes:
     cookieSession:
@@ -572,6 +584,88 @@ components:
             $ref: '#/components/schemas/RequestCommandResult'
 
   schemas:
+    SystemOverview:
+      type: object
+      required: [application, services, checkedAt]
+      properties:
+        application:
+          type: object
+          required: [name, version, commitSha, builtAt]
+          properties:
+            name: {type: string}
+            version: {type: string, nullable: true}
+            commitSha: {type: string, nullable: true}
+            builtAt: {type: string, format: date-time, nullable: true}
+          additionalProperties: false
+        services:
+          type: object
+          required: [database, ldap, smtp, storage]
+          properties:
+            database: {$ref: '#/components/schemas/DatabaseSystemServiceStatus'}
+            ldap: {$ref: '#/components/schemas/LdapSystemServiceStatus'}
+            smtp: {$ref: '#/components/schemas/SmtpSystemServiceStatus'}
+            storage: {$ref: '#/components/schemas/StorageSystemServiceStatus'}
+          additionalProperties: false
+        checkedAt: {type: string, format: date-time}
+      additionalProperties: false
+    DatabaseSystemServiceStatus:
+      type: object
+      required: [status, message, details]
+      properties:
+        status: {type: string, enum: [operational, error]}
+        message: {type: string}
+        details:
+          type: object
+          properties:
+            databaseName: {type: string}
+            databaseVersion: {type: string}
+          additionalProperties: false
+      additionalProperties: false
+    LdapSystemServiceStatus:
+      type: object
+      required: [status, message, details]
+      properties:
+        status: {type: string, enum: [operational, error]}
+        message: {type: string}
+        details:
+          type: object
+          required: [endpoint, domain, baseDn, transportSecurity]
+          properties:
+            endpoint: {type: string}
+            domain: {type: string}
+            baseDn: {type: string}
+            transportSecurity: {type: string}
+          additionalProperties: false
+      additionalProperties: false
+    SmtpSystemServiceStatus:
+      type: object
+      required: [status, message, details]
+      properties:
+        status: {type: string, enum: [operational, error]}
+        message: {type: string}
+        details:
+          type: object
+          required: [endpoint, transportSecurity, sender]
+          properties:
+            endpoint: {type: string}
+            transportSecurity: {type: string}
+            sender: {type: string}
+          additionalProperties: false
+      additionalProperties: false
+    StorageSystemServiceStatus:
+      type: object
+      required: [status, message, details]
+      properties:
+        status: {type: string, enum: [operational, error]}
+        message: {type: string}
+        details:
+          type: object
+          required: [path]
+          properties:
+            path: {type: string}
+            freeSpace: {type: string}
+          additionalProperties: false
+      additionalProperties: false
     Liveness:
       type: object
       required: [status]
