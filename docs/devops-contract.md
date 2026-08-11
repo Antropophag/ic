@@ -28,6 +28,9 @@ Production Compose содержит `frontend`, `backend`, `scheduler` и `maria
 `frontend` принимает HTTP, раздаёт production bundle и проксирует `/api` и
 `/health` в PHP-FPM. Используются только project `ic-prod`, `compose.yaml` и
 `.env.prod`; `.env.example` остаётся шаблоном без секретов.
+Backend runtime требует `ext-pcntl`: административная LDAP StartTLS probe
+использует process alarm, чтобы гарантированно завершаться по timeout. Штатный
+backend image устанавливает и проверяет это расширение при build.
 
 ```sh
 cp .env.example .env.prod

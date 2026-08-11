@@ -212,13 +212,14 @@ PHP;
                 continue;
             }
             $path = $directory . DIRECTORY_SEPARATOR . $entry;
-            if (is_dir($path)) {
+            if (is_dir($path) && !is_link($path)) {
                 $this->removeDirectory($path);
             } else {
-                unlink($path);
+                // nosemgrep: php.lang.security.unlink-use.unlink-use -- isolated fixture under a random test directory
+                @unlink($path);
             }
         }
-        rmdir($directory);
+        @rmdir($directory);
     }
 
     private function createApplication(string $login, string $password): void

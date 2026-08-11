@@ -352,8 +352,7 @@ final class AdminController extends ApiController
     private function runWithTimeout(callable $operation, int $seconds): void
     {
         if (!function_exists('pcntl_alarm') || !function_exists('pcntl_signal')) {
-            $operation();
-            return;
+            throw new \RuntimeException('LDAP probe requires ext-pcntl for a bounded timeout');
         }
         $previousHandler = pcntl_signal_get_handler(SIGALRM);
         $previousAsyncSignals = pcntl_async_signals();
