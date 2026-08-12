@@ -237,15 +237,22 @@ final class BitrixArchiveFileImporterTest extends IntegrationTestCase
         )) . "\n");
         $importer = new BitrixArchiveFileImporter($this->db(), new DocumentStorage($this->storageRoot));
 
-        self::assertSame(1, $importer->import($this->workspace, true)['created']);
+        $firstAttempt = $importer->import($this->workspace, true);
+        self::assertSame(
+            ['records' => 2, 'created' => 1, 'skipped' => 0, 'unavailable' => 1, 'unmatched' => 0],
+            $firstAttempt,
+        );
         file_put_contents($this->workspace . '/objects/file_2', 'legacy attachment 1');
         $retry = $importer->import($this->workspace, true);
 
         self::assertSame(['records' => 2, 'created' => 1, 'skipped' => 1, 'unavailable' => 0, 'unmatched' => 0], $retry);
-        self::assertSame(2, (int) $this->db()->createCommand(
-            'SELECT COUNT(*) FROM {{%request_documents}} WHERE request_id = :id AND title = :title',
+        self::assertSame([
+            'bitrix24:file:77:supporting:-:file_1',
+            'bitrix24:file:77:supporting:-:file_2',
+        ], $this->db()->createCommand(
+            'SELECT legacy_id FROM {{%request_documents}} WHERE request_id = :id AND title = :title ORDER BY legacy_id',
             [':id' => $request['id'], ':title' => 'duplicate-title.txt'],
-        )->queryScalar());
+        )->queryColumn());
     }
 
     private function removeDirectory(string $directory): void
