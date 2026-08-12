@@ -1,39 +1,39 @@
-# Reclassification исторического review corpus
+# Реклассификация исторического корпуса ревью
 
 ## Результат
 
-Evidence pass завершён для всех 138 provisional `PARTIAL`: placeholder evidence удалён. Exact guards получили `PROVEN`/`STRONG`, broad families — только `PARTIAL_STRONG` с явными covered/remaining mechanisms. Там, где current file найден, но exact historical symbol/guard mapping не удалось доказать, используется `NEEDS_VERIFICATION`, а не риск-классификация по шаблону.
+Проверка доказательств завершена для всех 138 предварительных `PARTIAL`: шаблонные обоснования удалены. Точные механизмы защиты получили `PROVEN`/`STRONG`, широкие семьи — только `PARTIAL_STRONG` с явно указанными защищёнными и оставшимися механизмами. Там, где актуальный файл найден, но точную связь с историческим символом и владельцем защиты доказать не удалось, используется `NEEDS_VERIFICATION`, а не шаблонная оценка риска.
 
-Рекомендация: **TARGETED MINI-WAVE** из двух implementation-ready guards: MariaDB migration retry и SMTP peer verification. Raw document-token persistence является current bug candidate и исключена из test-only remediation до отдельного fix.
+Рекомендация: **TARGETED MINI-WAVE** из двух готовых к реализации механизмов защиты: повторный запуск миграции MariaDB и проверка сертификата SMTP. Сохранение необработанных токенов документов является кандидатом в актуальные дефекты и исключено из тестовой ремедиации до отдельного исправления.
 
-Audit выполнен на `f5beb2d874bec32242995e9289ec1accad333daf`; `HEAD` и `origin/main` совпадали после финального fetch. Corpus `/home/antropophag/code/ic-review-corpus-20260811` использовался read-only.
+Аудит выполнен на `f5beb2d874bec32242995e9289ec1accad333daf`; `HEAD` и `origin/main` совпадали после финального `fetch`. Корпус `/home/antropophag/code/ic-review-corpus-20260811` использовался только для чтения.
 
-## Original blocker и evidence completion
+## Исходный блокер и завершение проверки доказательств
 
-| Transition from 138 provisional PARTIAL | Families |
+| Переход из 138 предварительных PARTIAL | Семьи |
 |---|---:|
 | → ALREADY_COVERED | 25 |
-| → confirmed PARTIAL_STRONG | 24 |
+| → подтверждённые PARTIAL_STRONG | 24 |
 | → HIGH_VALUE_UNCOVERED | 2 |
 | → MEDIUM_VALUE_UNCOVERED | 3 |
 | → COVER_ON_TOUCH | 0 |
 | → NOT_WORTH_AUTOMATING | 0 |
 | → NEEDS_VERIFICATION | 84 |
-| **Reviewed** | **138** |
+| **Проверено** | **138** |
 
-## Corpus и taxonomy accounting
+## Учёт корпуса и таксономии
 
-Normalized decisions содержат 442 substantive findings из PR #1–#250: 284 Qodo и 158 CodeRabbit. Ledger содержит все finding IDs; каждый ID встречается один раз. Exact normalized labels: 215. Одна label объединена с canonical contrast family, поэтому canonical families: 214. Splits не выполнялись: broad labels сохранены, но distinct mechanisms перечислены в `Covered invariant` и `Remaining gap`.
+Нормализованные решения содержат 442 существенные находки из PR #1–#250: 284 от Qodo и 158 от CodeRabbit. Реестр содержит все идентификаторы находок; каждый встречается один раз. Точных нормализованных меток — 215. Одна метка объединена с канонической семьёй контрастности, поэтому канонических семей — 214. Разделение не выполнялось: широкие метки сохранены, но разные механизмы перечислены в `Защищённом инварианте` и `Оставшемся пробеле`.
 
-| Taxonomy record | Canonical family | Finding IDs preserved | Reason |
+| Запись таксономии | Каноническая семья | Сохранённые ID находок | Причина |
 |---|---|---|---|
-| F024 Insufficient text contrast | F126 insufficient visual contrast | 3726860403 → canonical set with 3735091512 | both are the same invariant: WCAG contrast of small text on light surfaces |
+| F024 Insufficient text contrast | F126 insufficient visual contrast | 3726860403 → канонический набор с 3735091512 | один инвариант: контраст мелкого текста на светлых поверхностях по WCAG |
 
-No finding ID was moved or removed from the ledger; `DUPLICATE` affects only canonical denominator accounting.
+Ни один ID находки не перемещён и не удалён из реестра; `DUPLICATE` влияет только на учёт канонического знаменателя.
 
-Legacy denominator `19 / 163 = 11.7%` не имеет stable finding-to-family mapping, сохранён только для continuity и не используется для Wave decision.
+Устаревший знаменатель `19 / 163 = 11.7%` не имеет стабильного соответствия между находками и семьями, сохранён только для сопоставимости и не используется при принятии решения о следующей волне.
 
-| Classification | Families |
+| Классификация | Семьи |
 |---|---:|
 | PARTIAL | 24 |
 | ALREADY_COVERED | 48 |
@@ -44,69 +44,69 @@ Legacy denominator `19 / 163 = 11.7%` не имеет stable finding-to-family m
 | NEEDS_VERIFICATION | 131 |
 | FALSE_OR_QUESTIONABLE | 0 |
 | NOT_DETERMINISTICALLY_AUTOMATABLE | 0 |
-| **Normalized records** | **215** |
-| **Canonical after merges** | **214** |
+| **Нормализованные записи** | **215** |
+| **Канонические после объединения** | **214** |
 
-## Evidence confidence
+## Уверенность доказательств
 
-| Confidence | Families |
+| Уверенность | Семьи |
 |---|---:|
 | PROVEN | 11 |
 | STRONG | 37 |
 | PARTIAL_STRONG | 24 |
 | UNVERIFIED | 137 |
-| N/A (duplicate/obsolete) | 6 |
+| N/A (дубликаты/устаревшие) | 6 |
 
-`UNVERIFIED` never counts as covered. It comprises 131 `NEEDS_VERIFICATION` rows whose symbol/applicability mapping remains open and six evidence-reviewed uncovered rows where the current mechanism was traced and no exact guard was found.
+`UNVERIFIED` никогда не считается покрытием. Сюда входят 131 строка `NEEDS_VERIFICATION` с открытой проверкой соответствия символа и применимости, а также шесть проверенных uncovered-строк, где актуальный механизм прослежен, но точная защита не найдена.
 
-## Metrics and actionable backlog
+## Метрики и актуальный бэклог
 
-- Legacy continuity: **19 / 163 = 11.7%**; not used for the decision.
-- Proven coverage in new taxonomy: **11 families**.
-- Strong deterministic coverage: **48 families** (PROVEN + STRONG).
-- Partial strong: **24 families**.
-- Uncovered actionable: **6** (3 high, 3 medium).
-- Needs verification: **131**; excluded from both coverage and Wave sizing.
-- Evidence-ready actionable set (covered + partial strong + high + medium): **78**.
+- Устаревшая метрика для сопоставимости: **19 / 163 = 11.7%**; не используется для решения.
+- Доказанное покрытие в новой таксономии: **11 семей**.
+- Сильное детерминированное покрытие: **48 семей** (`PROVEN + STRONG`).
+- Частичное сильное покрытие: **24 семьи**.
+- Актуальные непокрытые: **6** (3 high, 3 medium).
+- Требуют проверки: **131**; исключены из покрытия и оценки размера волны.
+- Готовый по доказательствам актуальный набор (covered + partial strong + high + medium): **78**.
 
-No single percentage is promoted: PARTIAL_STRONG is not fully covered and the taxonomy is not comparable with legacy 163.
+Единый процент не публикуется: `PARTIAL_STRONG` не является полным покрытием, а новая таксономия несопоставима с устаревшими 163.
 
-## High-value shortlist
+## Краткий список high-value
 
-| Family | PR | Current path | Failure scenario | Concrete absence | Proposed guard | Cost |
+| Семья | PR | Актуальный путь | Сценарий отказа | Конкретный пробел | Предлагаемая защита | Стоимость |
 |---|---|---|---|---|---|---|
-| migration retry after partial MariaDB DDL | #200 | `backend/migrations/m260805_000002_add_request_department_snapshot.php` | DDL commits, backfill fails, rerun must resume | no MariaDB failure-after-DDL oracle | isolated failure/rerun integration contract | Medium |
-| raw document bearer token persistence | #61 | `backend/src/Infrastructure/Document/DocumentRepository.php`, `backend/src/Infrastructure/Notification/NotificationOutbox.php` | current notification body embeds a usable download token and persists it in outbox | no guard rejects bearer URLs in persisted body; current code exhibits the failure | after a separate production redesign, assert persisted outbox contains no usable credential | Medium |
-| SMTP certificate verification default | #51 | `backend/src/Infrastructure/Notification/Mailer.php` | regression disables default `verify_peer=1` | MailerTest covers timeout, not peer verification | DSN/transport secure-default test | Low |
-| inactive break-glass provisioning | #196 | `BreakGlassIdentityProvisioner.php` | administrator role assigned to inactive reserved identity | authenticator denies login; provisioning invariant untested | policy decision plus integration test | Low |
-| stale Bitrix workspace lock | #207 | `frontend/scripts/bitrix-files.mjs` | crash-left lock permanently blocks rerun | existing behavior retains pre-existing lock | stale-lock recovery/diagnostic contract | Medium |
-| audit conflict misclassification | #166 | `RequestController.php` | optimistic conflict recorded as policy denial | query tests do not exercise controller event | controller/integration audit assertion | Medium |
+| повторный запуск после частичного MariaDB DDL | #200 | `backend/migrations/m260805_000002_add_request_department_snapshot.php` | DDL фиксируется, backfill завершается ошибкой, повторный запуск должен продолжить работу | нет MariaDB oracle для сбоя после DDL | изолированный integration contract сбоя и повторного запуска | Medium |
+| сохранение необработанного bearer token документа | #61 | `backend/src/Infrastructure/Document/DocumentRepository.php`, `backend/src/Infrastructure/Notification/NotificationOutbox.php` | актуальное тело уведомления содержит рабочий download token и сохраняет его в outbox | нет защиты от bearer URL в сохранённом body; актуальный код воспроизводит отказ | после отдельного production redesign проверять отсутствие рабочего credential в outbox | Medium |
+| проверка сертификата SMTP по умолчанию | #51 | `backend/src/Infrastructure/Notification/Mailer.php` | регрессия отключает `verify_peer=1` по умолчанию | MailerTest проверяет timeout, но не peer verification | тест безопасного значения DSN/transport по умолчанию | Low |
+| provisioning неактивной break-glass identity | #196 | `BreakGlassIdentityProvisioner.php` | роль administrator назначается неактивной зарезервированной identity | authenticator запрещает вход, но provisioning invariant не проверяется | решение политики и integration test | Low |
+| устаревший lock рабочего пространства Bitrix | #207 | `frontend/scripts/bitrix-files.mjs` | lock после аварии навсегда блокирует повторный запуск | текущее поведение сохраняет существующий lock | контракт восстановления или диагностики stale lock | Medium |
+| неверная классификация audit conflict | #166 | `RequestController.php` | optimistic conflict записывается как policy denial | query tests не выполняют controller event | controller/integration assertion для аудита | Medium |
 
-Migration retry and SMTP verification are implementation-ready. Raw token persistence is high-value but must be handled as a current bug, not as test debt. The remaining 131 families cannot be used to argue for or against a later wave until their named verification gap is closed.
+Повторный запуск миграции и проверка SMTP готовы к реализации. Сохранение необработанного токена имеет высокую ценность, но должно обрабатываться как актуальный дефект, а не как тестовый долг. Оставшиеся 131 семей нельзя использовать как аргумент за или против следующей волны, пока не закрыт указанный пробел проверки.
 
-## Current bug candidates
+## Кандидаты в актуальные дефекты
 
-| Family | Current path | Scenario | Impact | Confidence | Next action |
+| Семья | Актуальный путь | Сценарий | Влияние | Уверенность | Следующее действие |
 |---|---|---|---|---|---|
-| raw bearer token in notification outbox | `DocumentRepository.php`, `RequestRepository.php`, `NotificationOutbox.php` | report/opinion/expert notifications concatenate `DocumentDownloadUrl` from a freshly issued token into `body`, which `enqueue()` stores verbatim | High | HIGH | reproduce and redesign delivery separately; then add a regression guard |
-| inactive break-glass provisioning | `BreakGlassIdentityProvisioner.php` | existing reserved identity is inactive; provisioner grants administrator without checking/reactivating `is_active` | Medium | HIGH path, MEDIUM semantics | reproduce separately; no fix here |
-| destructive department rollback | migration `safeDown()` | populated rollback drops historical snapshot columns | High | HIGH data loss, semantics unresolved | define downgrade/backup policy |
+| необработанный bearer token в notification outbox | `DocumentRepository.php`, `RequestRepository.php`, `NotificationOutbox.php` | уведомления об отчёте, заключении и назначении эксперта добавляют `DocumentDownloadUrl` со свежим токеном в `body`, который `enqueue()` сохраняет без изменений | High | HIGH | отдельно воспроизвести и переработать доставку, затем добавить regression guard |
+| provisioning неактивной break-glass identity | `BreakGlassIdentityProvisioner.php` | существующая зарезервированная identity неактивна; provisioner назначает administrator без проверки или реактивации `is_active` | Medium | HIGH для пути, MEDIUM для семантики | отдельно воспроизвести; исправлений здесь нет |
+| destructive department rollback (out-of-ledger, finding `3720977063`) | migration `safeDown()` | rollback с заполненными данными удаляет historical snapshot columns | High | HIGH для потери данных, семантика не определена | определить политику downgrade/backup |
 
-## Policy-blocked
+## Заблокировано политикой
 
-Destructive department rollback is conceptually `COVER_ON_TOUCH + POLICY_BLOCKED`: no guard should encode semantics until product/operations decide whether populated downgrade is supported.
+Destructive department rollback — отдельная операционная заметка вне реестра. Источник: finding `3720977063` из PR #200, исключённый из 442 существенных находок с normalized disposition `FALSE_QUESTIONABLE` (`ordinary reversible migration drops columns`). Флаг `POLICY_BLOCKED` не является основной классификацией семьи и не входит в totals. Защита не должна закреплять семантику, пока product/operations не решат, поддерживается ли downgrade с заполненными данными.
 
-## Sonar/static overlap
+## Пересечение с Sonar и статическим анализом
 
-No generic Sonar coverage was counted for business atomicity, MariaDB DDL recovery, async ordering, optimistic locking, notification leases or import provenance. Static credit requires an exact named rule/contract; no Sonar work is proposed.
+Общее покрытие Sonar не засчитывалось для бизнес-атомарности, восстановления после MariaDB DDL, порядка асинхронных операций, optimistic locking, notification leases и происхождения импорта. Для зачёта статической защиты требуется точное именованное правило или контракт; работы с Sonar не предлагаются.
 
-## Decision
+## Решение
 
-**TARGETED MINI-WAVE**: two low/medium-cost guards for migration retry and SMTP peer verification. Do not include raw token persistence: current code still writes usable bearer URLs to `notification_outbox`, so that item requires a separate production-fix decision before a regression guard. Do not create a broad Wave 5. Keep the three evidence-reviewed medium families in their owning backlog; the 131 `NEEDS_VERIFICATION` families are an explicit audit follow-up, not evidence of coverage, deferral or low value.
+**TARGETED MINI-WAVE**: два механизма защиты низкой/средней стоимости для повторного запуска миграции и проверки сертификата SMTP. Не включать сохранение необработанных токенов: актуальный код всё ещё записывает рабочие bearer URL в `notification_outbox`, поэтому до regression guard требуется отдельное решение о production fix. Не создавать широкую Wave 5. Три проверенные medium-семьи оставить в соответствующих бэклогах; 131 семья `NEEDS_VERIFICATION` — явное продолжение аудита, а не доказательство покрытия, отсрочки или низкой ценности.
 
-## Complete evidence ledger
+## Полный реестр доказательств
 
-For current classifications, `Current path` is a verified representative path at `f5beb2d`; obsolete rows intentionally name the removed historical path and record deletion evidence. All finding IDs and source paths remain in the read-only corpus.
+Для актуальных классификаций проверено существование `Current path` на `f5beb2d`. Только строки с `PROVEN`, `STRONG` или `PARTIAL_STRONG` дополнительно утверждают доказанное соответствие историческому механизму и владельцу защиты. Устаревшие строки намеренно указывают удалённый исторический путь и доказательство удаления. Все ID находок и исходные пути остаются в корпусе, доступном только для чтения.
 
 | ID | Family | Finding IDs | PR(s) | Findings | Classification | Current path | Deterministic layer | Concrete guard | Covered invariant | Remaining gap | Confidence |
 |---|---|---|---|---:|---|---|---|---|---|---|---|

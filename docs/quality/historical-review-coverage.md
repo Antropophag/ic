@@ -1,27 +1,28 @@
 # Покрытие исторических review-дефектов
 
-Полный audit оставшегося corpus и пересчёт actionable backlog приведены в
-[reclassification audit](historical-review-reclassification.md). Legacy metric
-ниже сохранён для continuity; он не является воспроизводимым catalog без
-stable family-to-finding mapping.
+Полный аудит оставшегося корпуса и пересчёт актуального бэклога приведены в
+[аудите реклассификации](historical-review-reclassification.md). Устаревшая
+метрика ниже сохранена для сопоставимости; без стабильной связи между семьями и
+находками она не является воспроизводимым каталогом.
 
 ## Метод
 
 `COVERED` требует воспроизводимого доказательства:
 
 ```text
-historical или семантически эквивалентное buggy behavior → RED
-current behavior                                      → GREEN
+историческое или семантически эквивалентное дефектное поведение → RED
+актуальное поведение                                           → GREEN
 ```
 
-Похожий тест, resolved thread или зелёный pipeline без mutation proof дают не
-более `PARTIAL`. Substantive finding не требует отдельного теста автоматически:
-guard добавляется только для повторяемого риска с надёжной deterministic oracle.
+Похожий тест, закрытый thread или зелёный pipeline без mutation proof дают не
+более `PARTIAL`. Существенная находка не требует отдельного теста автоматически:
+защита добавляется только для повторяемого риска с надёжным детерминированным oracle.
 
-Corpus snapshot от 2026-08-11 содержит 157 PR, 395 Qodo и 415 CodeRabbit inline
-comments, включая 442 substantive findings. Raw corpus хранится вне репозитория.
+Снимок корпуса от 2026-08-11 содержит 157 PR, 395 inline comments Qodo и 415
+inline comments CodeRabbit, включая 442 существенные находки. Исходный корпус
+хранится вне репозитория.
 
-## Evidence-backed coverage
+## Покрытие, подтверждённое доказательствами
 
 | Family | Historical source | Current guard | Evidence | Status |
 |---|---|---|---|---|
@@ -87,13 +88,20 @@ provisional denominator. `PARTIAL` is not counted.
 
 This is an evidence-backed lower bound, not an estimate of all CI coverage.
 
-## Remaining high-value backlog
+## Исторический снимок бэклога после Wave 4
+
+Этот раздел зафиксирован 11 августа 2026 года и не является текущим планом
+следующей волны. Актуальное решение — `TARGETED MINI-WAVE` для MariaDB retry
+oracle и SMTP peer verification — приведено в
+[аудите реклассификации](historical-review-reclassification.md#решение).
+
+### Оставшийся на тот момент high-value бэклог
 
 1. migration retry after non-transactional MariaDB DDL failure (PR #200);
 2. destructive rollback policy for populated department snapshots (PR #200);
 3. other high-risk provenance and data-integrity families.
 
-## Wave 4 candidate audit
+### Аудит кандидатов Wave 4 на тот момент
 
 | Family | Historical source | Classification | Decision |
 |---|---|---|---|
