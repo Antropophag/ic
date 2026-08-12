@@ -40,6 +40,16 @@ final class RequestAssignmentConcurrencyTest extends TestCase
             $requestId = (int) $request['id'];
             $version = (int) $request['lock_version'];
 
+            // Hold the request row until both independent sessions are ready.
+            // Their SELECT ... FOR UPDATE calls then queue behind this lock, so
+            // releasing it creates actual lock contention instead of relying on
+            // process scheduling to overlap two otherwise serial calls.
+            $barrier = $db->beginTransaction();
+            $db->createCommand(
+                'SELECT id FROM {{%requests}} WHERE id = :id FOR UPDATE',
+                [':id' => $requestId],
+            )->queryScalar();
+
             foreach (['start', 'ready-a', 'ready-b', 'result-a', 'result-b'] as $name) {
                 $files[$name] = tempnam(sys_get_temp_dir(), "assign-{$name}-");
                 self::assertIsString($files[$name]);
@@ -57,7 +67,13 @@ final class RequestAssignmentConcurrencyTest extends TestCase
                 $pipes[$index] = $pipeSet;
             }
             $this->waitForFiles([$files['ready-a'], $files['ready-b']], 10.0);
+            $workerConnectionIds = [
+                (int) file_get_contents($files['ready-a']),
+                (int) file_get_contents($files['ready-b']),
+            ];
             touch($files['start']);
+            $this->waitForBlockedAssignmentQueries($db, $workerConnectionIds, 10.0);
+            $barrier->rollBack();
             $this->waitForFiles([$files['result-a'], $files['result-b']], 15.0);
 
             $results = [];
@@ -92,6 +108,10 @@ final class RequestAssignmentConcurrencyTest extends TestCase
             $payload = is_array($audits[0]) ? $audits[0] : json_decode((string) $audits[0], true, 512, JSON_THROW_ON_ERROR);
             self::assertSame($winner, (int) $payload['executor_id']);
         } finally {
+            $transaction = $db->getTransaction();
+            if ($transaction?->getIsActive()) {
+                $transaction->rollBack();
+            }
             foreach ($processes as $process) {
                 if (is_resource($process)) {
                     proc_terminate($process);
@@ -122,7 +142,7 @@ final class RequestAssignmentConcurrencyTest extends TestCase
             $db = new \yii\db\Connection(['dsn' => sprintf('mysql:host=%s;port=%s;dbname=%s', getenv('DB_HOST') ?: '127.0.0.1', getenv('DB_PORT') ?: '3306', getenv('DB_NAME') ?: 'ic_test'), 'username' => getenv('DB_USER') ?: 'ic', 'password' => getenv('DB_PASSWORD') ?: '', 'charset' => 'utf8mb4']);
             $db->open();
             $db->createCommand('SET SESSION innodb_lock_wait_timeout = 5')->execute();
-            touch($argv[5]);
+            file_put_contents($argv[5], (string) $db->createCommand('SELECT CONNECTION_ID()')->queryScalar());
             $deadline = microtime(true) + 10.0;
             while (!file_exists($argv[6])) { if (microtime(true) >= $deadline) { exit(2); } usleep(1000); }
             try {
@@ -135,6 +155,31 @@ final class RequestAssignmentConcurrencyTest extends TestCase
             } finally { $db->close(); }
             file_put_contents($argv[7], json_encode($result, JSON_THROW_ON_ERROR));
             PHP;
+    }
+
+    /** @param list<int> $connectionIds */
+    private function waitForBlockedAssignmentQueries(Connection $db, array $connectionIds, float $timeout): void
+    {
+        $deadline = microtime(true) + $timeout;
+        do {
+            $active = [];
+            foreach ($db->createCommand('SHOW FULL PROCESSLIST')->queryAll() as $process) {
+                $connectionId = (int) ($process['Id'] ?? 0);
+                $info = (string) ($process['Info'] ?? '');
+                if (
+                    in_array($connectionId, $connectionIds, true)
+                    && str_contains($info, 'SELECT status, lock_version FROM')
+                ) {
+                    $active[] = $connectionId;
+                }
+            }
+            if (count(array_unique($active)) === count($connectionIds)) {
+                return;
+            }
+            usleep(10_000);
+        } while (microtime(true) < $deadline);
+
+        self::fail('Workers did not both enter the assignment locking query before timeout');
     }
 
     /** @param list<string> $paths */
