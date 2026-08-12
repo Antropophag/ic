@@ -13,6 +13,7 @@ import {
   readSnapshotFiles,
   assertOutsideGit,
   writePrivateJsonLines,
+  writeWorkspaceSource,
   verifyWorkspace,
 } from './bitrix-files.mjs'
 
@@ -272,6 +273,31 @@ describe('Bitrix file migration tooling', () => {
     await expect(verifyWorkspace(snapshot, workspace)).rejects.toThrow('integrity check failed')
   })
 
+  test('writes workspace identity from verified snapshot metadata', async () => {
+    const snapshot = await fixtureDirectory()
+    const workspace = await fixtureDirectory()
+    const detailUrl = 'https://portal.example/docs/file/FilesProposalTest/file.pdf'
+    await writeSnapshot(snapshot, [element('10', [{ id: 7, name: 'file.pdf', detailURL: detailUrl }], [])])
+    const source = await readSnapshotFiles(snapshot)
+
+    await writeWorkspaceSource(workspace, source)
+
+    expect(JSON.parse(await readFile(join(workspace, 'source.json'), 'utf8'))).toEqual({
+      listId: 114,
+      snapshotFingerprint: source.manifest.files['elements.jsonl'].sha256,
+    })
+  })
+
+  test('rejects workspace identity from another snapshot before payload checks', async () => {
+    const { snapshot, workspace } = await validMigrationWorkspace()
+    await writeFile(join(workspace, 'source.json'), `${JSON.stringify({
+      listId: 115,
+      snapshotFingerprint: '0'.repeat(64),
+    })}\n`)
+
+    await expect(verifyWorkspace(snapshot, workspace)).rejects.toThrow('Workspace source does not match the snapshot')
+  })
+
   test('rejects associations that do not match the snapshot', async () => {
     const { snapshot, workspace } = await validMigrationWorkspace()
     await writeFile(join(workspace, 'associations.jsonl'), '{"sourceFileId":"other"}\n')
@@ -332,6 +358,11 @@ async function validMigrationWorkspace() {
     sourceFileId: '7',
     originalName: 'file.pdf',
   }])
+  const manifest = JSON.parse(await readFile(join(snapshot, 'manifest.json'), 'utf8'))
+  await writeFile(join(workspace, 'source.json'), `${JSON.stringify({
+    listId: manifest.source.listId,
+    snapshotFingerprint: manifest.files['elements.jsonl'].sha256,
+  })}\n`)
   return { snapshot, workspace }
 }
 
@@ -358,6 +389,7 @@ async function writeSnapshot(directory, elements) {
   await writeFile(join(directory, 'manifest.json'), JSON.stringify({
     formatVersion: 1,
     complete: true,
+    source: { listId: 114 },
     files: {
       'elements.jsonl': {
         bytes: Buffer.byteLength(elementsContent),

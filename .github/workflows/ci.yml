@@ -50,6 +50,7 @@ jobs:
             backend/build/coverage/clover.xml
             backend/build/coverage/python.xml
             frontend/coverage/lcov.info
+            frontend/coverage/sonar/lcov.info
           if-no-files-found: error
           retention-days: 1
 

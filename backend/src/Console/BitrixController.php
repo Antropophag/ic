@@ -42,7 +42,7 @@ final class BitrixController extends Controller
             'inspect' => [...$options, 'maxPages'],
             'snapshot' => [...$options, 'maxPages', 'output'],
             'inventory' => [...$options, 'snapshot', 'output'],
-            'import-files' => [...$options, 'workspace', 'apply'],
+            'import-files' => [...$options, 'workspace', 'snapshot', 'apply'],
             default => $options,
         };
     }
@@ -173,6 +173,7 @@ final class BitrixController extends Controller
             Yii::$app->db,
             new DocumentStorage(getenv('DOCUMENT_STORAGE_PATH') ?: '/app/storage/documents'),
             $snapshot['listId'],
+            $snapshot['fingerprint'],
         ))->import($this->workspace, $this->apply === '1');
         $this->stdout(json_encode(['mode' => $this->apply === '1' ? 'apply' : 'dry-run', ...$summary], JSON_PRETTY_PRINT | JSON_THROW_ON_ERROR) . "\n");
         return $summary['unavailable'] === 0 && $summary['unmatched'] === 0 ? ExitCode::OK : ExitCode::DATAERR;
