@@ -73,9 +73,9 @@ final class RequestAssignmentConcurrencyTest extends TestCase
             }
             $outcomes = array_column($results, 'outcome');
             sort($outcomes);
-            self::assertSame(['conflict', 'ok'], $outcomes);
+            self::assertSame(['conflict', 'ok'], $outcomes, json_encode($results, JSON_THROW_ON_ERROR));
             $winner = (int) $results[array_search('ok', array_column($results, 'outcome'), true)]['executor'];
-            self::assertSame(2, (int) $db->createCommand('SELECT lock_version FROM {{%requests}} WHERE id = :id', [':id' => $requestId])->queryScalar());
+            self::assertSame($version + 1, (int) $db->createCommand('SELECT lock_version FROM {{%requests}} WHERE id = :id', [':id' => $requestId])->queryScalar());
             self::assertSame([$winner], array_map('intval', $db->createCommand(
                 "SELECT user_id FROM {{%request_assignments}} WHERE request_id = :id AND assignment_type = 'executor' AND valid_to IS NULL",
                 [':id' => $requestId],
@@ -158,8 +158,9 @@ final class RequestAssignmentConcurrencyTest extends TestCase
 
     private function grantRole(Connection $db, int $userId, string $code): void
     {
-        $roleId = (int) $db->createCommand('SELECT id FROM {{%roles}} WHERE code = :code', [':code' => $code])->queryScalar();
-        $db->createCommand()->insert('{{%user_roles}}', ['user_id' => $userId, 'role_id' => $roleId, 'created_at' => gmdate('Y-m-d H:i:s')])->execute();
+        $roleId = $db->createCommand('SELECT id FROM {{%roles}} WHERE code = :code', [':code' => $code])->queryScalar();
+        self::assertNotFalse($roleId, "Required role seed '{$code}' is missing.");
+        $db->createCommand()->insert('{{%user_roles}}', ['user_id' => $userId, 'role_id' => (int) $roleId, 'created_at' => gmdate('Y-m-d H:i:s')])->execute();
     }
 
     private function connection(): Connection

@@ -176,8 +176,17 @@ final class UserAdministrationRepository
                     // назначить эту же роль между нашей проверкой и вставкой —
                     // тот же идемпотентный результат, что и alreadyAssigned,
                     // без дублирующей записи аудита.
+                    $concurrentAssignmentExists = $this->db->createCommand(
+                        'SELECT 1 FROM {{%user_roles}} '
+                        . 'WHERE user_id = :user_id AND role_id = :role_id FOR UPDATE',
+                        [':user_id' => $userId, ':role_id' => $roleId],
+                    )->queryScalar() !== false;
+                    if (!$concurrentAssignmentExists) {
+                        throw $error;
+                    }
+                    $roles = $this->rolesOf($userId, true);
                     $transaction->commit();
-                    return $this->rolesOf($userId);
+                    return $roles;
                 }
                 $this->db->createCommand()->insert('{{%audit_events}}', [
                     'event_type' => 'user.role_assigned',
@@ -257,11 +266,12 @@ final class UserAdministrationRepository
     }
 
     /** @return list<array<string, mixed>> */
-    private function rolesOf(int $userId): array
+    private function rolesOf(int $userId, bool $currentRead = false): array
     {
         return $this->db->createCommand(
             'SELECT r.id, r.code, r.name FROM {{%user_roles}} ur '
-            . 'JOIN {{%roles}} r ON r.id = ur.role_id WHERE ur.user_id = :id ORDER BY r.id',
+            . 'JOIN {{%roles}} r ON r.id = ur.role_id WHERE ur.user_id = :id ORDER BY r.id'
+            . ($currentRead ? ' FOR UPDATE' : ''),
             [':id' => $userId],
         )->queryAll();
     }
