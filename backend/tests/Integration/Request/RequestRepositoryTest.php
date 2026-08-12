@@ -13,6 +13,7 @@ use App\Domain\Request\RequestDepartmentChangeDenied;
 use App\Domain\Request\RequestDepartmentMissing;
 use App\Domain\Request\SuspendResumeDenied;
 use App\Domain\Request\WithdrawDenied;
+use App\Infrastructure\Admin\AuditQuery;
 use App\Infrastructure\Clock;
 use App\Infrastructure\Request\RequestRepository;
 use App\Infrastructure\Request\RequestQuery;
@@ -31,6 +32,47 @@ final class RequestRepositoryTest extends IntegrationTestCase
         $input->testMethod = 'Интеграционный тест';
 
         return (new RequestRepository($this->db()))->create($input, $initiatorId);
+    }
+
+    public function testCreationWritesOneSafeAuditEventPresentedAsRequestCreation(): void
+    {
+        $initiator = $this->createUser('dev.it.creation.audit', 'Инициатор аудита');
+
+        $request = $this->createRegisteredRequest($initiator, 'audit');
+
+        $events = $this->db()->createCommand(
+            "SELECT event_type, entity_type, entity_id, actor_id, rule_id, payload_json, created_at "
+            . "FROM {{%audit_events}} WHERE event_type = 'request.created' AND entity_id = :id",
+            [':id' => $request['id']],
+        )->queryAll();
+        self::assertCount(1, $events);
+        self::assertSame('request.created', $events[0]['event_type']);
+        self::assertSame('request', $events[0]['entity_type']);
+        self::assertSame((int) $request['id'], (int) $events[0]['entity_id']);
+        self::assertSame($initiator, (int) $events[0]['actor_id']);
+        self::assertSame('REQ-007', $events[0]['rule_id']);
+        self::assertSame(
+            (string) $events[0]['created_at'],
+            (string) $this->scalar(
+                "SELECT created_at FROM {{%request_transitions}} WHERE request_id = :id AND action = 'create'",
+                [':id' => $request['id']],
+            ),
+        );
+        self::assertSame(
+            ['to_status' => 'registered'],
+            json_decode((string) $events[0]['payload_json'], true, flags: JSON_THROW_ON_ERROR),
+        );
+
+        $page = (new AuditQuery($this->db()))->findPage([
+            'actorId' => null, 'eventType' => 'request.created', 'entityType' => null, 'entityId' => null,
+            'requestId' => (int) $request['id'], 'result' => 'all', 'dateFrom' => null, 'dateTo' => null,
+            'limit' => 50, 'cursor' => null,
+        ]);
+        self::assertCount(1, $page['items']);
+        self::assertSame('Создана заявка', $page['items'][0]['title']);
+        self::assertSame('success', $page['items'][0]['result']);
+        self::assertSame('REQ-007', $page['items'][0]['ruleId']);
+        self::assertSame(['to_status' => 'registered'], $page['items'][0]['details']);
     }
 
     public function testDepartmentIsSnapshottedAndDoesNotFollowProfileChanges(): void

@@ -84,6 +84,15 @@ final class RequestRepository
                 'rule_id' => 'REQ-007',
                 'created_at' => $now,
             ])->execute();
+            $this->db->createCommand()->insert('{{%audit_events}}', [
+                'event_type' => 'request.created',
+                'entity_type' => 'request',
+                'entity_id' => $id,
+                'actor_id' => $initiatorId,
+                'rule_id' => 'REQ-007',
+                'payload_json' => ['to_status' => RequestStatus::Registered->value],
+                'created_at' => $now,
+            ])->execute();
             // REQ-008: руководители ИЦ и лаборатории уведомляются о новой заявке.
             $outbox = new NotificationOutbox($this->db);
             foreach ($this->activeUsersWithRoles(['ic_manager', 'laboratory_manager']) as $manager) {
