@@ -75,10 +75,13 @@ final class BitrixArchiveFileImporter
         }
         $path = $workspace . '/source.json';
         $source = json_decode((string) @file_get_contents($path), true);
+        $fingerprint = is_array($source) ? ($source['snapshotFingerprint'] ?? null) : null;
         if (
             !is_array($source)
             || ($source['listId'] ?? null) !== $this->listId
-            || !hash_equals($this->snapshotFingerprint, (string) ($source['snapshotFingerprint'] ?? ''))
+            || !is_string($fingerprint)
+            || preg_match('/\A[0-9a-f]{64}\z/D', $fingerprint) !== 1
+            || !hash_equals($this->snapshotFingerprint, $fingerprint)
         ) {
             throw new RuntimeException('Workspace source does not match the verified snapshot.');
         }

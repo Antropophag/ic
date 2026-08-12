@@ -8,6 +8,7 @@ use App\Application\Request\CreateRequestInput;
 use App\Infrastructure\Document\DocumentStorage;
 use App\Infrastructure\Import\BitrixArchiveFileImporter;
 use App\Infrastructure\Request\RequestRepository;
+use PHPUnit\Framework\Attributes\DataProvider;
 use Tests\Integration\IntegrationTestCase;
 
 final class BitrixArchiveFileImporterTest extends IntegrationTestCase
@@ -127,12 +128,55 @@ final class BitrixArchiveFileImporterTest extends IntegrationTestCase
         }
     }
 
-    public function testRejectsWorkspaceFromAnotherSnapshotBeforeReadingAssociations(): void
+    public function testAcceptsWorkspaceWithMatchingProvenance(): void
     {
-        file_put_contents($this->workspace . '/source.json', json_encode([
-            'listId' => 114,
-            'snapshotFingerprint' => str_repeat('b', 64),
-        ], JSON_THROW_ON_ERROR));
+        $this->writeWorkspaceSource(114, str_repeat('a', 64));
+        file_put_contents($this->workspace . '/associations.jsonl', '');
+        file_put_contents($this->workspace . '/checkpoint.jsonl', '');
+
+        $summary = (new BitrixArchiveFileImporter(
+            $this->db(),
+            new DocumentStorage($this->storageRoot),
+            114,
+            str_repeat('a', 64),
+        ))->import($this->workspace, false);
+
+        self::assertSame(['records' => 0, 'created' => 0, 'skipped' => 0, 'unavailable' => 0, 'unmatched' => 0], $summary);
+    }
+
+    public function testRejectsWorkspaceWithWrongFingerprintBeforeReadingAssociations(): void
+    {
+        $this->writeWorkspaceSource(114, str_repeat('b', 64));
+
+        $this->expectWorkspaceMismatch();
+    }
+
+    public function testRejectsWorkspaceWithWrongListIdBeforeReadingAssociations(): void
+    {
+        $this->writeWorkspaceSource(115, str_repeat('a', 64));
+
+        $this->expectWorkspaceMismatch();
+    }
+
+    #[DataProvider('invalidFingerprintProvider')]
+    public function testRejectsInvalidWorkspaceFingerprintBeforeReadingAssociations(mixed $fingerprint): void
+    {
+        $this->writeWorkspaceSource(114, $fingerprint);
+
+        $this->expectWorkspaceMismatch();
+    }
+
+    /** @return iterable<string, array{mixed}> */
+    public static function invalidFingerprintProvider(): iterable
+    {
+        yield 'wrong type' => [[]];
+        yield 'integer' => [123];
+        yield 'malformed string' => ['not-a-sha256'];
+    }
+
+    private function expectWorkspaceMismatch(): void
+    {
+        self::assertFileDoesNotExist($this->workspace . '/associations.jsonl');
 
         $this->expectException(\RuntimeException::class);
         $this->expectExceptionMessage('Workspace source does not match the verified snapshot.');
@@ -143,6 +187,14 @@ final class BitrixArchiveFileImporterTest extends IntegrationTestCase
             114,
             str_repeat('a', 64),
         ))->import($this->workspace, true);
+    }
+
+    private function writeWorkspaceSource(int $listId, mixed $fingerprint): void
+    {
+        file_put_contents($this->workspace . '/source.json', json_encode([
+            'listId' => $listId,
+            'snapshotFingerprint' => $fingerprint,
+        ], JSON_THROW_ON_ERROR));
     }
 
     public function testRetryAfterUnavailableFileSkipsCompletedDocumentAndImportsRemainder(): void

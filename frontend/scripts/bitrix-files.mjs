@@ -261,10 +261,9 @@ async function download(snapshotDirectory, workspace, options) {
   const objects = join(workspace, 'objects')
   const checkpointPath = join(workspace, 'checkpoint.jsonl')
   const associationsPath = join(workspace, 'associations.jsonl')
-  const sourcePath = join(workspace, 'source.json')
   await mkdir(objects, { recursive: true, mode: 0o700 })
   await writePrivateJsonLines(associationsPath, associationRecords(source))
-  await writePrivateJson(sourcePath, workspaceSource(source))
+  await writeWorkspaceSource(workspace, source)
   const checkpoint = await loadCheckpoint(checkpointPath)
   const maxBytes = positiveInteger(options['max-bytes'] ?? String(DEFAULT_MAX_BYTES), 'max-bytes')
   const limit = positiveInteger(options.limit ?? String(source.uniqueFiles.length), 'limit')
@@ -373,8 +372,8 @@ function workspaceSource(source) {
   }
 }
 
-async function writePrivateJson(path, value) {
-  await writePrivateJsonLines(path, [value])
+export async function writeWorkspaceSource(workspace, source) {
+  await writePrivateJsonLines(join(workspace, 'source.json'), [workspaceSource(source)])
 }
 
 async function downloadWithBrowser(page, url, destination, maxBytes, timeout) {

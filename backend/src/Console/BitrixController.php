@@ -42,7 +42,7 @@ final class BitrixController extends Controller
             'inspect' => [...$options, 'maxPages'],
             'snapshot' => [...$options, 'maxPages', 'output'],
             'inventory' => [...$options, 'snapshot', 'output'],
-            'import-files' => [...$options, 'workspace', 'apply'],
+            'import-files' => [...$options, 'workspace', 'snapshot', 'apply'],
             default => $options,
         };
     }

@@ -33,6 +33,7 @@ final class BitrixArchiveMetadataMigrationTest extends IntegrationTestCase
                 'created_at' => '2026-08-12 12:00:00',
             ])->execute();
         }
+        $schemaBefore = $this->archiveDocumentSchema();
 
         $path = dirname(__DIR__, 3) . '/migrations/m260810_000001_add_bitrix_archive_metadata.php';
         require_once $path;
@@ -55,9 +56,23 @@ final class BitrixArchiveMetadataMigrationTest extends IntegrationTestCase
         }
 
         self::assertArrayHasKey('title_discriminator', $this->db()->schema->getTableSchema('{{%request_documents}}', true)->columns);
+        self::assertSame($schemaBefore, $this->archiveDocumentSchema(), 'Rollback collision must be rejected before any DDL.');
         self::assertSame(2, (int) $this->db()->createCommand(
             'SELECT COUNT(*) FROM {{%request_documents}} WHERE request_id = :id',
             [':id' => $request['id']],
         )->queryScalar());
+    }
+
+    /** @return array{columns: list<string>, indexes: list<string>, foreignKeys: list<string>} */
+    private function archiveDocumentSchema(): array
+    {
+        $schema = $this->db()->schema->getTableSchema('{{%request_documents}}', true);
+        self::assertNotNull($schema);
+
+        return [
+            'columns' => array_keys($schema->columns),
+            'indexes' => array_keys($this->db()->schema->findUniqueIndexes($schema)),
+            'foreignKeys' => array_keys($schema->foreignKeys),
+        ];
     }
 }
