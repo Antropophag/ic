@@ -14,6 +14,7 @@ final class BitrixArchiveFileImporter
         private readonly Connection $db,
         private readonly DocumentStorage $storage,
         private readonly int $listId = 114,
+        private readonly ?string $snapshotFingerprint = null,
     ) {
     }
 
@@ -21,6 +22,7 @@ final class BitrixArchiveFileImporter
     public function import(string $workspace, bool $apply = false): array
     {
         $workspace = rtrim($workspace, DIRECTORY_SEPARATOR);
+        $this->assertWorkspaceProvenance($workspace);
         if ($apply) {
             $this->storage->assertWritable();
         }
@@ -64,6 +66,22 @@ final class BitrixArchiveFileImporter
             ++$summary['created'];
         }
         return $summary;
+    }
+
+    private function assertWorkspaceProvenance(string $workspace): void
+    {
+        if ($this->snapshotFingerprint === null) {
+            return;
+        }
+        $path = $workspace . '/source.json';
+        $source = json_decode((string) @file_get_contents($path), true);
+        if (
+            !is_array($source)
+            || ($source['listId'] ?? null) !== $this->listId
+            || !hash_equals($this->snapshotFingerprint, (string) ($source['snapshotFingerprint'] ?? ''))
+        ) {
+            throw new RuntimeException('Workspace source does not match the verified snapshot.');
+        }
     }
 
     /** @param array<string, mixed> $association */

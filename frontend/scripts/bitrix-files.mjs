@@ -261,8 +261,10 @@ async function download(snapshotDirectory, workspace, options) {
   const objects = join(workspace, 'objects')
   const checkpointPath = join(workspace, 'checkpoint.jsonl')
   const associationsPath = join(workspace, 'associations.jsonl')
+  const sourcePath = join(workspace, 'source.json')
   await mkdir(objects, { recursive: true, mode: 0o700 })
   await writePrivateJsonLines(associationsPath, associationRecords(source))
+  await writePrivateJson(sourcePath, workspaceSource(source))
   const checkpoint = await loadCheckpoint(checkpointPath)
   const maxBytes = positiveInteger(options['max-bytes'] ?? String(DEFAULT_MAX_BYTES), 'max-bytes')
   const limit = positiveInteger(options.limit ?? String(source.uniqueFiles.length), 'limit')
@@ -322,6 +324,10 @@ export async function verifyWorkspace(snapshotDirectory, workspace) {
   const workspacePath = resolve(workspace)
   assertOutsideGit(workspacePath)
   const source = await readSnapshotFiles(snapshotDirectory)
+  const expectedSource = workspaceSource(source)
+  if (await readFile(join(workspacePath, 'source.json'), 'utf8') !== `${JSON.stringify(expectedSource)}\n`) {
+    throw new Error('Workspace source does not match the snapshot.')
+  }
   const checkpoint = await loadCheckpoint(join(workspacePath, 'checkpoint.jsonl'))
   const associationsPath = join(workspacePath, 'associations.jsonl')
   const expectedAssociations = `${associationRecords(source).map((record) => JSON.stringify(record)).join('\n')}\n`
@@ -358,6 +364,17 @@ function associationRecords(source) {
     delete record.detailUrl
     return record
   })
+}
+
+function workspaceSource(source) {
+  return {
+    listId: source.manifest.source.listId,
+    snapshotFingerprint: source.manifest.files['elements.jsonl'].sha256,
+  }
+}
+
+async function writePrivateJson(path, value) {
+  await writePrivateJsonLines(path, [value])
 }
 
 async function downloadWithBrowser(page, url, destination, maxBytes, timeout) {

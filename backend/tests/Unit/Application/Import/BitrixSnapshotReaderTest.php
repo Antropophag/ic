@@ -33,6 +33,7 @@ final class BitrixSnapshotReaderTest extends TestCase
         $snapshot = (new BitrixSnapshotReader())->read($this->directory);
 
         self::assertSame(114, $snapshot['listId']);
+        self::assertSame(hash('sha256', "{\"ID\":\"42\"}\n"), $snapshot['fingerprint']);
         self::assertSame('7', $snapshot['users']['7']->bitrixId);
         self::assertSame([['ID' => '42']], iterator_to_array($snapshot['elements'], false));
     }

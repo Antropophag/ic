@@ -36,6 +36,9 @@ comments, включая 442 substantive findings. Raw corpus хранится �
 | role assignment and audit atomicity | PR #89, Qodo | `UserRoleAuditAtomicityTest::testAssignRoleRollsBackDomainMutationWhenAuditWriteFails` | historical non-transactional boundary RED under controlled audit failure; transactional current code GREEN | COVERED |
 | in-component out-of-order registry responses | PR #41/#213/#224, Qodo | `requestRegistryLoadLifecycle.test.js` | generation increment removal RED; controlled deferred responses GREEN | COVERED |
 | concurrent same-key idempotency claim | PR #202, Qodo | `IdempotencyStoreConcurrencyTest` | key-scope mutation executes both operations RED; existing two-session guard GREEN | COVERED |
+| populated archive-metadata rollback with duplicate document titles | PR #244 migration review family, CodeRabbit/Qodo | `BitrixArchiveMetadataMigrationTest::testRollbackRejectsPopulatedDuplicateTitlesBeforeChangingSchema` | historical `safeDown()` enters DDL and errors after schema mutation RED; preflight collision rejection on MariaDB GREEN | COVERED |
+| file-import workspace/snapshot provenance | PR #244, CodeRabbit | `BitrixArchiveFileImporterTest::testRejectsWorkspaceFromAnotherSnapshotBeforeReadingAssociations` | missing command/importer binding mutation accepts the mismatched source context RED; verified list ID + snapshot fingerprint GREEN | COVERED |
+| file-import retry after partial availability | PR #244, Qodo | `BitrixArchiveFileImporterTest::testRetryAfterUnavailableFileSkipsCompletedDocumentAndImportsRemainder` | completed-document recognition removal raises duplicate-key error RED; retry creates remainder and skips prior write GREEN | COVERED |
 
 Unchanged guards reuse preserved evidence only where the final execution path and
 oracle remain semantically unchanged. The adapted review-contract guard has fresh
@@ -47,7 +50,6 @@ positive and negative fixtures in this branch.
 |---|---|---|---|
 | archived mutation bypass via string route ID | PR #244, Qodo | FALSE/QUESTIONABLE | exact historical branch stayed GREEN because Yii coerces the bound route argument to `int` |
 | registry `mine` identity collision | PR #247, Qodo | PARTIAL | corrected collision fixture exists, but independent production mutation proof was not completed |
-| file-import workspace/snapshot identity | PR #244, CodeRabbit | PARTIAL | current command takes `listId` from the snapshot; isolated command-boundary proof remains outstanding |
 
 ## Wave 3 candidate audit
 
@@ -74,12 +76,25 @@ provisional denominator. `PARTIAL` is not counted.
 | After Wave 2 reconciliation | 12 | 163 | 7.4% |
 | After Wave 3 reclassification | 13 | 163 | 8.0% |
 | After Wave 3 guards | 16 | 163 | 9.8% |
+| Before Wave 4 | 16 | 163 | 9.8% |
+| After Wave 4 reclassification | 16 | 163 | 9.8% |
+| After Wave 4 guards | 19 | 163 | 11.7% |
 
 This is an evidence-backed lower bound, not an estimate of all CI coverage.
 
 ## Remaining high-value backlog
 
-1. populated migration rollback with duplicate document titles;
-2. command-boundary binding of file-import workspace to snapshot identity;
-3. migration retry, recovery, and idempotency;
-4. other high-risk provenance and data-integrity families.
+1. migration retry after non-transactional MariaDB DDL failure (PR #200);
+2. destructive rollback policy for populated department snapshots (PR #200);
+3. other high-risk provenance and data-integrity families.
+
+## Wave 4 candidate audit
+
+| Family | Historical source | Classification | Decision |
+|---|---|---|---|
+| archive-metadata rollback after duplicate visible titles | PR #244, CodeRabbit/Qodo migration family | CURRENT + UNCOVERED | added populated MariaDB preflight guard before any rollback DDL |
+| workspace/snapshot identity | PR #244, CodeRabbit | CURRENT + PARTIAL | strengthened to verified snapshot fingerprint at the import boundary |
+| import-files retry after partial availability | PR #244, Qodo | CURRENT + PARTIAL | proved exact observable rerun contract: completed write skipped, remainder imported |
+| department snapshot migration rerun after DDL failure | PR #200, CodeRabbit | CURRENT + PARTIAL | deferred: released migration policy and isolated mid-DDL failure need a dedicated remediation scope |
+| destructive department snapshot rollback | PR #200, Qodo | CURRENT + PARTIAL | deferred: product rollback policy must be resolved before changing a released migration |
+| CHECK-constraint rollback portability | PR #244, Qodo | NOT DETERMINISTICALLY AUTOMATABLE IN CURRENT MATRIX | production and CI contract is MariaDB; cross-engine portability has no supported runtime target |

@@ -199,7 +199,8 @@ npm --prefix frontend run bitrix-files -- verify \
   --workspace="$BITRIX_FILES_DIR"
 ```
 
-Команда требует точного совпадения всех записей `associations.jsonl` со
+Команда требует совпадения `source.json` с ID списка и SHA-256 проверенного
+`elements.jsonl`, точного совпадения всех записей `associations.jsonl` со
 snapshot, всех файловых ID в `objects/` и успешных checkpoint-записей, а затем
 повторно вычисляет размер и SHA-256 каждого объекта.
 
@@ -305,6 +306,8 @@ COMPOSE_ENV_FILE=.env.prod docker compose -p ic-prod --env-file .env.prod \
   --snapshot=/export/snapshot-YYYYMMDDTHHMMSSZ --apply=1
 ```
 
-Каждая связь получает отдельный идемпотентный ключ; общий исходный бинарник может
+Backend повторно проверяет `source.json` относительно переданного `--snapshot`
+до чтения associations и записи файлов. Каждая связь получает отдельный
+идемпотентный ключ; общий исходный бинарник может
 быть связан с несколькими заявками или комментариями. Перед записью повторно
 проверяются checkpoint, размер и SHA-256 объекта.

@@ -332,6 +332,11 @@ async function validMigrationWorkspace() {
     sourceFileId: '7',
     originalName: 'file.pdf',
   }])
+  const manifest = JSON.parse(await readFile(join(snapshot, 'manifest.json'), 'utf8'))
+  await writeFile(join(workspace, 'source.json'), `${JSON.stringify({
+    listId: manifest.source.listId,
+    snapshotFingerprint: manifest.files['elements.jsonl'].sha256,
+  })}\n`)
   return { snapshot, workspace }
 }
 
@@ -358,6 +363,7 @@ async function writeSnapshot(directory, elements) {
   await writeFile(join(directory, 'manifest.json'), JSON.stringify({
     formatVersion: 1,
     complete: true,
+    source: { listId: 114 },
     files: {
       'elements.jsonl': {
         bytes: Buffer.byteLength(elementsContent),
