@@ -116,6 +116,15 @@
 - Do not stop after confirming that the happy path works.
 - Re-run affected checks after every review-driven edit.
 
+### Independent Review
+
+- After implementation and validation, run a separate read-only `$pr-review`
+  against `main` before opening a PR.
+- The reviewer reports findings only. Address them in a separate implementation
+  pass, repeat relevant checks, and review the updated change set again.
+- Codex review complements deterministic CI and hosted reviewers; it replaces
+  neither.
+
 ### 6. Acceptance
 
 - Evaluate the result against the Definition of Done.

@@ -1,55 +1,39 @@
 # AI-review pull/merge request
 
-## Временный GitHub-контур
+## Слои качества
 
-На этапе разработки в GitHub выбран hosted AI reviewer Qodo. Бесплатный план
-для разработчиков поддерживает private-репозитории; подключение выполняется через
-явное разрешение GitHub App только к `Antropophag/ic`. Шум ограничивает
-версионируемая конфигурация `.pr_agent.toml`.
+Основной обязательный слой — deterministic checks: `make check`, `make e2e`,
+PHPStan, PHPCS, ESLint, OpenAPI validation, Semgrep, Gitleaks, dependency audit,
+repository contracts, historical regression guards и SonarQube Cloud. Детали
+Sonar и CI остаются в [документации CI](ci.md).
 
-Review запускается автоматически при открытии PR и повторно при каждом push
-новых коммитов в уже открытый PR (`[github_app].handle_push_trigger` в
-`.pr_agent.toml`) — после исправления замечаний не нужно ждать вручную или
-вызывать `/agentic_review`, следующий push сам получит свежий вердикт. Метка
-`skip-ai-review` (`ignore_pr_labels` в `.pr_agent.toml`) отключает review для
-конкретного PR — полезно для веток с частыми мелкими push (экспериментальные
-черновики, `dependencies`), где повторная проверка на каждый коммит не нужна.
+После реализации и локальных проверок разработчик запускает независимый
+read-only `$pr-review` относительно `main`. Skill находится в
+`.agents/skills/pr-review/`, анализирует полный change set и связанный код, но не
+редактирует файлы. Подтверждённые findings передаются в отдельный implementation-
+проход, после которого checks и review повторяются.
 
-AI-замечания рекомендательные и не заменяют обязательный CI и человеческий review.
-GitHub Actions также запускают детерминированные Semgrep и Gitleaks, а Dependabot
-еженедельно создаёт pull request обновления зависимостей.
+Codex review дополняет deterministic checks и hosted review, но не заменяет их и
+сам по себе не является merge gate.
 
-## Корпоративный GitLab-контур — отложено
+## Hosted review
 
-**Статус:** не входит в текущий объём проекта. Решение отложено до отдельного
-согласования с информационной безопасностью условий передачи корпоративного кода
-внешней модели либо появления утверждённых локальных вычислительных мощностей.
+Qodo запускается автоматически при открытии PR и повторно при каждом push через
+`.pr_agent.toml`. Не вызывайте `/agentic_review` вручную. Итоговый `Code Review by
+Qodo` должен относиться к текущему head; `PR Summary` и состояние
+`working`/`busy working` не являются завершённым review.
 
-## Выбранный вариант
+CodeRabbit остаётся дополнительным hosted reviewer. Findings Qodo, CodeRabbit,
+Codex и человека проверяются по достижимому failure scenario и исправляются либо
+аргументированно отклоняются. AI-review не заменяет обязательный pipeline и
+человеческий approve.
 
-При возобновлении работ кандидатом остаётся open-source PR-Agent в корпоративном контуре.
-Он поддерживает self-hosted GitLab и запуск по webhook. Модель должна работать
-локально через совместимый LLM endpoint; код и diff не отправляются во внешние
-SaaS. Конфигурация репозитория находится в `.pr_agent.toml`.
+## Historical remediation
 
-AI-review является рекомендательной проверкой: он пишет замечания, но не ставит
-автоматический approve и не может отменить результат детерминированных тестов.
+Каждый substantive historical finding оценивается на возможность permanent
+deterministic guard. Guard добавляется при значимом риске повторения и только с
+RED → GREEN evidence; тест на каждый bot comment не требуется. Authoritative
+registry находится в
+[historical-review-coverage.md](quality/historical-review-coverage.md).
 
-## Что потребуется от инфраструктуры
-
-- внутренний сервис PR-Agent с зафиксированной версией образа;
-- сервисная учётная запись GitLab с минимальными правами на чтение репозитория и
-  создание комментариев в merge request;
-- webhook только из GitLab в PR-Agent;
-- локальный LLM endpoint и утверждённая модель для code review;
-- запрет логирования исходного кода, prompt и diff;
-- лимиты времени/размера diff и защита от prompt injection из содержимого MR.
-
-Токены GitLab и LLM не хранятся в репозитории: их передаёт защищённое хранилище
-секретов инфраструктуры.
-
-## Политика GitLab
-
-Для `main` следует включить protected branch, запретить прямой push и включить
-`Pipelines must succeed`. Merge выполняется после успешного pipeline и хотя бы
-одного человеческого review. AI-комментарий не считается человеческим approve.
+Raw reviewer corpus и benchmark artifacts хранятся вне репозитория.
