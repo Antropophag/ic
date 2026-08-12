@@ -25,8 +25,16 @@ created the change.
    git status --short
    ```
 
-   Include staged, unstaged, and untracked files. Read untracked files directly.
-   If unresolved conflicts exist, identify them and explain review limitations.
+   Include staged, unstaged, and untracked files. If unresolved conflicts exist,
+   identify them and explain review limitations.
+
+   <!-- review-contract:sensitive-untracked -->
+   For untracked files, read relevant source and tests directly, but first
+   classify potentially sensitive paths using repository conventions such as
+   `.gitignore` and Gitleaks rules. Do not open obvious secret-bearing files
+   (`.env*`, credential/token overrides, private keys, or certificates) unless
+   the user explicitly requests their review and it is safe. Report only their
+   paths and status; never include secret values in review evidence or findings.
 4. For a requested commit or range, inspect exactly that scope plus affected code
    around it. State the resolved base/range before findings.
 

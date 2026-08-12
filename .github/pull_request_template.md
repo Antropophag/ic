@@ -28,7 +28,7 @@
 ## Готовность
 
 - [ ] тесты и обязательный pipeline проходят;
-- [ ] выполнен независимый read-only Codex review текущего change set;
+- [ ] выполнен независимый read-only Codex review итогового change set: findings исправлены или аргументированно отклонены, checks и review после последнего implementation-прохода повторены; <!-- review-contract:final-change-set -->
 - [ ] Qodo завершил проверку текущего head-коммита: нет статуса `working`/`busy working`, опубликован итоговый `Code Review by Qodo`, все review threads закрыты (`resolved`);
 - [ ] документация и пользовательские инструкции актуализированы;
 - [ ] миграция и откат проверены, если изменялась база данных;

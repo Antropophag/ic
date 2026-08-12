@@ -11,7 +11,8 @@ Sonar и CI остаются в [документации CI](ci.md).
 read-only `$pr-review` относительно `main`. Skill находится в
 `.agents/skills/pr-review/`, анализирует полный change set и связанный код, но не
 редактирует файлы. Подтверждённые findings передаются в отдельный implementation-
-проход, после которого checks и review повторяются.
+проход, после которого deterministic checks и review итогового change set
+повторяются. <!-- review-contract:final-change-set -->
 
 Codex review дополняет deterministic checks и hosted review, но не заменяет их и
 сам по себе не является merge gate.
@@ -24,9 +25,9 @@ Qodo` должен относиться к текущему head; `PR Summary` �
 `working`/`busy working` не являются завершённым review.
 
 CodeRabbit остаётся дополнительным hosted reviewer. Findings Qodo, CodeRabbit,
-Codex и человека проверяются по достижимому failure scenario и исправляются либо
-аргументированно отклоняются. AI-review не заменяет обязательный pipeline и
-человеческий approve.
+Codex и человека проверяются по каждому достижимому сценарию отказа и
+исправляются либо аргументированно отклоняются. AI-review не заменяет
+обязательный pipeline и человеческий approve.
 
 ## Historical remediation
 

@@ -24,15 +24,17 @@ grep -Eq '^handle_push_trigger[[:space:]]*=[[:space:]]*true$' .pr_agent.toml
 grep -Eq '^push_commands[[:space:]]*=[[:space:]]*\["/review"\]$' .pr_agent.toml
 grep -Fq 'Act only as reviewer' .agents/skills/pr-review/SKILL.md
 grep -Fq 'Never fix findings in the review pass' .agents/skills/pr-review/SKILL.md
+grep -Fq 'review-contract:sensitive-untracked' .agents/skills/pr-review/SKILL.md
 
-# Policy may be reworded, but the effective layers must remain discoverable.
-set -- AGENTS.md CLAUDE.md docs/ai-review.md docs/engineering-standards.md \
-  .github/pull_request_template.md
+# Each invariant is checked in the policy layer that owns it. Prose around the
+# stable anchors may change without weakening the contract.
 # shellcheck disable=SC2016 # Literal skill name, not a shell variable.
-grep -Fq '$pr-review' "$@"
-grep -Fq 'Code Review by Qodo' "$@"
-grep -Fq 'CodeRabbit' docs/ai-review.md docs/ci.md
+grep -Fq '$pr-review' AGENTS.md
+grep -Fq 'review-contract:final-change-set' .github/pull_request_template.md
+grep -Fq 'review-contract:final-change-set' docs/ai-review.md
+grep -Fq 'Code Review by Qodo' .github/pull_request_template.md
+grep -Fq 'CodeRabbit' docs/ai-review.md
 grep -Fq 'make check' docs/ai-review.md
-grep -Fq 'Sonar' docs/ai-review.md docs/ci.md
+grep -Fq 'Sonar' docs/ai-review.md
 
 echo 'Review workflow contracts passed'

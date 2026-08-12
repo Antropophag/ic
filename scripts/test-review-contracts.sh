@@ -41,4 +41,24 @@ if REVIEW_CONTRACT_ROOT="$disabled_qodo" sh scripts/check-review-contracts.sh >/
   exit 1
 fi
 
+missing_sensitive_policy="$fixture_root/missing-sensitive-policy"
+copy_contract "$missing_sensitive_policy"
+sed -i '/review-contract:sensitive-untracked/,/secret values in review evidence or findings/d' \
+  "$missing_sensitive_policy/.agents/skills/pr-review/SKILL.md"
+if REVIEW_CONTRACT_ROOT="$missing_sensitive_policy" sh scripts/check-review-contracts.sh >/dev/null 2>&1; then
+  echo 'Review contract accepted a skill without sensitive-untracked protection.' >&2
+  exit 1
+fi
+
+wrong_final_review_layer="$fixture_root/wrong-final-review-layer"
+copy_contract "$wrong_final_review_layer"
+sed -i '/review-contract:final-change-set/d' \
+  "$wrong_final_review_layer/.github/pull_request_template.md"
+printf '%s\n' '<!-- review-contract:final-change-set -->' \
+  >>"$wrong_final_review_layer/CLAUDE.md"
+if REVIEW_CONTRACT_ROOT="$wrong_final_review_layer" sh scripts/check-review-contracts.sh >/dev/null 2>&1; then
+  echo 'Review contract accepted the final-review invariant only in the wrong policy layer.' >&2
+  exit 1
+fi
+
 echo 'Review contract fixtures passed'
