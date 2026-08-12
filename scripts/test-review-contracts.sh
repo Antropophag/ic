@@ -43,7 +43,7 @@ fi
 
 missing_sensitive_policy="$fixture_root/missing-sensitive-policy"
 copy_contract "$missing_sensitive_policy"
-sed -i '/review-contract:sensitive-untracked/,/secret values in review evidence or findings/d' \
+sed -i '/review-contract:sensitive-untracked/d' \
   "$missing_sensitive_policy/.agents/skills/pr-review/SKILL.md"
 if REVIEW_CONTRACT_ROOT="$missing_sensitive_policy" sh scripts/check-review-contracts.sh >/dev/null 2>&1; then
   echo 'Review contract accepted a skill without sensitive-untracked protection.' >&2

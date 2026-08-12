@@ -29,12 +29,16 @@ created the change.
    identify them and explain review limitations.
 
    <!-- review-contract:sensitive-untracked -->
-   For untracked files, read relevant source and tests directly, but first
-   classify potentially sensitive paths using repository conventions such as
-   `.gitignore` and Gitleaks rules. Do not open obvious secret-bearing files
-   (`.env*`, credential/token overrides, private keys, or certificates) unless
-   the user explicitly requests their review and it is safe. Report only their
-   paths and status; never include secret values in review evidence or findings.
+   For untracked files, read every relevant non-sensitive file directly,
+   including source, tests, configuration, workflows, manifests, migrations,
+   fixtures, and documentation. First classify potentially sensitive paths using
+   repository conventions such as `.gitignore` and Gitleaks rules. Do not open
+   obvious secret-bearing files (`.env`, `.env.dev`, `.env.prod`, local
+   credential/token overrides, private keys, or certificates) unless the user
+   explicitly requests their review and it is safe. Read sanitized examples and
+   deterministic test configuration only after repository policy confirms their
+   status. Report only sensitive paths and status; never include secret values in
+   review evidence or findings.
 4. For a requested commit or range, inspect exactly that scope plus affected code
    around it. State the resolved base/range before findings.
 
