@@ -146,48 +146,57 @@ final class UserAdministrationRepository
     /** @return list<array<string, mixed>> */
     public function assignRole(int $userId, int $roleId, int $actorId): array
     {
-        $this->assertUserIsManageable($userId);
-        $role = $this->db->createCommand(
-            'SELECT id FROM {{%roles}} WHERE id = :id',
-            [':id' => $roleId],
-        )->queryScalar();
-        if ($role === false) {
-            throw new UserAdministrationTargetNotFound('Role not found');
-        }
+        $transaction = $this->db->beginTransaction();
+        try {
+            $this->assertUserIsManageable($userId);
+            $role = $this->db->createCommand(
+                'SELECT id FROM {{%roles}} WHERE id = :id',
+                [':id' => $roleId],
+            )->queryScalar();
+            if ($role === false) {
+                throw new UserAdministrationTargetNotFound('Role not found');
+            }
 
-        $alreadyAssigned = $this->db->createCommand(
-            'SELECT 1 FROM {{%user_roles}} WHERE user_id = :user_id AND role_id = :role_id',
-            [':user_id' => $userId, ':role_id' => $roleId],
-        )->queryScalar() !== false;
+            $alreadyAssigned = $this->db->createCommand(
+                'SELECT 1 FROM {{%user_roles}} WHERE user_id = :user_id AND role_id = :role_id',
+                [':user_id' => $userId, ':role_id' => $roleId],
+            )->queryScalar() !== false;
 
-        if (!$alreadyAssigned) {
-            $now = Clock::now();
-            try {
-                $this->db->createCommand()->insert('{{%user_roles}}', [
-                    'user_id' => $userId,
-                    'role_id' => $roleId,
-                    'assigned_by' => $actorId,
+            if (!$alreadyAssigned) {
+                $now = Clock::now();
+                try {
+                    $this->db->createCommand()->insert('{{%user_roles}}', [
+                        'user_id' => $userId,
+                        'role_id' => $roleId,
+                        'assigned_by' => $actorId,
+                        'created_at' => $now,
+                    ])->execute();
+                } catch (IntegrityException $error) {
+                    // Гонка check-then-insert: другой параллельный запрос успел
+                    // назначить эту же роль между нашей проверкой и вставкой —
+                    // тот же идемпотентный результат, что и alreadyAssigned,
+                    // без дублирующей записи аудита.
+                    $transaction->commit();
+                    return $this->rolesOf($userId);
+                }
+                $this->db->createCommand()->insert('{{%audit_events}}', [
+                    'event_type' => 'user.role_assigned',
+                    'entity_type' => 'user',
+                    'entity_id' => $userId,
+                    'actor_id' => $actorId,
+                    'rule_id' => 'AUTH-007',
+                    'payload_json' => ['role_id' => $roleId],
                     'created_at' => $now,
                 ])->execute();
-            } catch (IntegrityException $error) {
-                // Гонка check-then-insert: другой параллельный запрос успел
-                // назначить эту же роль между нашей проверкой и вставкой —
-                // тот же идемпотентный результат, что и alreadyAssigned,
-                // без дублирующей записи аудита.
-                return $this->rolesOf($userId);
             }
-            $this->db->createCommand()->insert('{{%audit_events}}', [
-                'event_type' => 'user.role_assigned',
-                'entity_type' => 'user',
-                'entity_id' => $userId,
-                'actor_id' => $actorId,
-                'rule_id' => 'AUTH-007',
-                'payload_json' => ['role_id' => $roleId],
-                'created_at' => $now,
-            ])->execute();
-        }
 
-        return $this->rolesOf($userId);
+            $roles = $this->rolesOf($userId);
+            $transaction->commit();
+            return $roles;
+        } catch (\Throwable $error) {
+            $transaction->rollBack();
+            throw $error;
+        }
     }
 
     /** @return list<array<string, mixed>> */
