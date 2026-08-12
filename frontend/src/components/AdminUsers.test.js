@@ -38,9 +38,9 @@ it('renders login and activity states and preserves role assignment', async () =
   adminApi.users.mockResolvedValue({
     checkedAt: '2026-08-11T12:00:00Z',
     items: [
-      { id: 1, displayName: 'Новый пользователь', adLogin: 'new.user', email: null, isActive: true, roles: [], lastLoginAt: null, lastActivityAt: null },
-      { id: 2, displayName: 'Активный пользователь', adLogin: 'active.user', email: 'active@example.invalid', isActive: true, roles: [], lastLoginAt: '2026-08-11T11:58:00Z', lastActivityAt: '2026-08-11T11:59:00Z' },
-      { id: 3, displayName: 'Давний пользователь', adLogin: 'old.user', email: null, isActive: false, roles: [], lastLoginAt: '2026-08-10T08:00:00Z', lastActivityAt: '2026-08-11T11:45:00Z' },
+      { id: 1, displayName: 'Новый пользователь', adLogin: 'new.user', department: null, email: null, isActive: true, roles: [], lastLoginAt: null, lastActivityAt: null },
+      { id: 2, displayName: 'Активный пользователь', adLogin: 'active.user', department: 'Испытательный центр', email: 'active@example.invalid', isActive: true, roles: [], lastLoginAt: '2026-08-11T11:58:00Z', lastActivityAt: '2026-08-11T11:59:00Z' },
+      { id: 3, displayName: 'Давний пользователь', adLogin: 'old.user', department: null, email: null, isActive: false, roles: [], lastLoginAt: '2026-08-10T08:00:00Z', lastActivityAt: '2026-08-11T11:45:00Z' },
     ],
   })
   adminApi.roles.mockResolvedValue({ items: [{ id: 4, code: 'expert', name: 'Эксперт' }] })
@@ -52,7 +52,11 @@ it('renders login and activity states and preserves role assignment', async () =
   expect(root.textContent).toContain('Активен')
   expect(root.textContent).toContain('15 мин назад')
   expect(root.textContent).toContain('Отключена')
+  expect([...root.querySelectorAll('thead th')].map(cell => cell.textContent)).toContain('Подразделение')
   const activeRow = [...root.querySelectorAll('tbody tr')].find(row => row.textContent.includes('Активный пользователь'))
+  expect(activeRow.querySelectorAll('td')[2].textContent).toBe('Испытательный центр')
+  const newUserRow = [...root.querySelectorAll('tbody tr')].find(row => row.textContent.includes('Новый пользователь'))
+  expect(newUserRow.querySelectorAll('td')[2].textContent).toBe('—')
   const roleSelect = activeRow.querySelector('.role-assign select')
   roleSelect.value = '4'
   roleSelect.dispatchEvent(new Event('change'))
