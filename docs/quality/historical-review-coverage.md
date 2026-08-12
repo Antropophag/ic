@@ -1,5 +1,10 @@
 # Покрытие исторических review-дефектов
 
+Полный audit оставшегося corpus и пересчёт actionable backlog приведены в
+[reclassification audit](historical-review-reclassification.md). Legacy metric
+ниже сохранён для continuity; он не является воспроизводимым catalog без
+stable family-to-finding mapping.
+
 ## Метод
 
 `COVERED` требует воспроизводимого доказательства:
