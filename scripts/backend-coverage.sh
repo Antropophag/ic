@@ -5,7 +5,7 @@ cd "$(CDPATH='' cd -- "$(dirname -- "$0")/.." && pwd)"
 : "${COMPOSE:?COMPOSE must be provided by Makefile}"
 : "${CONTAINER_ENGINE:?CONTAINER_ENGINE must be provided by Makefile}"
 
-project=ic-coverage
+project="ic-coverage-$$"
 env_file=.env.test
 compose="$COMPOSE -p $project --env-file $env_file -f compose.test.yaml"
 
