@@ -8,6 +8,7 @@ use App\Application\Request\CreateRequestInput;
 use App\Infrastructure\Document\DocumentStorage;
 use App\Infrastructure\Import\BitrixArchiveFileImporter;
 use App\Infrastructure\Request\RequestRepository;
+use PHPUnit\Framework\Attributes\DataProvider;
 use Tests\Integration\IntegrationTestCase;
 
 final class BitrixArchiveFileImporterTest extends IntegrationTestCase
@@ -125,6 +126,133 @@ final class BitrixArchiveFileImporterTest extends IntegrationTestCase
                 self::assertStringContainsString($case['expected'], $error->getMessage());
             }
         }
+    }
+
+    public function testAcceptsWorkspaceWithMatchingProvenance(): void
+    {
+        $this->writeWorkspaceSource(114, str_repeat('a', 64));
+        file_put_contents($this->workspace . '/associations.jsonl', '');
+        file_put_contents($this->workspace . '/checkpoint.jsonl', '');
+
+        $summary = (new BitrixArchiveFileImporter(
+            $this->db(),
+            new DocumentStorage($this->storageRoot),
+            114,
+            str_repeat('a', 64),
+        ))->import($this->workspace, false);
+
+        self::assertSame(['records' => 0, 'created' => 0, 'skipped' => 0, 'unavailable' => 0, 'unmatched' => 0], $summary);
+    }
+
+    public function testRejectsWorkspaceWithWrongFingerprintBeforeReadingAssociations(): void
+    {
+        $this->writeWorkspaceSource(114, str_repeat('b', 64));
+
+        $this->expectWorkspaceMismatch();
+    }
+
+    public function testRejectsWorkspaceWithWrongListIdBeforeReadingAssociations(): void
+    {
+        $this->writeWorkspaceSource(115, str_repeat('a', 64));
+
+        $this->expectWorkspaceMismatch();
+    }
+
+    #[DataProvider('invalidFingerprintProvider')]
+    public function testRejectsInvalidWorkspaceFingerprintBeforeReadingAssociations(mixed $fingerprint): void
+    {
+        $this->writeWorkspaceSource(114, $fingerprint);
+
+        $this->expectWorkspaceMismatch();
+    }
+
+    /** @return iterable<string, array{mixed}> */
+    public static function invalidFingerprintProvider(): iterable
+    {
+        yield 'wrong type' => [[]];
+        yield 'integer' => [123];
+        yield 'malformed string' => ['not-a-sha256'];
+    }
+
+    private function expectWorkspaceMismatch(): void
+    {
+        self::assertFileDoesNotExist($this->workspace . '/associations.jsonl');
+
+        $this->expectException(\RuntimeException::class);
+        $this->expectExceptionMessage('Workspace source does not match the verified snapshot.');
+
+        (new BitrixArchiveFileImporter(
+            $this->db(),
+            new DocumentStorage($this->storageRoot),
+            114,
+            str_repeat('a', 64),
+        ))->import($this->workspace, true);
+    }
+
+    private function writeWorkspaceSource(int $listId, mixed $fingerprint): void
+    {
+        file_put_contents($this->workspace . '/source.json', json_encode([
+            'listId' => $listId,
+            'snapshotFingerprint' => $fingerprint,
+        ], JSON_THROW_ON_ERROR));
+    }
+
+    public function testRetryAfterUnavailableFileSkipsCompletedDocumentAndImportsRemainder(): void
+    {
+        $userId = $this->createUser('dev.it.bitrix.retry', 'Автор');
+        $input = new CreateRequestInput();
+        $input->productName = 'Архивное изделие';
+        $input->manufacturer = 'Завод';
+        $input->supplier = 'Поставщик';
+        $input->sampleQuantity = 1;
+        $input->testMethod = 'Методика';
+        $request = (new RequestRepository($this->db()))->create($input, $userId);
+        $this->db()->createCommand()->update('{{%requests}}', [
+            'legacy_id' => 'bitrix24:114:77', 'source' => 'bitrix24', 'is_archived' => 1,
+        ], ['id' => $request['id']])->execute();
+
+        $records = [];
+        $checkpoints = [];
+        foreach (['file_1', 'file_2'] as $index => $sourceFileId) {
+            $payload = "legacy attachment {$index}";
+            $records[] = [
+                'requestNumber' => 77, 'documentType' => 'supporting',
+                'sourceFileId' => $sourceFileId, 'originalName' => 'duplicate-title.txt',
+            ];
+            $checkpoints[] = [
+                'sourceFileId' => $sourceFileId, 'status' => 'downloaded',
+                'bytes' => strlen($payload), 'sha256' => hash('sha256', $payload), 'mime' => 'text/plain',
+            ];
+            if ($index === 0) {
+                file_put_contents($this->workspace . '/objects/' . $sourceFileId, $payload);
+            }
+        }
+        file_put_contents($this->workspace . '/associations.jsonl', implode("\n", array_map(
+            static fn (array $record): string => json_encode($record, JSON_THROW_ON_ERROR),
+            $records,
+        )) . "\n");
+        file_put_contents($this->workspace . '/checkpoint.jsonl', implode("\n", array_map(
+            static fn (array $record): string => json_encode($record, JSON_THROW_ON_ERROR),
+            $checkpoints,
+        )) . "\n");
+        $importer = new BitrixArchiveFileImporter($this->db(), new DocumentStorage($this->storageRoot));
+
+        $firstAttempt = $importer->import($this->workspace, true);
+        self::assertSame(
+            ['records' => 2, 'created' => 1, 'skipped' => 0, 'unavailable' => 1, 'unmatched' => 0],
+            $firstAttempt,
+        );
+        file_put_contents($this->workspace . '/objects/file_2', 'legacy attachment 1');
+        $retry = $importer->import($this->workspace, true);
+
+        self::assertSame(['records' => 2, 'created' => 1, 'skipped' => 1, 'unavailable' => 0, 'unmatched' => 0], $retry);
+        self::assertSame([
+            'bitrix24:file:77:supporting:-:file_1',
+            'bitrix24:file:77:supporting:-:file_2',
+        ], $this->db()->createCommand(
+            'SELECT legacy_id FROM {{%request_documents}} WHERE request_id = :id AND title = :title ORDER BY legacy_id',
+            [':id' => $request['id'], ':title' => 'duplicate-title.txt'],
+        )->queryColumn());
     }
 
     private function removeDirectory(string $directory): void
