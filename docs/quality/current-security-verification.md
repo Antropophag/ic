@@ -104,9 +104,13 @@ outbox body.
   позволяет восстановить credential, при этом доставленное письмо содержит
   рабочую ссылку.
 - Data cleanup: existing pending/sending/failed rows могут содержать
-  non-expiring credentials. Нужны inventory и policy для purge/reissue. Для sent
-  rows body уже очищен. Простое ожидание expiry не помогает, потому что expiry в
-  текущей модели отсутствует.
+  non-expiring credentials. Inventory должен связать затронутые outbox rows с
+  `document_download_links`; очистки/reissue outbox недостаточно, потому что уже
+  скопированный token продолжит совпадать с authoritative hash. Cleanup policy
+  должна удалить/инвалидировать старые link hashes либо выполнить rotation с
+  гарантированной недействительностью прежних tokens. Для sent rows body уже
+  очищен. Простое ожидание expiry не помогает, потому что expiry в текущей модели
+  отсутствует.
 
 ## Finding B — inactive break-glass identity
 
@@ -239,9 +243,11 @@ verified.
 ## Next work
 
 1. Separate security PR: redesign the durable notification/link boundary, add
-   regression coverage, and inventory/purge or reissue exposed pending/failed
-   credentials. Migration is needed only if the selected representation changes
-   schema; data cleanup is required regardless because links do not expire.
+   regression coverage, map exposed pending/failed outbox rows to their download
+   links, and revoke the old hashes before any replacement notification is
+   issued. Migration is needed only if the selected representation changes
+   schema; credential revocation and data cleanup are required regardless because
+   links do not expire.
 2. Separate security/operations decision: approve the SMTP relay trust model. If
    peer authentication is required, configure corporate CA/pinning and then add
    an effective-production-config guard. If the exception is accepted, record
