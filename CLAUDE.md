@@ -33,6 +33,13 @@
 - Назначайте ровно одну метку `type:*`, одну или несколько `area:*` и ровно одну
   `risk:*`. Workflow, ACL, миграции и безопасность всегда имеют `risk:high`.
 
+## Независимый Codex review
+
+- После реализации и проверок запустите read-only `$pr-review` относительно
+  `main`. Findings исправляются только в отдельном implementation-проходе.
+- Codex review дополняет deterministic CI, Qodo, CodeRabbit и человеческий
+  review, но не заменяет их.
+
 ## Qodo и merge
 
 - Никогда не вызывайте Qodo вручную командой `/agentic_review`: приложение

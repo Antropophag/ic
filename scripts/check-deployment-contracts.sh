@@ -3,6 +3,13 @@ set -eu
 
 cd "$(CDPATH='' cd -- "$(dirname -- "$0")/.." && pwd)"
 
+tracked_runtime_env=$(git ls-files -- .env .env.dev .env.prod)
+if [ -n "$tracked_runtime_env" ]; then
+  echo "Runtime environment files must stay untracked; commit sanitized examples only:" >&2
+  printf '%s\n' "$tracked_runtime_env" >&2
+  exit 1
+fi
+
 reject_tracked() {
   description=$1
   pattern=$2

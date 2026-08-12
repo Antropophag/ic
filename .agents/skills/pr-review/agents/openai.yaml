@@ -1,0 +1,4 @@
+interface:
+  display_name: "PR Review"
+  short_description: "Независимое adversarial review изменений"
+  default_prompt: "Use $pr-review to review the current changes against main without modifying files."
