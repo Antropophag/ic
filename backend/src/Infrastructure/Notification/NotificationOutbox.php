@@ -15,8 +15,10 @@ final class NotificationOutbox
 
     /**
      * Ставит письмо в очередь в текущей транзакционной границе вызывающего
-     * кода (NTF-002). Содержимое рендерится сразу, чтобы запись была
-     * самодостаточной и не зависела от состояния заявки на момент отправки.
+     * кода (NTF-002). Semantic document references are persisted separately;
+     * bearer credentials are rendered only at the delivery boundary (ACL-005).
+     *
+     * @param list<array{label: string, documentVersionId: int}> $documentLinks
      */
     public function enqueue(
         int $requestId,
@@ -25,6 +27,7 @@ final class NotificationOutbox
         string $recipientName,
         string $subject,
         string $body,
+        array $documentLinks = [],
     ): void {
         $now = Clock::now();
         $this->db->createCommand()->insert('{{%notification_outbox}}', [
@@ -34,6 +37,7 @@ final class NotificationOutbox
             'recipient_name' => $recipientName,
             'subject' => $subject,
             'body' => $body,
+            'payload_json' => ['documentLinks' => $documentLinks],
             'status' => 'pending',
             'attempts' => 0,
             'next_attempt_at' => $now,

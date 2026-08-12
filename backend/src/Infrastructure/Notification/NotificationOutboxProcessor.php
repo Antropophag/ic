@@ -83,7 +83,7 @@ final class NotificationOutboxProcessor
         }
 
         $row = $this->db->createCommand(
-            'SELECT request_id, recipient_email, recipient_name, subject, body, attempts '
+            'SELECT request_id, recipient_email, recipient_name, subject, body, payload_json, attempts '
             . 'FROM {{%notification_outbox}} WHERE id = :id',
             [':id' => $id],
         )->queryOne();
@@ -93,11 +93,19 @@ final class NotificationOutboxProcessor
         }
 
         try {
+            $payload = is_array($row['payload_json'])
+                ? $row['payload_json']
+                : json_decode((string) $row['payload_json'], true, flags: JSON_THROW_ON_ERROR);
+            $body = (new NotificationDownloadLinks($this->db))->appendToBody(
+                $id,
+                (string) $row['body'],
+                $payload['documentLinks'] ?? [],
+            );
             [$recipientEmail, $subject, $body] = NotificationTestRedirect::apply(
                 (string) $row['recipient_email'],
                 (string) $row['recipient_name'],
                 (string) $row['subject'],
-                (string) $row['body'],
+                $body,
                 getenv('NOTIFICATION_TEST_REDIRECT_EMAIL') ?: null,
             );
             ($this->sender)(

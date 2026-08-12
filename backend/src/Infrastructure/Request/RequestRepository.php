@@ -25,7 +25,6 @@ use App\Domain\Request\StartRequestPolicy;
 use App\Domain\Request\SuspendResumePolicy;
 use App\Domain\Request\WithdrawPolicy;
 use App\Infrastructure\Clock;
-use App\Infrastructure\Document\DocumentDownloadUrl;
 use App\Infrastructure\Notification\NotificationOutbox;
 use yii\db\Connection;
 
@@ -294,14 +293,14 @@ final class RequestRepository
             if ($decision === 'approve') {
                 $initiator = $this->initiatorContact($requestId);
                 if ($initiator !== null) {
-                    $links = '';
+                    $documentLinks = [];
                     $reportVersionId = $this->latestDocumentVersionId($requestId, 'report');
                     if ($reportVersionId !== null) {
-                        $links .= "\nСсылка на отчёт: " . DocumentDownloadUrl::build($this->issueDocumentLink($reportVersionId));
+                        $documentLinks[] = ['label' => 'отчёт', 'documentVersionId' => $reportVersionId];
                     }
                     $opinionVersionId = $this->latestDocumentVersionId($requestId, 'opinion');
                     if ($opinionVersionId !== null) {
-                        $links .= "\nСсылка на заключение: " . DocumentDownloadUrl::build($this->issueDocumentLink($opinionVersionId));
+                        $documentLinks[] = ['label' => 'заключение', 'documentVersionId' => $opinionVersionId];
                     }
                     $outbox->enqueue(
                         $requestId,
@@ -310,8 +309,8 @@ final class RequestRepository
                         $initiator['name'],
                         'Испытания завершены',
                         'Испытания по вашей заявке завершены. Служба безопасности согласовала заключение. '
-                        . 'Отчёт и заключение доступны в портале.'
-                        . $links,
+                        . 'Отчёт и заключение доступны в портале.',
+                        $documentLinks,
                     );
                 }
             } else {
@@ -574,9 +573,6 @@ final class RequestRepository
             $expertContact = $this->userContact($targetExpertId);
             if ($expertContact !== null) {
                 $reportVersionId = $this->latestDocumentVersionId($requestId, 'report');
-                $reportLink = $reportVersionId === null
-                    ? ''
-                    : "\nСсылка на отчёт: " . DocumentDownloadUrl::build($this->issueDocumentLink($reportVersionId));
                 (new NotificationOutbox($this->db))->enqueue(
                     $requestId,
                     $eventType,
@@ -584,8 +580,10 @@ final class RequestRepository
                     $expertContact['name'],
                     'Вам передана заявка для экспертного заключения',
                     'Вам передана заявка для подготовки экспертного заключения. '
-                    . 'Откройте заявку в портале, чтобы подготовить заключение.'
-                    . $reportLink,
+                    . 'Откройте заявку в портале, чтобы подготовить заключение.',
+                    $reportVersionId === null
+                        ? []
+                        : [['label' => 'отчёт', 'documentVersionId' => $reportVersionId]],
                 );
             }
         }
@@ -1391,21 +1389,6 @@ final class RequestRepository
         )->queryScalar();
 
         return $id === false ? null : (int) $id;
-    }
-
-    // ACL-003..006: письмо-уведомление содержит активную ссылку на скачивание
-    // документа без входа в портал (ТЗ 4.6/4.9/4.10), в т.ч. пока обычный
-    // доступ через портал ещё не открыт.
-    private function issueDocumentLink(int $documentVersionId): string
-    {
-        $token = bin2hex(random_bytes(32));
-        $this->db->createCommand()->insert('{{%document_download_links}}', [
-            'document_version_id' => $documentVersionId,
-            'token_hash' => hash('sha256', $token),
-            'created_at' => Clock::now(),
-        ])->execute();
-
-        return $token;
     }
 
     /** @return array{email: string, name: string}|null */
