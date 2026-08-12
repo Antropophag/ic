@@ -14,12 +14,20 @@ def main() -> int:
     parser.add_argument("--minimum", type=float, required=True)
     args = parser.parse_args()
 
-    metrics = ET.parse(args.report).getroot().find("project/metrics")
-    if metrics is None:
-        raise SystemExit(f"Clover metrics not found in {args.report}")
+    root = ET.parse(args.report).getroot()
+    source_prefixes = ("src/Domain/", "src/Application/")
+    metrics = []
+    for file_node in root.findall(".//file"):
+        path = file_node.attrib.get("name", "").replace("\\", "/").lstrip("/")
+        if not any(path.startswith(prefix) or f"/{prefix}" in path for prefix in source_prefixes):
+            continue
+        metrics.append(file_node.find("metrics"))
+    metrics = [metric for metric in metrics if metric is not None]
+    if not metrics:
+        raise SystemExit(f"Domain/Application Clover metrics not found in {args.report}")
 
-    statements = int(metrics.attrib["statements"])
-    covered = int(metrics.attrib["coveredstatements"])
+    statements = sum(int(metric.attrib["statements"]) for metric in metrics)
+    covered = sum(int(metric.attrib["coveredstatements"]) for metric in metrics)
     if statements <= 0:
         raise SystemExit(
             "Clover report contains no statements; coverage collection is likely misconfigured"
