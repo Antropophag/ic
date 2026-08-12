@@ -79,6 +79,31 @@ describe('request registry load lifecycle', () => {
     expect(state).toEqual({ registry: 'new registry', dashboard: 'new dashboard' })
   })
 
+  it('keeps newer same-activation responses when older requests finish last', async () => {
+    const lifecycle = createRequestRegistryLoadLifecycle()
+    const state = { registry: '', dashboard: '', notifications: '' }
+    const cases = [
+      ['registry', lifecycle.registryGuard],
+      ['dashboard', lifecycle.dashboardGuard],
+      ['notifications', lifecycle.notificationGuard],
+    ]
+
+    for (const [key, guard] of cases) {
+      const older = deferred()
+      const newer = deferred()
+      const olderUpdate = applyWhenCurrent(guard, guard.begin(true), older.promise, state, key)
+      const newerUpdate = applyWhenCurrent(guard, guard.begin(true), newer.promise, state, key)
+
+      newer.resolve(`new ${key}`)
+      await newerUpdate
+      expect(state[key]).toBe(`new ${key}`)
+
+      older.resolve(`old ${key}`)
+      await olderUpdate
+      expect(state[key]).toBe(`new ${key}`)
+    }
+  })
+
   it('cancels a scheduled reload and creation side effects on deactivation', async () => {
     const scheduled = new Map()
     let timerId = 0

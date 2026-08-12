@@ -117,8 +117,12 @@ e2e: doctor
 
 coverage: doctor
 	mkdir -p backend/build/coverage
+	python3 -m venv backend/build/coverage/python-venv
+	backend/build/coverage/python-venv/bin/pip install --disable-pip-version-check -r scripts/requirements-coverage.txt
+	COVERAGE_FILE=backend/build/coverage/.coverage backend/build/coverage/python-venv/bin/coverage run --include='scripts/check_coverage.py' -m unittest discover -s scripts/tests
+	COVERAGE_FILE=backend/build/coverage/.coverage backend/build/coverage/python-venv/bin/coverage xml -o backend/build/coverage/python.xml
 	$(CONTAINER_ENGINE) build --file docker/coverage.Dockerfile --tag shlz-test-registry-coverage .
-	$(CONTAINER_ENGINE) run --rm --volume "$(CURDIR)/backend/build/coverage:/app/build/coverage" shlz-test-registry-coverage
+	COMPOSE='$(COMPOSE)' CONTAINER_ENGINE='$(CONTAINER_ENGINE)' sh scripts/backend-coverage.sh
 	python3 scripts/check_coverage.py backend/build/coverage/clover.xml --minimum 90
 	npm --prefix frontend ci --no-audit --no-fund
 	npm --prefix frontend run coverage

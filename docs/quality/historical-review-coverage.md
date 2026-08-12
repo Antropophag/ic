@@ -32,6 +32,10 @@ comments, включая 442 substantive findings. Raw corpus хранится �
 | non-regular migration workspace object | PR #225, Qodo/CodeRabbit | `frontend/scripts/bitrix-files.test.js` | historical `stat()` behavior RED; current `lstat()` GREEN | COVERED |
 | late system-overview request after unmount | PR #250, Qodo/CodeRabbit | `frontend/src/components/AdminOverview.test.js` | removed abort RED; current GREEN | COVERED |
 | imported file metadata exceeds DB bounds | PR #244, Qodo | `BitrixArchiveFileImporterTest::testRejectsDatabaseBoundViolationsBeforeImportingFiles` | removed bound checks RED; current MariaDB test GREEN | COVERED |
+| simultaneous executor reassignment from one stale version | PR #16, Qodo | `RequestAssignmentConcurrencyTest::testTwoAssignmentsFromTheSameVersionProduceOneWinnerAndConsistentAudit` | historical missing-version mutation: two successes RED; two MariaDB sessions, current lock/version guard GREEN | COVERED |
+| role assignment and audit atomicity | PR #89, Qodo | `UserRoleAuditAtomicityTest::testAssignRoleRollsBackDomainMutationWhenAuditWriteFails` | historical non-transactional boundary RED under controlled audit failure; transactional current code GREEN | COVERED |
+| in-component out-of-order registry responses | PR #41/#213/#224, Qodo | `requestRegistryLoadLifecycle.test.js` | generation increment removal RED; controlled deferred responses GREEN | COVERED |
+| concurrent same-key idempotency claim | PR #202, Qodo | `IdempotencyStoreConcurrencyTest` | key-scope mutation executes both operations RED; existing two-session guard GREEN | COVERED |
 
 Unchanged guards reuse preserved evidence only where the final execution path and
 oracle remain semantically unchanged. The adapted review-contract guard has fresh
@@ -45,6 +49,19 @@ positive and negative fixtures in this branch.
 | registry `mine` identity collision | PR #247, Qodo | PARTIAL | corrected collision fixture exists, but independent production mutation proof was not completed |
 | file-import workspace/snapshot identity | PR #244, CodeRabbit | PARTIAL | current command takes `listId` from the snapshot; isolated command-boundary proof remains outstanding |
 
+## Wave 3 candidate audit
+
+| Family | Historical source | Classification | Decision |
+|---|---|---|---|
+| stale executor authorization during start | PR #14, Qodo | CURRENT + ALREADY COVERED | current row lock and active-assignee check share the transaction; the stronger recurring assignment race from PR #16 was selected |
+| simultaneous executor reassignment | PR #16, Qodo | CURRENT + UNCOVERED | added a real two-session optimistic-lock/audit guard |
+| duplicate role insert | PR #84, Qodo | CURRENT + PARTIAL | existing uniqueness handling covers the duplicate; the uncovered role/audit transaction boundary from PR #89 was selected |
+| role mutation survives audit failure | PR #89, Qodo | CURRENT + UNCOVERED | current production bug fixed with one transaction boundary and a controlled MariaDB failure guard |
+| stale registry/dashboard/notification response | PR #41/#213/#224, Qodo | CURRENT + PARTIAL | disposal/reopen tests existed; added same-activation reversed-completion coverage |
+| same-key duplicate mutation | PR #202, Qodo | CURRENT + ALREADY COVERED | existing two-process guard proved by mutation; no duplicate test added |
+| details refresh overwrites a new comment | PR #22, Qodo | CURRENT + PARTIAL | same sequencing primitive is now guarded at the shared lifecycle boundary; component-specific duplication rejected |
+| notification atomic claim | PR #51, Qodo | CURRENT + ALREADY COVERED | current claim integration tests already use competing workers; no stronger Wave 3 oracle found |
+
 ## Metric
 
 Manual reclassification removes the disproved archived string-ID family from the
@@ -55,13 +72,14 @@ provisional denominator. `PARTIAL` is not counted.
 | Before Wave 1 | 5 | 164 | 3.0% |
 | After Wave 1 | 7 | 164 | 4.3% |
 | After Wave 2 reconciliation | 12 | 163 | 7.4% |
+| After Wave 3 reclassification | 13 | 163 | 8.0% |
+| After Wave 3 guards | 16 | 163 | 9.8% |
 
 This is an evidence-backed lower bound, not an estimate of all CI coverage.
 
 ## Remaining high-value backlog
 
-1. simultaneous assignment/claim and stale authorization with explicit barriers;
-2. atomic role assignment and audit under a controlled duplicate insert;
-3. populated migration rollback with duplicate document titles;
-4. command-boundary binding of file-import workspace to snapshot identity;
-5. out-of-order admin and registry requests beyond component disposal.
+1. populated migration rollback with duplicate document titles;
+2. command-boundary binding of file-import workspace to snapshot identity;
+3. migration retry, recovery, and idempotency;
+4. other high-risk provenance and data-integrity families.
