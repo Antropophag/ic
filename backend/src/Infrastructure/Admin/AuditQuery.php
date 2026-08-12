@@ -20,6 +20,7 @@ final class AuditQuery
     ];
 
     private const TITLES = [
+        'request.created' => 'Создана заявка',
         'request.security_decided' => 'Решение службы безопасности',
         'request.security_decision_rejected' => 'Решение службы безопасности отклонено',
         'request.comment_added' => 'Добавлен комментарий',
@@ -50,6 +51,7 @@ final class AuditQuery
     ];
 
     private const SAFE_DETAILS = [
+        'request.created' => ['to_status'],
         'request.security_decided' => ['decision'], 'request.comment_added' => ['comment_id'],
         'request.expert_claimed' => ['expert_id', 'assignment_id'], 'request.expert_reassigned' => ['expert_id', 'assignment_id'],
         'request.expert_assignment_denied' => ['expert_id'], 'request.executor_assigned' => ['executor_id', 'assignment_id'],
