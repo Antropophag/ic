@@ -41,6 +41,14 @@ jobs:
           cache: npm
           cache-dependency-path: frontend/package-lock.json
       - run: make coverage
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7
+        with:
+          name: sonar-coverage
+          path: |
+            backend/build/coverage/clover.xml
+            frontend/coverage/lcov.info
+          if-no-files-found: error
+          retention-days: 1
 
   e2e:
     runs-on: ubuntu-latest
@@ -84,3 +92,26 @@ jobs:
       - uses: gitleaks/gitleaks-action@v3
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  sonar:
+    needs: [check, coverage, e2e, analyze, secrets]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c  # v8
+        with:
+          name: sonar-coverage
+      - name: Normalize container paths in PHP coverage
+        run: |
+          grep -q 'name="/app/' backend/build/coverage/clover.xml
+          sed -i 's#name="/app/#name="backend/#g' backend/build/coverage/clover.xml
+          ! grep -q 'name="/app/' backend/build/coverage/clover.xml
+      - uses: SonarSource/sonarqube-scan-action@22918119ff8e1ca75a623e15c8296b6ea4fbe28f  # v8.2.1
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
