@@ -10,7 +10,7 @@ use RuntimeException;
 
 final class BitrixSnapshotReader
 {
-    /** @return array{listId: int, users: array<int|string, LegacyUserData>, elements: iterable<array<string, mixed>>} */
+    /** @return array{listId: int, fingerprint: string, users: array<int|string, LegacyUserData>, elements: iterable<array<string, mixed>>} */
     public function read(string $directory): array
     {
         $directory = rtrim($directory, DIRECTORY_SEPARATOR);
@@ -53,7 +53,12 @@ final class BitrixSnapshotReader
         if ($listId === false) {
             throw new RuntimeException('Snapshot list ID is invalid.');
         }
-        return ['listId' => $listId, 'users' => $users, 'elements' => $this->elements($directory . '/elements.jsonl')];
+        return [
+            'listId' => $listId,
+            'fingerprint' => (string) $manifest['files']['elements.jsonl']['sha256'],
+            'users' => $users,
+            'elements' => $this->elements($directory . '/elements.jsonl'),
+        ];
     }
 
     /** @return Generator<int, array<string, mixed>> */
