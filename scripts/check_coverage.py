@@ -31,7 +31,7 @@ def main() -> int:
 
     coverage = covered * 100.0 / statements
     print(
-        "Backend domain/application statement coverage: "
+        "Backend statement coverage: "
         f"{coverage:.2f}% ({covered}/{statements})"
     )
 

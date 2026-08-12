@@ -118,7 +118,7 @@ e2e: doctor
 coverage: doctor
 	mkdir -p backend/build/coverage
 	$(CONTAINER_ENGINE) build --file docker/coverage.Dockerfile --tag shlz-test-registry-coverage .
-	$(CONTAINER_ENGINE) run --rm --volume "$(CURDIR)/backend/build/coverage:/app/build/coverage" shlz-test-registry-coverage
+	COMPOSE='$(COMPOSE)' CONTAINER_ENGINE='$(CONTAINER_ENGINE)' sh scripts/backend-coverage.sh
 	python3 scripts/check_coverage.py backend/build/coverage/clover.xml --minimum 90
 	npm --prefix frontend ci --no-audit --no-fund
 	npm --prefix frontend run coverage
