@@ -91,6 +91,42 @@ final class BitrixArchiveFileImporterTest extends IntegrationTestCase
         self::assertSame('2024-02-03 12:34:56.000000', $timestamps['version_created_at'] ?? null);
     }
 
+    public function testRejectsDatabaseBoundViolationsBeforeImportingFiles(): void
+    {
+        $payload = 'legacy attachment';
+        file_put_contents($this->workspace . '/objects/file_1', $payload);
+        file_put_contents($this->workspace . '/checkpoint.jsonl', json_encode([
+            'sourceFileId' => 'file_1',
+            'status' => 'downloaded',
+            'bytes' => strlen($payload),
+            'sha256' => hash('sha256', $payload),
+            'mime' => 'text/plain',
+        ], JSON_THROW_ON_ERROR) . "\n");
+
+        $cases = [
+            ['sourceFileId' => str_repeat('a', 192), 'originalName' => 'history.txt', 'expected' => 'association legacy ID'],
+            ['sourceFileId' => 'file_1', 'originalName' => str_repeat('Я', 256), 'expected' => 'original file name'],
+        ];
+        foreach ($cases as $case) {
+            file_put_contents($this->workspace . '/associations.jsonl', json_encode([
+                'requestNumber' => 42,
+                'documentType' => 'supporting',
+                'sourceFileId' => $case['sourceFileId'],
+                'originalName' => $case['originalName'],
+            ], JSON_THROW_ON_ERROR) . "\n");
+
+            try {
+                (new BitrixArchiveFileImporter(
+                    $this->db(),
+                    new DocumentStorage($this->storageRoot),
+                ))->import($this->workspace, false);
+                self::fail('Oversized import metadata was accepted.');
+            } catch (\RuntimeException $error) {
+                self::assertStringContainsString($case['expected'], $error->getMessage());
+            }
+        }
+    }
+
     private function removeDirectory(string $directory): void
     {
         if (!is_dir($directory)) {

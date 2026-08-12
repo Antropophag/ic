@@ -116,6 +116,15 @@
 - Do not stop after confirming that the happy path works.
 - Re-run affected checks after every review-driven edit.
 
+### Independent Review
+
+- After implementation and validation, run a separate read-only `$pr-review`
+  against `main` before opening a PR.
+- The reviewer reports findings only. Address them in a separate implementation
+  pass, repeat relevant checks, and review the updated change set again.
+- Codex review complements deterministic CI and hosted reviewers; it replaces
+  neither.
+
 ### 6. Acceptance
 
 - Evaluate the result against the Definition of Done.
@@ -144,13 +153,6 @@
 - Validate high-risk changes with a rollback or recovery path.
 - Escalate scope only when the original objective cannot be met within current boundaries.
 - Document why an exception to an established repository pattern is necessary.
-
-### Forge-specific merge requests
-
-- Write every merge request as a self-contained change for the forge where it is opened.
-- For GitLab merge requests, provide a complete standalone description of the goal, implementation, validation, risks, and rollback.
-- Do not describe a GitLab merge request as an analogue, copy, mirror, or port of a pull request from another forge.
-- Do not include links or references to GitHub pull requests in GitLab merge request titles or descriptions unless the user explicitly requests them.
 
 ## Validation Checklist
 
