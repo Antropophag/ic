@@ -5,7 +5,10 @@ declare(strict_types=1);
 namespace Tests\Integration\Request;
 
 use App\Application\Request\CreateRequestInput;
+use App\Application\Request\Command\AssignExecutorCommand;
+use App\Application\Request\UseCase\AssignExecutor;
 use App\Infrastructure\Clock;
+use App\Infrastructure\Persistence\Request\ExecutorAssignmentPersistenceAdapter;
 use App\Infrastructure\Request\RequestQuery;
 use App\Infrastructure\Request\RequestRepository;
 use Tests\Integration\IntegrationTestCase;
@@ -128,11 +131,13 @@ final class AttentionDashboardTest extends IntegrationTestCase
         $query = new RequestQuery($this->db());
         self::assertSame(1, $this->queueCount($query->attentionDashboard($manager), 'assign_executor'));
 
-        (new RequestRepository($this->db()))->assignExecutor(
-            (int) $request['id'],
-            $executor,
-            (int) $request['lock_version'],
-            $manager,
+        (new AssignExecutor(new ExecutorAssignmentPersistenceAdapter($this->db())))->execute(
+            new AssignExecutorCommand(
+                (int) $request['id'],
+                $executor,
+                (int) $request['lock_version'],
+                $manager,
+            ),
         );
 
         $this->assertQueueAbsent($query->attentionDashboard($manager), 'assign_executor');

@@ -6,7 +6,6 @@ namespace App\Infrastructure\Request;
 
 use App\Application\Request\CreateRequestInput;
 use App\Domain\Request\CommentPolicy;
-use App\Domain\Request\AssignmentPolicy;
 use App\Domain\Request\AssignmentTargetNotFound;
 use App\Domain\Request\ConcurrentRequestModification;
 use App\Domain\Request\ExpertAssignmentPolicy;
@@ -546,150 +545,6 @@ final class RequestRepository
         ])->execute();
     }
 
-    /** @return array<string, mixed> */
-    public function assignExecutor(
-        int $requestId,
-        int $executorId,
-        int $expectedLockVersion,
-        int $actorId,
-    ): array {
-        $transaction = $this->db->beginTransaction();
-        try {
-            $request = $this->db->createCommand(
-                'SELECT status, lock_version FROM {{%requests}} WHERE id = :id FOR UPDATE',
-                [':id' => $requestId],
-            )->queryOne();
-            if ($request === false) {
-                throw new AssignmentTargetNotFound('Request not found');
-            }
-            $reassignableStatuses = [
-                RequestStatus::Registered->value,
-                RequestStatus::InProgress->value,
-                RequestStatus::Suspended->value,
-            ];
-            if (
-                !in_array((string) $request['status'], $reassignableStatuses, true)
-                || (int) $request['lock_version'] !== $expectedLockVersion
-            ) {
-                throw new ConcurrentRequestModification();
-            }
-
-            $executor = $this->db->createCommand(
-                'SELECT id, is_active FROM {{%users}} WHERE id = :id',
-                [':id' => $executorId],
-            )->queryOne();
-            if ($executor === false) {
-                throw new AssignmentTargetNotFound('Executor not found');
-            }
-
-            (new AssignmentPolicy())->assertCanAssign(
-                $this->rolesFor($actorId),
-                (bool) $executor['is_active'],
-                $this->rolesFor($executorId),
-                $this->isActiveUser($actorId),
-                $this->isCurrentExecutor($requestId, $executorId),
-            );
-
-            $now = Clock::now();
-            $nextLockVersion = $expectedLockVersion + 1;
-            $this->db->createCommand()->update(
-                '{{%requests}}',
-                ['lock_version' => $nextLockVersion, 'updated_at' => $now],
-                ['id' => $requestId],
-            )->execute();
-            $this->db->createCommand()->update(
-                '{{%request_assignments}}',
-                ['valid_to' => $now],
-                ['request_id' => $requestId, 'assignment_type' => 'executor', 'valid_to' => null],
-            )->execute();
-            $this->db->createCommand()->insert('{{%request_assignments}}', [
-                'request_id' => $requestId,
-                'assignment_type' => 'executor',
-                'user_id' => $executorId,
-                'assigned_by' => $actorId,
-                'valid_from' => $now,
-            ])->execute();
-            $assignmentId = (int) $this->db->getLastInsertID();
-            $this->db->createCommand()->insert('{{%audit_events}}', [
-                'event_type' => 'request.executor_assigned',
-                'entity_type' => 'request',
-                'entity_id' => $requestId,
-                'actor_id' => $actorId,
-                'rule_id' => 'WF-001',
-                'payload_json' => [
-                    'executor_id' => $executorId,
-                    'assignment_id' => $assignmentId,
-                    'lock_version' => $nextLockVersion,
-                ],
-                'created_at' => $now,
-            ])->execute();
-            $executorContact = $this->userContact($executorId);
-            if ($executorContact !== null) {
-                // WF-012: помимо первичного назначения (registered) заявку
-                // можно переназначить и после того, как она уже в работе —
-                // получателю в этом случае не нужно «принимать в работу»
-                // то, что уже идёт, текст письма отражает реальный статус.
-                $body = match ((string) $request['status']) {
-                    RequestStatus::InProgress->value =>
-                        'Вам переназначена заявка, по которой уже начались испытания. '
-                        . 'Откройте заявку в портале, чтобы продолжить работу.',
-                    RequestStatus::Suspended->value =>
-                        'Вам переназначена заявка с приостановленными работами. '
-                        . 'Откройте заявку в портале и проверьте её текущий статус.',
-                    default =>
-                        'Вам назначена заявка на проведение испытаний. '
-                        . 'Откройте заявку в портале, чтобы начать работу.',
-                };
-                (new NotificationOutbox($this->db))->enqueue(
-                    $requestId,
-                    'request.executor_assigned',
-                    $executorContact['email'],
-                    $executorContact['name'],
-                    'Вам назначена заявка на проведение испытаний',
-                    $body,
-                );
-            }
-            $transaction->commit();
-
-            return [
-                'id' => $assignmentId,
-                'requestId' => $requestId,
-                'executorId' => $executorId,
-                'assignedBy' => $actorId,
-                'assignedAt' => $now,
-                'lockVersion' => $nextLockVersion,
-            ];
-        } catch (\Throwable $error) {
-            $transaction->rollBack();
-            throw $error;
-        }
-    }
-
-    public function recordRejectedAssignment(
-        int $requestId,
-        int $executorId,
-        int $actorId,
-        string $ruleId,
-    ): void {
-        $actorExists = $this->db->createCommand(
-            'SELECT 1 FROM {{%users}} WHERE id = :id',
-            [':id' => $actorId],
-        )->queryScalar();
-        if ($actorExists === false) {
-            return;
-        }
-
-        $this->db->createCommand()->insert('{{%audit_events}}', [
-            'event_type' => 'request.executor_assignment_denied',
-            'entity_type' => 'request',
-            'entity_id' => $requestId,
-            'actor_id' => $actorId,
-            'rule_id' => $ruleId,
-            'payload_json' => ['executor_id' => $executorId],
-            'created_at' => Clock::now(),
-        ])->execute();
-    }
-
     public function recordRejectedColor(int $requestId, int $actorId, string $ruleId): void
     {
         $actorExists = $this->db->createCommand(
@@ -740,15 +595,6 @@ final class RequestRepository
             static fn (string $code): ?Role => Role::tryFrom($code),
             $codes,
         )));
-    }
-
-    private function isCurrentExecutor(int $requestId, int $userId): bool
-    {
-        return $this->db->createCommand(
-            'SELECT 1 FROM {{%request_assignments}} WHERE request_id = :request_id '
-            . "AND assignment_type = 'executor' AND user_id = :user_id AND valid_to IS NULL",
-            [':request_id' => $requestId, ':user_id' => $userId],
-        )->queryScalar() !== false;
     }
 
     public function isActiveUser(int $userId): bool
