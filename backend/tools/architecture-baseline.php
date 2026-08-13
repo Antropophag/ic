@@ -82,7 +82,7 @@ return [
         'backend/src/Http/Controller/RequestController.php' => 899,
         'backend/src/Infrastructure/Document/DocumentRepository.php' => 782,
         'backend/src/Infrastructure/Request/RequestQuery.php' => 646,
-        'backend/src/Infrastructure/Request/RequestRepository.php' => 1402,
+        'backend/src/Infrastructure/Request/RequestRepository.php' => 1353,
         'frontend/src/components/RequestDetails.vue' => 1272,
         'frontend/src/components/RequestRegistry.vue' => 847,
     ],

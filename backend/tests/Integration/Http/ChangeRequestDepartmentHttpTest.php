@@ -5,8 +5,10 @@ declare(strict_types=1);
 namespace Tests\Integration\Http;
 
 use App\Application\Request\CreateRequestInput;
+use App\Application\Request\Port\RequestDepartmentGateway;
 use App\Http\Controller\RequestController;
 use App\Infrastructure\Request\RequestRepository;
+use App\Infrastructure\Persistence\Request\RequestDepartmentPersistenceAdapter;
 use Tests\Integration\IntegrationTestCase;
 use Yii;
 use yii\web\Application;
@@ -117,6 +119,11 @@ final class ChangeRequestDepartmentHttpTest extends IntegrationTestCase
             'id' => 'change-request-department-http-test',
             'basePath' => dirname(__DIR__, 3),
             'params' => ['identityHeader' => 'X-Test-User-ID'],
+            'container' => [
+                'definitions' => [
+                    RequestDepartmentGateway::class => fn () => new RequestDepartmentPersistenceAdapter($this->db()),
+                ],
+            ],
             'components' => [
                 'db' => $this->db(),
                 'request' => ['class' => Request::class, 'cookieValidationKey' => 'department-http-test'],

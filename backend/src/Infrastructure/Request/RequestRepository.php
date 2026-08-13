@@ -5,8 +5,6 @@ declare(strict_types=1);
 namespace App\Infrastructure\Request;
 
 use App\Application\Request\CreateRequestInput;
-use App\Application\Request\Port\RequestColorGateway;
-use App\Application\Request\Port\RequestDepartmentGateway;
 use App\Domain\Request\CommentPolicy;
 use App\Domain\Request\AssignmentPolicy;
 use App\Domain\Request\AssignmentTargetNotFound;
@@ -15,7 +13,6 @@ use App\Domain\Request\ExpertAssignmentPolicy;
 use App\Domain\Request\RequestAction;
 use App\Domain\Request\RejectPolicy;
 use App\Domain\Request\RequestCreationPolicy;
-use App\Domain\Request\RequestColor;
 use App\Domain\Request\RequestDepartmentMissing;
 use App\Domain\Request\RequestNotFound;
 use App\Domain\Request\RequestStatus;
@@ -29,10 +26,8 @@ use App\Infrastructure\Clock;
 use App\Infrastructure\Notification\NotificationOutbox;
 use yii\db\Connection;
 
-final class RequestRepository implements RequestColorGateway, RequestDepartmentGateway
+final class RequestRepository
 {
-    use RequestDepartmentPersistence;
-
     public function __construct(private readonly Connection $db)
     {
     }
@@ -696,50 +691,6 @@ final class RequestRepository implements RequestColorGateway, RequestDepartmentG
             'actor_id' => $actorId,
             'rule_id' => $ruleId,
             'payload_json' => ['executor_id' => $executorId],
-            'created_at' => Clock::now(),
-        ])->execute();
-    }
-
-    public function transactional(callable $operation): mixed
-    {
-        $transaction = $this->db->beginTransaction();
-        try {
-            $result = $operation();
-            $transaction->commit();
-            return $result;
-        } catch (\Throwable $error) {
-            $transaction->rollBack();
-            throw $error;
-        }
-    }
-
-    public function lockVersionForUpdate(int $requestId): ?int
-    {
-        $lockVersion = $this->db->createCommand(
-            'SELECT lock_version FROM {{%requests}} WHERE id = :id FOR UPDATE',
-            [':id' => $requestId],
-        )->queryScalar();
-        return $lockVersion === false ? null : (int) $lockVersion;
-    }
-
-    public function persistColorChange(int $requestId, RequestColor $color, int $lockVersion): void
-    {
-        $this->db->createCommand()->update('{{%requests}}', [
-            'color' => $color->value,
-            'lock_version' => $lockVersion,
-            'updated_at' => Clock::now(),
-        ], ['id' => $requestId])->execute();
-    }
-
-    public function recordColorMarked(int $requestId, int $actorId, RequestColor $color, string $ruleId): void
-    {
-        $this->db->createCommand()->insert('{{%audit_events}}', [
-            'event_type' => 'request.color_marked',
-            'entity_type' => 'request',
-            'entity_id' => $requestId,
-            'actor_id' => $actorId,
-            'rule_id' => $ruleId,
-            'payload_json' => ['color' => $color->value],
             'created_at' => Clock::now(),
         ])->execute();
     }
