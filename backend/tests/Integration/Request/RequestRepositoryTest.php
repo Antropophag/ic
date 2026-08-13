@@ -5,6 +5,8 @@ declare(strict_types=1);
 namespace Tests\Integration\Request;
 
 use App\Application\Request\CreateRequestInput;
+use App\Application\Request\Command\ChangeRequestDepartmentCommand;
+use App\Application\Request\UseCase\ChangeRequestDepartment;
 use App\Domain\Request\AssignmentDenied;
 use App\Domain\Request\ConcurrentRequestModification;
 use App\Domain\Request\RejectDenied;
@@ -104,12 +106,14 @@ final class RequestRepositoryTest extends IntegrationTestCase
         $request = $this->createRegisteredRequest($initiator, 'department-manual');
         $this->db()->createCommand()->update('{{%requests}}', ['department_external_id' => 'bitrix:42'], ['id' => $request['id']])->execute();
 
-        $result = (new RequestRepository($this->db()))->changeDepartment(
-            (int) $request['id'],
-            'Подразделение C',
-            (int) $request['lock_version'],
-            $administrator,
-        );
+        $result = (new ChangeRequestDepartment(new RequestRepository($this->db())))->execute(
+            new ChangeRequestDepartmentCommand(
+                (int) $request['id'],
+                'Подразделение C',
+                (int) $request['lock_version'],
+                $administrator,
+            ),
+        )->toArray();
 
         self::assertSame('Подразделение C', $result['department']);
         $snapshot = $this->db()->createCommand(
@@ -118,10 +122,20 @@ final class RequestRepositoryTest extends IntegrationTestCase
         )->queryOne();
         self::assertSame(['department_name' => 'Подразделение C', 'department_external_id' => null, 'department_source' => 'manual'], $snapshot);
         self::assertSame('Подразделение A', $this->scalar('SELECT department FROM {{%users}} WHERE id = :id', [':id' => $initiator]));
-        self::assertSame(1, (int) $this->scalar(
-            "SELECT COUNT(*) FROM {{%audit_events}} WHERE entity_id = :id AND event_type = 'request.department_changed' AND rule_id = 'REQ-011'",
+        $audit = $this->db()->createCommand(
+            "SELECT event_type, rule_id, payload_json FROM {{%audit_events}} WHERE entity_id = :id "
+            . "AND event_type = 'request.department_changed'",
             [':id' => $request['id']],
-        ));
+        )->queryOne();
+        self::assertSame('request.department_changed', $audit['event_type']);
+        self::assertSame('REQ-011', $audit['rule_id']);
+        self::assertSame([
+            'old_department_name' => 'Подразделение A',
+            'new_department_name' => 'Подразделение C',
+            'old_department_external_id' => 'bitrix:42',
+            'new_department_external_id' => null,
+            'source' => 'manual',
+        ], json_decode((string) $audit['payload_json'], true, flags: JSON_THROW_ON_ERROR));
     }
 
     public function testOrdinaryUserCannotChangeDepartment(): void
@@ -129,11 +143,13 @@ final class RequestRepositoryTest extends IntegrationTestCase
         $initiator = $this->createUser('dev.it.department.denied', 'Инициатор');
         $request = $this->createRegisteredRequest($initiator, 'department-denied');
         $this->expectException(RequestDepartmentChangeDenied::class);
-        (new RequestRepository($this->db()))->changeDepartment(
-            (int) $request['id'],
-            'Другое подразделение',
-            (int) $request['lock_version'],
-            $initiator,
+        (new ChangeRequestDepartment(new RequestRepository($this->db())))->execute(
+            new ChangeRequestDepartmentCommand(
+                (int) $request['id'],
+                'Другое подразделение',
+                (int) $request['lock_version'],
+                $initiator,
+            ),
         );
     }
 
@@ -149,11 +165,13 @@ final class RequestRepositoryTest extends IntegrationTestCase
         ], ['id' => $request['id']])->execute();
 
         try {
-            (new RequestRepository($this->db()))->changeDepartment(
-                (int) $request['id'],
-                'Новое подразделение',
-                (int) $request['lock_version'] + 1,
-                $administrator,
+            (new ChangeRequestDepartment(new RequestRepository($this->db())))->execute(
+                new ChangeRequestDepartmentCommand(
+                    (int) $request['id'],
+                    'Новое подразделение',
+                    (int) $request['lock_version'] + 1,
+                    $administrator,
+                ),
             );
             self::fail('Expected stale department change to be rejected.');
         } catch (ConcurrentRequestModification) {
