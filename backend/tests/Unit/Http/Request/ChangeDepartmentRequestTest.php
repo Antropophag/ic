@@ -2,17 +2,17 @@
 
 declare(strict_types=1);
 
-namespace Tests\Unit\Application\Request;
+namespace Tests\Unit\Http\Request;
 
-use App\Application\Request\ChangeDepartmentInput;
+use App\Http\Request\ChangeDepartmentRequest;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 
-final class ChangeDepartmentInputTest extends TestCase
+final class ChangeDepartmentRequestTest extends TestCase
 {
     public function testTrimsValidDepartment(): void
     {
-        $input = new ChangeDepartmentInput();
+        $input = new ChangeDepartmentRequest();
         $input->department = '  Подразделение C  ';
         $input->lockVersion = 3;
 
@@ -22,7 +22,7 @@ final class ChangeDepartmentInputTest extends TestCase
 
     public function testRejectsWhitespaceOnlyDepartment(): void
     {
-        $input = new ChangeDepartmentInput();
+        $input = new ChangeDepartmentRequest();
         $input->department = '   ';
         $input->lockVersion = 3;
 
@@ -33,7 +33,7 @@ final class ChangeDepartmentInputTest extends TestCase
     #[DataProvider('nonStringDepartments')]
     public function testRejectsNonStringDepartmentWithoutTypeError(mixed $department): void
     {
-        $input = new ChangeDepartmentInput();
+        $input = new ChangeDepartmentRequest();
         $input->department = $department;
         $input->lockVersion = 3;
 
