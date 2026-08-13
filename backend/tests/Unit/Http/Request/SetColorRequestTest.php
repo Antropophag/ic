@@ -2,16 +2,16 @@
 
 declare(strict_types=1);
 
-namespace Tests\Unit\Application\Request;
+namespace Tests\Unit\Http\Request;
 
-use App\Application\Request\SetColorInput;
+use App\Http\Request\SetColorRequest;
 use PHPUnit\Framework\TestCase;
 
-final class SetColorInputTest extends TestCase
+final class SetColorRequestTest extends TestCase
 {
     public function testAcceptsAKnownColorAndLockVersion(): void
     {
-        $input = new SetColorInput();
+        $input = new SetColorRequest();
         $input->setAttributes(['color' => 'red', 'lockVersion' => 3]);
 
         self::assertTrue($input->validate());
@@ -19,7 +19,7 @@ final class SetColorInputTest extends TestCase
 
     public function testRejectsAnUnknownColor(): void
     {
-        $input = new SetColorInput();
+        $input = new SetColorRequest();
         $input->setAttributes(['color' => 'pink', 'lockVersion' => 1]);
 
         self::assertFalse($input->validate());
@@ -28,7 +28,7 @@ final class SetColorInputTest extends TestCase
 
     public function testRejectsANonStringColorEvenIfLooselyInRange(): void
     {
-        $input = new SetColorInput();
+        $input = new SetColorRequest();
         $input->setAttributes(['color' => true, 'lockVersion' => 1]);
 
         self::assertFalse($input->validate());
@@ -37,7 +37,7 @@ final class SetColorInputTest extends TestCase
 
     public function testRequiresBothFields(): void
     {
-        $input = new SetColorInput();
+        $input = new SetColorRequest();
         $input->setAttributes([]);
 
         self::assertFalse($input->validate());
@@ -47,7 +47,7 @@ final class SetColorInputTest extends TestCase
 
     public function testRejectsANonPositiveLockVersion(): void
     {
-        $input = new SetColorInput();
+        $input = new SetColorRequest();
         $input->setAttributes(['color' => 'white', 'lockVersion' => 0]);
 
         self::assertFalse($input->validate());
