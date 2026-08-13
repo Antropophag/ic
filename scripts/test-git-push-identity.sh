@@ -6,6 +6,12 @@ fixture_root=$(mktemp -d)
 cleanup() { rm -rf "$fixture_root"; }
 trap cleanup EXIT HUP INT TERM
 
+# Git exports repository-local GIT_* variables to hooks. Without clearing them,
+# the nested fixture can accidentally address and reconfigure the real repository.
+local_git_env=$(git rev-parse --local-env-vars)
+# shellcheck disable=SC2086
+unset $local_git_env
+
 git -C "$fixture_root" init -q
 git -C "$fixture_root" config user.name 'GitHub User'
 git -C "$fixture_root" config user.email 'github@example.test'
