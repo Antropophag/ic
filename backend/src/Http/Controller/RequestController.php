@@ -14,11 +14,12 @@ use App\Application\Request\ListRequestsInput;
 use App\Application\Request\AddCommentInput;
 use App\Application\Request\AssignExecutorInput;
 use App\Application\Request\AssignExpertInput;
-use App\Application\Request\CancelRequestInput;
+use App\Application\Request\Command\CancelRequestCommand;
 use App\Application\Request\PublishOpinionInput;
 use App\Application\Request\SecurityDecisionInput;
 use App\Application\Request\UseCase\SetRequestColor;
 use App\Application\Request\UseCase\RequestLifecycle;
+use App\Application\Request\UseCase\CancelRequest as CancelRequestUseCase;
 use App\Domain\Request\AssignmentDenied;
 use App\Domain\Request\AssignmentTargetNotFound;
 use App\Domain\Request\AttachmentDenied;
@@ -52,6 +53,7 @@ use App\Http\Request\SetColorRequest;
 use App\Http\Request\ChangeDepartmentRequest;
 use App\Http\Request\LockVersionRequest;
 use App\Http\Request\ReasonedLockVersionRequest;
+use App\Http\Request\CancelRequest;
 use Yii;
 use yii\web\Response;
 use yii\web\ConflictHttpException;
@@ -648,26 +650,21 @@ final class RequestController extends ApiController
     /** @return array<string, mixed> */
     public function actionReject(int $id): array
     {
-        $input = new CancelRequestInput();
+        $input = new CancelRequest();
         if (($errors = $this->bodyValidationErrors($input)) !== null) {
             return $errors;
         }
 
-        $actorId = $this->currentUserId();
+        $command = $input->toCommand($id, $this->currentUserId(), RequestAction::Reject);
         try {
-            return $this->repository()->rejectRequest(
-                $id,
-                (int) $input->lockVersion,
-                $actorId,
-                (string) $input->reason,
-            );
+            return Yii::$container->get(CancelRequestUseCase::class)->execute($command)->toArray();
         } catch (RequestNotFound $error) {
             throw new NotFoundHttpException($error->getMessage());
         } catch (RejectDenied $error) {
-            $this->recordRejectedRejectSafely($id, $actorId, $error->ruleId);
+            $this->recordRejectedCancellationSafely($command, $error->ruleId);
             throw new ForbiddenHttpException($error->getMessage());
         } catch (ConcurrentRequestModification $error) {
-            $this->recordRejectedRejectSafely($id, $actorId, $error->ruleId);
+            $this->recordRejectedCancellationSafely($command, $error->ruleId);
             throw new ConflictHttpException($error->getMessage());
         }
     }
@@ -675,26 +672,21 @@ final class RequestController extends ApiController
     /** @return array<string, mixed> */
     public function actionWithdraw(int $id): array
     {
-        $input = new CancelRequestInput();
+        $input = new CancelRequest();
         if (($errors = $this->bodyValidationErrors($input)) !== null) {
             return $errors;
         }
 
-        $actorId = $this->currentUserId();
+        $command = $input->toCommand($id, $this->currentUserId(), RequestAction::Withdraw);
         try {
-            return $this->repository()->withdrawRequest(
-                $id,
-                (int) $input->lockVersion,
-                $actorId,
-                (string) $input->reason,
-            );
+            return Yii::$container->get(CancelRequestUseCase::class)->execute($command)->toArray();
         } catch (RequestNotFound $error) {
             throw new NotFoundHttpException($error->getMessage());
         } catch (WithdrawDenied $error) {
-            $this->recordRejectedWithdrawSafely($id, $actorId, $error->ruleId);
+            $this->recordRejectedCancellationSafely($command, $error->ruleId);
             throw new ForbiddenHttpException($error->getMessage());
         } catch (ConcurrentRequestModification $error) {
-            $this->recordRejectedWithdrawSafely($id, $actorId, $error->ruleId);
+            $this->recordRejectedCancellationSafely($command, $error->ruleId);
             throw new ConflictHttpException($error->getMessage());
         }
     }
@@ -729,22 +721,12 @@ final class RequestController extends ApiController
         );
     }
 
-    private function recordRejectedRejectSafely(int $requestId, int $actorId, string $ruleId): void
+    private function recordRejectedCancellationSafely(CancelRequestCommand $command, string $ruleId): void
     {
         $this->recordRejectedSafely(
-            fn () => $this->repository()->recordRejectedReject($requestId, $actorId, $ruleId),
-            'Не удалось записать аудит отклонённого отказа в испытаниях.',
-            ['requestId' => $requestId, 'actorId' => $actorId, 'ruleId' => $ruleId],
-            __METHOD__,
-        );
-    }
-
-    private function recordRejectedWithdrawSafely(int $requestId, int $actorId, string $ruleId): void
-    {
-        $this->recordRejectedSafely(
-            fn () => $this->repository()->recordRejectedWithdraw($requestId, $actorId, $ruleId),
-            'Не удалось записать аудит отклонённого отзыва заявки.',
-            ['requestId' => $requestId, 'actorId' => $actorId, 'ruleId' => $ruleId],
+            fn () => Yii::$container->get(CancelRequestUseCase::class)->recordRejected($command, $ruleId),
+            'Не удалось записать аудит отклонённой отмены заявки.',
+            ['requestId' => $command->requestId, 'actorId' => $command->actorId, 'ruleId' => $ruleId],
             __METHOD__,
         );
     }

@@ -35,11 +35,12 @@ Production не получает ни одного из этих файлов.
 Чтение заявок для HTTP/UI разделено без дополнительного слоя: `RequestController`
 обращается к `RequestQuery` за реестром, карточкой, комментариями и списками
 исполнителей/экспертов. Изменяющие транзакционные операции, аудит и постановка
-уведомлений в outbox преимущественно остаются в `RequestRepository`. Установка
-цветовой метки заявки перенесена первым vertical slice в Application use case:
-controller переводит HTTP-ввод в command, Application применяет domain policy и
-оркестрирует транзакцию через узкий port, а `RequestRepository` временно реализует
-его SQL-примитивы.
+уведомлений в outbox постепенно выносятся из `RequestRepository` узкими vertical
+slices. Цветовая метка, смена подразделения, запуск/приостановка/возобновление,
+отказ и отзыв уже следуют схеме: controller переводит HTTP-ввод в command,
+Application применяет domain policy/workflow и оркестрирует транзакцию через
+узкий port, а отдельный Infrastructure/Persistence adapter реализует
+SQL-примитивы.
 
 Перед production POST-командами заявок и администрирования `ApiController`
 создаёт внешнюю транзакционную границу идемпотентности в MariaDB. Вложенные

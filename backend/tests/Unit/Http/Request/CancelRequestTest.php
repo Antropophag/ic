@@ -2,17 +2,17 @@
 
 declare(strict_types=1);
 
-namespace Tests\Unit\Application\Request;
+namespace Tests\Unit\Http\Request;
 
-use App\Application\Request\CancelRequestInput;
+use App\Http\Request\CancelRequest;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 
-final class CancelRequestInputTest extends TestCase
+final class CancelRequestTest extends TestCase
 {
     public function testRejectsMissingReason(): void
     {
-        $input = new CancelRequestInput();
+        $input = new CancelRequest();
         $input->lockVersion = 1;
 
         self::assertFalse($input->validate());
@@ -21,7 +21,7 @@ final class CancelRequestInputTest extends TestCase
 
     public function testTrimsRequiredReason(): void
     {
-        $input = new CancelRequestInput();
+        $input = new CancelRequest();
         $input->reason = '  reason  ';
         $input->lockVersion = 1;
 
@@ -31,7 +31,7 @@ final class CancelRequestInputTest extends TestCase
 
     public function testRejectsBlankReason(): void
     {
-        $input = new CancelRequestInput();
+        $input = new CancelRequest();
         $input->reason = '   ';
         $input->lockVersion = 1;
 
@@ -41,7 +41,7 @@ final class CancelRequestInputTest extends TestCase
 
     public function testRejectsReasonLongerThanLimit(): void
     {
-        $input = new CancelRequestInput();
+        $input = new CancelRequest();
         $input->reason = str_repeat('a', 5001);
         $input->lockVersion = 1;
 
@@ -52,7 +52,7 @@ final class CancelRequestInputTest extends TestCase
     #[DataProvider('invalidLockVersionProvider')]
     public function testRejectsInvalidLockVersion(mixed $lockVersion): void
     {
-        $input = new CancelRequestInput();
+        $input = new CancelRequest();
         $input->lockVersion = $lockVersion;
 
         self::assertFalse($input->validate());
