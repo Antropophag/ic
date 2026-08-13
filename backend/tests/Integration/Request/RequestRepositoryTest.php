@@ -6,11 +6,14 @@ namespace Tests\Integration\Request;
 
 use App\Application\Request\CreateRequestInput;
 use App\Application\Request\Command\ChangeRequestDepartmentCommand;
+use App\Application\Request\Command\RequestLifecycleCommand;
 use App\Application\Request\UseCase\ChangeRequestDepartment;
+use App\Application\Request\UseCase\RequestLifecycle;
 use App\Domain\Request\AssignmentDenied;
 use App\Domain\Request\ConcurrentRequestModification;
 use App\Domain\Request\RejectDenied;
 use App\Domain\Request\RequestNotFound;
+use App\Domain\Request\RequestAction;
 use App\Domain\Request\RequestDepartmentChangeDenied;
 use App\Domain\Request\RequestDepartmentMissing;
 use App\Domain\Request\SuspendResumeDenied;
@@ -18,12 +21,26 @@ use App\Domain\Request\WithdrawDenied;
 use App\Infrastructure\Admin\AuditQuery;
 use App\Infrastructure\Clock;
 use App\Infrastructure\Persistence\Request\RequestDepartmentPersistenceAdapter;
+use App\Infrastructure\Persistence\Request\RequestLifecyclePersistenceAdapter;
 use App\Infrastructure\Request\RequestRepository;
 use App\Infrastructure\Request\RequestQuery;
 use Tests\Integration\IntegrationTestCase;
 
 final class RequestRepositoryTest extends IntegrationTestCase
 {
+    /** @return array<string, mixed> */
+    private function lifecycle(
+        int $requestId,
+        int $lockVersion,
+        int $actorId,
+        RequestAction $action,
+        ?string $reason = null,
+    ): array {
+        return (new RequestLifecycle(new RequestLifecyclePersistenceAdapter($this->db())))->execute(
+            new RequestLifecycleCommand($requestId, $lockVersion, $actorId, $action, $reason),
+        )->toArray();
+    }
+
     /** @return array<string, mixed> */
     private function createRegisteredRequest(int $initiatorId, string $marker): array
     {
@@ -317,10 +334,10 @@ final class RequestRepositoryTest extends IntegrationTestCase
 
         $repository = new RequestRepository($this->db());
         $repository->assignExecutor($requestId, $executor, (int) $request['lock_version'], $manager);
-        $started = $repository->startRequest($requestId, (int) $request['lock_version'] + 1, $manager);
+        $started = $this->lifecycle($requestId, (int) $request['lock_version'] + 1, $manager, RequestAction::Start);
         self::assertSame('in_progress', $started['status']);
 
-        $suspended = $repository->suspendRequest($requestId, $started['lockVersion'], $executor, 'Ожидание оборудования');
+        $suspended = $this->lifecycle($requestId, $started['lockVersion'], $executor, RequestAction::Suspend, 'Ожидание оборудования');
         self::assertSame('suspended', $suspended['status']);
         $savedReason = $this->scalar(
             "SELECT reason FROM {{%request_transitions}} WHERE request_id = :id AND action = 'suspend'",
@@ -328,7 +345,7 @@ final class RequestRepositoryTest extends IntegrationTestCase
         );
         self::assertSame('Ожидание оборудования', $savedReason);
 
-        $resumed = $repository->resumeRequest($requestId, $suspended['lockVersion'], $manager);
+        $resumed = $this->lifecycle($requestId, $suspended['lockVersion'], $manager, RequestAction::Resume);
         self::assertSame('in_progress', $resumed['status']);
 
         $transitionCount = $this->scalar(
@@ -352,10 +369,10 @@ final class RequestRepositoryTest extends IntegrationTestCase
 
         $repository = new RequestRepository($this->db());
         $repository->assignExecutor($requestId, $executor, (int) $request['lock_version'], $manager);
-        $started = $repository->startRequest($requestId, (int) $request['lock_version'] + 1, $manager);
+        $started = $this->lifecycle($requestId, (int) $request['lock_version'] + 1, $manager, RequestAction::Start);
 
         $this->expectException(SuspendResumeDenied::class);
-        $repository->suspendRequest($requestId, $started['lockVersion'], $otherExecutor, 'Ожидание оборудования');
+        $this->lifecycle($requestId, $started['lockVersion'], $otherExecutor, RequestAction::Suspend, 'Ожидание оборудования');
     }
 
     public function testSuspendFailsOnStaleLockVersion(): void
@@ -367,10 +384,10 @@ final class RequestRepositoryTest extends IntegrationTestCase
         $requestId = (int) $request['id'];
 
         $repository = new RequestRepository($this->db());
-        $started = $repository->startRequest($requestId, (int) $request['lock_version'], $manager);
+        $started = $this->lifecycle($requestId, (int) $request['lock_version'], $manager, RequestAction::Start);
 
         $this->expectException(ConcurrentRequestModification::class);
-        $repository->suspendRequest($requestId, $started['lockVersion'] + 1, $manager, 'Ожидание оборудования');
+        $this->lifecycle($requestId, $started['lockVersion'] + 1, $manager, RequestAction::Suspend, 'Ожидание оборудования');
     }
 
     public function testCanSuspendAndCanResumeFlagsInRegistry(): void
@@ -383,7 +400,7 @@ final class RequestRepositoryTest extends IntegrationTestCase
         $requestId = (int) $request['id'];
 
         $repository = new RequestRepository($this->db());
-        $started = $repository->startRequest($requestId, (int) $request['lock_version'], $manager);
+        $started = $this->lifecycle($requestId, (int) $request['lock_version'], $manager, RequestAction::Start);
 
         $managerRow = self::findRow($this->findAll($manager), $requestId);
         self::assertSame(1, (int) $managerRow['can_suspend']);
@@ -392,7 +409,7 @@ final class RequestRepositoryTest extends IntegrationTestCase
         $outsiderRow = self::findRow($this->findAll($outsider), $requestId);
         self::assertSame(0, (int) $outsiderRow['can_suspend']);
 
-        $repository->suspendRequest($requestId, $started['lockVersion'], $manager, 'Ожидание оборудования');
+        $this->lifecycle($requestId, $started['lockVersion'], $manager, RequestAction::Suspend, 'Ожидание оборудования');
         $managerRowAfter = self::findRow($this->findAll($manager), $requestId);
         self::assertSame(0, (int) $managerRowAfter['can_suspend']);
         self::assertSame(1, (int) $managerRowAfter['can_resume']);
@@ -934,7 +951,7 @@ final class RequestRepositoryTest extends IntegrationTestCase
 
         $repository = new RequestRepository($this->db());
         $assigned = $repository->assignExecutor($requestId, $firstExecutor, (int) $request['lock_version'], $manager);
-        $started = $repository->startRequest($requestId, (int) $assigned['lockVersion'], $manager);
+        $started = $this->lifecycle($requestId, (int) $assigned['lockVersion'], $manager, RequestAction::Start);
 
         $reassigned = $repository->assignExecutor(
             $requestId,
@@ -1020,7 +1037,7 @@ final class RequestRepositoryTest extends IntegrationTestCase
 
         $repository = new RequestRepository($this->db());
         $assigned = $repository->assignExecutor($requestId, $firstExecutor, (int) $request['lock_version'], $manager);
-        $started = $repository->startRequest($requestId, (int) $assigned['lockVersion'], $manager);
+        $started = $this->lifecycle($requestId, (int) $assigned['lockVersion'], $manager, RequestAction::Start);
         $repository->assignExecutor($requestId, $secondExecutor, (int) $started['lockVersion'], $manager);
 
         $body = $this->scalar(

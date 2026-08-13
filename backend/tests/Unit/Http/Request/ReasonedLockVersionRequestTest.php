@@ -2,16 +2,16 @@
 
 declare(strict_types=1);
 
-namespace Tests\Unit\Application\Request;
+namespace Tests\Unit\Http\Request;
 
-use App\Application\Request\ReasonedLockVersionInput;
+use App\Http\Request\ReasonedLockVersionRequest;
 use PHPUnit\Framework\TestCase;
 
-final class ReasonedLockVersionInputTest extends TestCase
+final class ReasonedLockVersionRequestTest extends TestCase
 {
     public function testAcceptsAndTrimsReasonWithLockVersion(): void
     {
-        $input = new ReasonedLockVersionInput();
+        $input = new ReasonedLockVersionRequest();
         $input->reason = '  Требуется уточнение  ';
         $input->lockVersion = 2;
 
@@ -21,7 +21,7 @@ final class ReasonedLockVersionInputTest extends TestCase
 
     public function testRejectsBlankReason(): void
     {
-        $input = new ReasonedLockVersionInput();
+        $input = new ReasonedLockVersionRequest();
         $input->reason = '   ';
         $input->lockVersion = 2;
 

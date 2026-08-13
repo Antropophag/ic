@@ -2,17 +2,17 @@
 
 declare(strict_types=1);
 
-namespace Tests\Unit\Application\Request;
+namespace Tests\Unit\Http\Request;
 
-use App\Application\Request\LockVersionInput;
+use App\Http\Request\LockVersionRequest;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 
-final class LockVersionInputTest extends TestCase
+final class LockVersionRequestTest extends TestCase
 {
     public function testAcceptsPositiveIntegerLockVersion(): void
     {
-        $input = new LockVersionInput();
+        $input = new LockVersionRequest();
         $input->lockVersion = 1;
 
         self::assertTrue($input->validate());
@@ -21,16 +21,14 @@ final class LockVersionInputTest extends TestCase
     #[DataProvider('invalidLockVersionProvider')]
     public function testRejectsInvalidLockVersion(mixed $lockVersion): void
     {
-        $input = new LockVersionInput();
+        $input = new LockVersionRequest();
         $input->lockVersion = $lockVersion;
 
         self::assertFalse($input->validate());
         self::assertArrayHasKey('lockVersion', $input->errors);
     }
 
-    /**
-     * @return iterable<string, array{mixed}>
-     */
+    /** @return iterable<string, array{mixed}> */
     public static function invalidLockVersionProvider(): iterable
     {
         yield 'missing' => [null];
