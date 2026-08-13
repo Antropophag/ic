@@ -2,11 +2,13 @@
 
 declare(strict_types=1);
 
-namespace App\Application\Request;
+namespace App\Http\Request;
 
+use App\Application\Request\Command\CancelRequestCommand;
+use App\Domain\Request\RequestAction;
 use yii\base\Model;
 
-final class CancelRequestInput extends Model
+final class CancelRequest extends Model
 {
     public mixed $reason = null;
     public mixed $lockVersion = null;
@@ -20,5 +22,16 @@ final class CancelRequestInput extends Model
             ['lockVersion', 'required'],
             ['lockVersion', 'integer', 'min' => 1],
         ];
+    }
+
+    public function toCommand(int $requestId, int $actorId, RequestAction $action): CancelRequestCommand
+    {
+        return new CancelRequestCommand(
+            $requestId,
+            (int) $this->lockVersion,
+            $actorId,
+            $action,
+            (string) $this->reason,
+        );
     }
 }
