@@ -2,14 +2,33 @@
 
 declare(strict_types=1);
 
-namespace App\Infrastructure\Request;
+namespace App\Infrastructure\Persistence\Request;
 
 use App\Application\Request\ChangeRequestDepartmentResult;
 use App\Application\Request\DepartmentChangeSnapshot;
+use App\Application\Request\Port\RequestDepartmentGateway;
 use App\Infrastructure\Clock;
+use yii\db\Connection;
 
-trait RequestDepartmentPersistence
+final readonly class RequestDepartmentPersistenceAdapter implements RequestDepartmentGateway
 {
+    public function __construct(private Connection $db)
+    {
+    }
+
+    public function transactional(callable $operation): mixed
+    {
+        $transaction = $this->db->beginTransaction();
+        try {
+            $result = $operation();
+            $transaction->commit();
+            return $result;
+        } catch (\Throwable $error) {
+            $transaction->rollBack();
+            throw $error;
+        }
+    }
+
     public function lockAdministratorRole(int $actorId): bool
     {
         return $this->db->createCommand(
@@ -89,6 +108,14 @@ trait RequestDepartmentPersistence
 
     public function departmentChangeResult(int $requestId): ChangeRequestDepartmentResult
     {
-        return new ChangeRequestDepartmentResult($this->findOne($requestId));
+        $request = $this->db->createCommand(
+            'SELECT id, number, legacy_id, initiator_id, status, product_name, manufacturer, supplier, '
+            . 'sample_quantity, legacy_sample_quantity_raw, test_method, revision, lock_version, color, '
+            . 'department_name AS department, '
+            . 'created_at, updated_at FROM {{%requests}} WHERE id = :id',
+            [':id' => $requestId],
+        )->queryOne();
+
+        return new ChangeRequestDepartmentResult($request);
     }
 }

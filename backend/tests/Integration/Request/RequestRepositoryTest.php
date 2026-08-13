@@ -17,6 +17,7 @@ use App\Domain\Request\SuspendResumeDenied;
 use App\Domain\Request\WithdrawDenied;
 use App\Infrastructure\Admin\AuditQuery;
 use App\Infrastructure\Clock;
+use App\Infrastructure\Persistence\Request\RequestDepartmentPersistenceAdapter;
 use App\Infrastructure\Request\RequestRepository;
 use App\Infrastructure\Request\RequestQuery;
 use Tests\Integration\IntegrationTestCase;
@@ -106,7 +107,7 @@ final class RequestRepositoryTest extends IntegrationTestCase
         $request = $this->createRegisteredRequest($initiator, 'department-manual');
         $this->db()->createCommand()->update('{{%requests}}', ['department_external_id' => 'bitrix:42'], ['id' => $request['id']])->execute();
 
-        $result = (new ChangeRequestDepartment(new RequestRepository($this->db())))->execute(
+        $result = (new ChangeRequestDepartment(new RequestDepartmentPersistenceAdapter($this->db())))->execute(
             new ChangeRequestDepartmentCommand(
                 (int) $request['id'],
                 'Подразделение C',
@@ -143,7 +144,7 @@ final class RequestRepositoryTest extends IntegrationTestCase
         $initiator = $this->createUser('dev.it.department.denied', 'Инициатор');
         $request = $this->createRegisteredRequest($initiator, 'department-denied');
         $this->expectException(RequestDepartmentChangeDenied::class);
-        (new ChangeRequestDepartment(new RequestRepository($this->db())))->execute(
+        (new ChangeRequestDepartment(new RequestDepartmentPersistenceAdapter($this->db())))->execute(
             new ChangeRequestDepartmentCommand(
                 (int) $request['id'],
                 'Другое подразделение',
@@ -165,7 +166,7 @@ final class RequestRepositoryTest extends IntegrationTestCase
         ], ['id' => $request['id']])->execute();
 
         try {
-            (new ChangeRequestDepartment(new RequestRepository($this->db())))->execute(
+            (new ChangeRequestDepartment(new RequestDepartmentPersistenceAdapter($this->db())))->execute(
                 new ChangeRequestDepartmentCommand(
                     (int) $request['id'],
                     'Новое подразделение',
