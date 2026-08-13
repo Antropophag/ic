@@ -27,7 +27,6 @@ return [
         'backend/src/Application/Request/PublishOpinionInput.php' => ['yii\\base\\Model'],
         'backend/src/Application/Request/ReasonedLockVersionInput.php' => ['yii\\base\\Model'],
         'backend/src/Application/Request/SecurityDecisionInput.php' => ['yii\\base\\Model'],
-        'backend/src/Application/Request/SetColorInput.php' => ['yii\\base\\Model'],
         'backend/src/Http/Controller/AdminController.php' => [
             'App\\Infrastructure\\Admin\\AuditQuery',
             'App\\Infrastructure\\Admin\\NotificationQuery',
@@ -84,7 +83,7 @@ return [
         'backend/src/Http/Controller/RequestController.php' => 900,
         'backend/src/Infrastructure/Document/DocumentRepository.php' => 782,
         'backend/src/Infrastructure/Request/RequestQuery.php' => 646,
-        'backend/src/Infrastructure/Request/RequestRepository.php' => 1461,
+        'backend/src/Infrastructure/Request/RequestRepository.php' => 1460,
         'frontend/src/components/RequestDetails.vue' => 1272,
         'frontend/src/components/RequestRegistry.vue' => 847,
     ],
