@@ -150,6 +150,9 @@ _check-backend:
 	$(CONTAINER_ENGINE) run --rm shlz-test-registry-coverage composer analyse
 	$(CONTAINER_ENGINE) run --rm shlz-test-registry-coverage composer audit
 	$(CONTAINER_ENGINE) run --rm shlz-test-registry-coverage composer test
+	$(CONTAINER_ENGINE) run --rm --volume "$(CURDIR):/workspace:ro" \
+		--env PROJECT_ROOT=/workspace shlz-test-registry-coverage \
+		php /workspace/backend/tools/architecture-guard.php
 
 _check-repository:
 	@if test ! -x frontend/node_modules/.bin/markdownlint-cli2; then npm --prefix frontend ci --no-audit --no-fund; fi

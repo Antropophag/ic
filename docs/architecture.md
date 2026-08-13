@@ -1,5 +1,23 @@
 # Архитектура deployment
 
+## Application architecture
+
+Сейчас код имеет переходную слоистость: Domain остаётся независимым, но часть
+Application input models наследует `yii\base\Model`, один document service
+обращается к Infrastructure/Yii, а HTTP controllers напрямую собирают и вызывают
+Infrastructure. Эти исключения не описывают целевую архитектуру и не означают,
+что переход уже завершён.
+
+Целевое направление зависимостей — `Http/Console → Application → Domain`.
+Infrastructure реализует persistence, read models и внешние технические границы
+Application/Domain; обратные зависимости Application/Domain на Infrastructure
+не допускаются. Миграция идёт небольшими волнами по реальным responsibilities.
+Текущие исключения перечислены exact baseline автоматического architecture guard:
+новое нарушение запрещено, а удалённое исключение требует уменьшить baseline.
+
+Подробности и целевое дерево зафиксированы в
+[ADR 0008](adr/0008-layer-boundaries-and-incremental-refactoring.md).
+
 Во всех окружениях запускается одна кодовая база:
 
 ```text
