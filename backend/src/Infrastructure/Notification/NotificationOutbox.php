@@ -15,8 +15,8 @@ final class NotificationOutbox
 
     /**
      * Ставит письмо в очередь в текущей транзакционной границе вызывающего
-     * кода (NTF-002). Semantic document references are persisted separately;
-     * bearer credentials are rendered only at the delivery boundary (ACL-005).
+     * кода (NTF-002). Семантические ссылки на документы хранятся отдельно;
+     * bearer credentials формируются только на границе доставки (ACL-005).
      *
      * @param list<array{label: string, documentVersionId: int}> $documentLinks
      */

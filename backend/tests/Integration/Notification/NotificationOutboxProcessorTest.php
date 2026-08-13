@@ -165,6 +165,34 @@ final class NotificationOutboxProcessorTest extends IntegrationTestCase
         ));
     }
 
+    public function testMalformedPayloadFailsTerminallyWithoutCallingSender(): void
+    {
+        $id = $this->enqueue();
+        $this->db()->createCommand()->update(
+            '{{%notification_outbox}}',
+            ['payload_json' => ['documentLinks' => [['label' => [], 'documentVersionId' => '1']]]],
+            ['id' => $id],
+        )->execute();
+        $deliveries = 0;
+
+        $result = (new NotificationOutboxProcessor(
+            $this->db(),
+            static function () use (&$deliveries): void {
+                $deliveries++;
+            },
+        ))->processAvailableBatch(20);
+
+        $row = $this->db()->createCommand(
+            'SELECT status, attempts, last_error FROM {{%notification_outbox}} WHERE id = :id',
+            [':id' => $id],
+        )->queryOne();
+        self::assertSame(1, $result['failed']);
+        self::assertSame(0, $deliveries);
+        self::assertSame('failed', $row['status']);
+        self::assertSame(1, (int) $row['attempts']);
+        self::assertSame('Notification payload contains an invalid document link.', $row['last_error']);
+    }
+
     public function testStopsBetweenMessagesWhenShutdownIsRequested(): void
     {
         $firstId = $this->enqueue();

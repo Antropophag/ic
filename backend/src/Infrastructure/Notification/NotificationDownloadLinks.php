@@ -19,6 +19,15 @@ final class NotificationDownloadLinks
     {
         foreach ($links as $link) {
             $versionId = $link['documentVersionId'];
+            $activeVersion = $this->db->createCommand(
+                'SELECT v.id FROM {{%request_document_versions}} v '
+                . 'JOIN {{%request_documents}} d ON d.id = v.document_id '
+                . 'WHERE v.id = :version_id AND v.deleted_at IS NULL AND d.deleted_at IS NULL',
+                [':version_id' => $versionId],
+            )->queryScalar();
+            if ($activeVersion === false) {
+                throw new InvalidNotificationPayload('Notification references an unavailable document version.');
+            }
             $token = $this->token($notificationId, $versionId);
             $this->db->createCommand(
                 'INSERT IGNORE INTO {{%document_download_links}} '

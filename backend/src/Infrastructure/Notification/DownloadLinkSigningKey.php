@@ -14,7 +14,7 @@ final class DownloadLinkSigningKey
             || strlen($key) < 32
             || str_starts_with($key, 'replace-with-')
         ) {
-            throw new \RuntimeException(
+            throw new InvalidDownloadLinkConfiguration(
                 'DOWNLOAD_LINK_SIGNING_KEY must be a non-placeholder value containing at least 32 characters',
             );
         }

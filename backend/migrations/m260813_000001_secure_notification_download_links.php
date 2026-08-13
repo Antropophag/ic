@@ -2,6 +2,7 @@
 
 declare(strict_types=1);
 
+use yii\base\NotSupportedException;
 use yii\db\Migration;
 use App\Infrastructure\Notification\DownloadLinkSigningKey;
 use App\Infrastructure\Notification\NotificationOutboxCredentialCleanup;
@@ -15,16 +16,39 @@ final class m260813_000001_secure_notification_download_links extends Migration
     public function safeUp(): void
     {
         DownloadLinkSigningKey::get();
-        $this->addColumn('{{%notification_outbox}}', 'payload_json', $this->json()->null()->after('body'));
+        if (!$this->hasPayloadColumn()) {
+            $this->addColumn('{{%notification_outbox}}', 'payload_json', $this->json()->null()->after('body'));
+            $this->db->schema->refreshTableSchema('notification_outbox');
+        }
 
         (new NotificationOutboxCredentialCleanup($this->db))->run();
-        $this->alterColumn('{{%notification_outbox}}', 'payload_json', $this->json()->notNull());
+        if ($this->payloadColumnAllowsNull()) {
+            $this->db->createCommand()->update(
+                '{{%notification_outbox}}',
+                ['payload_json' => ['documentLinks' => []]],
+                ['payload_json' => null],
+            )->execute();
+            $this->alterColumn('{{%notification_outbox}}', 'payload_json', $this->json()->notNull());
+            $this->db->schema->refreshTableSchema('notification_outbox');
+        }
     }
 
     public function safeDown(): void
     {
-        throw new \RuntimeException(
+        throw new NotSupportedException(
             static::class . ' is irreversible: revoked plaintext bearer credentials must not be restored.',
         );
+    }
+
+    private function hasPayloadColumn(): bool
+    {
+        $table = $this->db->schema->getTableSchema('{{%notification_outbox}}', true);
+        return $table !== null && isset($table->columns['payload_json']);
+    }
+
+    private function payloadColumnAllowsNull(): bool
+    {
+        $table = $this->db->schema->getTableSchema('{{%notification_outbox}}', true);
+        return $table !== null && isset($table->columns['payload_json']) && $table->columns['payload_json']->allowNull;
     }
 }

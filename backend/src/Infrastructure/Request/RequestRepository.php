@@ -1384,6 +1384,7 @@ final class RequestRepository
             'SELECT v.id FROM {{%request_document_versions}} v '
             . 'JOIN {{%request_documents}} d ON d.id = v.document_id '
             . 'WHERE d.request_id = :request_id AND d.document_type = :document_type '
+            . 'AND d.deleted_at IS NULL AND v.deleted_at IS NULL '
             . 'ORDER BY v.version DESC LIMIT 1',
             [':request_id' => $requestId, ':document_type' => $documentType],
         )->queryScalar();
