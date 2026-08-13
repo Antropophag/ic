@@ -12,6 +12,12 @@ backend-уровень — Integration с настоящей MariaDB; брауз
 | Playwright | вход и критические маршруты через реальный `frontend` | `make e2e` |
 | Runtime contracts | LDAP/SMTP/MariaDB/scheduler recovery | `make e2e` |
 
+Backend coverage автоматически включает весь production-код `backend/src` и
+все `*Test.php` из `backend/tests/Integration`; migrations, tools, vendor и test
+code в coverage source не входят. `make check` проверяет этот контракт и его
+согласованность с Sonar, поэтому новые production-классы и integration tests не
+требуют ручного изменения `phpunit.coverage.xml`.
+
 ## Единый стенд
 
 ```text
