@@ -31,7 +31,8 @@
             <file>src/Infrastructure/Import/BitrixArchiveFileImporter.php</file>
             <file>src/Infrastructure/Admin/AuditQuery.php</file>
             <file>src/Infrastructure/Request/RequestRepository.php</file>
-            <file>src/Infrastructure/Request/RequestDepartmentPersistence.php</file>
+            <file>src/Infrastructure/Persistence/Request/RequestColorPersistenceAdapter.php</file>
+            <file>src/Infrastructure/Persistence/Request/RequestDepartmentPersistenceAdapter.php</file>
             <file>src/Http/Controller/RequestController.php</file>
             <file>src/Http/Request/ChangeDepartmentRequest.php</file>
             <file>migrations/m260810_000001_add_bitrix_archive_metadata.php</file>

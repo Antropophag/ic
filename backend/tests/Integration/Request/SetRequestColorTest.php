@@ -11,6 +11,7 @@ use App\Domain\Request\ColorMarkDenied;
 use App\Domain\Request\ConcurrentRequestModification;
 use App\Domain\Request\RequestColor;
 use App\Domain\Request\RequestNotFound;
+use App\Infrastructure\Persistence\Request\RequestColorPersistenceAdapter;
 use App\Infrastructure\Request\RequestRepository;
 use Tests\Integration\IntegrationTestCase;
 
@@ -103,7 +104,7 @@ final class SetRequestColorTest extends IntegrationTestCase
 
     private function useCase(): SetRequestColor
     {
-        return new SetRequestColor(new RequestRepository($this->db()));
+        return new SetRequestColor(new RequestColorPersistenceAdapter($this->db()));
     }
 
     private function assertDeniedWithoutMutation(int $requestId, int $lockVersion, int $actorId, string $ruleId): void

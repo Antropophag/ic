@@ -7,6 +7,7 @@ namespace Tests\Integration\Request;
 use App\Application\Request\Command\ChangeRequestDepartmentCommand;
 use App\Application\Request\CreateRequestInput;
 use App\Application\Request\UseCase\ChangeRequestDepartment;
+use App\Infrastructure\Persistence\Request\RequestDepartmentPersistenceAdapter;
 use App\Infrastructure\Request\RequestRepository;
 use PHPUnit\Framework\TestCase;
 use yii\db\Connection;
@@ -40,7 +41,7 @@ final class ChangeRequestDepartmentAuditAtomicityTest extends TestCase
             ], ['id' => $request['id']])->execute();
 
             try {
-                (new ChangeRequestDepartment($repository))->execute(new ChangeRequestDepartmentCommand(
+                (new ChangeRequestDepartment(new RequestDepartmentPersistenceAdapter($db)))->execute(new ChangeRequestDepartmentCommand(
                     (int) $request['id'],
                     'Новое подразделение',
                     (int) $request['lock_version'],

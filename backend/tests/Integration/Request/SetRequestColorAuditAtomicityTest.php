@@ -8,6 +8,7 @@ use App\Application\Request\Command\SetRequestColorCommand;
 use App\Application\Request\CreateRequestInput;
 use App\Application\Request\UseCase\SetRequestColor;
 use App\Domain\Request\RequestColor;
+use App\Infrastructure\Persistence\Request\RequestColorPersistenceAdapter;
 use App\Infrastructure\Request\RequestRepository;
 use PHPUnit\Framework\TestCase;
 use yii\db\Connection;
@@ -37,7 +38,7 @@ final class SetRequestColorAuditAtomicityTest extends TestCase
             $request = $repository->create($input, $initiatorId);
 
             try {
-                (new SetRequestColor($repository))->execute(new SetRequestColorCommand(
+                (new SetRequestColor(new RequestColorPersistenceAdapter($db)))->execute(new SetRequestColorCommand(
                     (int) $request['id'],
                     RequestColor::Red,
                     (int) $request['lock_version'],

@@ -5,8 +5,10 @@ declare(strict_types=1);
 namespace Tests\Integration\Http;
 
 use App\Application\Request\CreateRequestInput;
+use App\Application\Request\Port\RequestColorGateway;
 use App\Http\Controller\RequestController;
 use App\Infrastructure\Request\RequestRepository;
+use App\Infrastructure\Persistence\Request\RequestColorPersistenceAdapter;
 use Tests\Integration\IntegrationTestCase;
 use Yii;
 use yii\web\Application;
@@ -110,6 +112,11 @@ final class SetRequestColorHttpTest extends IntegrationTestCase
             'id' => 'set-request-color-http-test',
             'basePath' => dirname(__DIR__, 3),
             'params' => ['identityHeader' => 'X-Test-User-ID'],
+            'container' => [
+                'definitions' => [
+                    RequestColorGateway::class => fn () => new RequestColorPersistenceAdapter($this->db()),
+                ],
+            ],
             'components' => [
                 'db' => $this->db(),
                 'request' => ['class' => Request::class, 'cookieValidationKey' => 'set-request-color-http-test'],

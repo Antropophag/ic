@@ -410,7 +410,7 @@ final class RequestController extends ApiController
             return $errors;
         }
         try {
-            $result = (new ChangeRequestDepartment($this->repository()))->execute(
+            $result = Yii::$container->get(ChangeRequestDepartment::class)->execute(
                 $input->toCommand($id, $this->currentUserId()),
             );
             return $result->toArray();
@@ -432,7 +432,7 @@ final class RequestController extends ApiController
         }
         $actorId = $this->currentUserId();
         try {
-            $result = (new SetRequestColor($this->repository()))->execute($input->toCommand($id, $actorId));
+            $result = Yii::$container->get(SetRequestColor::class)->execute($input->toCommand($id, $actorId));
             return $result->toArray();
         } catch (RequestNotFound $error) {
             throw new NotFoundHttpException($error->getMessage());
