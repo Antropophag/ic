@@ -6,11 +6,14 @@ namespace Tests\Integration\Request;
 
 use App\Application\Request\CreateRequestInput;
 use App\Application\Request\Command\AssignExecutorCommand;
+use App\Application\Request\Command\AssignExpertCommand;
+use App\Application\Request\Command\ExpertAssignmentAction;
 use App\Application\Request\Command\ChangeRequestDepartmentCommand;
 use App\Application\Request\Command\RequestLifecycleCommand;
 use App\Application\Request\Command\CancelRequestCommand;
 use App\Application\Request\UseCase\CancelRequest;
 use App\Application\Request\UseCase\AssignExecutor;
+use App\Application\Request\UseCase\AssignExpert;
 use App\Application\Request\UseCase\ChangeRequestDepartment;
 use App\Application\Request\UseCase\RequestLifecycle;
 use App\Domain\Request\AssignmentDenied;
@@ -28,6 +31,7 @@ use App\Infrastructure\Persistence\Request\RequestDepartmentPersistenceAdapter;
 use App\Infrastructure\Persistence\Request\RequestLifecyclePersistenceAdapter;
 use App\Infrastructure\Persistence\Request\RequestCancellationPersistenceAdapter;
 use App\Infrastructure\Persistence\Request\ExecutorAssignmentPersistenceAdapter;
+use App\Infrastructure\Persistence\Request\ExpertAssignmentPersistenceAdapter;
 use App\Infrastructure\Request\RequestRepository;
 use App\Infrastructure\Request\RequestQuery;
 use Tests\Integration\IntegrationTestCase;
@@ -39,6 +43,19 @@ final class RequestRepositoryTest extends IntegrationTestCase
     {
         return (new AssignExecutor(new ExecutorAssignmentPersistenceAdapter($this->db())))->execute(
             new AssignExecutorCommand($requestId, $executorId, $lockVersion, $actorId),
+        )->toArray();
+    }
+
+    /** @return array<string, mixed> */
+    private function assignExpert(
+        ExpertAssignmentAction $action,
+        int $requestId,
+        int $expertId,
+        int $lockVersion,
+        int $actorId,
+    ): array {
+        return (new AssignExpert(new ExpertAssignmentPersistenceAdapter($this->db())))->execute(
+            new AssignExpertCommand($action, $requestId, $expertId, $lockVersion, $actorId),
         )->toArray();
     }
 
@@ -1031,7 +1048,6 @@ final class RequestRepositoryTest extends IntegrationTestCase
         $request = $this->createRegisteredRequest($initiator, 'reassign-noop');
         $requestId = (int) $request['id'];
 
-        $repository = new RequestRepository($this->db());
         $assigned = $this->assignExecutor($requestId, $executor, (int) $request['lock_version'], $manager);
 
         try {
@@ -1133,8 +1149,20 @@ final class RequestRepositoryTest extends IntegrationTestCase
             ['status' => 'opinion_preparation'],
             ['id' => $requestId],
         )->execute();
-        $claimed = $repository->claimExpert($requestId, (int) $assigned['lockVersion'], $firstExpert);
-        $repository->reassignExpert($requestId, $secondExpert, (int) $claimed['lockVersion'], $firstExpert);
+        $claimed = $this->assignExpert(
+            ExpertAssignmentAction::Claim,
+            $requestId,
+            $firstExpert,
+            (int) $assigned['lockVersion'],
+            $firstExpert,
+        );
+        $this->assignExpert(
+            ExpertAssignmentAction::Reassign,
+            $requestId,
+            $secondExpert,
+            (int) $claimed['lockVersion'],
+            $firstExpert,
+        );
 
         $history = (new RequestQuery($this->db()))->findDetails($requestId, $manager)['history'];
         $byAction = [];
