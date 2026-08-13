@@ -9,6 +9,8 @@
             <file>tests/Integration/Identity/UserRoleAuditAtomicityTest.php</file>
             <file>tests/Integration/Import/BitrixArchiveFileImporterTest.php</file>
             <file>tests/Integration/Import/BitrixArchiveMetadataMigrationTest.php</file>
+            <file>tests/Integration/Request/RequestRepositoryTest.php</file>
+            <file>tests/Integration/Request/RequestCreationAuditAtomicityTest.php</file>
         </testsuite>
     </testsuites>
     <source>
@@ -17,6 +19,8 @@
             <directory>src/Application</directory>
             <file>src/Infrastructure/Identity/UserAdministrationRepository.php</file>
             <file>src/Infrastructure/Import/BitrixArchiveFileImporter.php</file>
+            <file>src/Infrastructure/Admin/AuditQuery.php</file>
+            <file>src/Infrastructure/Request/RequestRepository.php</file>
             <file>migrations/m260810_000001_add_bitrix_archive_metadata.php</file>
         </include>
     </source>
