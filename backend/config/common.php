@@ -11,6 +11,14 @@ return [
     'basePath' => dirname(__DIR__),
     'vendorPath' => dirname(__DIR__) . '/vendor',
     'bootstrap' => ['log'],
+    'container' => [
+        'definitions' => [
+            App\Application\Request\Port\RequestColorGateway::class => static fn () =>
+                new App\Infrastructure\Persistence\Request\RequestColorPersistenceAdapter(Yii::$app->db),
+            App\Application\Request\Port\RequestDepartmentGateway::class => static fn () =>
+                new App\Infrastructure\Persistence\Request\RequestDepartmentPersistenceAdapter(Yii::$app->db),
+        ],
+    ],
     'components' => [
         'db' => [
             'class' => yii\db\Connection::class,
