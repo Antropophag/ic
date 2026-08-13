@@ -5,60 +5,12 @@
             <directory>tests/Unit</directory>
         </testsuite>
         <testsuite name="covered-integration">
-            <file>tests/Integration/Identity/UserAdministrationRepositoryTest.php</file>
-            <file>tests/Integration/Identity/UserRoleAuditAtomicityTest.php</file>
-            <file>tests/Integration/Import/BitrixArchiveFileImporterTest.php</file>
-            <file>tests/Integration/Import/BitrixArchiveMetadataMigrationTest.php</file>
-            <file>tests/Integration/Request/RequestRepositoryTest.php</file>
-            <file>tests/Integration/Request/RequestCreationAuditAtomicityTest.php</file>
-            <file>tests/Integration/Request/SetRequestColorTest.php</file>
-            <file>tests/Integration/Request/SetRequestColorAuditAtomicityTest.php</file>
-            <file>tests/Integration/Http/SetRequestColorHttpTest.php</file>
-            <file>tests/Integration/Request/ChangeRequestDepartmentAuditAtomicityTest.php</file>
-            <file>tests/Integration/Http/ChangeRequestDepartmentHttpTest.php</file>
-            <file>tests/Integration/Request/RequestLifecycleAtomicityTest.php</file>
-            <file>tests/Integration/Http/RequestLifecycleHttpTest.php</file>
-            <file>tests/Integration/Request/RequestCancellationAtomicityTest.php</file>
-            <file>tests/Integration/Http/RequestCancellationHttpTest.php</file>
-            <file>tests/Integration/Request/ExecutorAssignmentAtomicityTest.php</file>
-            <file>tests/Integration/Http/ExecutorAssignmentHttpTest.php</file>
-            <file>tests/Integration/Document/DocumentRepositoryTest.php</file>
-            <file>tests/Integration/Notification/NotificationOutboxCredentialCleanupTest.php</file>
-            <file>tests/Integration/Notification/NotificationOutboxMigrationResumabilityTest.php</file>
-            <file>tests/Integration/Notification/NotificationOutboxProcessorTest.php</file>
+            <directory>tests/Integration</directory>
         </testsuite>
     </testsuites>
     <source>
         <include>
-            <directory>src/Domain</directory>
-            <directory>src/Application</directory>
-            <file>tools/ArchitectureGuard.php</file>
-            <file>src/Infrastructure/Identity/UserAdministrationRepository.php</file>
-            <file>src/Infrastructure/Import/BitrixArchiveFileImporter.php</file>
-            <file>src/Infrastructure/Admin/AuditQuery.php</file>
-            <file>src/Infrastructure/Request/RequestRepository.php</file>
-            <file>src/Infrastructure/Persistence/Request/RequestColorPersistenceAdapter.php</file>
-            <file>src/Infrastructure/Persistence/Request/RequestDepartmentPersistenceAdapter.php</file>
-            <file>src/Infrastructure/Persistence/Request/RequestLifecyclePersistenceAdapter.php</file>
-            <file>src/Infrastructure/Persistence/Request/RequestCancellationPersistenceAdapter.php</file>
-            <file>src/Infrastructure/Persistence/Request/ExecutorAssignmentPersistenceAdapter.php</file>
-            <file>src/Http/Controller/RequestController.php</file>
-            <file>src/Http/Request/AssignExecutorRequest.php</file>
-            <file>src/Http/Request/ChangeDepartmentRequest.php</file>
-            <file>src/Http/Request/LockVersionRequest.php</file>
-            <file>src/Http/Request/ReasonedLockVersionRequest.php</file>
-            <file>src/Http/Request/CancelRequest.php</file>
-            <file>migrations/m260810_000001_add_bitrix_archive_metadata.php</file>
-            <file>migrations/m260813_000001_secure_notification_download_links.php</file>
-            <file>src/Infrastructure/Document/DocumentRepository.php</file>
-            <file>src/Infrastructure/Notification/DownloadLinkSigningKey.php</file>
-            <file>src/Infrastructure/Notification/InvalidNotificationPayload.php</file>
-            <file>src/Infrastructure/Notification/InvalidDownloadLinkConfiguration.php</file>
-            <file>src/Infrastructure/Notification/NotificationDownloadLinks.php</file>
-            <file>src/Infrastructure/Notification/NotificationDocumentLinksPayload.php</file>
-            <file>src/Infrastructure/Notification/NotificationOutbox.php</file>
-            <file>src/Infrastructure/Notification/NotificationOutboxCredentialCleanup.php</file>
-            <file>src/Infrastructure/Notification/NotificationOutboxProcessor.php</file>
+            <directory>src</directory>
         </include>
     </source>
 </phpunit>
