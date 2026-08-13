@@ -3,6 +3,7 @@
     <description>Проверка серверного кода по PSR-12.</description>
     <file>src</file>
     <file>tests</file>
+    <file>tools</file>
     <arg name="colors"/>
     <arg name="extensions" value="php"/>
     <arg name="parallel" value="4"/>

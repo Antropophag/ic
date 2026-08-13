@@ -21,6 +21,7 @@
         <include>
             <directory>src/Domain</directory>
             <directory>src/Application</directory>
+            <file>tools/ArchitectureGuard.php</file>
             <file>src/Infrastructure/Identity/UserAdministrationRepository.php</file>
             <file>src/Infrastructure/Import/BitrixArchiveFileImporter.php</file>
             <file>src/Infrastructure/Admin/AuditQuery.php</file>
