@@ -23,6 +23,8 @@ return [
                 new App\Infrastructure\Persistence\Request\RequestCancellationPersistenceAdapter(Yii::$app->db),
             App\Application\Request\Port\ExecutorAssignmentGateway::class => static fn () =>
                 new App\Infrastructure\Persistence\Request\ExecutorAssignmentPersistenceAdapter(Yii::$app->db),
+            App\Application\Request\Port\ExpertAssignmentGateway::class => static fn () =>
+                new App\Infrastructure\Persistence\Request\ExpertAssignmentPersistenceAdapter(Yii::$app->db),
         ],
     ],
     'components' => [
