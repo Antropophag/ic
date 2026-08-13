@@ -17,6 +17,8 @@ return [
                 new App\Infrastructure\Persistence\Request\RequestColorPersistenceAdapter(Yii::$app->db),
             App\Application\Request\Port\RequestDepartmentGateway::class => static fn () =>
                 new App\Infrastructure\Persistence\Request\RequestDepartmentPersistenceAdapter(Yii::$app->db),
+            App\Application\Request\Port\RequestLifecycleGateway::class => static fn () =>
+                new App\Infrastructure\Persistence\Request\RequestLifecyclePersistenceAdapter(Yii::$app->db),
         ],
     ],
     'components' => [
