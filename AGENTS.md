@@ -154,6 +154,26 @@
 - Escalate scope only when the original objective cannot be met within current boundaries.
 - Document why an exception to an established repository pattern is necessary.
 
+## Git identities
+
+- This repository can use different identities for different remotes. Treat
+  `remote.<name>.pushIdentityName` and `remote.<name>.pushIdentityEmail` as the
+  source of truth for commits intended for that remote.
+- Before creating a commit, resolve the current branch's tracking remote and
+  compare `git config user.name` and `git config user.email` with that remote's
+  configured push identity.
+- Configure a worktree-specific identity with `git config --worktree`; never
+  replace the shared repository or global identity for this purpose.
+- Before first enabling `extensions.worktreeConfig`, inspect local
+  `core.bare` and `core.worktree`. If either is present, migrate it to the
+  appropriate worktree configuration as required by `git worktree` before
+  enabling the extension; then run `git config extensions.worktreeConfig true`.
+- When creating a new worktree, set its identity before the first commit. If the
+  branch has no tracking remote or the remote has no configured push identity,
+  stop and ask the user which account applies.
+- Do not rewrite published commits solely to change their identity without the
+  user's explicit authorization.
+
 ## Validation Checklist
 
 - [ ] The requested behavior works through the intended entry point.

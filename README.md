@@ -17,6 +17,9 @@ make dev-up
 ```
 
 `make init` создаёт `.env.dev` из `.env.dev.example` и подключает Git hooks.
+Pre-push hook также проверяет, что identity текущего worktree соответствует
+настройкам `remote.<name>.pushIdentityName` и
+`remote.<name>.pushIdentityEmail`, если они заданы для выбранного remote.
 `make dev-up` работает только с project `ic-dev`, файлами `compose.yaml` и
 `compose.dev.yaml`, конфигурацией `.env.dev`. Команда собирает development
 frontend и backend, применяет миграции, выполняет идемпотентный seed и выводит
