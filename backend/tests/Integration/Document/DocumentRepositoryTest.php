@@ -12,6 +12,8 @@ use App\Domain\Request\RequestNotFound;
 use App\Infrastructure\Clock;
 use App\Infrastructure\Document\DocumentRepository;
 use App\Infrastructure\Document\DocumentStorage;
+use App\Infrastructure\Notification\NotificationOutboxProcessor;
+use App\Infrastructure\Notification\NotificationOutboxCredentialCleanup;
 use App\Infrastructure\Request\RequestQuery;
 use App\Infrastructure\Request\RequestRepository;
 use Tests\Integration\IntegrationTestCase;
@@ -130,6 +132,115 @@ final class DocumentRepositoryTest extends IntegrationTestCase
         );
         self::assertSame(0, (int) $inactiveNotified);
 
+        $persistedNotification = $this->db()->createCommand(
+            "SELECT n.* FROM {{%notification_outbox}} n WHERE n.request_id = :id "
+            . "AND n.event_type = 'request.report_uploaded' AND n.recipient_email = 'active.expert@example.invalid'",
+            [':id' => $requestId],
+        )->queryOne();
+        self::assertNotFalse($persistedNotification);
+        $persistedRepresentation = json_encode(
+            $persistedNotification,
+            JSON_THROW_ON_ERROR | JSON_UNESCAPED_SLASHES,
+        );
+        self::assertFalse(
+            $this->containsActiveDownloadCredential($persistedRepresentation),
+            'ACL-005: persisted notification data must not contain an active raw download credential',
+        );
+        self::assertSame(0, (int) $this->scalar(
+            'SELECT COUNT(*) FROM {{%document_download_links}} WHERE document_version_id = :version_id',
+            [':version_id' => $result['versionId']],
+        ));
+
+        $deliveredBody = null;
+        $processor = new NotificationOutboxProcessor(
+            $this->db(),
+            static function (int $request, string $email, string $name, string $subject, string $body) use (&$deliveredBody): void {
+                if ($email === 'active.expert@example.invalid') {
+                    $deliveredBody = $body;
+                    throw new \RuntimeException('Synthetic SMTP failure');
+                }
+            },
+        );
+        $processor->processAvailableBatch(100);
+        self::assertIsString($deliveredBody);
+        preg_match('~/api/v1/document-links/([a-f0-9]{64})/download~', $deliveredBody, $deliveredLink);
+        self::assertArrayHasKey(1, $deliveredLink);
+        self::assertNotFalse($repository->findVersionByToken($deliveredLink[1]));
+        self::assertSame(1, (int) $this->scalar(
+            'SELECT COUNT(*) FROM {{%document_download_links}} WHERE token_hash = :token_hash',
+            [':token_hash' => hash('sha256', $deliveredLink[1])],
+        ));
+        $linkCountAfterFailure = (int) $this->scalar(
+            'SELECT COUNT(*) FROM {{%document_download_links}} WHERE document_version_id = :version_id',
+            [':version_id' => $result['versionId']],
+        );
+        $failedRepresentation = json_encode(
+            $this->db()->createCommand(
+                "SELECT * FROM {{%notification_outbox}} WHERE request_id = :id "
+                . "AND recipient_email = 'active.expert@example.invalid'",
+                [':id' => $requestId],
+            )->queryOne(),
+            JSON_THROW_ON_ERROR,
+        );
+        self::assertFalse($this->containsActiveDownloadCredential($failedRepresentation));
+
+        $this->db()->createCommand()->update(
+            '{{%notification_outbox}}',
+            ['next_attempt_at' => Clock::now()],
+            ['request_id' => $requestId, 'recipient_email' => 'active.expert@example.invalid'],
+        )->execute();
+        $retriedBody = null;
+        (new NotificationOutboxProcessor(
+            $this->db(),
+            static function (int $request, string $email, string $name, string $subject, string $body) use (&$retriedBody): void {
+                if ($email === 'active.expert@example.invalid') {
+                    $retriedBody = $body;
+                }
+            },
+        ))->processAvailableBatch(100);
+        self::assertSame($deliveredBody, $retriedBody, 'SMTP ambiguity must preserve the same usable credential on retry.');
+        self::assertSame($linkCountAfterFailure, (int) $this->scalar(
+            'SELECT COUNT(*) FROM {{%document_download_links}} WHERE document_version_id = :version_id',
+            [':version_id' => $result['versionId']],
+        ));
+
+        $legacyToken = bin2hex(random_bytes(32));
+        $this->db()->createCommand()->insert('{{%document_download_links}}', [
+            'document_version_id' => $result['versionId'],
+            'token_hash' => hash('sha256', $legacyToken),
+            'created_at' => Clock::now(),
+        ])->execute();
+        $this->db()->createCommand()->update(
+            '{{%notification_outbox}}',
+            [
+                'status' => 'failed',
+                'body' => 'Legacy body' . "\nСсылка на отчёт: http://legacy.invalid/api/v1/document-links/{$legacyToken}/download",
+                'payload_json' => ['documentLinks' => []],
+            ],
+            ['request_id' => $requestId, 'recipient_email' => 'active.expert@example.invalid'],
+        )->execute();
+        (new NotificationOutboxCredentialCleanup($this->db()))->run();
+
+        $remediatedRow = $this->db()->createCommand(
+            "SELECT body, payload_json, status FROM {{%notification_outbox}} WHERE request_id = :id "
+            . "AND recipient_email = 'active.expert@example.invalid'",
+            [':id' => $requestId],
+        )->queryOne();
+        self::assertSame('failed', $remediatedRow['status']);
+        self::assertStringNotContainsString($legacyToken, $remediatedRow['body']);
+        $remediatedPayload = is_array($remediatedRow['payload_json'])
+            ? $remediatedRow['payload_json']
+            : json_decode($remediatedRow['payload_json'], true, flags: JSON_THROW_ON_ERROR);
+        self::assertContains(
+            ['label' => 'отчёт', 'documentVersionId' => $result['versionId']],
+            $remediatedPayload['documentLinks'],
+        );
+        self::assertSame(1, (int) $this->scalar(
+            'SELECT COUNT(*) FROM {{%document_download_links}} WHERE token_hash = :token_hash',
+            [':token_hash' => hash('sha256', $legacyToken)],
+        ));
+        self::assertNotFalse($repository->findVersionByToken($legacyToken));
+
         $auditRuleId = $this->scalar(
             "SELECT rule_id FROM {{%audit_events}} WHERE event_type = 'request.report_uploaded' "
             . 'AND entity_id = :id ORDER BY id DESC LIMIT 1',
@@ -153,6 +264,27 @@ final class DocumentRepositoryTest extends IntegrationTestCase
         ));
         self::assertNull($outsiderUploadEvent[0]['versionId']);
         self::assertNull($outsiderUploadEvent[0]['originalName']);
+    }
+
+    private function containsActiveDownloadCredential(string $persistedRepresentation): bool
+    {
+        preg_match_all(
+            '~(?<![a-f0-9])([a-f0-9]{64})(?![a-f0-9])~',
+            $persistedRepresentation,
+            $matches,
+        );
+        foreach ($matches[1] as $token) {
+            if (
+                (int) $this->scalar(
+                    'SELECT COUNT(*) FROM {{%document_download_links}} WHERE token_hash = :token_hash',
+                    [':token_hash' => hash('sha256', $token)],
+                ) > 0
+            ) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     public function testDeletingReportFromCompletedRequestReturnsItToWorkAndWritesTransition(): void
