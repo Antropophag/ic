@@ -6,6 +6,7 @@ namespace App\Infrastructure\Request;
 
 use App\Application\Request\CreateRequestInput;
 use App\Application\Request\Port\RequestColorGateway;
+use App\Application\Request\Port\RequestDepartmentGateway;
 use App\Domain\Request\CommentPolicy;
 use App\Domain\Request\AssignmentPolicy;
 use App\Domain\Request\AssignmentTargetNotFound;
@@ -15,7 +16,6 @@ use App\Domain\Request\RequestAction;
 use App\Domain\Request\RejectPolicy;
 use App\Domain\Request\RequestCreationPolicy;
 use App\Domain\Request\RequestColor;
-use App\Domain\Request\RequestDepartmentChangeDenied;
 use App\Domain\Request\RequestDepartmentMissing;
 use App\Domain\Request\RequestNotFound;
 use App\Domain\Request\RequestStatus;
@@ -29,8 +29,10 @@ use App\Infrastructure\Clock;
 use App\Infrastructure\Notification\NotificationOutbox;
 use yii\db\Connection;
 
-final class RequestRepository implements RequestColorGateway
+final class RequestRepository implements RequestColorGateway, RequestDepartmentGateway
 {
+    use RequestDepartmentPersistence;
+
     public function __construct(private readonly Connection $db)
     {
     }
@@ -134,66 +136,6 @@ final class RequestRepository implements RequestColorGateway
             $transaction->commit();
 
             return $this->findOne($id);
-        } catch (\Throwable $error) {
-            $transaction->rollBack();
-            throw $error;
-        }
-    }
-
-    /** @return array<string, mixed> */
-    public function changeDepartment(int $requestId, string $department, int $expectedLockVersion, int $actorId): array
-    {
-        $transaction = $this->db->beginTransaction();
-        try {
-            // Lock the membership row so a concurrent role revoke cannot pass the authorization check
-            // and commit before the protected mutation finishes.
-            $administratorRoleId = $this->db->createCommand(
-                'SELECT ur.role_id FROM {{%user_roles}} ur '
-                . 'JOIN {{%roles}} role ON role.id = ur.role_id '
-                . "WHERE ur.user_id = :actor_id AND role.code = 'administrator' FOR UPDATE",
-                [':actor_id' => $actorId],
-            )->queryScalar();
-            $row = $this->db->createCommand(
-                'SELECT r.department_name, r.department_external_id, r.lock_version, actor.is_active '
-                . 'FROM {{%requests}} r JOIN {{%users}} actor ON actor.id = :actor_id '
-                . 'WHERE r.id = :request_id FOR UPDATE',
-                [':request_id' => $requestId, ':actor_id' => $actorId],
-            )->queryOne();
-            if ($row === false) {
-                throw new RequestNotFound('Request not found');
-            }
-            if (!(bool) $row['is_active'] || $administratorRoleId === false) {
-                throw new RequestDepartmentChangeDenied('Изменять подразделение заявки может только активный администратор.');
-            }
-            if ((int) $row['lock_version'] !== $expectedLockVersion) {
-                throw new ConcurrentRequestModification();
-            }
-            $department = trim($department);
-            $now = Clock::now();
-            $this->db->createCommand()->update('{{%requests}}', [
-                'department_name' => $department,
-                'department_external_id' => null,
-                'department_source' => 'manual',
-                'lock_version' => $expectedLockVersion + 1,
-                'updated_at' => $now,
-            ], ['id' => $requestId])->execute();
-            $this->db->createCommand()->insert('{{%audit_events}}', [
-                'event_type' => 'request.department_changed',
-                'entity_type' => 'request',
-                'entity_id' => $requestId,
-                'actor_id' => $actorId,
-                'rule_id' => 'REQ-011',
-                'payload_json' => [
-                    'old_department_name' => $row['department_name'],
-                    'new_department_name' => $department,
-                    'old_department_external_id' => $row['department_external_id'],
-                    'new_department_external_id' => null,
-                    'source' => 'manual',
-                ],
-                'created_at' => $now,
-            ])->execute();
-            $transaction->commit();
-            return $this->findOne($requestId);
         } catch (\Throwable $error) {
             $transaction->rollBack();
             throw $error;

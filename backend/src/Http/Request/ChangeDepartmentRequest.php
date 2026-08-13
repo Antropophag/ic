@@ -2,11 +2,12 @@
 
 declare(strict_types=1);
 
-namespace App\Application\Request;
+namespace App\Http\Request;
 
+use App\Application\Request\Command\ChangeRequestDepartmentCommand;
 use yii\base\Model;
 
-final class ChangeDepartmentInput extends Model
+final class ChangeDepartmentRequest extends Model
 {
     public mixed $department = null;
     public mixed $lockVersion = null;
@@ -19,5 +20,15 @@ final class ChangeDepartmentInput extends Model
             ['department', 'string', 'max' => 255],
             ['lockVersion', 'integer', 'min' => 1],
         ];
+    }
+
+    public function toCommand(int $requestId, int $actorId): ChangeRequestDepartmentCommand
+    {
+        return new ChangeRequestDepartmentCommand(
+            $requestId,
+            (string) $this->department,
+            (int) $this->lockVersion,
+            $actorId,
+        );
     }
 }

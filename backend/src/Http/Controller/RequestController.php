@@ -8,7 +8,7 @@ use App\Application\Document\TestActDocumentService;
 use App\Application\Document\TestActConfigurationError;
 use App\Application\Document\TestActInput;
 use App\Application\Request\CreateRequestInput;
-use App\Application\Request\ChangeDepartmentInput;
+use App\Application\Request\UseCase\ChangeRequestDepartment;
 use App\Application\Request\ListRequestsInput;
 use App\Application\Request\AddCommentInput;
 use App\Application\Request\AssignExecutorInput;
@@ -48,6 +48,7 @@ use App\Infrastructure\Document\TestActDocumentGenerator;
 use App\Infrastructure\Request\RequestQuery;
 use App\Infrastructure\Request\RequestRepository;
 use App\Http\Request\SetColorRequest;
+use App\Http\Request\ChangeDepartmentRequest;
 use Yii;
 use yii\web\Response;
 use yii\web\ConflictHttpException;
@@ -404,17 +405,15 @@ final class RequestController extends ApiController
     /** @return array<string, mixed> */
     public function actionChangeDepartment(int $id): array
     {
-        $input = new ChangeDepartmentInput();
+        $input = new ChangeDepartmentRequest();
         if (($errors = $this->bodyValidationErrors($input)) !== null) {
             return $errors;
         }
         try {
-            return $this->repository()->changeDepartment(
-                $id,
-                (string) $input->department,
-                (int) $input->lockVersion,
-                $this->currentUserId(),
+            $result = (new ChangeRequestDepartment($this->repository()))->execute(
+                $input->toCommand($id, $this->currentUserId()),
             );
+            return $result->toArray();
         } catch (RequestNotFound $error) {
             throw new NotFoundHttpException($error->getMessage());
         } catch (RequestDepartmentChangeDenied $error) {
