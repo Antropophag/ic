@@ -5,15 +5,16 @@ declare(strict_types=1);
 namespace App\Infrastructure\Request;
 
 use App\Application\Request\CreateRequestInput;
+use App\Application\Request\Port\RequestColorGateway;
 use App\Domain\Request\CommentPolicy;
 use App\Domain\Request\AssignmentPolicy;
-use App\Domain\Request\ColorMarkPolicy;
 use App\Domain\Request\AssignmentTargetNotFound;
 use App\Domain\Request\ConcurrentRequestModification;
 use App\Domain\Request\ExpertAssignmentPolicy;
 use App\Domain\Request\RequestAction;
 use App\Domain\Request\RejectPolicy;
 use App\Domain\Request\RequestCreationPolicy;
+use App\Domain\Request\RequestColor;
 use App\Domain\Request\RequestDepartmentChangeDenied;
 use App\Domain\Request\RequestDepartmentMissing;
 use App\Domain\Request\RequestNotFound;
@@ -28,7 +29,7 @@ use App\Infrastructure\Clock;
 use App\Infrastructure\Notification\NotificationOutbox;
 use yii\db\Connection;
 
-final class RequestRepository
+final class RequestRepository implements RequestColorGateway
 {
     public function __construct(private readonly Connection $db)
     {
@@ -757,50 +758,48 @@ final class RequestRepository
         ])->execute();
     }
 
-    /** @return array{requestId: int, color: string, lockVersion: int} */
-    public function setColor(int $requestId, string $color, int $expectedLockVersion, int $actorId): array
+    public function transactional(callable $operation): mixed
     {
         $transaction = $this->db->beginTransaction();
         try {
-            $request = $this->db->createCommand(
-                'SELECT lock_version FROM {{%requests}} WHERE id = :id FOR UPDATE',
-                [':id' => $requestId],
-            )->queryOne();
-            if ($request === false) {
-                throw new RequestNotFound('Request not found');
-            }
-            if ((int) $request['lock_version'] !== $expectedLockVersion) {
-                throw new ConcurrentRequestModification();
-            }
-
-            (new ColorMarkPolicy())->assertCanSetColor(
-                $this->rolesFor($actorId),
-                $this->isActiveUser($actorId),
-            );
-
-            $now = Clock::now();
-            $nextLockVersion = $expectedLockVersion + 1;
-            $this->db->createCommand()->update(
-                '{{%requests}}',
-                ['color' => $color, 'lock_version' => $nextLockVersion, 'updated_at' => $now],
-                ['id' => $requestId],
-            )->execute();
-            $this->db->createCommand()->insert('{{%audit_events}}', [
-                'event_type' => 'request.color_marked',
-                'entity_type' => 'request',
-                'entity_id' => $requestId,
-                'actor_id' => $actorId,
-                'rule_id' => 'WF-009',
-                'payload_json' => ['color' => $color],
-                'created_at' => $now,
-            ])->execute();
+            $result = $operation();
             $transaction->commit();
-
-            return ['requestId' => $requestId, 'color' => $color, 'lockVersion' => $nextLockVersion];
+            return $result;
         } catch (\Throwable $error) {
             $transaction->rollBack();
             throw $error;
         }
+    }
+
+    public function lockVersionForUpdate(int $requestId): ?int
+    {
+        $lockVersion = $this->db->createCommand(
+            'SELECT lock_version FROM {{%requests}} WHERE id = :id FOR UPDATE',
+            [':id' => $requestId],
+        )->queryScalar();
+        return $lockVersion === false ? null : (int) $lockVersion;
+    }
+
+    public function persistColorChange(int $requestId, RequestColor $color, int $lockVersion): void
+    {
+        $this->db->createCommand()->update('{{%requests}}', [
+            'color' => $color->value,
+            'lock_version' => $lockVersion,
+            'updated_at' => Clock::now(),
+        ], ['id' => $requestId])->execute();
+    }
+
+    public function recordColorMarked(int $requestId, int $actorId, RequestColor $color, string $ruleId): void
+    {
+        $this->db->createCommand()->insert('{{%audit_events}}', [
+            'event_type' => 'request.color_marked',
+            'entity_type' => 'request',
+            'entity_id' => $requestId,
+            'actor_id' => $actorId,
+            'rule_id' => $ruleId,
+            'payload_json' => ['color' => $color->value],
+            'created_at' => Clock::now(),
+        ])->execute();
     }
 
     public function recordRejectedColor(int $requestId, int $actorId, string $ruleId): void
@@ -1321,7 +1320,7 @@ final class RequestRepository
     }
 
     /** @return list<Role> */
-    private function rolesFor(int $userId): array
+    public function rolesFor(int $userId): array
     {
         $codes = $this->db->createCommand(
             'SELECT r.code FROM {{%roles}} r '
@@ -1344,7 +1343,7 @@ final class RequestRepository
         )->queryScalar() !== false;
     }
 
-    private function isActiveUser(int $userId): bool
+    public function isActiveUser(int $userId): bool
     {
         return $this->db->createCommand(
             'SELECT 1 FROM {{%users}} WHERE id = :id AND is_active = 1',
