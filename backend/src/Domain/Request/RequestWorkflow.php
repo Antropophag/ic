@@ -16,6 +16,10 @@ final class RequestWorkflow
     /** @param list<Role> $roles */
     public function transition(RequestStatus $from, RequestAction $action, array $roles): RequestStatus
     {
+        if (in_array($action, [RequestAction::Reject, RequestAction::Withdraw], true)) {
+            return $this->cancellationTransition($from, $action, $roles);
+        }
+
         $target = match ([$from, $action]) {
             [RequestStatus::Registered, RequestAction::Start] => $this->forRoles(
                 $roles,
@@ -81,6 +85,44 @@ final class RequestWorkflow
         }
 
         return $target;
+    }
+
+    /** @param list<Role> $roles */
+    private function cancellationTransition(RequestStatus $from, RequestAction $action, array $roles): RequestStatus
+    {
+        if (!$this->allowsCancellationTransition($from, $action)) {
+            throw new TransitionDenied('WF-003', $from, $action);
+        }
+
+        $target = match ([$from, $action]) {
+            [RequestStatus::Registered, RequestAction::Reject],
+            [RequestStatus::InProgress, RequestAction::Reject] => $this->forRoles(
+                $roles,
+                [Role::IcManager, Role::LaboratoryManager], RequestStatus::Rejected,
+                'WF-006', $from, $action,
+            ),
+            [RequestStatus::Registered, RequestAction::Withdraw],
+            [RequestStatus::InProgress, RequestAction::Withdraw],
+            [RequestStatus::Suspended, RequestAction::Withdraw],
+            [RequestStatus::OpinionPreparation, RequestAction::Withdraw] => RequestStatus::Withdrawn,
+            default => RequestStatus::Withdrawn,
+        };
+
+        return $target;
+    }
+
+    public function allowsCancellationTransition(RequestStatus $from, RequestAction $action): bool
+    {
+        return match ($action) {
+            RequestAction::Reject => in_array($from, [RequestStatus::Registered, RequestStatus::InProgress], true),
+            RequestAction::Withdraw => in_array($from, [
+                RequestStatus::Registered,
+                RequestStatus::InProgress,
+                RequestStatus::Suspended,
+                RequestStatus::OpinionPreparation,
+            ], true),
+            default => false,
+        };
     }
 
     /**

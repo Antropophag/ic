@@ -19,6 +19,8 @@ return [
                 new App\Infrastructure\Persistence\Request\RequestDepartmentPersistenceAdapter(Yii::$app->db),
             App\Application\Request\Port\RequestLifecycleGateway::class => static fn () =>
                 new App\Infrastructure\Persistence\Request\RequestLifecyclePersistenceAdapter(Yii::$app->db),
+            App\Application\Request\Port\RequestCancellationGateway::class => static fn () =>
+                new App\Infrastructure\Persistence\Request\RequestCancellationPersistenceAdapter(Yii::$app->db),
         ],
     ],
     'components' => [

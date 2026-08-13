@@ -7,6 +7,8 @@ namespace Tests\Integration\Request;
 use App\Application\Request\CreateRequestInput;
 use App\Application\Request\Command\ChangeRequestDepartmentCommand;
 use App\Application\Request\Command\RequestLifecycleCommand;
+use App\Application\Request\Command\CancelRequestCommand;
+use App\Application\Request\UseCase\CancelRequest;
 use App\Application\Request\UseCase\ChangeRequestDepartment;
 use App\Application\Request\UseCase\RequestLifecycle;
 use App\Domain\Request\AssignmentDenied;
@@ -22,6 +24,7 @@ use App\Infrastructure\Admin\AuditQuery;
 use App\Infrastructure\Clock;
 use App\Infrastructure\Persistence\Request\RequestDepartmentPersistenceAdapter;
 use App\Infrastructure\Persistence\Request\RequestLifecyclePersistenceAdapter;
+use App\Infrastructure\Persistence\Request\RequestCancellationPersistenceAdapter;
 use App\Infrastructure\Request\RequestRepository;
 use App\Infrastructure\Request\RequestQuery;
 use Tests\Integration\IntegrationTestCase;
@@ -38,6 +41,19 @@ final class RequestRepositoryTest extends IntegrationTestCase
     ): array {
         return (new RequestLifecycle(new RequestLifecyclePersistenceAdapter($this->db())))->execute(
             new RequestLifecycleCommand($requestId, $lockVersion, $actorId, $action, $reason),
+        )->toArray();
+    }
+
+    /** @return array<string, mixed> */
+    private function cancel(
+        int $requestId,
+        int $lockVersion,
+        int $actorId,
+        RequestAction $action,
+        string $reason,
+    ): array {
+        return (new CancelRequest(new RequestCancellationPersistenceAdapter($this->db())))->execute(
+            new CancelRequestCommand($requestId, $lockVersion, $actorId, $action, $reason),
         )->toArray();
     }
 
@@ -220,7 +236,7 @@ final class RequestRepositoryTest extends IntegrationTestCase
 
         $repository = new RequestRepository($this->db());
         $this->expectException(ConcurrentRequestModification::class);
-        $repository->rejectRequest((int) $request['id'], (int) $request['lock_version'] + 1, $manager, 'Не соответствует требованиям');
+        $this->cancel((int) $request['id'], (int) $request['lock_version'] + 1, $manager, RequestAction::Reject, 'Не соответствует требованиям');
     }
 
     public function testRejectByManagerTransitionsStatusAndWritesAudit(): void
@@ -231,7 +247,7 @@ final class RequestRepositoryTest extends IntegrationTestCase
         $request = $this->createRegisteredRequest($initiator, 'reject-audit');
 
         $repository = new RequestRepository($this->db());
-        $result = $repository->rejectRequest((int) $request['id'], (int) $request['lock_version'], $manager, 'Не соответствует требованиям');
+        $result = $this->cancel((int) $request['id'], (int) $request['lock_version'], $manager, RequestAction::Reject, 'Не соответствует требованиям');
 
         self::assertSame('rejected', $result['status']);
         self::assertSame((int) $request['lock_version'] + 1, $result['lockVersion']);
@@ -246,6 +262,10 @@ final class RequestRepositoryTest extends IntegrationTestCase
             [':id' => $request['id']],
         );
         self::assertSame('Не соответствует требованиям', $savedReason);
+        self::assertSame(1, (int) $this->scalar(
+            "SELECT COUNT(*) FROM {{%notification_outbox}} WHERE request_id = :id AND event_type = 'request.rejected'",
+            [':id' => $request['id']],
+        ));
     }
 
     public function testOnlyManagerCanReject(): void
@@ -256,7 +276,7 @@ final class RequestRepositoryTest extends IntegrationTestCase
 
         $repository = new RequestRepository($this->db());
         $this->expectException(RejectDenied::class);
-        $repository->rejectRequest((int) $request['id'], (int) $request['lock_version'], $employee, 'Не соответствует требованиям');
+        $this->cancel((int) $request['id'], (int) $request['lock_version'], $employee, RequestAction::Reject, 'Не соответствует требованиям');
     }
 
     public function testOnlyInitiatorCanWithdraw(): void
@@ -267,7 +287,7 @@ final class RequestRepositoryTest extends IntegrationTestCase
 
         $repository = new RequestRepository($this->db());
         $this->expectException(WithdrawDenied::class);
-        $repository->withdrawRequest((int) $request['id'], (int) $request['lock_version'], $other, 'Заявка больше не актуальна');
+        $this->cancel((int) $request['id'], (int) $request['lock_version'], $other, RequestAction::Withdraw, 'Заявка больше не актуальна');
     }
 
     public function testWithdrawIsBlockedAfterSecurityReview(): void
@@ -319,7 +339,7 @@ final class RequestRepositoryTest extends IntegrationTestCase
 
         $repository = new RequestRepository($this->db());
         $this->expectException(ConcurrentRequestModification::class);
-        $repository->withdrawRequest($requestId, (int) $request['lock_version'], $initiator, 'Заявка больше не актуальна');
+        $this->cancel($requestId, (int) $request['lock_version'], $initiator, RequestAction::Withdraw, 'Заявка больше не актуальна');
     }
 
     public function testSuspendAndResumeTransitionStatus(): void
@@ -418,17 +438,23 @@ final class RequestRepositoryTest extends IntegrationTestCase
     public function testWithdrawSavesRequiredReason(): void
     {
         $initiator = $this->createUser('dev.it.initiator-withdrawreason', 'Инициатор причины отзыва');
+        $manager = $this->createUser('dev.it.manager-withdrawreason', 'Получатель отзыва');
+        $this->grantRole($manager, 'ic_manager');
         $request = $this->createRegisteredRequest($initiator, 'withdraw-reason');
         $requestId = (int) $request['id'];
 
         $repository = new RequestRepository($this->db());
-        $repository->withdrawRequest($requestId, (int) $request['lock_version'], $initiator, 'Больше не актуально');
+        $this->cancel($requestId, (int) $request['lock_version'], $initiator, RequestAction::Withdraw, 'Больше не актуально');
 
         $savedReason = $this->scalar(
             "SELECT reason FROM {{%request_transitions}} WHERE request_id = :id AND action = 'withdraw'",
             [':id' => $requestId],
         );
         self::assertSame('Больше не актуально', $savedReason);
+        self::assertGreaterThanOrEqual(1, (int) $this->scalar(
+            "SELECT COUNT(*) FROM {{%notification_outbox}} WHERE request_id = :id AND event_type = 'request.withdrawn'",
+            [':id' => $requestId],
+        ));
     }
 
     public function testCanRejectAndCanWithdrawFlagsInRegistry(): void
