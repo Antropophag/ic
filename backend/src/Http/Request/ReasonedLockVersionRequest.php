@@ -2,11 +2,13 @@
 
 declare(strict_types=1);
 
-namespace App\Application\Request;
+namespace App\Http\Request;
 
+use App\Application\Request\Command\RequestLifecycleCommand;
+use App\Domain\Request\RequestAction;
 use yii\base\Model;
 
-final class ReasonedLockVersionInput extends Model
+final class ReasonedLockVersionRequest extends Model
 {
     public mixed $reason = null;
     public mixed $lockVersion = null;
@@ -20,5 +22,16 @@ final class ReasonedLockVersionInput extends Model
             ['lockVersion', 'required'],
             ['lockVersion', 'integer', 'min' => 1],
         ];
+    }
+
+    public function toLifecycleCommand(int $requestId, int $actorId, RequestAction $action): RequestLifecycleCommand
+    {
+        return new RequestLifecycleCommand(
+            $requestId,
+            (int) $this->lockVersion,
+            $actorId,
+            $action,
+            (string) $this->reason,
+        );
     }
 }
