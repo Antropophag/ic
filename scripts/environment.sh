@@ -249,17 +249,21 @@ show_status() {
 start_environment() {
   run_quiet 'Проверка конфигурации' compose config --quiet
   if [ "$environment" = dev ]; then
-    run_quiet 'Сборка и запуск сервисов' compose up -d --build --force-recreate
+    run_quiet 'Сборка образов' compose build backend scheduler frontend
+    run_quiet 'Остановка прикладных сервисов перед миграцией' compose stop frontend scheduler backend
+    run_quiet 'Запуск базы данных' compose up -d mariadb
     run_quiet 'Применение миграций' compose run --rm backend php yii migrate/up --interactive=0
     run_quiet 'Загрузка development-данных' compose run --rm backend php yii dev/seed
     run_quiet 'Настройка break-glass доступа' compose run --rm backend php yii admin/provision-break-glass
+    run_quiet 'Запуск прикладных сервисов' compose up -d --no-build --force-recreate backend frontend scheduler
   else
     run_quiet 'Сборка образов' compose build backend scheduler frontend
-    run_quiet 'Запуск базы данных и backend' compose up -d --no-build --force-recreate mariadb backend
+    run_quiet 'Остановка прикладных сервисов перед миграцией' compose stop frontend scheduler backend
+    run_quiet 'Запуск базы данных' compose up -d mariadb
     run_quiet 'Применение миграций' compose run --rm backend php yii migrate/up --interactive=0
     run_quiet 'Настройка break-glass доступа' compose run --rm backend php yii admin/provision-break-glass
     run_quiet 'Настройка администраторов' compose run --rm backend php yii admin/bootstrap
-    run_quiet 'Запуск frontend и scheduler' compose up -d --no-build --force-recreate frontend scheduler
+    run_quiet 'Запуск прикладных сервисов' compose up -d --no-build --force-recreate backend frontend scheduler
   fi
   printf '\n  Проверка готовности…\n'
   wait_for_service mariadb healthy

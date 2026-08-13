@@ -176,7 +176,12 @@ printf '%s' "$down_output" | grep -q 'Окружение остановлено'
 restart_output=$(NO_COLOR=1 run_environment restart)
 [ "$(printf '%s' "$restart_output" | grep -c 'IC · Разработка')" -eq 1 ]
 grep -q 'down --remove-orphans' "$test_dir/record"
-grep -q 'up -d --build --force-recreate' "$test_dir/record"
+grep -q 'stop frontend scheduler backend' "$test_dir/record"
+grep -q 'run --rm backend php yii migrate/up --interactive=0' "$test_dir/record"
+grep -q 'up -d --no-build --force-recreate backend frontend scheduler' "$test_dir/record"
+migration_line=$(grep -n 'run --rm backend php yii migrate/up --interactive=0' "$test_dir/record" | tail -1 | cut -d: -f1)
+application_start_line=$(grep -n 'up -d --no-build --force-recreate backend frontend scheduler' "$test_dir/record" | tail -1 | cut -d: -f1)
+[ "$migration_line" -lt "$application_start_line" ]
 
 temporary_output_dir=$test_dir/output
 mkdir "$temporary_output_dir"
