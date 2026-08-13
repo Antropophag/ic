@@ -2,12 +2,13 @@
 
 declare(strict_types=1);
 
-namespace App\Application\Request;
+namespace App\Http\Request;
 
+use App\Application\Request\Command\SetRequestColorCommand;
 use App\Domain\Request\RequestColor;
 use yii\base\Model;
 
-final class SetColorInput extends Model
+final class SetColorRequest extends Model
 {
     public mixed $color = null;
     public mixed $lockVersion = null;
@@ -21,5 +22,15 @@ final class SetColorInput extends Model
             ['lockVersion', 'required'],
             ['lockVersion', 'integer', 'min' => 1],
         ];
+    }
+
+    public function toCommand(int $requestId, int $actorId): SetRequestColorCommand
+    {
+        return new SetRequestColorCommand(
+            $requestId,
+            RequestColor::from((string) $this->color),
+            (int) $this->lockVersion,
+            $actorId,
+        );
     }
 }

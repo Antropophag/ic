@@ -18,7 +18,7 @@ use App\Application\Request\LockVersionInput;
 use App\Application\Request\ReasonedLockVersionInput;
 use App\Application\Request\PublishOpinionInput;
 use App\Application\Request\SecurityDecisionInput;
-use App\Application\Request\SetColorInput;
+use App\Application\Request\UseCase\SetRequestColor;
 use App\Domain\Request\AssignmentDenied;
 use App\Domain\Request\AssignmentTargetNotFound;
 use App\Domain\Request\AttachmentDenied;
@@ -47,6 +47,7 @@ use App\Infrastructure\Document\OpinionPdfRenderer;
 use App\Infrastructure\Document\TestActDocumentGenerator;
 use App\Infrastructure\Request\RequestQuery;
 use App\Infrastructure\Request\RequestRepository;
+use App\Http\Request\SetColorRequest;
 use Yii;
 use yii\web\Response;
 use yii\web\ConflictHttpException;
@@ -426,15 +427,14 @@ final class RequestController extends ApiController
     /** @return array<string, mixed> */
     public function actionSetColor(int $id): array
     {
-        $input = new SetColorInput();
+        $input = new SetColorRequest();
         if (($errors = $this->bodyValidationErrors($input)) !== null) {
             return $errors;
         }
-
         $actorId = $this->currentUserId();
-
         try {
-            return $this->repository()->setColor($id, (string) $input->color, (int) $input->lockVersion, $actorId);
+            $result = (new SetRequestColor($this->repository()))->execute($input->toCommand($id, $actorId));
+            return $result->toArray();
         } catch (RequestNotFound $error) {
             throw new NotFoundHttpException($error->getMessage());
         } catch (ColorMarkDenied $error) {

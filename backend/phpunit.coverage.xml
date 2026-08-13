@@ -11,6 +11,9 @@
             <file>tests/Integration/Import/BitrixArchiveMetadataMigrationTest.php</file>
             <file>tests/Integration/Request/RequestRepositoryTest.php</file>
             <file>tests/Integration/Request/RequestCreationAuditAtomicityTest.php</file>
+            <file>tests/Integration/Request/SetRequestColorTest.php</file>
+            <file>tests/Integration/Request/SetRequestColorAuditAtomicityTest.php</file>
+            <file>tests/Integration/Http/SetRequestColorHttpTest.php</file>
             <file>tests/Integration/Document/DocumentRepositoryTest.php</file>
             <file>tests/Integration/Notification/NotificationOutboxCredentialCleanupTest.php</file>
             <file>tests/Integration/Notification/NotificationOutboxMigrationResumabilityTest.php</file>
