@@ -235,11 +235,11 @@ final class DocumentRepositoryTest extends IntegrationTestCase
             ['label' => 'отчёт', 'documentVersionId' => $result['versionId']],
             $remediatedPayload['documentLinks'],
         );
-        self::assertSame(0, (int) $this->scalar(
+        self::assertSame(1, (int) $this->scalar(
             'SELECT COUNT(*) FROM {{%document_download_links}} WHERE token_hash = :token_hash',
             [':token_hash' => hash('sha256', $legacyToken)],
         ));
-        self::assertFalse($repository->findVersionByToken($legacyToken));
+        self::assertNotFalse($repository->findVersionByToken($legacyToken));
 
         $auditRuleId = $this->scalar(
             "SELECT rule_id FROM {{%audit_events}} WHERE event_type = 'request.report_uploaded' "

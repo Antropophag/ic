@@ -11,11 +11,15 @@ final class NotificationOutboxCredentialCleanup
     private const LINK_PATTERN = '~(?:Ссылка на (отчёт|заключение):\s*)?https?://[^\s]+/api/v1/document-links/([a-f0-9]{64})/download~u';
     private const SCRUB_PATTERN = '~\n?(?:Ссылка на (?:отчёт|заключение):\s*)?https?://[^\s]+/api/v1/document-links/[a-f0-9]{64}/download~u';
 
-    /** @param null|callable(int): void $afterOutboxUpdate Test-only fault oracle. */
+    /**
+     * @param null|callable(int): void $afterOutboxUpdate Test-only rollback oracle.
+     * @param null|callable(int): void $afterRowCommit Test-only restart oracle.
+     */
     public function __construct(
         private readonly Connection $db,
         private readonly int $batchSize = 500,
         private readonly mixed $afterOutboxUpdate = null,
+        private readonly mixed $afterRowCommit = null,
     ) {
         if ($batchSize <= 0) {
             throw new \InvalidArgumentException('Notification cleanup batch size must be positive.');
@@ -38,6 +42,9 @@ final class NotificationOutboxCredentialCleanup
             foreach ($rows as $id) {
                 $lastId = (int) $id;
                 $this->migrateRow($lastId);
+                if (is_callable($this->afterRowCommit)) {
+                    ($this->afterRowCommit)($lastId);
+                }
             }
         }
     }
@@ -57,35 +64,40 @@ final class NotificationOutboxCredentialCleanup
 
             $existingPayload = $this->decodePayload($row['payload_json']);
             $documentLinks = $existingPayload === null ? [] : $existingPayload['documentLinks'];
-            $tokenHashes = [];
+            $shouldBuildPayload = $existingPayload === null || $documentLinks === [];
+            $resolvedLinks = [];
             foreach ($matches as $match) {
                 $tokenHash = hash('sha256', $match[2]);
-                $tokenHashes[] = $tokenHash;
                 $versionId = $this->db->createCommand(
-                    'SELECT document_version_id FROM {{%document_download_links}} WHERE token_hash = :token_hash',
+                    'SELECT document_version_id FROM {{%document_download_links}} '
+                    . 'WHERE token_hash = :token_hash FOR UPDATE',
                     [':token_hash' => $tokenHash],
                 )->queryScalar();
-                if ($versionId !== false && ($existingPayload === null || $documentLinks === [])) {
-                    $documentLinks[] = [
-                        'label' => $match[1] !== '' ? $match[1] : 'документ',
-                        'documentVersionId' => (int) $versionId,
-                    ];
+                if ($versionId === false) {
+                    throw new InvalidNotificationPayload('Legacy notification credential cannot be resolved.');
+                }
+                $resolvedLinks[] = [
+                    'label' => $match[1] !== '' ? $match[1] : 'документ',
+                    'documentVersionId' => (int) $versionId,
+                ];
+            }
+            if ($shouldBuildPayload) {
+                $documentLinks = $resolvedLinks;
+            } else {
+                foreach ($resolvedLinks as $resolvedLink) {
+                    if (!in_array($resolvedLink, $documentLinks, true)) {
+                        throw new InvalidNotificationPayload('Legacy notification conflicts with its semantic payload.');
+                    }
                 }
             }
             $scrubbedBody = trim((string) preg_replace(self::SCRUB_PATTERN, '', (string) $row['body']));
             $values = ['body' => $scrubbedBody];
-            if ($existingPayload === null || $existingPayload['documentLinks'] === []) {
+            if ($shouldBuildPayload) {
                 $values['payload_json'] = ['documentLinks' => $documentLinks];
             }
             $this->db->createCommand()->update('{{%notification_outbox}}', $values, ['id' => $id])->execute();
             if (is_callable($this->afterOutboxUpdate)) {
                 ($this->afterOutboxUpdate)($id);
-            }
-            foreach ($tokenHashes as $tokenHash) {
-                $this->db->createCommand()->delete(
-                    '{{%document_download_links}}',
-                    ['token_hash' => $tokenHash],
-                )->execute();
             }
             $transaction->commit();
         } catch (\Throwable $error) {

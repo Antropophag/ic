@@ -9,7 +9,7 @@ use App\Infrastructure\Notification\NotificationOutboxCredentialCleanup;
 
 /**
  * F074 / ACL-005: move document references to semantic outbox payloads and
- * revoke credentials that were previously persisted in notification bodies.
+ * preserve their hash-only download records for potentially delivered links.
  */
 final class m260813_000001_secure_notification_download_links extends Migration
 {
@@ -36,7 +36,7 @@ final class m260813_000001_secure_notification_download_links extends Migration
     public function safeDown(): void
     {
         throw new NotSupportedException(
-            static::class . ' is irreversible: revoked plaintext bearer credentials must not be restored.',
+            static::class . ' is irreversible: scrubbed plaintext bearer credentials must not be restored.',
         );
     }
 
