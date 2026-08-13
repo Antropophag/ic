@@ -217,7 +217,6 @@ final class DocumentRepository
                 // активные эксперты (никто конкретно заявку не назначает,
                 // первый взявший её в работу и формирует заключение, см.
                 // WF-010).
-                $reportLink = "\nСсылка на отчёт: " . DocumentDownloadUrl::build($this->issueDocumentLink($versionId));
                 $outbox = new NotificationOutbox($this->db);
                 foreach ($this->activeUsersWithRoles(['expert']) as $expert) {
                     $outbox->enqueue(
@@ -227,8 +226,8 @@ final class DocumentRepository
                         $expert['name'],
                         'Поступил отчёт для подготовки заключения',
                         'Загружен отчёт испытаний, для которого нужно подготовить экспертное заключение. '
-                        . 'Откройте заявку в портале и возьмите её в работу.'
-                        . $reportLink,
+                        . 'Откройте заявку в портале и возьмите её в работу.',
+                        [['label' => 'отчёт', 'documentVersionId' => $versionId]],
                     );
                 }
             }
@@ -472,10 +471,10 @@ final class DocumentRepository
             // ТЗ 4.9: сотрудники СБ уведомляются о поступлении отчёта и
             // заключения на контроль, письмо содержит активные ссылки на
             // скачивание обоих документов без входа в портал.
-            $links = "\nСсылка на заключение: " . DocumentDownloadUrl::build($this->issueDocumentLink($versionId));
+            $documentLinks = [['label' => 'заключение', 'documentVersionId' => $versionId]];
             $reportVersionId = $this->latestDocumentVersionId($requestId, 'report');
             if ($reportVersionId !== null) {
-                $links .= "\nСсылка на отчёт: " . DocumentDownloadUrl::build($this->issueDocumentLink($reportVersionId));
+                $documentLinks[] = ['label' => 'отчёт', 'documentVersionId' => $reportVersionId];
             }
             $outbox = new NotificationOutbox($this->db);
             foreach ($this->activeUsersWithRoles(['security_officer']) as $officer) {
@@ -486,8 +485,8 @@ final class DocumentRepository
                     $officer['name'],
                     'Заключение поступило на контроль СБ',
                     'Экспертное заключение опубликовано и ожидает проверки службы безопасности. '
-                    . 'Откройте заявку в портале.'
-                    . $links,
+                    . 'Откройте заявку в портале.',
+                    $documentLinks,
                 );
             }
             $transaction->commit();
@@ -773,25 +772,11 @@ final class DocumentRepository
             'SELECT v.id FROM {{%request_document_versions}} v '
             . 'JOIN {{%request_documents}} d ON d.id = v.document_id '
             . 'WHERE d.request_id = :request_id AND d.document_type = :document_type '
+            . 'AND d.deleted_at IS NULL AND v.deleted_at IS NULL '
             . 'ORDER BY v.version DESC LIMIT 1',
             [':request_id' => $requestId, ':document_type' => $documentType],
         )->queryScalar();
 
         return $id === false ? null : (int) $id;
-    }
-
-    // ACL-003..006: письмо-уведомление содержит активную ссылку на скачивание
-    // документа без входа в портал (ТЗ 4.9), в т.ч. пока обычный доступ через
-    // портал ещё не открыт.
-    private function issueDocumentLink(int $documentVersionId): string
-    {
-        $token = bin2hex(random_bytes(32));
-        $this->db->createCommand()->insert('{{%document_download_links}}', [
-            'document_version_id' => $documentVersionId,
-            'token_hash' => hash('sha256', $token),
-            'created_at' => Clock::now(),
-        ])->execute();
-
-        return $token;
     }
 }

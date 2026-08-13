@@ -102,7 +102,8 @@ grep -q '^env-status: doctor$' Makefile
 grep -Fq "sh scripts/environment.sh prod up" Makefile
 grep -Fq "sh scripts/environment.sh dev up" Makefile
 grep -Fq "compose build backend scheduler frontend" scripts/environment.sh
-grep -Fq "compose up -d --no-build --force-recreate frontend scheduler" scripts/environment.sh
+grep -Fq "compose stop frontend scheduler backend" scripts/environment.sh
+grep -Fq "compose up -d --no-build --force-recreate backend frontend scheduler" scripts/environment.sh
 grep -Fq "compose logs --follow" scripts/environment.sh
 grep -Fq "SERVICE_READY_TIMEOUT" scripts/environment.sh
 grep -Fq "compose config --quiet" scripts/environment.sh

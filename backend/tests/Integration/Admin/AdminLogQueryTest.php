@@ -159,7 +159,8 @@ final class AdminLogQueryTest extends IntegrationTestCase
     {
         $this->db()->createCommand()->insert('{{%notification_outbox}}', ['request_id' => $requestId,
             'event_type' => 'future.event', 'recipient_email' => 'safe@example.invalid', 'recipient_name' => 'Safe User',
-            'subject' => 'Safe subject', 'body' => '<b>SECRET BODY</b>', 'status' => $status, 'attempts' => $attempts,
+            'subject' => 'Safe subject', 'body' => '<b>SECRET BODY</b>', 'payload_json' => ['documentLinks' => []],
+            'status' => $status, 'attempts' => $attempts,
             'next_attempt_at' => $at, 'last_error' => $error, 'created_at' => $at])->execute();
     }
 }

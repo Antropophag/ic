@@ -9,9 +9,18 @@ use PHPUnit\Framework\TestCase;
 
 final class RequestUrlTest extends TestCase
 {
+    private string|false $original;
+
+    protected function setUp(): void
+    {
+        $this->original = getenv('APP_PUBLIC_URL');
+    }
+
     protected function tearDown(): void
     {
-        putenv('APP_PUBLIC_URL');
+        $this->original === false
+            ? putenv('APP_PUBLIC_URL')
+            : putenv('APP_PUBLIC_URL=' . $this->original);
     }
 
     public function testBuildsRequestDeepLink(): void
