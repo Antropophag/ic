@@ -5,10 +5,12 @@ declare(strict_types=1);
 namespace Tests\Integration\Request;
 
 use App\Application\Request\CreateRequestInput;
+use App\Application\Request\Command\AssignExecutorCommand;
 use App\Application\Request\Command\ChangeRequestDepartmentCommand;
 use App\Application\Request\Command\RequestLifecycleCommand;
 use App\Application\Request\Command\CancelRequestCommand;
 use App\Application\Request\UseCase\CancelRequest;
+use App\Application\Request\UseCase\AssignExecutor;
 use App\Application\Request\UseCase\ChangeRequestDepartment;
 use App\Application\Request\UseCase\RequestLifecycle;
 use App\Domain\Request\AssignmentDenied;
@@ -25,12 +27,21 @@ use App\Infrastructure\Clock;
 use App\Infrastructure\Persistence\Request\RequestDepartmentPersistenceAdapter;
 use App\Infrastructure\Persistence\Request\RequestLifecyclePersistenceAdapter;
 use App\Infrastructure\Persistence\Request\RequestCancellationPersistenceAdapter;
+use App\Infrastructure\Persistence\Request\ExecutorAssignmentPersistenceAdapter;
 use App\Infrastructure\Request\RequestRepository;
 use App\Infrastructure\Request\RequestQuery;
 use Tests\Integration\IntegrationTestCase;
 
 final class RequestRepositoryTest extends IntegrationTestCase
 {
+    /** @return array<string, mixed> */
+    private function assignExecutor(int $requestId, int $executorId, int $lockVersion, int $actorId): array
+    {
+        return (new AssignExecutor(new ExecutorAssignmentPersistenceAdapter($this->db())))->execute(
+            new AssignExecutorCommand($requestId, $executorId, $lockVersion, $actorId),
+        )->toArray();
+    }
+
     /** @return array<string, mixed> */
     private function lifecycle(
         int $requestId,
@@ -353,7 +364,7 @@ final class RequestRepositoryTest extends IntegrationTestCase
         $requestId = (int) $request['id'];
 
         $repository = new RequestRepository($this->db());
-        $repository->assignExecutor($requestId, $executor, (int) $request['lock_version'], $manager);
+        $this->assignExecutor($requestId, $executor, (int) $request['lock_version'], $manager);
         $started = $this->lifecycle($requestId, (int) $request['lock_version'] + 1, $manager, RequestAction::Start);
         self::assertSame('in_progress', $started['status']);
 
@@ -388,7 +399,7 @@ final class RequestRepositoryTest extends IntegrationTestCase
         $requestId = (int) $request['id'];
 
         $repository = new RequestRepository($this->db());
-        $repository->assignExecutor($requestId, $executor, (int) $request['lock_version'], $manager);
+        $this->assignExecutor($requestId, $executor, (int) $request['lock_version'], $manager);
         $started = $this->lifecycle($requestId, (int) $request['lock_version'] + 1, $manager, RequestAction::Start);
 
         $this->expectException(SuspendResumeDenied::class);
@@ -976,10 +987,10 @@ final class RequestRepositoryTest extends IntegrationTestCase
         $requestId = (int) $request['id'];
 
         $repository = new RequestRepository($this->db());
-        $assigned = $repository->assignExecutor($requestId, $firstExecutor, (int) $request['lock_version'], $manager);
+        $assigned = $this->assignExecutor($requestId, $firstExecutor, (int) $request['lock_version'], $manager);
         $started = $this->lifecycle($requestId, (int) $assigned['lockVersion'], $manager, RequestAction::Start);
 
-        $reassigned = $repository->assignExecutor(
+        $reassigned = $this->assignExecutor(
             $requestId,
             $secondExecutor,
             (int) $started['lockVersion'],
@@ -1021,10 +1032,10 @@ final class RequestRepositoryTest extends IntegrationTestCase
         $requestId = (int) $request['id'];
 
         $repository = new RequestRepository($this->db());
-        $assigned = $repository->assignExecutor($requestId, $executor, (int) $request['lock_version'], $manager);
+        $assigned = $this->assignExecutor($requestId, $executor, (int) $request['lock_version'], $manager);
 
         try {
-            $repository->assignExecutor($requestId, $executor, (int) $assigned['lockVersion'], $manager);
+            $this->assignExecutor($requestId, $executor, (int) $assigned['lockVersion'], $manager);
             self::fail('Повторное назначение того же исполнителя должно быть отклонено');
         } catch (AssignmentDenied $error) {
             self::assertSame('WF-013', $error->ruleId);
@@ -1062,9 +1073,9 @@ final class RequestRepositoryTest extends IntegrationTestCase
         $requestId = (int) $request['id'];
 
         $repository = new RequestRepository($this->db());
-        $assigned = $repository->assignExecutor($requestId, $firstExecutor, (int) $request['lock_version'], $manager);
+        $assigned = $this->assignExecutor($requestId, $firstExecutor, (int) $request['lock_version'], $manager);
         $started = $this->lifecycle($requestId, (int) $assigned['lockVersion'], $manager, RequestAction::Start);
-        $repository->assignExecutor($requestId, $secondExecutor, (int) $started['lockVersion'], $manager);
+        $this->assignExecutor($requestId, $secondExecutor, (int) $started['lockVersion'], $manager);
 
         $body = $this->scalar(
             "SELECT body FROM {{%notification_outbox}} WHERE request_id = :id "
@@ -1094,7 +1105,7 @@ final class RequestRepositoryTest extends IntegrationTestCase
 
         $repository = new RequestRepository($this->db());
         $this->expectException(ConcurrentRequestModification::class);
-        $repository->assignExecutor($requestId, $executor, (int) $request['lock_version'], $manager);
+        $this->assignExecutor($requestId, $executor, (int) $request['lock_version'], $manager);
     }
 
     public function testHistoryIncludesTheTargetNameForAssignmentEvents(): void
@@ -1115,7 +1126,7 @@ final class RequestRepositoryTest extends IntegrationTestCase
         $requestId = (int) $request['id'];
 
         $repository = new RequestRepository($this->db());
-        $assigned = $repository->assignExecutor($requestId, $executor, (int) $request['lock_version'], $manager);
+        $assigned = $this->assignExecutor($requestId, $executor, (int) $request['lock_version'], $manager);
 
         $this->db()->createCommand()->update(
             '{{%requests}}',
@@ -1152,7 +1163,7 @@ final class RequestRepositoryTest extends IntegrationTestCase
         $requestId = (int) $request['id'];
 
         $repository = new RequestRepository($this->db());
-        $repository->assignExecutor($requestId, $executor, (int) $request['lock_version'], $manager);
+        $this->assignExecutor($requestId, $executor, (int) $request['lock_version'], $manager);
 
         $this->db()->createCommand(
             "UPDATE {{%audit_events}} SET payload_json = JSON_QUOTE(payload_json) "
