@@ -8,17 +8,17 @@ use App\Application\Document\TestActDocumentService;
 use App\Application\Document\TestActConfigurationError;
 use App\Application\Document\TestActInput;
 use App\Application\Request\CreateRequestInput;
+use App\Application\Request\Command\RequestLifecycleCommand;
 use App\Application\Request\UseCase\ChangeRequestDepartment;
 use App\Application\Request\ListRequestsInput;
 use App\Application\Request\AddCommentInput;
 use App\Application\Request\AssignExecutorInput;
 use App\Application\Request\AssignExpertInput;
 use App\Application\Request\CancelRequestInput;
-use App\Application\Request\LockVersionInput;
-use App\Application\Request\ReasonedLockVersionInput;
 use App\Application\Request\PublishOpinionInput;
 use App\Application\Request\SecurityDecisionInput;
 use App\Application\Request\UseCase\SetRequestColor;
+use App\Application\Request\UseCase\RequestLifecycle;
 use App\Domain\Request\AssignmentDenied;
 use App\Domain\Request\AssignmentTargetNotFound;
 use App\Domain\Request\AttachmentDenied;
@@ -31,6 +31,7 @@ use App\Domain\Request\RequestCreationDenied;
 use App\Domain\Request\RequestDepartmentChangeDenied;
 use App\Domain\Request\RequestDepartmentMissing;
 use App\Domain\Request\RequestNotFound;
+use App\Domain\Request\RequestAction;
 use App\Domain\Request\ReportDenied;
 use App\Domain\Request\ReportDeletionDenied;
 use App\Domain\Request\OpinionDenied;
@@ -49,6 +50,8 @@ use App\Infrastructure\Request\RequestQuery;
 use App\Infrastructure\Request\RequestRepository;
 use App\Http\Request\SetColorRequest;
 use App\Http\Request\ChangeDepartmentRequest;
+use App\Http\Request\LockVersionRequest;
+use App\Http\Request\ReasonedLockVersionRequest;
 use Yii;
 use yii\web\Response;
 use yii\web\ConflictHttpException;
@@ -271,7 +274,7 @@ final class RequestController extends ApiController
     /** @return array<string, mixed> */
     public function actionDeleteReport(int $id): array
     {
-        $input = new ReasonedLockVersionInput();
+        $input = new ReasonedLockVersionRequest();
         if (($errors = $this->bodyValidationErrors($input)) !== null) {
             return $errors;
         }
@@ -477,7 +480,7 @@ final class RequestController extends ApiController
     /** @return array<string, mixed> */
     public function actionClaimExpert(int $id): array
     {
-        $input = new LockVersionInput();
+        $input = new LockVersionRequest();
         if (($errors = $this->bodyValidationErrors($input)) !== null) {
             return $errors;
         }
@@ -578,21 +581,22 @@ final class RequestController extends ApiController
     /** @return array<string, mixed> */
     public function actionStart(int $id): array
     {
-        $input = new LockVersionInput();
+        $input = new LockVersionRequest();
         if (($errors = $this->bodyValidationErrors($input)) !== null) {
             return $errors;
         }
 
         $actorId = $this->currentUserId();
+        $command = $input->toLifecycleCommand($id, $actorId, RequestAction::Start);
         try {
-            return $this->repository()->startRequest($id, (int) $input->lockVersion, $actorId);
+            return Yii::$container->get(RequestLifecycle::class)->execute($command)->toArray();
         } catch (RequestNotFound $error) {
             throw new NotFoundHttpException($error->getMessage());
         } catch (StartDenied $error) {
-            $this->recordRejectedStartSafely($id, $actorId, $error->ruleId);
+            $this->recordRejectedStartSafely($command, $error->ruleId);
             throw new ForbiddenHttpException($error->getMessage());
         } catch (TransitionDenied | ConcurrentRequestModification $error) {
-            $this->recordRejectedStartSafely($id, $actorId, $error->ruleId);
+            $this->recordRejectedStartSafely($command, $error->ruleId);
             throw new ConflictHttpException($error->getMessage());
         }
     }
@@ -600,45 +604,41 @@ final class RequestController extends ApiController
     /** @return array<string, mixed> */
     public function actionSuspend(int $id): array
     {
-        $input = new ReasonedLockVersionInput();
+        $input = new ReasonedLockVersionRequest();
         if (($errors = $this->bodyValidationErrors($input)) !== null) {
             return $errors;
         }
 
-        $actorId = $this->currentUserId();
-        try {
-            return $this->repository()->suspendRequest($id, (int) $input->lockVersion, $actorId, (string) $input->reason);
-        } catch (RequestNotFound $error) {
-            throw new NotFoundHttpException($error->getMessage());
-        } catch (SuspendResumeDenied $error) {
-            $this->recordRejectedSuspendResumeSafely($id, $actorId, $error->ruleId);
-            throw new ForbiddenHttpException($error->getMessage());
-        } catch (TransitionDenied $error) {
-            $this->recordRejectedSuspendResumeSafely($id, $actorId, $error->ruleId);
-            throw new ConflictHttpException($error->getMessage());
-        } catch (ConcurrentRequestModification $error) {
-            throw new ConflictHttpException($error->getMessage());
-        }
+        return $this->executeSuspendResume(
+            $input->toLifecycleCommand($id, $this->currentUserId(), RequestAction::Suspend),
+        );
     }
 
     /** @return array<string, mixed> */
     public function actionResume(int $id): array
     {
-        $input = new LockVersionInput();
+        $input = new LockVersionRequest();
         if (($errors = $this->bodyValidationErrors($input)) !== null) {
             return $errors;
         }
 
-        $actorId = $this->currentUserId();
+        return $this->executeSuspendResume(
+            $input->toLifecycleCommand($id, $this->currentUserId(), RequestAction::Resume),
+        );
+    }
+
+    /** @return array<string, mixed> */
+    private function executeSuspendResume(RequestLifecycleCommand $command): array
+    {
         try {
-            return $this->repository()->resumeRequest($id, (int) $input->lockVersion, $actorId);
+            return Yii::$container->get(RequestLifecycle::class)->execute($command)->toArray();
         } catch (RequestNotFound $error) {
             throw new NotFoundHttpException($error->getMessage());
         } catch (SuspendResumeDenied $error) {
-            $this->recordRejectedSuspendResumeSafely($id, $actorId, $error->ruleId);
+            $this->recordRejectedSuspendResumeSafely($command, $error->ruleId);
             throw new ForbiddenHttpException($error->getMessage());
         } catch (TransitionDenied $error) {
-            $this->recordRejectedSuspendResumeSafely($id, $actorId, $error->ruleId);
+            $this->recordRejectedSuspendResumeSafely($command, $error->ruleId);
             throw new ConflictHttpException($error->getMessage());
         } catch (ConcurrentRequestModification $error) {
             throw new ConflictHttpException($error->getMessage());
@@ -709,22 +709,22 @@ final class RequestController extends ApiController
         );
     }
 
-    private function recordRejectedStartSafely(int $requestId, int $actorId, string $ruleId): void
+    private function recordRejectedStartSafely(RequestLifecycleCommand $command, string $ruleId): void
     {
         $this->recordRejectedSafely(
-            fn () => $this->repository()->recordRejectedStart($requestId, $actorId, $ruleId),
+            fn () => Yii::$container->get(RequestLifecycle::class)->recordRejected($command, $ruleId),
             'Не удалось записать аудит отклонённого запуска заявки.',
-            ['requestId' => $requestId, 'actorId' => $actorId, 'ruleId' => $ruleId],
+            ['requestId' => $command->requestId, 'actorId' => $command->actorId, 'ruleId' => $ruleId],
             __METHOD__,
         );
     }
 
-    private function recordRejectedSuspendResumeSafely(int $requestId, int $actorId, string $ruleId): void
+    private function recordRejectedSuspendResumeSafely(RequestLifecycleCommand $command, string $ruleId): void
     {
         $this->recordRejectedSafely(
-            fn () => $this->repository()->recordRejectedSuspendResume($requestId, $actorId, $ruleId),
+            fn () => Yii::$container->get(RequestLifecycle::class)->recordRejected($command, $ruleId),
             'Не удалось записать аудит отклонённой приостановки/возобновления заявки.',
-            ['requestId' => $requestId, 'actorId' => $actorId, 'ruleId' => $ruleId],
+            ['requestId' => $command->requestId, 'actorId' => $command->actorId, 'ruleId' => $ruleId],
             __METHOD__,
         );
     }

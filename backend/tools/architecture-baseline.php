@@ -22,9 +22,7 @@ return [
         'backend/src/Application/Request/CancelRequestInput.php' => ['yii\\base\\Model'],
         'backend/src/Application/Request/CreateRequestInput.php' => ['yii\\base\\Model'],
         'backend/src/Application/Request/ListRequestsInput.php' => ['yii\\base\\Model'],
-        'backend/src/Application/Request/LockVersionInput.php' => ['yii\\base\\Model'],
         'backend/src/Application/Request/PublishOpinionInput.php' => ['yii\\base\\Model'],
-        'backend/src/Application/Request/ReasonedLockVersionInput.php' => ['yii\\base\\Model'],
         'backend/src/Application/Request/SecurityDecisionInput.php' => ['yii\\base\\Model'],
         'backend/src/Http/Controller/AdminController.php' => [
             'App\\Infrastructure\\Admin\\AuditQuery',
@@ -82,7 +80,7 @@ return [
         'backend/src/Http/Controller/RequestController.php' => 899,
         'backend/src/Infrastructure/Document/DocumentRepository.php' => 782,
         'backend/src/Infrastructure/Request/RequestQuery.php' => 646,
-        'backend/src/Infrastructure/Request/RequestRepository.php' => 1353,
+        'backend/src/Infrastructure/Request/RequestRepository.php' => 1104,
         'frontend/src/components/RequestDetails.vue' => 1272,
         'frontend/src/components/RequestRegistry.vue' => 847,
     ],
