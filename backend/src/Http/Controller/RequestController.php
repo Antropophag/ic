@@ -12,14 +12,15 @@ use App\Application\Request\Command\RequestLifecycleCommand;
 use App\Application\Request\UseCase\ChangeRequestDepartment;
 use App\Application\Request\ListRequestsInput;
 use App\Application\Request\AddCommentInput;
-use App\Application\Request\AssignExecutorInput;
 use App\Application\Request\AssignExpertInput;
+use App\Application\Request\Command\AssignExecutorCommand;
 use App\Application\Request\Command\CancelRequestCommand;
 use App\Application\Request\PublishOpinionInput;
 use App\Application\Request\SecurityDecisionInput;
 use App\Application\Request\UseCase\SetRequestColor;
 use App\Application\Request\UseCase\RequestLifecycle;
 use App\Application\Request\UseCase\CancelRequest as CancelRequestUseCase;
+use App\Application\Request\UseCase\AssignExecutor;
 use App\Domain\Request\AssignmentDenied;
 use App\Domain\Request\AssignmentTargetNotFound;
 use App\Domain\Request\AttachmentDenied;
@@ -54,6 +55,7 @@ use App\Http\Request\ChangeDepartmentRequest;
 use App\Http\Request\LockVersionRequest;
 use App\Http\Request\ReasonedLockVersionRequest;
 use App\Http\Request\CancelRequest;
+use App\Http\Request\AssignExecutorRequest;
 use Yii;
 use yii\web\Response;
 use yii\web\ConflictHttpException;
@@ -453,28 +455,23 @@ final class RequestController extends ApiController
     /** @return array<string, mixed> */
     public function actionAssignExecutor(int $id): array
     {
-        $input = new AssignExecutorInput();
+        $input = new AssignExecutorRequest();
         if (($errors = $this->bodyValidationErrors($input)) !== null) {
             return $errors;
         }
 
-        $executorId = (int) $input->executorId;
         $actorId = $this->currentUserId();
+        $command = $input->toCommand($id, $actorId);
 
         try {
-            return $this->repository()->assignExecutor(
-                $id,
-                $executorId,
-                (int) $input->lockVersion,
-                $actorId,
-            );
+            return Yii::$container->get(AssignExecutor::class)->execute($command)->toArray();
         } catch (AssignmentTargetNotFound $error) {
             throw new NotFoundHttpException($error->getMessage());
         } catch (AssignmentDenied $error) {
-            $this->recordRejectedAssignmentSafely($id, $executorId, $actorId, $error->ruleId);
+            $this->recordRejectedAssignmentSafely($command, $error->ruleId);
             throw new ForbiddenHttpException($error->getMessage());
         } catch (ConcurrentRequestModification $error) {
-            $this->recordRejectedAssignmentSafely($id, $executorId, $actorId, $error->ruleId);
+            $this->recordRejectedAssignmentSafely($command, $error->ruleId);
             throw new ConflictHttpException($error->getMessage());
         }
     }
@@ -741,19 +738,15 @@ final class RequestController extends ApiController
         );
     }
 
-    private function recordRejectedAssignmentSafely(
-        int $requestId,
-        int $executorId,
-        int $actorId,
-        string $ruleId,
-    ): void {
+    private function recordRejectedAssignmentSafely(AssignExecutorCommand $command, string $ruleId): void
+    {
         $this->recordRejectedSafely(
-            fn () => $this->repository()->recordRejectedAssignment($requestId, $executorId, $actorId, $ruleId),
+            fn () => Yii::$container->get(AssignExecutor::class)->recordRejected($command, $ruleId),
             'Не удалось записать аудит отклонённого назначения.',
             [
-                'requestId' => $requestId,
-                'executorId' => $executorId,
-                'actorId' => $actorId,
+                'requestId' => $command->requestId,
+                'executorId' => $command->executorId,
+                'actorId' => $command->actorId,
                 'ruleId' => $ruleId,
             ],
             __METHOD__,

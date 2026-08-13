@@ -20,6 +20,8 @@
             <file>tests/Integration/Http/RequestLifecycleHttpTest.php</file>
             <file>tests/Integration/Request/RequestCancellationAtomicityTest.php</file>
             <file>tests/Integration/Http/RequestCancellationHttpTest.php</file>
+            <file>tests/Integration/Request/ExecutorAssignmentAtomicityTest.php</file>
+            <file>tests/Integration/Http/ExecutorAssignmentHttpTest.php</file>
             <file>tests/Integration/Document/DocumentRepositoryTest.php</file>
             <file>tests/Integration/Notification/NotificationOutboxCredentialCleanupTest.php</file>
             <file>tests/Integration/Notification/NotificationOutboxMigrationResumabilityTest.php</file>
@@ -39,7 +41,9 @@
             <file>src/Infrastructure/Persistence/Request/RequestDepartmentPersistenceAdapter.php</file>
             <file>src/Infrastructure/Persistence/Request/RequestLifecyclePersistenceAdapter.php</file>
             <file>src/Infrastructure/Persistence/Request/RequestCancellationPersistenceAdapter.php</file>
+            <file>src/Infrastructure/Persistence/Request/ExecutorAssignmentPersistenceAdapter.php</file>
             <file>src/Http/Controller/RequestController.php</file>
+            <file>src/Http/Request/AssignExecutorRequest.php</file>
             <file>src/Http/Request/ChangeDepartmentRequest.php</file>
             <file>src/Http/Request/LockVersionRequest.php</file>
             <file>src/Http/Request/ReasonedLockVersionRequest.php</file>

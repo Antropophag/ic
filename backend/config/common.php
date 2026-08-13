@@ -21,6 +21,8 @@ return [
                 new App\Infrastructure\Persistence\Request\RequestLifecyclePersistenceAdapter(Yii::$app->db),
             App\Application\Request\Port\RequestCancellationGateway::class => static fn () =>
                 new App\Infrastructure\Persistence\Request\RequestCancellationPersistenceAdapter(Yii::$app->db),
+            App\Application\Request\Port\ExecutorAssignmentGateway::class => static fn () =>
+                new App\Infrastructure\Persistence\Request\ExecutorAssignmentPersistenceAdapter(Yii::$app->db),
         ],
     ],
     'components' => [
