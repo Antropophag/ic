@@ -7,8 +7,8 @@ if [ -z "$remote_name" ]; then
   exit 2
 fi
 
-expected_name=$(git config --get "remote.$remote_name.pushIdentityName" || true)
-expected_email=$(git config --get "remote.$remote_name.pushIdentityEmail" || true)
+expected_name=$(git config --local --get "remote.$remote_name.pushIdentityName" || true)
+expected_email=$(git config --local --get "remote.$remote_name.pushIdentityEmail" || true)
 
 if [ -z "$expected_name" ] && [ -z "$expected_email" ]; then
   exit 0
@@ -28,6 +28,7 @@ if [ "$actual_name" != "$expected_name" ] || [ "$actual_email" != "$expected_ema
   echo "Ожидается: $expected_name <$expected_email>" >&2
   echo "Текущая: ${actual_name:-<не задано>} <${actual_email:-не задано}>" >&2
   echo 'Настройте identity в этом worktree:' >&2
+  echo '  git config extensions.worktreeConfig true' >&2
   echo "  git config --worktree user.name '$expected_name'" >&2
   echo "  git config --worktree user.email '$expected_email'" >&2
   exit 1

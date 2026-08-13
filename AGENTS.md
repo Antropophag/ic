@@ -164,6 +164,10 @@
   configured push identity.
 - Configure a worktree-specific identity with `git config --worktree`; never
   replace the shared repository or global identity for this purpose.
+- Before first enabling `extensions.worktreeConfig`, inspect local
+  `core.bare` and `core.worktree`. If either is present, migrate it to the
+  appropriate worktree configuration as required by `git worktree` before
+  enabling the extension; then run `git config extensions.worktreeConfig true`.
 - When creating a new worktree, set its identity before the first commit. If the
   branch has no tracking remote or the remote has no configured push identity,
   stop and ask the user which account applies.
