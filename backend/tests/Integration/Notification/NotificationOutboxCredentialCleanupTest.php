@@ -234,6 +234,36 @@ final class NotificationOutboxCredentialCleanupTest extends IntegrationTestCase
         }
     }
 
+    public function testMalformedAdditionalSemanticLinkRollsBackWithoutScrubbingLegacyEvidence(): void
+    {
+        $versionId = $this->createVersion();
+        $token = bin2hex(random_bytes(32));
+        $this->createToken($versionId, $token);
+        $payload = ['documentLinks' => [
+            ['label' => 'отчёт', 'documentVersionId' => $versionId],
+            ['label' => '', 'documentVersionId' => 'invalid'],
+        ]];
+        $id = $this->createOutbox(
+            "Legacy\nСсылка на отчёт: http://legacy.invalid/api/v1/document-links/{$token}/download",
+            $payload,
+            'pending',
+        );
+        $before = $this->outboxState([$id]);
+
+        try {
+            (new NotificationOutboxCredentialCleanup($this->db()))->run();
+            self::fail('Malformed additional semantic link was accepted before destructive cleanup.');
+        } catch (InvalidNotificationPayload $error) {
+            self::assertSame('Notification payload contains an invalid document link.', $error->getMessage());
+        }
+
+        self::assertSame($before, $this->outboxState([$id]));
+        self::assertSame(1, (int) $this->scalar(
+            'SELECT COUNT(*) FROM {{%document_download_links}} WHERE token_hash = :hash',
+            [':hash' => hash('sha256', $token)],
+        ));
+    }
+
     public function testMigrationCanRunAgainWhenSchemaAlreadyExists(): void
     {
         $path = dirname(__DIR__, 3) . '/migrations/m260813_000001_secure_notification_download_links.php';

@@ -32,6 +32,7 @@
             <file>src/Infrastructure/Notification/InvalidNotificationPayload.php</file>
             <file>src/Infrastructure/Notification/InvalidDownloadLinkConfiguration.php</file>
             <file>src/Infrastructure/Notification/NotificationDownloadLinks.php</file>
+            <file>src/Infrastructure/Notification/NotificationDocumentLinksPayload.php</file>
             <file>src/Infrastructure/Notification/NotificationOutbox.php</file>
             <file>src/Infrastructure/Notification/NotificationOutboxCredentialCleanup.php</file>
             <file>src/Infrastructure/Notification/NotificationOutboxProcessor.php</file>

@@ -62,9 +62,11 @@ final class NotificationOutboxCredentialCleanup
                 return;
             }
 
-            $existingPayload = $this->decodePayload($row['payload_json']);
-            $documentLinks = $existingPayload === null ? [] : $existingPayload['documentLinks'];
-            $shouldBuildPayload = $existingPayload === null || $documentLinks === [];
+            $hasExistingPayload = $row['payload_json'] !== null;
+            $documentLinks = $hasExistingPayload
+                ? NotificationDocumentLinksPayload::parse($row['payload_json'])
+                : [];
+            $shouldBuildPayload = !$hasExistingPayload || $documentLinks === [];
             $resolvedLinks = [];
             foreach ($matches as $match) {
                 $tokenHash = hash('sha256', $match[2]);
@@ -90,6 +92,7 @@ final class NotificationOutboxCredentialCleanup
                     }
                 }
             }
+            NotificationDocumentLinksPayload::parse(['documentLinks' => $documentLinks]);
             $scrubbedBody = trim((string) preg_replace(self::SCRUB_PATTERN, '', (string) $row['body']));
             $values = ['body' => $scrubbedBody];
             if ($shouldBuildPayload) {
@@ -106,18 +109,5 @@ final class NotificationOutboxCredentialCleanup
             }
             throw $error;
         }
-    }
-
-    /** @return array{documentLinks: list<array{label: string, documentVersionId: int}>}|null */
-    private function decodePayload(mixed $payload): ?array
-    {
-        if ($payload === null) {
-            return null;
-        }
-        $decoded = is_array($payload) ? $payload : json_decode((string) $payload, true, flags: JSON_THROW_ON_ERROR);
-        if (!is_array($decoded) || !is_array($decoded['documentLinks'] ?? null)) {
-            throw new InvalidNotificationPayload('Existing notification payload is malformed.');
-        }
-        return $decoded;
     }
 }

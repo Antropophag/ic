@@ -93,10 +93,7 @@ final class NotificationOutboxProcessor
         }
 
         try {
-            $payload = is_array($row['payload_json'])
-                ? $row['payload_json']
-                : json_decode((string) $row['payload_json'], true, flags: JSON_THROW_ON_ERROR);
-            $documentLinks = $this->documentLinks($payload);
+            $documentLinks = NotificationDocumentLinksPayload::parse($row['payload_json']);
             $body = (new NotificationDownloadLinks($this->db))->appendToBody(
                 $id,
                 (string) $row['body'],
@@ -136,34 +133,6 @@ final class NotificationOutboxProcessor
             );
             $result['failed']++;
         }
-    }
-
-    /** @return list<array{label: string, documentVersionId: int}> */
-    private function documentLinks(mixed $payload): array
-    {
-        if (!is_array($payload) || !isset($payload['documentLinks']) || !is_array($payload['documentLinks'])) {
-            throw new InvalidNotificationPayload('Notification payload has an invalid documentLinks collection.');
-        }
-
-        $links = [];
-        foreach ($payload['documentLinks'] as $link) {
-            if (
-                !is_array($link)
-                || !isset($link['label'], $link['documentVersionId'])
-                || !is_string($link['label'])
-                || $link['label'] === ''
-                || !is_int($link['documentVersionId'])
-                || $link['documentVersionId'] <= 0
-            ) {
-                throw new InvalidNotificationPayload('Notification payload contains an invalid document link.');
-            }
-            $links[] = [
-                'label' => $link['label'],
-                'documentVersionId' => $link['documentVersionId'],
-            ];
-        }
-
-        return $links;
     }
 
     private function recordFailure(int $id, int $attempts, \Throwable $error, bool $terminal = false): void
