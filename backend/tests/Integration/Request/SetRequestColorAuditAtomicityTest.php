@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace Tests\Integration\Request;
 
 use App\Application\Request\Command\SetRequestColorCommand;
-use App\Application\Request\CreateRequestInput;
+use App\Http\Request\CreateRequest as CreateRequestInput;
 use App\Application\Request\UseCase\SetRequestColor;
 use App\Domain\Request\RequestColor;
 use App\Infrastructure\Persistence\Request\RequestColorPersistenceAdapter;
@@ -34,8 +34,9 @@ final class SetRequestColorAuditAtomicityTest extends TestCase
                 'sampleQuantity' => 1,
                 'testMethod' => 'Методика',
             ]);
-            $repository = new RequestRepository($db);
-            $request = $repository->create($input, $initiatorId);
+            $request = (new \App\Application\Request\UseCase\CreateRequest(
+                new \App\Infrastructure\Persistence\Request\RequestCreationPersistenceAdapter($db),
+            ))->execute($input->toCommand($initiatorId))->toArray();
 
             try {
                 (new SetRequestColor(new RequestColorPersistenceAdapter($db)))->execute(new SetRequestColorCommand(

@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace Tests\Integration\Request;
 
 use App\Application\Request\Command\DecideSecurityCommand;
-use App\Application\Request\CreateRequestInput;
+use App\Http\Request\CreateRequest as CreateRequestInput;
 use App\Application\Request\UseCase\DecideSecurity;
 use App\Domain\Request\ConcurrentRequestModification;
 use App\Domain\Request\RequestNotFound;
@@ -209,7 +209,7 @@ final class SecurityDecisionTest extends IntegrationTestCase
             'productName' => "Security {$marker}", 'manufacturer' => 'Завод', 'supplier' => 'Поставщик',
             'sampleQuantity' => 1, 'testMethod' => 'Методика',
         ]);
-        $request = (new RequestRepository($this->db()))->create($input, $initiator);
+        $request = (new \App\Application\Request\UseCase\CreateRequest(new \App\Infrastructure\Persistence\Request\RequestCreationPersistenceAdapter($this->db())))->execute($input->toCommand($initiator))->toArray();
         $requestId = (int) $request['id'];
         $this->db()->createCommand()->update('{{%requests}}', ['status' => 'security_review'], ['id' => $requestId])->execute();
         $this->db()->createCommand()->insert('{{%request_assignments}}', [

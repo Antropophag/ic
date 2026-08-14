@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace Tests\Integration\Request;
 
 use App\Application\Request\Command\AssignExecutorCommand;
-use App\Application\Request\CreateRequestInput;
+use App\Http\Request\CreateRequest as CreateRequestInput;
 use App\Application\Request\UseCase\AssignExecutor;
 use App\Infrastructure\Persistence\Request\ExecutorAssignmentPersistenceAdapter;
 use App\Infrastructure\Request\RequestRepository;
@@ -35,7 +35,7 @@ final class ExecutorAssignmentAtomicityTest extends TestCase
                 'sampleQuantity' => 1,
                 'testMethod' => 'Методика',
             ]);
-            $request = (new RequestRepository($db))->create($input, $initiatorId);
+            $request = (new \App\Application\Request\UseCase\CreateRequest(new \App\Infrastructure\Persistence\Request\RequestCreationPersistenceAdapter($db)))->execute($input->toCommand($initiatorId))->toArray();
 
             try {
                 (new AssignExecutor(new ExecutorAssignmentPersistenceAdapter($db)))->execute(

@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace Tests\Integration\Http;
 
 use App\Application\Request\Command\AssignExpertCommand;
-use App\Application\Request\CreateRequestInput;
+use App\Http\Request\CreateRequest as CreateRequestInput;
 use App\Application\Request\Port\ExpertAssignmentGateway;
 use App\Application\Request\UseCase\AssignExpert;
 use App\Http\Controller\RequestController;
@@ -159,7 +159,7 @@ final class ExpertAssignmentHttpTest extends IntegrationTestCase
             'sampleQuantity' => 1,
             'testMethod' => 'Методика',
         ]);
-        $request = (new RequestRepository($this->db()))->create($input, $initiator);
+        $request = (new \App\Application\Request\UseCase\CreateRequest(new \App\Infrastructure\Persistence\Request\RequestCreationPersistenceAdapter($this->db())))->execute($input->toCommand($initiator))->toArray();
         $this->db()->createCommand()->update(
             '{{%requests}}',
             ['status' => 'opinion_preparation'],

@@ -27,6 +27,8 @@ return [
                 new App\Infrastructure\Persistence\Request\ExpertAssignmentPersistenceAdapter(Yii::$app->db),
             App\Application\Request\Port\SecurityDecisionGateway::class => static fn () =>
                 new App\Infrastructure\Persistence\Request\SecurityDecisionPersistenceAdapter(Yii::$app->db),
+            App\Application\Request\Port\RequestCreationGateway::class => static fn () =>
+                new App\Infrastructure\Persistence\Request\RequestCreationPersistenceAdapter(Yii::$app->db),
         ],
     ],
     'components' => [

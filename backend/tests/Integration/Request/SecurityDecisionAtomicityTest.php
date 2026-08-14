@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace Tests\Integration\Request;
 
 use App\Application\Request\Command\DecideSecurityCommand;
-use App\Application\Request\CreateRequestInput;
+use App\Http\Request\CreateRequest as CreateRequestInput;
 use App\Application\Request\UseCase\DecideSecurity;
 use App\Infrastructure\Persistence\Request\SecurityDecisionPersistenceAdapter;
 use App\Infrastructure\Request\RequestRepository;
@@ -30,7 +30,7 @@ final class SecurityDecisionAtomicityTest extends TestCase
                 'productName' => "Security atomicity {$marker}", 'manufacturer' => 'Завод',
                 'supplier' => 'Поставщик', 'sampleQuantity' => 1, 'testMethod' => 'Методика',
             ]);
-            $request = (new RequestRepository($db))->create($input, $initiator);
+            $request = (new \App\Application\Request\UseCase\CreateRequest(new \App\Infrastructure\Persistence\Request\RequestCreationPersistenceAdapter($db)))->execute($input->toCommand($initiator))->toArray();
             $requestId = (int) $request['id'];
             $db->createCommand()->update('{{%requests}}', ['status' => 'security_review'], ['id' => $requestId])->execute();
             $db->createCommand()->insert('{{%request_documents}}', [

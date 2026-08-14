@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace Tests\Integration\Request;
 
-use App\Application\Request\CreateRequestInput;
+use App\Http\Request\CreateRequest as CreateRequestInput;
 use App\Infrastructure\Request\RequestRepository;
 use PHPUnit\Framework\TestCase;
 use yii\db\Connection;
@@ -36,7 +36,7 @@ final class RequestAssignmentConcurrencyTest extends TestCase
             $input->supplier = 'Test supplier';
             $input->sampleQuantity = 1;
             $input->testMethod = 'Controlled two-session assignment';
-            $request = (new RequestRepository($db))->create($input, $users['initiator']);
+            $request = (new \App\Application\Request\UseCase\CreateRequest(new \App\Infrastructure\Persistence\Request\RequestCreationPersistenceAdapter($db)))->execute($input->toCommand($users['initiator']))->toArray();
             $requestId = (int) $request['id'];
             $version = (int) $request['lock_version'];
 

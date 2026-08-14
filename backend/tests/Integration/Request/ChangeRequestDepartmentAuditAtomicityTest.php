@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace Tests\Integration\Request;
 
 use App\Application\Request\Command\ChangeRequestDepartmentCommand;
-use App\Application\Request\CreateRequestInput;
+use App\Http\Request\CreateRequest as CreateRequestInput;
 use App\Application\Request\UseCase\ChangeRequestDepartment;
 use App\Infrastructure\Persistence\Request\RequestDepartmentPersistenceAdapter;
 use App\Infrastructure\Request\RequestRepository;
@@ -33,8 +33,9 @@ final class ChangeRequestDepartmentAuditAtomicityTest extends TestCase
                 'sampleQuantity' => 1,
                 'testMethod' => 'Методика',
             ]);
-            $repository = new RequestRepository($db);
-            $request = $repository->create($input, $initiatorId);
+            $request = (new \App\Application\Request\UseCase\CreateRequest(
+                new \App\Infrastructure\Persistence\Request\RequestCreationPersistenceAdapter($db),
+            ))->execute($input->toCommand($initiatorId))->toArray();
             $db->createCommand()->update('{{%requests}}', [
                 'department_external_id' => 'bitrix:atomicity',
                 'department_source' => 'bitrix24',
