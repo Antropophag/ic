@@ -6,6 +6,7 @@ namespace App\Infrastructure\Persistence\Request;
 
 use App\Application\Request\Port\SecurityDecisionGateway;
 use App\Application\Request\SecurityDecisionSnapshot;
+use App\Domain\Request\CurrentAssignmentInvariantViolation;
 use App\Domain\Request\RequestStatus;
 use App\Domain\Request\Role;
 use App\Infrastructure\Clock;
@@ -168,6 +169,7 @@ final readonly class SecurityDecisionPersistenceAdapter implements SecurityDecis
             return;
         }
 
+        $this->assertSingleCurrentAssignment($requestId, 'executor');
         $executor = $this->currentAssigneeContact($requestId, 'executor');
         if ($executor !== null) {
             $outbox->enqueue(
@@ -205,6 +207,18 @@ final readonly class SecurityDecisionPersistenceAdapter implements SecurityDecis
             'payload_json' => ['outcome' => 'rejected'],
             'created_at' => Clock::now(),
         ])->execute();
+    }
+
+    private function assertSingleCurrentAssignment(int $requestId, string $type): void
+    {
+        $count = (int) $this->db->createCommand(
+            'SELECT COUNT(*) FROM {{%request_assignments}} '
+            . 'WHERE request_id = :request_id AND assignment_type = :assignment_type AND valid_to IS NULL',
+            [':request_id' => $requestId, ':assignment_type' => $type],
+        )->queryScalar();
+        if ($count > 1) {
+            throw new CurrentAssignmentInvariantViolation($requestId, $type, $count);
+        }
     }
 
     /** @return array{email: string, name: string}|null */
