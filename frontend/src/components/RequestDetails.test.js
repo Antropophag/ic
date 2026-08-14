@@ -12,6 +12,8 @@ vi.mock('../api', () => ({
     comments: vi.fn(),
     deleteReport: vi.fn(),
     downloadDocument: vi.fn(),
+    executors: vi.fn(),
+    experts: vi.fn(),
     generateTestAct: vi.fn(),
     get: vi.fn(),
     prepareTestAct: vi.fn(),
@@ -127,7 +129,7 @@ describe('RequestDetails characterization', () => {
       can_upload_document: 1,
       can_upload_report: 1,
     }))
-    requestApi.executors = vi.fn().mockResolvedValue({ items: [] })
+    requestApi.executors.mockResolvedValue({ items: [] })
     const { app } = mountDetails()
     await flushRequests()
 
@@ -167,7 +169,7 @@ describe('RequestDetails characterization', () => {
       can_set_color: 1,
       can_edit_department: 1,
     }))
-    requestApi.experts = vi.fn().mockResolvedValue({ items: [] })
+    requestApi.experts.mockResolvedValue({ items: [] })
     const { app } = mountDetails()
     await flushRequests()
 
@@ -205,8 +207,8 @@ describe('RequestDetails characterization', () => {
     [{ can_reject: 1 }, 'Примите заявку в работу или откажите'],
   ])('presents the capability-specific next-step prompt for %o', async (capability, prompt) => {
     requestApi.get.mockResolvedValue(requestDetails(1, capability))
-    requestApi.executors = vi.fn().mockResolvedValue({ items: [] })
-    requestApi.experts = vi.fn().mockResolvedValue({ items: [] })
+    requestApi.executors.mockResolvedValue({ items: [] })
+    requestApi.experts.mockResolvedValue({ items: [] })
     const { app } = mountDetails()
     await flushRequests()
 

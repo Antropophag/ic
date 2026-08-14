@@ -28,7 +28,7 @@ const participants = computed(() => {
 const COLOR_LABELS = { white: 'Без цвета', red: 'Красный', orange: 'Оранжевый', blue: 'Синий', violet: 'Фиолетовый', green: 'Зелёный' }
 const colorLabel = color => COLOR_LABELS[color] || color
 
-async function loadRequestDetails(item) {
+async function loadRequestDetails(item, { rethrow = false } = {}) {
   const token = detailRequestGuard.begin(item.backendId)
   selected.value = item
   detailError.value = ''
@@ -47,6 +47,7 @@ async function loadRequestDetails(item) {
   } catch (error) {
     if (!detailRequestGuard.isCurrent(token, selected.value?.backendId)) return
     detailError.value = error.status === 404 ? 'Заявка не найдена или недоступна.' : 'Не удалось загрузить актуальные данные заявки.'
+    if (rethrow) throw error
   } finally {
     if (detailRequestGuard.isCurrent(token, selected.value?.backendId)) detailLoading.value = false
   }
@@ -58,12 +59,13 @@ async function refreshSelected(requestId, options = {}) {
   if (options.disableCapabilities) {
     selected.value = Object.fromEntries(Object.entries(selected.value).map(([key, value]) => [key, options.disableCapabilities.includes(key) ? false : value]))
   }
-  await loadRequestDetails(selected.value)
+  await loadRequestDetails(selected.value, { rethrow: true })
   if (options.emitUpdated) emit('updated')
 }
 
 async function setColorMark(color, event) {
-  if (await actions.value?.setColorMark(color)) event.currentTarget.closest('details')?.removeAttribute('open')
+  const colorControl = event.currentTarget.closest('details')
+  if (await actions.value?.setColorMark(color)) colorControl?.removeAttribute('open')
 }
 
 function addComment(comment) {

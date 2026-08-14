@@ -185,13 +185,17 @@ export function useRequestActions(request, refresh) {
       reassignError.value = 'Выберите эксперта.'
       return
     }
-    if (!(await confirmDialog.ask('Передать заявку выбранному эксперту?', { confirmLabel: 'Передать' }))) return
-    const requestId = request.value.backendId
+    const context = await confirmRequestAction(
+      () => request.value,
+      () => confirmDialog.ask('Передать заявку выбранному эксперту?', { confirmLabel: 'Передать' }),
+    )
+    if (!context) return
+    const { requestId, lockVersion } = context
     const token = guards.reassign.begin(requestId)
     reassignLoading.value = true
     reassignError.value = ''
     try {
-      await requestApi.reassignExpert(requestId, Number(expertChoice.value), request.value.lockVersion)
+      await requestApi.reassignExpert(requestId, Number(expertChoice.value), lockVersion)
       if (!guards.reassign.isCurrent(token, request.value?.backendId)) return
       expertChoice.value = ''
       try { await refresh(requestId) } catch { reassignError.value = 'Заявка переназначена, но данные на экране не обновились. Обновите страницу перед следующим действием.' }
@@ -254,15 +258,18 @@ export function useRequestActions(request, refresh) {
     const confirmationOptions = isApprove
       ? { confirmLabel: 'Согласовать' }
       : { confirmLabel: 'Вернуть', reasonField: { required: true, placeholder: 'Опишите, что нужно исправить' } }
-    const confirmed = await confirmDialog.ask(confirmationMessage, confirmationOptions)
-    if (!confirmed) return
-    const requestId = request.value.backendId
+    const context = await confirmRequestAction(
+      () => request.value,
+      () => confirmDialog.ask(confirmationMessage, confirmationOptions),
+    )
+    if (!context) return
+    const { requestId, lockVersion, confirmed } = context
     const token = guards.security.begin(requestId)
     securityLoading.value = true
     securityError.value = ''
     try {
       const reason = isApprove ? null : confirmed.reason
-      await requestApi.decideSecurity(requestId, decision, reason, request.value.lockVersion)
+      await requestApi.decideSecurity(requestId, decision, reason, lockVersion)
       if (!guards.security.isCurrent(token, request.value?.backendId)) return
       try { await refresh(requestId, { disableCapabilities: ['canSecurityDecide'] }) } catch { actionError.value = 'Решение сохранено, но данные на экране не обновились. Обновите страницу перед следующим действием.' }
     } catch (error) {
@@ -317,16 +324,21 @@ export function useRequestActions(request, refresh) {
     colorLoading.value = true
     colorError.value = ''
     try {
-      await requestApi.setColor(requestId, color, request.value.lockVersion)
-      if (guards.color.isCurrent(token, request.value?.backendId)) {
-        await refresh(requestId)
-        return true
+      try {
+        await requestApi.setColor(requestId, color, request.value.lockVersion)
+      } catch (error) {
+        if (!guards.color.isCurrent(token, request.value?.backendId)) return
+        if (error.status === 409) await recoverConflict(requestId, 'Заявка уже изменена.')
+        else colorError.value = error.status === 403 ? 'У вас нет права менять цвет заявки.' : 'Не удалось сохранить цвет. Повторите попытку.'
+        return false
       }
-    } catch (error) {
       if (!guards.color.isCurrent(token, request.value?.backendId)) return
-      if (error.status === 409) await recoverConflict(requestId, 'Заявка уже изменена.')
-      else colorError.value = error.status === 403 ? 'У вас нет права менять цвет заявки.' : 'Не удалось сохранить цвет. Повторите попытку.'
-      return false
+      try {
+        await refresh(requestId)
+      } catch {
+        if (guards.color.isCurrent(token, request.value?.backendId)) colorError.value = 'Цвет сохранён, но данные на экране не обновились.'
+      }
+      return true
     } finally {
       if (guards.color.isCurrent(token, request.value?.backendId)) colorLoading.value = false
     }
@@ -346,16 +358,23 @@ export function useRequestActions(request, refresh) {
     departmentLoading.value = true
     departmentError.value = ''
     try {
-      await requestApi.changeDepartment(requestId, department, request.value.lockVersion)
+      try {
+        await requestApi.changeDepartment(requestId, department, request.value.lockVersion)
+      } catch (error) {
+        if (!guards.department.isCurrent(token, request.value?.backendId)) return
+        if (error.status === 409) {
+          showDepartmentModal.value = false
+          await recoverConflict(requestId, 'Заявка уже изменена.')
+        } else departmentError.value = error.payload?.errors?.department?.[0] || error.message || 'Не удалось изменить подразделение.'
+        return
+      }
       if (!guards.department.isCurrent(token, request.value?.backendId)) return
       showDepartmentModal.value = false
-      await refresh(requestId, { emitUpdated: true })
-    } catch (error) {
-      if (!guards.department.isCurrent(token, request.value?.backendId)) return
-      if (error.status === 409) {
-        showDepartmentModal.value = false
-        await recoverConflict(requestId, 'Заявка уже изменена.')
-      } else departmentError.value = error.payload?.errors?.department?.[0] || error.message || 'Не удалось изменить подразделение.'
+      try {
+        await refresh(requestId, { emitUpdated: true })
+      } catch (error) {
+        if (guards.department.isCurrent(token, request.value?.backendId)) departmentError.value = error.payload?.errors?.department?.[0] || error.message || 'Не удалось изменить подразделение.'
+      }
     } finally {
       if (guards.department.isCurrent(token, request.value?.backendId)) departmentLoading.value = false
     }

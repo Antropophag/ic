@@ -177,4 +177,38 @@ describe('useRequestActions workflows', () => {
     expect(actions.actionError.value).toContain('Данные обновлены')
     stop()
   })
+
+  it.each([
+    ['reassignExpert', actions => { actions.expertChoice.value = '9' }, actions => actions.reassignExpert()],
+    ['decideSecurity', () => {}, actions => actions.decideSecurity('approve')],
+  ])('does not %s after the request changes while confirmation is open', async (apiMethod, prepare, operation) => {
+    const { actions, request, stop } = createActions()
+    prepare(actions)
+
+    const result = operation(actions)
+    await nextTick()
+    request.value = { ...request.value, backendId: 2 }
+    actions.confirmDialog.accept()
+    await result
+
+    expect(requestApi[apiMethod]).not.toHaveBeenCalled()
+    stop()
+  })
+
+  it('distinguishes a successful mutation from a failed controlled refresh', async () => {
+    requestApi.setColor.mockResolvedValue(undefined)
+    requestApi.changeDepartment.mockResolvedValue(undefined)
+    const { actions, refresh, stop } = createActions()
+    refresh.mockRejectedValue(new Error('refresh failed'))
+
+    await expect(actions.setColorMark('red')).resolves.toBe(true)
+    expect(actions.colorError.value).toBe('Цвет сохранён, но данные на экране не обновились.')
+    actions.showDepartmentModal.value = true
+    actions.departmentDraft.value = 'Новый отдел'
+    await actions.changeDepartment()
+
+    expect(actions.showDepartmentModal.value).toBe(false)
+    expect(actions.departmentError.value).toBe('refresh failed')
+    stop()
+  })
 })
