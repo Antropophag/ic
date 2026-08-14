@@ -142,7 +142,9 @@ describe('useRequestActions workflows', () => {
 
     actions.executorChoice.value = '8'
     await confirm(actions, () => actions.assignExecutor())
+    expect(actions.actionError.value).toBe('У вас нет права назначать исполнителя.')
     await confirm(actions, () => actions.startRequest())
+    expect(actions.actionError.value).toBe('У вас нет права переводить эту заявку в работу.')
     await actions.claimExpert()
     actions.expertChoice.value = '9'
     await confirm(actions, () => actions.reassignExpert())
@@ -152,7 +154,6 @@ describe('useRequestActions workflows', () => {
     actions.departmentDraft.value = 'Новый отдел'
     await actions.changeDepartment()
 
-    expect(actions.actionError.value).toContain('права')
     expect(actions.claimError.value).toContain('права')
     expect(actions.reassignError.value).toContain('права')
     expect(actions.rejectError.value).toContain('руководитель')

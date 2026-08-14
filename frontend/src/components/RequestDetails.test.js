@@ -370,9 +370,11 @@ describe('RequestDetails characterization', () => {
     reason.dispatchEvent(new Event('input', { bubbles: true }))
     await nextTick()
     document.querySelector('.modal-actions .primary').click()
-    await flushRequests()
+    await vi.waitFor(() => expect(document.body.textContent).toContain('Заявка уже изменена. Данные обновлены — проверьте актуальный статус.'))
+
     document.querySelector('.request-file-action').click()
-    await flushRequests()
+    await vi.waitFor(() => expect(document.body.textContent).toContain('Не удалось скачать документ.'))
+
     document.querySelector('.request-file-open').click()
     await flushRequests()
 
