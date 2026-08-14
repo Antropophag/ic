@@ -8,7 +8,6 @@ use App\Http\Request\CreateRequest as CreateRequestInput;
 use App\Application\Request\Port\RequestCancellationGateway;
 use App\Http\Controller\RequestController;
 use App\Infrastructure\Persistence\Request\RequestCancellationPersistenceAdapter;
-use App\Infrastructure\Request\RequestRepository;
 use Tests\Integration\IntegrationTestCase;
 use Yii;
 use yii\web\Application;

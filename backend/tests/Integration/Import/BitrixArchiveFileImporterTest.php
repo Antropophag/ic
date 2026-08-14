@@ -7,7 +7,6 @@ namespace Tests\Integration\Import;
 use App\Http\Request\CreateRequest as CreateRequestInput;
 use App\Infrastructure\Document\DocumentStorage;
 use App\Infrastructure\Import\BitrixArchiveFileImporter;
-use App\Infrastructure\Request\RequestRepository;
 use PHPUnit\Framework\Attributes\DataProvider;
 use Tests\Integration\IntegrationTestCase;
 

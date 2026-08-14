@@ -9,7 +9,6 @@ use App\Application\Request\Port\SecurityDecisionGateway;
 use App\Http\Controller\RequestController;
 use App\Infrastructure\Clock;
 use App\Infrastructure\Persistence\Request\SecurityDecisionPersistenceAdapter;
-use App\Infrastructure\Request\RequestRepository;
 use Tests\Integration\IntegrationTestCase;
 use Yii;
 use yii\web\Application;

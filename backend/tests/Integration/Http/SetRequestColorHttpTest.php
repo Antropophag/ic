@@ -7,7 +7,6 @@ namespace Tests\Integration\Http;
 use App\Http\Request\CreateRequest as CreateRequestInput;
 use App\Application\Request\Port\RequestColorGateway;
 use App\Http\Controller\RequestController;
-use App\Infrastructure\Request\RequestRepository;
 use App\Infrastructure\Persistence\Request\RequestColorPersistenceAdapter;
 use Tests\Integration\IntegrationTestCase;
 use Yii;
