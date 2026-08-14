@@ -38,6 +38,15 @@ final class SecurityDecisionRequestTest extends TestCase
         self::assertArrayHasKey('lockVersion', $input->errors);
     }
 
+    public function testApproveRejectsNonEmptyReason(): void
+    {
+        $input = new SecurityDecisionRequest();
+        $input->load(['decision' => 'approve', 'reason' => 'Согласовано', 'lockVersion' => 6], '');
+
+        self::assertFalse($input->validate());
+        self::assertArrayHasKey('reason', $input->errors);
+    }
+
     public function testStructuredReasonIsRejectedWithoutConversion(): void
     {
         foreach ([['не строка'], (object) ['reason' => 'не строка']] as $reason) {

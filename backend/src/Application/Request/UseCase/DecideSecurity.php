@@ -9,6 +9,7 @@ use App\Application\Request\Port\SecurityDecisionGateway;
 use App\Application\Request\SecurityDecisionResult;
 use App\Domain\Request\ConcurrentRequestModification;
 use App\Domain\Request\RequestNotFound;
+use App\Domain\Request\SecurityDecisionConflict;
 use App\Domain\Request\SecurityDecisionPolicy;
 
 final readonly class DecideSecurity
@@ -38,7 +39,7 @@ final readonly class DecideSecurity
             }
             $opinionId = $this->gateway->currentUncheckedOpinionIdForUpdate($command->requestId);
             if ($opinionId === null) {
-                throw new \RuntimeException('Current expert opinion not found or already checked.');
+                throw new SecurityDecisionConflict();
             }
 
             $decidedAt = $this->gateway->decisionTimestamp();
@@ -67,11 +68,11 @@ final readonly class DecideSecurity
                 $command->requestId,
                 $command->actorId,
                 $command->decision,
-                $command->reason,
+                $reason,
                 $targetStatus,
                 $decidedAt,
             );
-            $this->gateway->enqueueDecisionNotification($command->requestId, $command->decision, $command->reason);
+            $this->gateway->enqueueDecisionNotification($command->requestId, $command->decision, $reason);
 
             return new SecurityDecisionResult(
                 $command->requestId,

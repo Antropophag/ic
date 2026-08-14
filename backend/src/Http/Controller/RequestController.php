@@ -43,7 +43,7 @@ use App\Domain\Request\RequestAction;
 use App\Domain\Request\ReportDenied;
 use App\Domain\Request\ReportDeletionDenied;
 use App\Domain\Request\OpinionDenied;
-use App\Domain\Request\SecurityDecisionDenied;
+use App\Domain\Request\{SecurityDecisionConflict, SecurityDecisionDenied};
 use App\Domain\Request\StartDenied;
 use App\Domain\Request\SuspendResumeDenied;
 use App\Domain\Request\TransitionDenied;
@@ -558,7 +558,7 @@ final class RequestController extends ApiController
         } catch (SecurityDecisionDenied $error) {
             $this->recordRejectedSecurityDecisionSafely($command, $error->ruleId);
             throw new ForbiddenHttpException($error->getMessage());
-        } catch (ConcurrentRequestModification $error) {
+        } catch (ConcurrentRequestModification | SecurityDecisionConflict $error) {
             $this->recordRejectedSecurityDecisionSafely($command, $error->ruleId);
             throw new ConflictHttpException($error->getMessage());
         }
