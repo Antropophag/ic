@@ -10,11 +10,14 @@ vi.mock('../api', () => ({
   requestApi: {
     addComment: vi.fn(),
     comments: vi.fn(),
+    deleteReport: vi.fn(),
     downloadDocument: vi.fn(),
+    generateTestAct: vi.fn(),
     get: vi.fn(),
     prepareTestAct: vi.fn(),
     start: vi.fn(),
     uploadDocument: vi.fn(),
+    uploadReport: vi.fn(),
   },
 }))
 
@@ -275,6 +278,60 @@ describe('RequestDetails characterization', () => {
     app.unmount()
   })
 
+  it('runs report, Test Act, and document operations through the document workflow', async () => {
+    const details = {
+      ...requestDetails(1, { can_upload_report: 1, can_delete_report: 1 }),
+      documents: [{ id: 5, versionId: 9, title: 'Отчёт.pdf', originalName: 'Отчёт.pdf', documentType: 'report', mimeType: 'application/pdf', sizeBytes: 10, version: 1, createdAt: '2026-08-11T12:00:00Z' }],
+    }
+    requestApi.get.mockResolvedValue(details)
+    requestApi.uploadReport.mockResolvedValue({})
+    requestApi.deleteReport.mockResolvedValue({})
+    requestApi.downloadDocument.mockResolvedValue(new Blob(['report'], { type: 'application/pdf' }))
+    requestApi.prepareTestAct.mockResolvedValue({ actNumber: '1', actDate: '11.08.2026', basis: 'Заявка № 1', sampleName: 'Образец', testMethod: 'Метод', requestNumber: 1 })
+    requestApi.generateTestAct.mockResolvedValue(new Blob(['act']))
+    URL.createObjectURL = vi.fn().mockReturnValue('blob:preview')
+    URL.revokeObjectURL = vi.fn()
+    const previewWindow = { close: vi.fn(), location: { replace: vi.fn() }, opener: window }
+    vi.spyOn(window, 'open').mockReturnValue(previewWindow)
+    const { app } = mountDetails()
+    await flushRequests()
+
+    const reportInput = document.querySelector('.upload-button input')
+    const report = new File(['report'], 'Отчёт.pdf', { type: 'application/pdf' })
+    Object.defineProperty(reportInput, 'files', { configurable: true, value: [report] })
+    reportInput.dispatchEvent(new Event('change', { bubbles: true }))
+    await flushRequests()
+
+    button('Удалить отчёт').click()
+    await nextTick()
+    const reason = document.querySelector('.confirm-reason-field textarea')
+    reason.value = 'Новая версия'
+    reason.dispatchEvent(new Event('input', { bubbles: true }))
+    await nextTick()
+    document.querySelector('.modal-actions .primary').click()
+    await flushRequests()
+
+    document.querySelector('.request-file-action').click()
+    await flushRequests()
+    document.querySelector('.request-file-open').click()
+    await flushRequests()
+
+    document.querySelector('[aria-label="Сформировать шаблон отчётного документа"]').click()
+    await flushRequests()
+    const result = document.querySelector('[placeholder="Опишите фактический результат испытаний"]')
+    result.value = 'Испытания пройдены'
+    result.dispatchEvent(new Event('input', { bubbles: true }))
+    document.querySelector('#test-act-modal-title').closest('form').dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }))
+    await flushRequests()
+
+    expect(requestApi.uploadReport).toHaveBeenCalledWith(1, report)
+    expect(requestApi.deleteReport).toHaveBeenCalledWith(1, 1, 'Новая версия')
+    expect(requestApi.downloadDocument).toHaveBeenCalledWith(9)
+    expect(previewWindow.location.replace).toHaveBeenCalledWith('blob:preview')
+    expect(requestApi.generateTestAct).toHaveBeenCalledWith(1, expect.objectContaining({ result: 'Испытания пройдены' }))
+    app.unmount()
+  })
+
   it('opens and closes the audit overlay while restoring focus to its trigger', async () => {
     requestApi.get.mockResolvedValue(requestDetails(1))
     const { app } = mountDetails()
@@ -291,6 +348,42 @@ describe('RequestDetails characterization', () => {
     await nextTick()
     expect(document.querySelector('[aria-labelledby="audit-title"]')).toBeNull()
     expect(document.activeElement).toBe(trigger)
+    app.unmount()
+  })
+
+  it('opens workflow help and restores focus when Escape closes the drawer', async () => {
+    requestApi.get.mockResolvedValue(requestDetails(1, { can_upload_report: 1 }))
+    const { app } = mountDetails()
+    await flushRequests()
+
+    const trigger = document.querySelector('[aria-label="Инструкция по загрузке отчёта испытаний"]')
+    trigger.focus()
+    trigger.click()
+    await nextTick()
+    const drawer = document.querySelector('[aria-labelledby="help-title"]')
+    expect(drawer).not.toBeNull()
+    drawer.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))
+    await nextTick()
+
+    expect(document.querySelector('[aria-labelledby="help-title"]')).toBeNull()
+    expect(document.activeElement).toBe(trigger)
+    app.unmount()
+  })
+
+  it('keeps comment errors local and refreshes only for a stage conflict', async () => {
+    requestApi.get.mockResolvedValue(requestDetails(1, { can_comment: 1 }))
+    requestApi.addComment.mockRejectedValue({ status: 409 })
+    const { app } = mountDetails()
+    await flushRequests()
+
+    const input = document.querySelector('.request-comment-composer input')
+    input.value = 'Комментарий'
+    input.dispatchEvent(new Event('input', { bubbles: true }))
+    document.querySelector('.request-comment-composer').dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }))
+    await flushRequests()
+
+    expect(requestApi.get).toHaveBeenCalledTimes(2)
+    expect(document.body.textContent).toContain('На текущем этапе добавлять комментарии нельзя.')
     app.unmount()
   })
 })

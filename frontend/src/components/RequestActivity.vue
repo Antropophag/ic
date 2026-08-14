@@ -163,7 +163,7 @@ onBeforeUnmount(invalidate)
   <article id="request-comments" class="card feed request-comments">
     <div class="section-title"><h3>Лента</h3></div>
     <p v-if="commentError" class="action-error">{{ commentError }}</p>
-    <form v-if="canSubmitComment(request, detailLoading)" class="comment-input request-comment-composer" @submit.prevent="addComment"><span class="avatar small">{{ currentInitials }}</span><input v-model="commentDraft" :disabled="commentLoading" maxlength="10000" placeholder="Оставьте комментарий…" /><button :disabled="commentLoading" aria-label="Отправить комментарий"><AppIcon name="send" :size="16" /></button></form>
+    <form v-if="canSubmitComment(request, detailLoading)" class="comment-input request-comment-composer" @submit.prevent="addComment"><span class="avatar small">{{ currentInitials }}</span><label class="visually-hidden" for="request-comment-draft">Комментарий</label><input id="request-comment-draft" v-model="commentDraft" :disabled="commentLoading" maxlength="10000" placeholder="Оставьте комментарий…" /><button type="submit" :disabled="commentLoading" aria-label="Отправить комментарий"><AppIcon name="send" :size="16" /></button></form>
     <p v-else class="placeholder-copy request-comment-unavailable">На текущем этапе добавлять комментарии нельзя.</p>
     <div class="stream">
       <div v-for="entry in feed" :key="`${entry.type}-${entry.id}`" class="entry" :class="{ system: entry.type !== 'comment' }">
@@ -173,7 +173,7 @@ onBeforeUnmount(invalidate)
       </div>
     </div>
     <p v-if="!feed.length" class="placeholder-copy">Событий пока нет.</p>
-    <button v-if="request.commentsPage?.hasMore" class="secondary" :disabled="olderCommentsLoading" @click="loadOlderComments">{{ olderCommentsLoading ? 'Загрузка…' : 'Показать ранние комментарии' }}</button>
+    <button v-if="request.commentsPage?.hasMore" type="button" class="secondary" :disabled="olderCommentsLoading" @click="loadOlderComments">{{ olderCommentsLoading ? 'Загрузка…' : 'Показать ранние комментарии' }}</button>
   </article>
   <div v-if="showAuditDrawer" class="request-drawer-overlay" @click.self="closeAuditDrawer">
     <aside ref="auditDrawer" class="request-drawer" role="dialog" aria-modal="true" aria-labelledby="audit-title" @keydown="handleAuditKeydown">

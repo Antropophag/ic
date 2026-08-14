@@ -49,6 +49,10 @@ export function useRequestActions(request, refresh) {
     }
   }
 
+  function errorMessage(error, messages, fallback) {
+    return messages[error.status] || fallback
+  }
+
   async function loadExecutors() {
     const requestId = request.value?.backendId
     const token = guards.executors.begin(requestId)
@@ -121,12 +125,14 @@ export function useRequestActions(request, refresh) {
   async function suspendOrResumeRequest(action) {
     if (suspendResumeLoading.value) return
     const isSuspend = action === 'suspend'
+    const confirmationMessage = isSuspend ? 'Приостановить работу по заявке?' : 'Возобновить работу по заявке?'
+    const confirmationOptions = {
+      confirmLabel: isSuspend ? 'Приостановить' : 'Возобновить',
+      reasonField: isSuspend ? { required: true, placeholder: 'Опишите причину приостановки' } : null,
+    }
     const context = await confirmRequestAction(
       () => request.value,
-      () => confirmDialog.ask(isSuspend ? 'Приостановить работу по заявке?' : 'Возобновить работу по заявке?', {
-        confirmLabel: isSuspend ? 'Приостановить' : 'Возобновить',
-        reasonField: isSuspend ? { required: true, placeholder: 'Опишите причину приостановки' } : null,
-      }),
+      () => confirmDialog.ask(confirmationMessage, confirmationOptions),
     )
     if (!context) return
     const { requestId, lockVersion, confirmed } = context
@@ -134,13 +140,21 @@ export function useRequestActions(request, refresh) {
     suspendResumeLoading.value = true
     suspendResumeError.value = ''
     try {
-      await (isSuspend ? requestApi.suspend(requestId, lockVersion, confirmed.reason) : requestApi.resume(requestId, lockVersion))
+      const mutation = isSuspend
+        ? requestApi.suspend(requestId, lockVersion, confirmed.reason)
+        : requestApi.resume(requestId, lockVersion)
+      await mutation
       if (!guards.suspendResume.isCurrent(token, request.value?.backendId)) return
-      try { await refresh(requestId) } catch { suspendResumeError.value = isSuspend ? 'Работа приостановлена, но данные на экране не обновились. Обновите страницу перед следующим действием.' : 'Работа возобновлена, но данные на экране не обновились. Обновите страницу перед следующим действием.' }
+      const refreshError = isSuspend
+        ? 'Работа приостановлена, но данные на экране не обновились. Обновите страницу перед следующим действием.'
+        : 'Работа возобновлена, но данные на экране не обновились. Обновите страницу перед следующим действием.'
+      try { await refresh(requestId) } catch { suspendResumeError.value = refreshError }
     } catch (error) {
       if (!guards.suspendResume.isCurrent(token, request.value?.backendId)) return
       if (error.status === 409) await recoverConflict(requestId, 'Заявка уже изменена.')
-      else suspendResumeError.value = error.status === 403 ? 'Приостановить или возобновить работу может только назначенный исполнитель или руководитель.' : isSuspend ? 'Не удалось приостановить работу. Повторите попытку.' : 'Не удалось возобновить работу. Повторите попытку.'
+      else suspendResumeError.value = errorMessage(error, {
+        403: 'Приостановить или возобновить работу может только назначенный исполнитель или руководитель.',
+      }, isSuspend ? 'Не удалось приостановить работу. Повторите попытку.' : 'Не удалось возобновить работу. Повторите попытку.')
     } finally {
       if (guards.suspendResume.isCurrent(token, request.value?.backendId)) suspendResumeLoading.value = false
     }
@@ -236,20 +250,28 @@ export function useRequestActions(request, refresh) {
 
   async function decideSecurity(decision) {
     const isApprove = decision === 'approve'
-    const confirmed = await confirmDialog.ask(isApprove ? 'Согласовать заключение и завершить заявку?' : 'Вернуть заявку исполнителю на доработку?', isApprove ? { confirmLabel: 'Согласовать' } : { confirmLabel: 'Вернуть', reasonField: { required: true, placeholder: 'Опишите, что нужно исправить' } })
+    const confirmationMessage = isApprove ? 'Согласовать заключение и завершить заявку?' : 'Вернуть заявку исполнителю на доработку?'
+    const confirmationOptions = isApprove
+      ? { confirmLabel: 'Согласовать' }
+      : { confirmLabel: 'Вернуть', reasonField: { required: true, placeholder: 'Опишите, что нужно исправить' } }
+    const confirmed = await confirmDialog.ask(confirmationMessage, confirmationOptions)
     if (!confirmed) return
     const requestId = request.value.backendId
     const token = guards.security.begin(requestId)
     securityLoading.value = true
     securityError.value = ''
     try {
-      await requestApi.decideSecurity(requestId, decision, isApprove ? null : confirmed.reason, request.value.lockVersion)
+      const reason = isApprove ? null : confirmed.reason
+      await requestApi.decideSecurity(requestId, decision, reason, request.value.lockVersion)
       if (!guards.security.isCurrent(token, request.value?.backendId)) return
       try { await refresh(requestId, { disableCapabilities: ['canSecurityDecide'] }) } catch { actionError.value = 'Решение сохранено, но данные на экране не обновились. Обновите страницу перед следующим действием.' }
     } catch (error) {
       if (!guards.security.isCurrent(token, request.value?.backendId)) return
       if (error.status === 409) await recoverConflict(requestId, 'Заявка уже изменена.')
-      else securityError.value = error.status === 422 ? 'Проверьте решение и причину возврата.' : error.status === 403 ? 'Решение может принять только сотрудник СБ на этапе контроля.' : 'Не удалось сохранить решение СБ.'
+      else securityError.value = errorMessage(error, {
+        403: 'Решение может принять только сотрудник СБ на этапе контроля.',
+        422: 'Проверьте решение и причину возврата.',
+      }, 'Не удалось сохранить решение СБ.')
     } finally {
       if (guards.security.isCurrent(token, request.value?.backendId)) securityLoading.value = false
     }
@@ -279,7 +301,10 @@ export function useRequestActions(request, refresh) {
     } catch (error) {
       if (!guards.opinion.isCurrent(token, request.value?.backendId)) return
       if (error.status === 409) await recoverConflict(requestId, 'Заявка уже изменена.')
-      else opinionError.value = error.status === 422 ? 'Заключение должно содержать от 10 до 20 000 символов.' : error.status === 403 ? 'Опубликовать заключение может только назначенный эксперт.' : 'Не удалось опубликовать заключение.'
+      else opinionError.value = errorMessage(error, {
+        403: 'Опубликовать заключение может только назначенный эксперт.',
+        422: 'Заключение должно содержать от 10 до 20 000 символов.',
+      }, 'Не удалось опубликовать заключение.')
     } finally {
       if (guards.opinion.isCurrent(token, request.value?.backendId)) opinionLoading.value = false
     }
