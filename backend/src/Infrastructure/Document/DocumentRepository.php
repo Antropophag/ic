@@ -6,7 +6,6 @@ namespace App\Infrastructure\Document;
 
 use App\Domain\Request\AttachmentPolicy;
 use App\Domain\Request\ConcurrentRequestModification;
-use App\Domain\Request\OpinionPolicy;
 use App\Domain\Request\ReportDeletionPolicy;
 use App\Domain\Request\RequestNotFound;
 use App\Domain\Request\RequestStatus;
@@ -361,158 +360,6 @@ final class DocumentRepository
     }
 
     /** @return array<string, mixed> */
-    public function publishOpinion(
-        int $requestId,
-        int $actorId,
-        string $body,
-        int $expectedLockVersion,
-        OpinionPdfRenderer $renderer,
-    ): array {
-        $transaction = $this->db->beginTransaction();
-        $storageKey = null;
-        $temporaryPath = null;
-        try {
-            $request = $this->db->createCommand(
-                'SELECT r.number, r.status, r.lock_version AS lockVersion, r.product_name AS productName, '
-                . 'r.manufacturer, r.supplier, actor.display_name AS expertName, actor.position AS expertPosition, '
-                . 'actor.is_active AS actorIsActive, (expert.user_id = :expert_actor) AS isCurrentExpert '
-                . 'FROM {{%requests}} r JOIN {{%users}} actor ON actor.id = :actor_id '
-                . 'LEFT JOIN {{%request_assignments}} expert ON expert.request_id = r.id '
-                . "AND expert.assignment_type = 'expert' AND expert.valid_to IS NULL "
-                . 'WHERE r.id = :request_id FOR UPDATE',
-                [':request_id' => $requestId, ':actor_id' => $actorId, ':expert_actor' => $actorId],
-            )->queryOne();
-            if ($request === false) {
-                throw new RequestNotFound('Request not found');
-            }
-            (new OpinionPolicy())->assertCanPublish(
-                RequestStatus::from((string) $request['status']),
-                (bool) $request['actorIsActive'],
-                (bool) $request['isCurrentExpert'],
-            );
-            if ((int) $request['lockVersion'] !== $expectedLockVersion) {
-                throw new ConcurrentRequestModification();
-            }
-
-            $revision = (int) $this->db->createCommand(
-                'SELECT COALESCE(MAX(revision), 0) + 1 FROM {{%expert_opinions}} WHERE request_id = :request_id',
-                [':request_id' => $requestId],
-            )->queryScalar();
-            $pdf = $renderer->render([
-                'number' => (int) $request['number'],
-                'productName' => (string) $request['productName'],
-                'manufacturer' => (string) $request['manufacturer'],
-                'supplier' => (string) $request['supplier'],
-                'expertName' => (string) $request['expertName'],
-                'expertPosition' => (string) ($request['expertPosition'] ?: 'Эксперт'),
-                'body' => $body,
-                'date' => gmdate('d.m.Y'),
-            ]);
-            $temporaryPath = tempnam(sys_get_temp_dir(), 'opinion-');
-            if ($temporaryPath === false || file_put_contents($temporaryPath, $pdf, LOCK_EX) !== strlen($pdf)) {
-                throw new \RuntimeException('Cannot prepare opinion PDF.');
-            }
-            $storageKey = $this->storage->store($temporaryPath);
-            $sha256 = hash('sha256', $pdf);
-            $size = strlen($pdf);
-            $now = Clock::now();
-            $documentId = $this->findOrCreateOpinion($requestId, $actorId);
-            $this->db->createCommand()->insert('{{%request_document_versions}}', [
-                'document_id' => $documentId,
-                'version' => $revision,
-                'storage_key' => $storageKey,
-                'original_name' => sprintf('expert-opinion-%06d-v%d.pdf', (int) $request['number'], $revision),
-                'mime_type' => 'application/pdf',
-                'size_bytes' => $size,
-                'sha256' => $sha256,
-                'uploaded_by' => $actorId,
-                'created_at' => $now,
-            ])->execute();
-            $versionId = (int) $this->db->getLastInsertID();
-            $this->db->createCommand()->insert('{{%expert_opinions}}', [
-                'request_id' => $requestId,
-                'revision' => $revision,
-                'expert_id' => $actorId,
-                'body' => $body,
-                'document_version_id' => $versionId,
-                'created_at' => $now,
-            ])->execute();
-            $nextLockVersion = $expectedLockVersion + 1;
-            $updated = $this->db->createCommand()->update('{{%requests}}', [
-                'status' => RequestStatus::SecurityReview->value,
-                'lock_version' => $nextLockVersion,
-                'updated_at' => $now,
-            ], [
-                'id' => $requestId,
-                'status' => RequestStatus::OpinionPreparation->value,
-                'lock_version' => $expectedLockVersion,
-            ])->execute();
-            if ($updated !== 1) {
-                throw new ConcurrentRequestModification();
-            }
-            $this->db->createCommand()->insert('{{%request_transitions}}', [
-                'request_id' => $requestId,
-                'actor_id' => $actorId,
-                'from_status' => RequestStatus::OpinionPreparation->value,
-                'to_status' => RequestStatus::SecurityReview->value,
-                'action' => 'publish_opinion',
-                'rule_id' => 'DOC-007',
-                'created_at' => $now,
-            ])->execute();
-            $this->db->createCommand()->insert('{{%audit_events}}', [
-                'event_type' => 'request.opinion_published',
-                'entity_type' => 'request',
-                'entity_id' => $requestId,
-                'actor_id' => $actorId,
-                'rule_id' => 'DOC-007',
-                'payload_json' => ['revision' => $revision, 'document_version_id' => $versionId],
-                'created_at' => $now,
-            ])->execute();
-            // ТЗ 4.9: сотрудники СБ уведомляются о поступлении отчёта и
-            // заключения на контроль, письмо содержит активные ссылки на
-            // скачивание обоих документов без входа в портал.
-            $documentLinks = [['label' => 'заключение', 'documentVersionId' => $versionId]];
-            $reportVersionId = $this->latestDocumentVersionId($requestId, 'report');
-            if ($reportVersionId !== null) {
-                $documentLinks[] = ['label' => 'отчёт', 'documentVersionId' => $reportVersionId];
-            }
-            $outbox = new NotificationOutbox($this->db);
-            foreach ($this->activeUsersWithRoles(['security_officer']) as $officer) {
-                $outbox->enqueue(
-                    $requestId,
-                    'request.opinion_published',
-                    $officer['email'],
-                    $officer['name'],
-                    'Заключение поступило на контроль СБ',
-                    'Экспертное заключение опубликовано и ожидает проверки службы безопасности. '
-                    . 'Откройте заявку в портале.',
-                    $documentLinks,
-                );
-            }
-            $transaction->commit();
-
-            return [
-                'requestId' => $requestId,
-                'revision' => $revision,
-                'documentVersionId' => $versionId,
-                'status' => RequestStatus::SecurityReview->value,
-                'lockVersion' => $nextLockVersion,
-            ];
-        } catch (\Throwable $error) {
-            $transaction->rollBack();
-            if ($storageKey !== null) {
-                $this->storage->delete($storageKey);
-            }
-            throw $error;
-        } finally {
-            if ($temporaryPath !== null && is_file($temporaryPath)) {
-                // nosemgrep: php.lang.security.unlink-use.unlink-use -- tempnam generated this path
-                unlink($temporaryPath);
-            }
-        }
-    }
-
-    /** @return array<string, mixed> */
     public function findVersionForDownload(int $versionId, int $actorId): array
     {
         $version = $this->db->createCommand(
@@ -651,27 +498,6 @@ final class DocumentRepository
         ])->execute();
     }
 
-    public function recordRejectedOpinion(int $requestId, int $actorId, string $ruleId): void
-    {
-        $allowedReferences = $this->db->createCommand(
-            'SELECT 1 FROM {{%requests}} r JOIN {{%users}} actor ON actor.id = :actor_id '
-            . 'WHERE r.id = :request_id',
-            [':request_id' => $requestId, ':actor_id' => $actorId],
-        )->queryScalar();
-        if ($allowedReferences === false) {
-            return;
-        }
-        $this->db->createCommand()->insert('{{%audit_events}}', [
-            'event_type' => 'request.opinion_publish_rejected',
-            'entity_type' => 'request',
-            'entity_id' => $requestId,
-            'actor_id' => $actorId,
-            'rule_id' => $ruleId,
-            'payload_json' => ['outcome' => 'rejected'],
-            'created_at' => Clock::now(),
-        ])->execute();
-    }
-
     private function findOrCreateDocument(int $requestId, int $actorId, string $title): int
     {
         $documentId = $this->db->createCommand(
@@ -721,25 +547,6 @@ final class DocumentRepository
         return ['id' => (int) $this->db->getLastInsertID(), 'wasDeleted' => false];
     }
 
-    private function findOrCreateOpinion(int $requestId, int $actorId): int
-    {
-        $documentId = $this->db->createCommand(
-            "SELECT id FROM {{%request_documents}} WHERE request_id = :request_id AND document_type = 'opinion' FOR UPDATE",
-            [':request_id' => $requestId],
-        )->queryScalar();
-        if ($documentId !== false) {
-            return (int) $documentId;
-        }
-        $this->db->createCommand()->insert('{{%request_documents}}', [
-            'request_id' => $requestId,
-            'document_type' => 'opinion',
-            'title' => 'Экспертное заключение',
-            'created_by' => $actorId,
-            'created_at' => Clock::now(),
-        ])->execute();
-        return (int) $this->db->getLastInsertID();
-    }
-
     /**
      * @param list<string> $roleCodes
      * @return list<array{email: string, name: string}>
@@ -764,19 +571,5 @@ final class DocumentRepository
             . 'AND r.code IN (' . implode(',', $placeholders) . ')',
             $params,
         )->queryAll();
-    }
-
-    private function latestDocumentVersionId(int $requestId, string $documentType): ?int
-    {
-        $id = $this->db->createCommand(
-            'SELECT v.id FROM {{%request_document_versions}} v '
-            . 'JOIN {{%request_documents}} d ON d.id = v.document_id '
-            . 'WHERE d.request_id = :request_id AND d.document_type = :document_type '
-            . 'AND d.deleted_at IS NULL AND v.deleted_at IS NULL '
-            . 'ORDER BY v.version DESC LIMIT 1',
-            [':request_id' => $requestId, ':document_type' => $documentType],
-        )->queryScalar();
-
-        return $id === false ? null : (int) $id;
     }
 }

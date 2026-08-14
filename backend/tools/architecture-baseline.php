@@ -17,7 +17,6 @@ return [
         'backend/src/Application/Identity/LoginInput.php' => ['yii\\base\\Model'],
         'backend/src/Application/Identity/RevokeRoleInput.php' => ['yii\\base\\Model'],
         'backend/src/Application/Request/ListRequestsInput.php' => ['yii\\base\\Model'],
-        'backend/src/Application/Request/PublishOpinionInput.php' => ['yii\\base\\Model'],
         'backend/src/Http/Controller/AdminController.php' => [
             'App\\Infrastructure\\Admin\\AuditQuery',
             'App\\Infrastructure\\Admin\\NotificationQuery',
@@ -63,15 +62,14 @@ return [
             'App\\Infrastructure\\Document\\DocumentRepository',
             'App\\Infrastructure\\Document\\DocumentStorage',
             'App\\Infrastructure\\Document\\OfficeDocumentInspector',
-            'App\\Infrastructure\\Document\\OpinionPdfRenderer',
             'App\\Infrastructure\\Document\\TestActDocumentGenerator',
             'App\\Infrastructure\\Identity\\CurrentUser',
             'App\\Infrastructure\\Request\\RequestQuery',
         ],
     ],
     'files' => [
-        'backend/src/Http/Controller/RequestController.php' => 861,
-        'backend/src/Infrastructure/Document/DocumentRepository.php' => 782,
+        'backend/src/Http/Controller/RequestController.php' => 856,
+        'backend/src/Infrastructure/Document/DocumentRepository.php' => 575,
         'backend/src/Infrastructure/Request/RequestQuery.php' => 645,
         'frontend/src/components/RequestDetails.vue' => 1272,
         'frontend/src/components/RequestRegistry.vue' => 847,
@@ -85,7 +83,6 @@ return [
         ],
         'backend/src/Infrastructure/Document/DocumentRepository.php' => [
             'DocumentRepository::deleteReport' => 92,
-            'DocumentRepository::publishOpinion' => 150,
             'DocumentRepository::uploadReport' => 159,
         ],
         'backend/src/Infrastructure/Document/TestActDocumentTemplate.php' => [
