@@ -2,11 +2,12 @@
 
 declare(strict_types=1);
 
-namespace App\Application\Request;
+namespace App\Http\Request;
 
+use App\Application\Request\Command\DecideSecurityCommand;
 use yii\base\Model;
 
-final class SecurityDecisionInput extends Model
+final class SecurityDecisionRequest extends Model
 {
     public mixed $decision = null;
     public mixed $reason = null;
@@ -23,5 +24,16 @@ final class SecurityDecisionInput extends Model
             ['lockVersion', 'required'],
             ['lockVersion', 'integer', 'min' => 1],
         ];
+    }
+
+    public function toCommand(int $requestId, int $actorId): DecideSecurityCommand
+    {
+        return new DecideSecurityCommand(
+            $requestId,
+            $actorId,
+            (string) $this->decision,
+            $this->reason === null || $this->reason === '' ? null : (string) $this->reason,
+            (int) $this->lockVersion,
+        );
     }
 }

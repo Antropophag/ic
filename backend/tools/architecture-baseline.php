@@ -20,7 +20,6 @@ return [
         'backend/src/Application/Request/CreateRequestInput.php' => ['yii\\base\\Model'],
         'backend/src/Application/Request/ListRequestsInput.php' => ['yii\\base\\Model'],
         'backend/src/Application/Request/PublishOpinionInput.php' => ['yii\\base\\Model'],
-        'backend/src/Application/Request/SecurityDecisionInput.php' => ['yii\\base\\Model'],
         'backend/src/Http/Controller/AdminController.php' => [
             'App\\Infrastructure\\Admin\\AuditQuery',
             'App\\Infrastructure\\Admin\\NotificationQuery',
@@ -74,10 +73,9 @@ return [
         ],
     ],
     'files' => [
-        'backend/src/Http/Controller/RequestController.php' => 871,
+        'backend/src/Http/Controller/RequestController.php' => 868,
         'backend/src/Infrastructure/Document/DocumentRepository.php' => 782,
         'backend/src/Infrastructure/Request/RequestQuery.php' => 646,
-        'backend/src/Infrastructure/Request/RequestRepository.php' => 519,
         'frontend/src/components/RequestDetails.vue' => 1272,
         'frontend/src/components/RequestRegistry.vue' => 847,
     ],
@@ -108,7 +106,6 @@ return [
         ],
         'backend/src/Infrastructure/Request/RequestRepository.php' => [
             'RequestRepository::create' => 103,
-            'RequestRepository::decideSecurity' => 131,
         ],
     ],
 ];
