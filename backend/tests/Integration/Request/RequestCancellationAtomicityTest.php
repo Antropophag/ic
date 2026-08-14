@@ -9,7 +9,6 @@ use App\Http\Request\CreateRequest as CreateRequestInput;
 use App\Application\Request\UseCase\CancelRequest;
 use App\Domain\Request\RequestAction;
 use App\Infrastructure\Persistence\Request\RequestCancellationPersistenceAdapter;
-use App\Infrastructure\Request\RequestRepository;
 use PHPUnit\Framework\TestCase;
 use yii\db\Connection;
 

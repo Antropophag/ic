@@ -5,7 +5,6 @@ declare(strict_types=1);
 namespace Tests\Integration\Import;
 
 use App\Http\Request\CreateRequest as CreateRequestInput;
-use App\Infrastructure\Request\RequestRepository;
 use RuntimeException;
 use Tests\Integration\IntegrationTestCase;
 use yii\db\Migration;

@@ -13,6 +13,8 @@ return [
     'bootstrap' => ['log'],
     'container' => [
         'definitions' => [
+            App\Application\Request\Port\RequestCommentGateway::class => static fn () =>
+                new App\Infrastructure\Persistence\Request\RequestCommentPersistenceAdapter(Yii::$app->db),
             App\Application\Request\Port\RequestColorGateway::class => static fn () =>
                 new App\Infrastructure\Persistence\Request\RequestColorPersistenceAdapter(Yii::$app->db),
             App\Application\Request\Port\RequestDepartmentGateway::class => static fn () =>

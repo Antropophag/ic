@@ -8,7 +8,6 @@ use App\Application\Request\Command\ChangeRequestDepartmentCommand;
 use App\Http\Request\CreateRequest as CreateRequestInput;
 use App\Application\Request\UseCase\ChangeRequestDepartment;
 use App\Infrastructure\Persistence\Request\RequestDepartmentPersistenceAdapter;
-use App\Infrastructure\Request\RequestRepository;
 use PHPUnit\Framework\TestCase;
 use yii\db\Connection;
 

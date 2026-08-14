@@ -12,7 +12,6 @@ use App\Domain\Request\RequestNotFound;
 use App\Domain\Request\SecurityDecisionDenied;
 use App\Infrastructure\Clock;
 use App\Infrastructure\Persistence\Request\SecurityDecisionPersistenceAdapter;
-use App\Infrastructure\Request\RequestRepository;
 use Tests\Integration\IntegrationTestCase;
 
 final class SecurityDecisionTest extends IntegrationTestCase

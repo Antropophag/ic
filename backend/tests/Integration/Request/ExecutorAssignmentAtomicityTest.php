@@ -8,7 +8,6 @@ use App\Application\Request\Command\AssignExecutorCommand;
 use App\Http\Request\CreateRequest as CreateRequestInput;
 use App\Application\Request\UseCase\AssignExecutor;
 use App\Infrastructure\Persistence\Request\ExecutorAssignmentPersistenceAdapter;
-use App\Infrastructure\Request\RequestRepository;
 use PHPUnit\Framework\TestCase;
 use yii\db\Connection;
 

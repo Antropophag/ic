@@ -10,7 +10,6 @@ use App\Application\Request\Port\ExpertAssignmentGateway;
 use App\Application\Request\UseCase\AssignExpert;
 use App\Http\Controller\RequestController;
 use App\Infrastructure\Persistence\Request\ExpertAssignmentPersistenceAdapter;
-use App\Infrastructure\Request\RequestRepository;
 use Tests\Integration\IntegrationTestCase;
 use Yii;
 use yii\web\Application;

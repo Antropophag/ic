@@ -497,8 +497,7 @@ final class RequestQuery
             . 'FROM {{%audit_events}} a '
             . 'JOIN {{%users}} u ON u.id = a.actor_id '
             // assign_executor/claim_expert/reassign_expert пишут одинаковое
-            // поле assignment_id в payload_json (см. RequestRepository::
-            // assignExecutor()/performExpertAssignment()) — резолвим имя
+            // поле assignment_id в payload_json — резолвим имя
             // адресата действия через саму запись назначения, а не парсим
             // executor_id/expert_id по отдельности (разные ключи на разные
             // события): проще и работает для report_deleted (NULL) тоже.
