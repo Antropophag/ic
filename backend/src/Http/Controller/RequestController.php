@@ -14,8 +14,9 @@ use App\Application\Request\Command\AssignExpertCommand;
 use App\Application\Request\Command\AssignExecutorCommand;
 use App\Application\Request\Command\CancelRequestCommand;
 use App\Application\Request\Command\DecideSecurityCommand;
-use App\Application\Request\PublishOpinionInput;
+use App\Application\Request\Command\PublishOpinionCommand;
 use App\Application\Request\UseCase\DecideSecurity;
+use App\Application\Request\UseCase\PublishOpinion;
 use App\Application\Request\UseCase\CreateRequest as CreateRequestUseCase;
 use App\Application\Request\UseCase\SetRequestColor;
 use App\Application\Request\UseCase\RequestLifecycle;
@@ -48,7 +49,6 @@ use App\Infrastructure\Identity\CurrentUser;
 use App\Infrastructure\Document\DocumentRepository;
 use App\Infrastructure\Document\DocumentStorage;
 use App\Infrastructure\Document\OfficeDocumentInspector;
-use App\Infrastructure\Document\OpinionPdfRenderer;
 use App\Infrastructure\Document\TestActDocumentGenerator;
 use App\Infrastructure\Request\RequestQuery;
 use App\Http\Request\AddCommentRequest;
@@ -60,6 +60,7 @@ use App\Http\Request\CancelRequest;
 use App\Http\Request\AssignExecutorRequest;
 use App\Http\Request\AssignExpertRequest;
 use App\Http\Request\SecurityDecisionRequest;
+use App\Http\Request\PublishOpinionRequest;
 use App\Http\Request\CreateRequest;
 use Yii;
 use yii\web\Response;
@@ -523,27 +524,21 @@ final class RequestController extends ApiController
     /** @return array<string, mixed> */
     public function actionPublishOpinion(int $id): array
     {
-        $input = new PublishOpinionInput();
+        $input = new PublishOpinionRequest();
         if (($errors = $this->bodyValidationErrors($input)) !== null) {
             return $errors;
         }
 
-        $actorId = $this->currentUserId();
+        $command = $input->toCommand($id, $this->currentUserId());
         try {
-            return $this->documents()->publishOpinion(
-                $id,
-                $actorId,
-                trim((string) $input->body),
-                (int) $input->lockVersion,
-                new OpinionPdfRenderer(),
-            );
+            return Yii::$container->get(PublishOpinion::class)->execute($command)->toArray();
         } catch (RequestNotFound $error) {
             throw new NotFoundHttpException($error->getMessage());
         } catch (OpinionDenied $error) {
-            $this->recordRejectedOpinionSafely($id, $actorId, $error->ruleId);
+            $this->recordRejectedOpinionSafely($command, $error->ruleId);
             throw new ForbiddenHttpException($error->getMessage());
         } catch (ConcurrentRequestModification $error) {
-            $this->recordRejectedOpinionSafely($id, $actorId, $error->ruleId);
+            $this->recordRejectedOpinionSafely($command, $error->ruleId);
             throw new ConflictHttpException($error->getMessage());
         }
     }
@@ -794,12 +789,12 @@ final class RequestController extends ApiController
         );
     }
 
-    private function recordRejectedOpinionSafely(int $requestId, int $actorId, string $ruleId): void
+    private function recordRejectedOpinionSafely(PublishOpinionCommand $command, string $ruleId): void
     {
         $this->recordRejectedSafely(
-            fn () => $this->documents()->recordRejectedOpinion($requestId, $actorId, $ruleId),
+            fn () => Yii::$container->get(PublishOpinion::class)->recordRejected($command, $ruleId),
             'Не удалось записать аудит отклонённой публикации заключения.',
-            ['requestId' => $requestId, 'actorId' => $actorId, 'ruleId' => $ruleId],
+            ['requestId' => $command->requestId, 'actorId' => $command->actorId, 'ruleId' => $ruleId],
             __METHOD__,
         );
     }
