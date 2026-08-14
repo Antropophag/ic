@@ -15,8 +15,9 @@ use App\Application\Request\AddCommentInput;
 use App\Application\Request\Command\AssignExpertCommand;
 use App\Application\Request\Command\AssignExecutorCommand;
 use App\Application\Request\Command\CancelRequestCommand;
+use App\Application\Request\Command\DecideSecurityCommand;
 use App\Application\Request\PublishOpinionInput;
-use App\Application\Request\SecurityDecisionInput;
+use App\Application\Request\UseCase\DecideSecurity;
 use App\Application\Request\UseCase\SetRequestColor;
 use App\Application\Request\UseCase\RequestLifecycle;
 use App\Application\Request\UseCase\CancelRequest as CancelRequestUseCase;
@@ -58,6 +59,7 @@ use App\Http\Request\ReasonedLockVersionRequest;
 use App\Http\Request\CancelRequest;
 use App\Http\Request\AssignExecutorRequest;
 use App\Http\Request\AssignExpertRequest;
+use App\Http\Request\SecurityDecisionRequest;
 use Yii;
 use yii\web\Response;
 use yii\web\ConflictHttpException;
@@ -551,27 +553,22 @@ final class RequestController extends ApiController
     /** @return array<string, mixed> */
     public function actionSecurityDecision(int $id): array
     {
-        $input = new SecurityDecisionInput();
+        $input = new SecurityDecisionRequest();
         if (($errors = $this->bodyValidationErrors($input)) !== null) {
             return $errors;
         }
 
         $actorId = $this->currentUserId();
+        $command = $input->toCommand($id, $actorId);
         try {
-            return $this->repository()->decideSecurity(
-                $id,
-                $actorId,
-                (string) $input->decision,
-                $input->reason === '' ? null : (string) $input->reason,
-                (int) $input->lockVersion,
-            );
+            return Yii::$container->get(DecideSecurity::class)->execute($command)->toArray();
         } catch (RequestNotFound $error) {
             throw new NotFoundHttpException($error->getMessage());
         } catch (SecurityDecisionDenied $error) {
-            $this->recordRejectedSecurityDecisionSafely($id, $actorId, $error->ruleId);
+            $this->recordRejectedSecurityDecisionSafely($command, $error->ruleId);
             throw new ForbiddenHttpException($error->getMessage());
         } catch (ConcurrentRequestModification $error) {
-            $this->recordRejectedSecurityDecisionSafely($id, $actorId, $error->ruleId);
+            $this->recordRejectedSecurityDecisionSafely($command, $error->ruleId);
             throw new ConflictHttpException($error->getMessage());
         }
     }
@@ -809,12 +806,12 @@ final class RequestController extends ApiController
         );
     }
 
-    private function recordRejectedSecurityDecisionSafely(int $requestId, int $actorId, string $ruleId): void
+    private function recordRejectedSecurityDecisionSafely(DecideSecurityCommand $command, string $ruleId): void
     {
         $this->recordRejectedSafely(
-            fn () => $this->repository()->recordRejectedSecurityDecision($requestId, $actorId, $ruleId),
+            fn () => Yii::$container->get(DecideSecurity::class)->recordRejected($command, $ruleId),
             'Не удалось записать аудит отклонённого решения СБ.',
-            ['requestId' => $requestId, 'actorId' => $actorId, 'ruleId' => $ruleId],
+            ['requestId' => $command->requestId, 'actorId' => $command->actorId, 'ruleId' => $ruleId],
             __METHOD__,
         );
     }
