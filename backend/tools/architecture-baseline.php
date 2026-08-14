@@ -69,7 +69,6 @@ return [
     ],
     'files' => [
         'backend/src/Http/Controller/RequestController.php' => 856,
-        'backend/src/Infrastructure/Document/DocumentRepository.php' => 575,
         'backend/src/Infrastructure/Request/RequestQuery.php' => 645,
         'frontend/src/components/RequestDetails.vue' => 1272,
         'frontend/src/components/RequestRegistry.vue' => 847,
@@ -80,10 +79,6 @@ return [
         ],
         'backend/src/Infrastructure/Development/DevelopmentRequestSeeder.php' => [
             'DevelopmentRequestSeeder::seed' => 83,
-        ],
-        'backend/src/Infrastructure/Document/DocumentRepository.php' => [
-            'DocumentRepository::deleteReport' => 92,
-            'DocumentRepository::uploadReport' => 159,
         ],
         'backend/src/Infrastructure/Document/TestActDocumentTemplate.php' => [
             'TestActDocumentTemplate::build' => 123,

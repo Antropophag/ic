@@ -14,9 +14,12 @@ use App\Application\Request\Command\AssignExpertCommand;
 use App\Application\Request\Command\AssignExecutorCommand;
 use App\Application\Request\Command\CancelRequestCommand;
 use App\Application\Request\Command\DecideSecurityCommand;
+use App\Application\Request\Command\DeleteReportCommand;
 use App\Application\Request\Command\PublishOpinionCommand;
+use App\Application\Request\Command\UploadReportCommand;
 use App\Application\Request\UseCase\DecideSecurity;
 use App\Application\Request\UseCase\PublishOpinion;
+use App\Application\Request\UseCase\ReportLifecycle;
 use App\Application\Request\UseCase\CreateRequest as CreateRequestUseCase;
 use App\Application\Request\UseCase\SetRequestColor;
 use App\Application\Request\UseCase\RequestLifecycle;
@@ -257,14 +260,8 @@ final class RequestController extends ApiController
         }
 
         try {
-            $report = $this->documents()->uploadReport(
-                $id,
-                $actorId,
-                $file->name,
-                $mimeType,
-                $size,
-                $file->tempName,
-            );
+            $command = new UploadReportCommand($id, $actorId, $file->name, $mimeType, $size, $file->tempName);
+            $report = Yii::$container->get(ReportLifecycle::class)->upload($command)->toArray();
             Yii::$app->response->statusCode = 201;
             return $report;
         } catch (RequestNotFound $error) {
@@ -289,7 +286,8 @@ final class RequestController extends ApiController
 
         $actorId = $this->currentUserId();
         try {
-            return $this->documents()->deleteReport($id, (int) $input->lockVersion, $actorId, (string) $input->reason);
+            $command = new DeleteReportCommand($id, (int) $input->lockVersion, $actorId, (string) $input->reason);
+            return Yii::$container->get(ReportLifecycle::class)->delete($command)->toArray();
         } catch (RequestNotFound $error) {
             throw new NotFoundHttpException($error->getMessage());
         } catch (ReportDeletionDenied $error) {
@@ -772,7 +770,8 @@ final class RequestController extends ApiController
     private function recordRejectedReportSafely(int $requestId, int $actorId, string $ruleId): void
     {
         $this->recordRejectedSafely(
-            fn () => $this->documents()->recordRejectedReportUpload($requestId, $actorId, $ruleId),
+            fn () => Yii::$container->get(ReportLifecycle::class)
+                ->recordRejectedUpload($requestId, $actorId, $ruleId),
             'Не удалось записать аудит отклонённой загрузки отчёта.',
             ['requestId' => $requestId, 'actorId' => $actorId, 'ruleId' => $ruleId],
             __METHOD__,
@@ -782,7 +781,8 @@ final class RequestController extends ApiController
     private function recordRejectedReportDeletionSafely(int $requestId, int $actorId, string $ruleId): void
     {
         $this->recordRejectedSafely(
-            fn () => $this->documents()->recordRejectedReportDeletion($requestId, $actorId, $ruleId),
+            fn () => Yii::$container->get(ReportLifecycle::class)
+                ->recordRejectedDeletion($requestId, $actorId, $ruleId),
             'Не удалось записать аудит отклонённого удаления отчёта.',
             ['requestId' => $requestId, 'actorId' => $actorId, 'ruleId' => $ruleId],
             __METHOD__,

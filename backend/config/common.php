@@ -37,6 +37,13 @@ return [
                     ),
                 ),
             App\Application\Request\Port\OpinionRenderer::class => App\Infrastructure\Document\OpinionRendererAdapter::class,
+            App\Application\Request\Port\ReportLifecycleGateway::class => static fn () =>
+                new App\Infrastructure\Persistence\Request\ReportLifecyclePersistenceAdapter(
+                    Yii::$app->db,
+                    new App\Infrastructure\Document\DocumentStorage(
+                        getenv('DOCUMENT_STORAGE_PATH') ?: '/app/storage/documents',
+                    ),
+                ),
             App\Application\Request\Port\RequestCreationGateway::class => static fn () =>
                 new App\Infrastructure\Persistence\Request\RequestCreationPersistenceAdapter(Yii::$app->db),
         ],
