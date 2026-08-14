@@ -10,6 +10,7 @@ use App\Application\Request\UseCase\DecideSecurity;
 use App\Domain\Request\ConcurrentRequestModification;
 use App\Domain\Request\RequestNotFound;
 use App\Domain\Request\SecurityDecisionDenied;
+use App\Domain\Request\SecurityDecisionConflict;
 use App\Infrastructure\Clock;
 use App\Infrastructure\Persistence\Request\SecurityDecisionPersistenceAdapter;
 use Tests\Integration\IntegrationTestCase;
@@ -135,7 +136,7 @@ final class SecurityDecisionTest extends IntegrationTestCase
             'reason' => 'Предыдущая проверка',
             'created_at' => Clock::now(),
         ])->execute();
-        $this->expectExceptionMessage('Current expert opinion not found or already checked.');
+        $this->expectException(SecurityDecisionConflict::class);
         $this->decide($fixture, 'approve');
     }
 
