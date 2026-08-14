@@ -12,7 +12,6 @@ use App\Domain\Request\ConcurrentRequestModification;
 use App\Domain\Request\RequestColor;
 use App\Domain\Request\RequestNotFound;
 use App\Infrastructure\Persistence\Request\RequestColorPersistenceAdapter;
-use App\Infrastructure\Request\RequestRepository;
 use Tests\Integration\IntegrationTestCase;
 
 final class SetRequestColorTest extends IntegrationTestCase

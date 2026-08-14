@@ -8,7 +8,6 @@ use App\Application\Request\Command\DecideSecurityCommand;
 use App\Http\Request\CreateRequest as CreateRequestInput;
 use App\Application\Request\UseCase\DecideSecurity;
 use App\Infrastructure\Persistence\Request\SecurityDecisionPersistenceAdapter;
-use App\Infrastructure\Request\RequestRepository;
 use PHPUnit\Framework\TestCase;
 use yii\db\Connection;
 

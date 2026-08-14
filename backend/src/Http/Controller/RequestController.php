@@ -10,7 +10,6 @@ use App\Application\Document\TestActInput;
 use App\Application\Request\Command\RequestLifecycleCommand;
 use App\Application\Request\UseCase\ChangeRequestDepartment;
 use App\Application\Request\ListRequestsInput;
-use App\Application\Request\AddCommentInput;
 use App\Application\Request\Command\AssignExpertCommand;
 use App\Application\Request\Command\AssignExecutorCommand;
 use App\Application\Request\Command\CancelRequestCommand;
@@ -23,6 +22,7 @@ use App\Application\Request\UseCase\RequestLifecycle;
 use App\Application\Request\UseCase\CancelRequest as CancelRequestUseCase;
 use App\Application\Request\UseCase\AssignExecutor;
 use App\Application\Request\UseCase\AssignExpert;
+use App\Application\Request\UseCase\AddComment;
 use App\Domain\Request\AssignmentDenied;
 use App\Domain\Request\AssignmentTargetNotFound;
 use App\Domain\Request\AttachmentDenied;
@@ -51,7 +51,7 @@ use App\Infrastructure\Document\OfficeDocumentInspector;
 use App\Infrastructure\Document\OpinionPdfRenderer;
 use App\Infrastructure\Document\TestActDocumentGenerator;
 use App\Infrastructure\Request\RequestQuery;
-use App\Infrastructure\Request\RequestRepository;
+use App\Http\Request\AddCommentRequest;
 use App\Http\Request\SetColorRequest;
 use App\Http\Request\ChangeDepartmentRequest;
 use App\Http\Request\LockVersionRequest;
@@ -163,19 +163,17 @@ final class RequestController extends ApiController
     /** @return array<string, mixed> */
     public function actionAddComment(int $id): array
     {
-        $input = new AddCommentInput();
+        $input = new AddCommentRequest();
         if (($errors = $this->bodyValidationErrors($input)) !== null) {
             return $errors;
         }
 
         try {
-            $comment = $this->repository()->addComment(
-                $id,
-                $this->currentUserId(),
-                (string) $input->body,
+            $comment = Yii::$container->get(AddComment::class)->execute(
+                $input->toCommand($id, $this->currentUserId()),
             );
             Yii::$app->response->statusCode = 201;
-            return $comment;
+            return $comment->toArray();
         } catch (RequestNotFound $error) {
             throw new NotFoundHttpException($error->getMessage());
         } catch (CommentDenied $error) {
@@ -727,7 +725,7 @@ final class RequestController extends ApiController
     private function recordRejectedColorSafely(int $requestId, int $actorId, string $ruleId): void
     {
         $this->recordRejectedSafely(
-            fn () => $this->repository()->recordRejectedColor($requestId, $actorId, $ruleId),
+            fn () => Yii::$container->get(SetRequestColor::class)->recordRejected($requestId, $actorId, $ruleId),
             'Не удалось записать аудит отклонённой цветовой метки.',
             ['requestId' => $requestId, 'actorId' => $actorId, 'ruleId' => $ruleId],
             __METHOD__,
@@ -839,11 +837,6 @@ final class RequestController extends ApiController
     private function currentUserId(): int
     {
         return (new CurrentUser(Yii::$app->db))->id(Yii::$app->request);
-    }
-
-    private function repository(): RequestRepository
-    {
-        return new RequestRepository(Yii::$app->db);
     }
 
     private function query(): RequestQuery

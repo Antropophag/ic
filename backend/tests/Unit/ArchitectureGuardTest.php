@@ -54,7 +54,8 @@ PHP);
         $this->write('backend/src/Application/Example.php', <<<'PHP'
 <?php
 namespace App\Application;
-use App\Infrastructure\Request\{RequestQuery, RequestRepository as Repository};
+use App\Infrastructure\Request\RequestQuery;
+use App\Infrastructure\Document\DocumentRepository as Repository;
 final class Example {}
 PHP);
 
@@ -65,7 +66,7 @@ PHP);
             $errors,
         );
         self::assertContains(
-            'New forbidden dependency: backend/src/Application/Example.php -> App\Infrastructure\Request\RequestRepository',
+            'New forbidden dependency: backend/src/Application/Example.php -> App\Infrastructure\Document\DocumentRepository',
             $errors,
         );
     }

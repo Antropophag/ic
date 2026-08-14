@@ -15,7 +15,6 @@ use App\Infrastructure\Document\DocumentStorage;
 use App\Infrastructure\Notification\NotificationOutboxProcessor;
 use App\Infrastructure\Notification\NotificationOutboxCredentialCleanup;
 use App\Infrastructure\Request\RequestQuery;
-use App\Infrastructure\Request\RequestRepository;
 use Tests\Integration\IntegrationTestCase;
 
 final class DocumentRepositoryTest extends IntegrationTestCase

@@ -6,6 +6,7 @@ namespace Tests\Integration\Request;
 
 use App\Http\Request\CreateRequest as CreateRequestInput;
 use App\Application\Request\Command\AssignExecutorCommand;
+use App\Application\Request\Command\AddCommentCommand;
 use App\Application\Request\Command\AssignExpertCommand;
 use App\Application\Request\Command\ExpertAssignmentAction;
 use App\Application\Request\Command\ChangeRequestDepartmentCommand;
@@ -13,6 +14,7 @@ use App\Application\Request\Command\RequestLifecycleCommand;
 use App\Application\Request\Command\CancelRequestCommand;
 use App\Application\Request\UseCase\CancelRequest;
 use App\Application\Request\UseCase\AssignExecutor;
+use App\Application\Request\UseCase\AddComment;
 use App\Application\Request\UseCase\AssignExpert;
 use App\Application\Request\UseCase\ChangeRequestDepartment;
 use App\Application\Request\UseCase\RequestLifecycle;
@@ -31,12 +33,12 @@ use App\Infrastructure\Persistence\Request\RequestDepartmentPersistenceAdapter;
 use App\Infrastructure\Persistence\Request\RequestLifecyclePersistenceAdapter;
 use App\Infrastructure\Persistence\Request\RequestCancellationPersistenceAdapter;
 use App\Infrastructure\Persistence\Request\ExecutorAssignmentPersistenceAdapter;
+use App\Infrastructure\Persistence\Request\RequestCommentPersistenceAdapter;
 use App\Infrastructure\Persistence\Request\ExpertAssignmentPersistenceAdapter;
-use App\Infrastructure\Request\RequestRepository;
 use App\Infrastructure\Request\RequestQuery;
 use Tests\Integration\IntegrationTestCase;
 
-final class RequestRepositoryTest extends IntegrationTestCase
+final class RequestWriteSlicesTest extends IntegrationTestCase
 {
     /** @return array<string, mixed> */
     private function assignExecutor(int $requestId, int $executorId, int $lockVersion, int $actorId): array
@@ -262,7 +264,6 @@ final class RequestRepositoryTest extends IntegrationTestCase
         $initiator = $this->createUser('dev.it.initiator1', 'Тестовый инициатор 1');
         $request = $this->createRegisteredRequest($initiator, 'stale-reject');
 
-        $repository = new RequestRepository($this->db());
         $this->expectException(ConcurrentRequestModification::class);
         $this->cancel((int) $request['id'], (int) $request['lock_version'] + 1, $manager, RequestAction::Reject, 'Не соответствует требованиям');
     }
@@ -274,7 +275,6 @@ final class RequestRepositoryTest extends IntegrationTestCase
         $initiator = $this->createUser('dev.it.initiator2', 'Тестовый инициатор 2');
         $request = $this->createRegisteredRequest($initiator, 'reject-audit');
 
-        $repository = new RequestRepository($this->db());
         $result = $this->cancel((int) $request['id'], (int) $request['lock_version'], $manager, RequestAction::Reject, 'Не соответствует требованиям');
 
         self::assertSame('rejected', $result['status']);
@@ -302,7 +302,6 @@ final class RequestRepositoryTest extends IntegrationTestCase
         $initiator = $this->createUser('dev.it.initiator3', 'Тестовый инициатор 3');
         $request = $this->createRegisteredRequest($initiator, 'reject-denied');
 
-        $repository = new RequestRepository($this->db());
         $this->expectException(RejectDenied::class);
         $this->cancel((int) $request['id'], (int) $request['lock_version'], $employee, RequestAction::Reject, 'Не соответствует требованиям');
     }
@@ -313,7 +312,6 @@ final class RequestRepositoryTest extends IntegrationTestCase
         $initiator = $this->createUser('dev.it.initiator4', 'Тестовый инициатор 4');
         $request = $this->createRegisteredRequest($initiator, 'withdraw-denied');
 
-        $repository = new RequestRepository($this->db());
         $this->expectException(WithdrawDenied::class);
         $this->cancel((int) $request['id'], (int) $request['lock_version'], $other, RequestAction::Withdraw, 'Заявка больше не актуальна');
     }
@@ -365,7 +363,6 @@ final class RequestRepositoryTest extends IntegrationTestCase
             'created_at' => $now,
         ])->execute();
 
-        $repository = new RequestRepository($this->db());
         $this->expectException(ConcurrentRequestModification::class);
         $this->cancel($requestId, (int) $request['lock_version'], $initiator, RequestAction::Withdraw, 'Заявка больше не актуальна');
     }
@@ -380,7 +377,6 @@ final class RequestRepositoryTest extends IntegrationTestCase
         $request = $this->createRegisteredRequest($initiator, 'suspend-resume');
         $requestId = (int) $request['id'];
 
-        $repository = new RequestRepository($this->db());
         $this->assignExecutor($requestId, $executor, (int) $request['lock_version'], $manager);
         $started = $this->lifecycle($requestId, (int) $request['lock_version'] + 1, $manager, RequestAction::Start);
         self::assertSame('in_progress', $started['status']);
@@ -415,7 +411,6 @@ final class RequestRepositoryTest extends IntegrationTestCase
         $request = $this->createRegisteredRequest($initiator, 'suspend-denied');
         $requestId = (int) $request['id'];
 
-        $repository = new RequestRepository($this->db());
         $this->assignExecutor($requestId, $executor, (int) $request['lock_version'], $manager);
         $started = $this->lifecycle($requestId, (int) $request['lock_version'] + 1, $manager, RequestAction::Start);
 
@@ -431,7 +426,6 @@ final class RequestRepositoryTest extends IntegrationTestCase
         $request = $this->createRegisteredRequest($initiator, 'suspend-stale');
         $requestId = (int) $request['id'];
 
-        $repository = new RequestRepository($this->db());
         $started = $this->lifecycle($requestId, (int) $request['lock_version'], $manager, RequestAction::Start);
 
         $this->expectException(ConcurrentRequestModification::class);
@@ -447,7 +441,6 @@ final class RequestRepositoryTest extends IntegrationTestCase
         $request = $this->createRegisteredRequest($initiator, 'suspend-flags');
         $requestId = (int) $request['id'];
 
-        $repository = new RequestRepository($this->db());
         $started = $this->lifecycle($requestId, (int) $request['lock_version'], $manager, RequestAction::Start);
 
         $managerRow = self::findRow($this->findAll($manager), $requestId);
@@ -471,7 +464,6 @@ final class RequestRepositoryTest extends IntegrationTestCase
         $request = $this->createRegisteredRequest($initiator, 'withdraw-reason');
         $requestId = (int) $request['id'];
 
-        $repository = new RequestRepository($this->db());
         $this->cancel($requestId, (int) $request['lock_version'], $initiator, RequestAction::Withdraw, 'Больше не актуально');
 
         $savedReason = $this->scalar(
@@ -668,11 +660,10 @@ final class RequestRepositoryTest extends IntegrationTestCase
         $request = $this->createRegisteredRequest($initiator, 'last-comment');
         $requestId = (int) $request['id'];
 
-        $repository = new RequestRepository($this->db());
         self::assertNull(self::findRow($this->findAll($manager), $requestId)['last_comment_author']);
 
-        $repository->addComment($requestId, $initiator, 'Первый комментарий');
-        $repository->addComment($requestId, $manager, 'Второй, самый свежий комментарий');
+        $this->addComment($requestId, $initiator, 'Первый комментарий');
+        $this->addComment($requestId, $manager, 'Второй, самый свежий комментарий');
 
         $row = self::findRow($this->findAll($manager), $requestId);
         self::assertSame('Руководитель просмотра комментария', $row['last_comment_author']);
@@ -691,8 +682,7 @@ final class RequestRepositoryTest extends IntegrationTestCase
         $request = $this->createRegisteredRequest($initiator, 'long-comment');
         $requestId = (int) $request['id'];
 
-        $repository = new RequestRepository($this->db());
-        $repository->addComment($requestId, $initiator, str_repeat('а', 600));
+        $this->addComment($requestId, $initiator, str_repeat('а', 600));
 
         $row = self::findRow($this->findAll($initiator), $requestId);
         self::assertSame(str_repeat('а', 500) . '…', $row['last_comment_body']);
@@ -750,7 +740,6 @@ final class RequestRepositoryTest extends IntegrationTestCase
             'created_at' => $now,
         ])->execute();
 
-        $repository = new RequestRepository($this->db());
         $executorRow = self::findRow($this->findAll($executor), $requestId);
         self::assertSame(1, (int) $executorRow['has_report']);
         self::assertSame('report.pdf', $executorRow['report_original_name']);
@@ -978,7 +967,6 @@ final class RequestRepositoryTest extends IntegrationTestCase
             'created_at' => $now,
         ])->execute();
 
-        $repository = new RequestRepository($this->db());
 
         $expertDetails = (new RequestQuery($this->db()))->findDetails($requestId, $expert);
         self::assertNotEmpty($expertDetails['documents']);
@@ -1003,7 +991,6 @@ final class RequestRepositoryTest extends IntegrationTestCase
         $request = $this->createRegisteredRequest($initiator, 'reassign-in-progress');
         $requestId = (int) $request['id'];
 
-        $repository = new RequestRepository($this->db());
         $assigned = $this->assignExecutor($requestId, $firstExecutor, (int) $request['lock_version'], $manager);
         $started = $this->lifecycle($requestId, (int) $assigned['lockVersion'], $manager, RequestAction::Start);
 
@@ -1088,7 +1075,6 @@ final class RequestRepositoryTest extends IntegrationTestCase
         $request = $this->createRegisteredRequest($initiator, 'reassign-email-text');
         $requestId = (int) $request['id'];
 
-        $repository = new RequestRepository($this->db());
         $assigned = $this->assignExecutor($requestId, $firstExecutor, (int) $request['lock_version'], $manager);
         $started = $this->lifecycle($requestId, (int) $assigned['lockVersion'], $manager, RequestAction::Start);
         $this->assignExecutor($requestId, $secondExecutor, (int) $started['lockVersion'], $manager);
@@ -1119,7 +1105,6 @@ final class RequestRepositoryTest extends IntegrationTestCase
             ['id' => $requestId],
         )->execute();
 
-        $repository = new RequestRepository($this->db());
         $this->expectException(ConcurrentRequestModification::class);
         $this->assignExecutor($requestId, $executor, (int) $request['lock_version'], $manager);
     }
@@ -1141,7 +1126,6 @@ final class RequestRepositoryTest extends IntegrationTestCase
         $request = $this->createRegisteredRequest($initiator, 'history-target-name');
         $requestId = (int) $request['id'];
 
-        $repository = new RequestRepository($this->db());
         $assigned = $this->assignExecutor($requestId, $executor, (int) $request['lock_version'], $manager);
 
         $this->db()->createCommand()->update(
@@ -1190,7 +1174,6 @@ final class RequestRepositoryTest extends IntegrationTestCase
         $request = $this->createRegisteredRequest($initiator, 'legacy-payload-json');
         $requestId = (int) $request['id'];
 
-        $repository = new RequestRepository($this->db());
         $this->assignExecutor($requestId, $executor, (int) $request['lock_version'], $manager);
 
         $this->db()->createCommand(
@@ -1214,6 +1197,13 @@ final class RequestRepositoryTest extends IntegrationTestCase
         }
 
         self::assertSame('Легаси Исполнитель', $byAction['assign_executor']['targetName']);
+    }
+
+    private function addComment(int $requestId, int $actorId, string $body): void
+    {
+        (new AddComment(new RequestCommentPersistenceAdapter($this->db())))->execute(
+            new AddCommentCommand($requestId, $actorId, $body),
+        );
     }
 
     /**

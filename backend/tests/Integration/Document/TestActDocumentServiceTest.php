@@ -12,7 +12,6 @@ use App\Domain\Request\ReportDenied;
 use App\Domain\Request\RequestNotFound;
 use App\Infrastructure\Clock;
 use App\Infrastructure\Document\TestActDocumentGenerator;
-use App\Infrastructure\Request\RequestRepository;
 use Tests\Integration\IntegrationTestCase;
 
 final class TestActDocumentServiceTest extends IntegrationTestCase

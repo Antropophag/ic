@@ -8,7 +8,7 @@ final class m260730_000003_add_active_document_version_index extends Migration
 {
     public function safeUp(): void
     {
-        // Реестр (RequestRepository::findPage) и карточка резолвят «действующую
+        // Реестр и карточка резолвят «действующую
         // последнюю версию» документа через MAX(version) WHERE deleted_at IS
         // NULL — deleted_at появился позже uq_document_version(document_id,
         // version) и не входил в него, поэтому предикат не мог использовать

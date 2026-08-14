@@ -9,7 +9,6 @@ use App\Http\Request\CreateRequest as CreateRequestInput;
 use App\Application\Request\UseCase\SetRequestColor;
 use App\Domain\Request\RequestColor;
 use App\Infrastructure\Persistence\Request\RequestColorPersistenceAdapter;
-use App\Infrastructure\Request\RequestRepository;
 use PHPUnit\Framework\TestCase;
 use yii\db\Connection;
 

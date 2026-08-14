@@ -16,7 +16,6 @@ return [
         'backend/src/Application/Identity/CreateUserInput.php' => ['yii\\base\\Model'],
         'backend/src/Application/Identity/LoginInput.php' => ['yii\\base\\Model'],
         'backend/src/Application/Identity/RevokeRoleInput.php' => ['yii\\base\\Model'],
-        'backend/src/Application/Request/AddCommentInput.php' => ['yii\\base\\Model'],
         'backend/src/Application/Request/ListRequestsInput.php' => ['yii\\base\\Model'],
         'backend/src/Application/Request/PublishOpinionInput.php' => ['yii\\base\\Model'],
         'backend/src/Http/Controller/AdminController.php' => [
@@ -68,13 +67,12 @@ return [
             'App\\Infrastructure\\Document\\TestActDocumentGenerator',
             'App\\Infrastructure\\Identity\\CurrentUser',
             'App\\Infrastructure\\Request\\RequestQuery',
-            'App\\Infrastructure\\Request\\RequestRepository',
         ],
     ],
     'files' => [
-        'backend/src/Http/Controller/RequestController.php' => 868,
+        'backend/src/Http/Controller/RequestController.php' => 861,
         'backend/src/Infrastructure/Document/DocumentRepository.php' => 782,
-        'backend/src/Infrastructure/Request/RequestQuery.php' => 646,
+        'backend/src/Infrastructure/Request/RequestQuery.php' => 645,
         'frontend/src/components/RequestDetails.vue' => 1272,
         'frontend/src/components/RequestRegistry.vue' => 847,
     ],
@@ -100,7 +98,7 @@ return [
             'DatabaseLegacyRequestWriter::write' => 85,
         ],
         'backend/src/Infrastructure/Request/RequestQuery.php' => [
-            'RequestQuery::findDetails' => 261,
+            'RequestQuery::findDetails' => 260,
             'RequestQuery::findPage' => 233,
         ],
     ],

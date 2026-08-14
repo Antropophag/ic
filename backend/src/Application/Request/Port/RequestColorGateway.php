@@ -26,4 +26,6 @@ interface RequestColorGateway
     public function persistColorChange(int $requestId, RequestColor $color, int $lockVersion): void;
 
     public function recordColorMarked(int $requestId, int $actorId, RequestColor $color, string $ruleId): void;
+
+    public function recordRejectedColor(int $requestId, int $actorId, string $ruleId): void;
 }
