@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Tests\Unit\Domain\Request;
 
+use App\Domain\Request\InvalidSecurityDecisionReason;
 use App\Domain\Request\RequestStatus;
 use App\Domain\Request\Role;
 use App\Domain\Request\SecurityDecisionDenied;
@@ -30,6 +31,19 @@ final class SecurityDecisionPolicyTest extends TestCase
             true,
             [Role::SecurityOfficer],
         ));
+    }
+
+    public function testApproveRejectsNonEmptyReason(): void
+    {
+        $this->expectException(InvalidSecurityDecisionReason::class);
+
+        (new SecurityDecisionPolicy())->targetStatus(
+            RequestStatus::SecurityReview,
+            'approve',
+            'Согласовано',
+            true,
+            [Role::SecurityOfficer],
+        );
     }
 
     /** @param list<Role> $roles */
