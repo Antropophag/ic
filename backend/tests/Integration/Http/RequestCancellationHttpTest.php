@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace Tests\Integration\Http;
 
-use App\Application\Request\CreateRequestInput;
+use App\Http\Request\CreateRequest as CreateRequestInput;
 use App\Application\Request\Port\RequestCancellationGateway;
 use App\Http\Controller\RequestController;
 use App\Infrastructure\Persistence\Request\RequestCancellationPersistenceAdapter;
@@ -75,7 +75,7 @@ final class RequestCancellationHttpTest extends IntegrationTestCase
             'sampleQuantity' => 1,
             'testMethod' => 'Методика',
         ]);
-        $request = (new RequestRepository($this->db()))->create($input, $initiatorId);
+        $request = (new \App\Application\Request\UseCase\CreateRequest(new \App\Infrastructure\Persistence\Request\RequestCreationPersistenceAdapter($this->db())))->execute($input->toCommand($initiatorId))->toArray();
 
         return [(int) $request['id'], (int) $request['lock_version'], $initiatorId, $managerId];
     }

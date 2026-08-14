@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace Tests\Integration\Import;
 
-use App\Application\Request\CreateRequestInput;
+use App\Http\Request\CreateRequest as CreateRequestInput;
 use App\Infrastructure\Request\RequestRepository;
 use RuntimeException;
 use Tests\Integration\IntegrationTestCase;
@@ -21,7 +21,7 @@ final class BitrixArchiveMetadataMigrationTest extends IntegrationTestCase
         $input->supplier = 'Поставщик';
         $input->sampleQuantity = 1;
         $input->testMethod = 'Методика';
-        $request = (new RequestRepository($this->db()))->create($input, $userId);
+        $request = (new \App\Application\Request\UseCase\CreateRequest(new \App\Infrastructure\Persistence\Request\RequestCreationPersistenceAdapter($this->db())))->execute($input->toCommand($userId))->toArray();
         foreach (['bitrix24:file:one', 'bitrix24:file:two'] as $legacyId) {
             $this->db()->createCommand()->insert('{{%request_documents}}', [
                 'legacy_id' => $legacyId,

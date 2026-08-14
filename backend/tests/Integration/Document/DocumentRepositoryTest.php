@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace Tests\Integration\Document;
 
-use App\Application\Request\CreateRequestInput;
+use App\Http\Request\CreateRequest as CreateRequestInput;
 use App\Domain\Request\ConcurrentRequestModification;
 use App\Domain\Request\ReportDeletionDenied;
 use App\Domain\Request\ReportDenied;
@@ -71,7 +71,7 @@ final class DocumentRepositoryTest extends IntegrationTestCase
         $input->supplier = 'Поставщик';
         $input->sampleQuantity = 1;
         $input->testMethod = 'Интеграционный тест';
-        $request = (new RequestRepository($this->db()))->create($input, $initiatorId);
+        $request = (new \App\Application\Request\UseCase\CreateRequest(new \App\Infrastructure\Persistence\Request\RequestCreationPersistenceAdapter($this->db())))->execute($input->toCommand($initiatorId))->toArray();
         $requestId = (int) $request['id'];
         $now = Clock::now();
 

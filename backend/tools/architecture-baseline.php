@@ -17,7 +17,6 @@ return [
         'backend/src/Application/Identity/LoginInput.php' => ['yii\\base\\Model'],
         'backend/src/Application/Identity/RevokeRoleInput.php' => ['yii\\base\\Model'],
         'backend/src/Application/Request/AddCommentInput.php' => ['yii\\base\\Model'],
-        'backend/src/Application/Request/CreateRequestInput.php' => ['yii\\base\\Model'],
         'backend/src/Application/Request/ListRequestsInput.php' => ['yii\\base\\Model'],
         'backend/src/Application/Request/PublishOpinionInput.php' => ['yii\\base\\Model'],
         'backend/src/Http/Controller/AdminController.php' => [
@@ -103,9 +102,6 @@ return [
         'backend/src/Infrastructure/Request/RequestQuery.php' => [
             'RequestQuery::findDetails' => 261,
             'RequestQuery::findPage' => 233,
-        ],
-        'backend/src/Infrastructure/Request/RequestRepository.php' => [
-            'RequestRepository::create' => 103,
         ],
     ],
 ];

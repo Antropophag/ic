@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace Tests\Integration\Request;
 
 use App\Application\Request\Command\CancelRequestCommand;
-use App\Application\Request\CreateRequestInput;
+use App\Http\Request\CreateRequest as CreateRequestInput;
 use App\Application\Request\UseCase\CancelRequest;
 use App\Domain\Request\RequestAction;
 use App\Infrastructure\Persistence\Request\RequestCancellationPersistenceAdapter;
@@ -34,7 +34,7 @@ final class RequestCancellationAtomicityTest extends TestCase
                 'sampleQuantity' => 1,
                 'testMethod' => 'Методика',
             ]);
-            $request = (new RequestRepository($db))->create($input, $initiatorId);
+            $request = (new \App\Application\Request\UseCase\CreateRequest(new \App\Infrastructure\Persistence\Request\RequestCreationPersistenceAdapter($db)))->execute($input->toCommand($initiatorId))->toArray();
 
             try {
                 (new CancelRequest(new RequestCancellationPersistenceAdapter($db)))->execute(
