@@ -2,11 +2,12 @@
 
 declare(strict_types=1);
 
-namespace App\Application\Request;
+namespace App\Http\Request;
 
+use App\Application\Request\Command\PublishOpinionCommand;
 use yii\base\Model;
 
-final class PublishOpinionInput extends Model
+final class PublishOpinionRequest extends Model
 {
     public mixed $body = null;
     public mixed $lockVersion = null;
@@ -20,5 +21,10 @@ final class PublishOpinionInput extends Model
             ['lockVersion', 'required'],
             ['lockVersion', 'integer', 'min' => 1],
         ];
+    }
+
+    public function toCommand(int $requestId, int $actorId): PublishOpinionCommand
+    {
+        return new PublishOpinionCommand($requestId, $actorId, (string) $this->body, (int) $this->lockVersion);
     }
 }

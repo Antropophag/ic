@@ -2,17 +2,17 @@
 
 declare(strict_types=1);
 
-namespace Tests\Unit\Application\Request;
+namespace Tests\Unit\Http\Request;
 
-use App\Application\Request\PublishOpinionInput;
+use App\Http\Request\PublishOpinionRequest;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 
-final class PublishOpinionInputTest extends TestCase
+final class PublishOpinionRequestTest extends TestCase
 {
     public function testAcceptsValidOpinion(): void
     {
-        $input = new PublishOpinionInput();
+        $input = new PublishOpinionRequest();
         $input->load(['body' => 'Образец соответствует требованиям.', 'lockVersion' => 5], '');
 
         self::assertTrue($input->validate());
@@ -22,7 +22,7 @@ final class PublishOpinionInputTest extends TestCase
     #[DataProvider('invalidData')]
     public function testRejectsInvalidInput(array $data): void
     {
-        $input = new PublishOpinionInput();
+        $input = new PublishOpinionRequest();
         $input->load($data, '');
 
         self::assertFalse($input->validate());
