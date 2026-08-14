@@ -1,0 +1,24 @@
+{
+  "annotations": {"list": []},
+  "editable": false,
+  "graphTooltip": 1,
+  "panels": [
+    {"type": "stat", "title": "IC /health/ready", "id": 1, "gridPos": {"h": 6, "w": 6, "x": 0, "y": 0}, "datasource": {"type": "prometheus", "uid": "prometheus"}, "fieldConfig": {"defaults": {"mappings": [{"type": "value", "options": {"0": {"text": "DOWN", "color": "red"}, "1": {"text": "READY", "color": "green"}}}], "color": {"mode": "thresholds"}}}, "targets": [{"expr": "probe_success{job=\"blackbox\"}", "refId": "A"}]},
+    {"type": "stat", "title": "Readiness latency", "id": 2, "gridPos": {"h": 6, "w": 6, "x": 6, "y": 0}, "datasource": {"type": "prometheus", "uid": "prometheus"}, "fieldConfig": {"defaults": {"unit": "s"}}, "targets": [{"expr": "probe_duration_seconds{job=\"blackbox\"}", "refId": "A"}]},
+    {"type": "stat", "title": "IC containers visible", "id": 3, "gridPos": {"h": 6, "w": 6, "x": 12, "y": 0}, "datasource": {"type": "prometheus", "uid": "prometheus"}, "targets": [{"expr": "count(container_last_seen{container_label_com_docker_compose_service=~\"frontend|backend|scheduler|mariadb\"})", "refId": "A"}]},
+    {"type": "stat", "title": "Active alerts", "id": 4, "gridPos": {"h": 6, "w": 6, "x": 18, "y": 0}, "datasource": {"type": "prometheus", "uid": "prometheus"}, "targets": [{"expr": "count(ALERTS{alertstate=\"firing\"}) OR vector(0)", "refId": "A"}]},
+    {"type": "timeseries", "title": "Readiness history", "id": 5, "gridPos": {"h": 8, "w": 12, "x": 0, "y": 6}, "datasource": {"type": "prometheus", "uid": "prometheus"}, "targets": [{"expr": "probe_success{job=\"blackbox\"}", "legendFormat": "{{instance}}", "refId": "A"}]},
+    {"type": "table", "title": "Application container runtime state", "id": 6, "gridPos": {"h": 8, "w": 12, "x": 12, "y": 6}, "datasource": {"type": "prometheus", "uid": "prometheus"}, "targets": [{"expr": "container_last_seen{container_label_com_docker_compose_service=~\"frontend|backend|scheduler|mariadb\"}", "format": "table", "instant": true, "refId": "A"}]},
+    {"type": "timeseries", "title": "Application container CPU", "id": 7, "gridPos": {"h": 8, "w": 12, "x": 0, "y": 14}, "datasource": {"type": "prometheus", "uid": "prometheus"}, "targets": [{"expr": "sum by (container_label_com_docker_compose_service) (rate(container_cpu_usage_seconds_total{container_label_com_docker_compose_service=~\"frontend|backend|scheduler|mariadb\"}[5m]))", "legendFormat": "{{container_label_com_docker_compose_service}}", "refId": "A"}]},
+    {"type": "timeseries", "title": "Application container memory", "id": 8, "gridPos": {"h": 8, "w": 12, "x": 12, "y": 14}, "datasource": {"type": "prometheus", "uid": "prometheus"}, "fieldConfig": {"defaults": {"unit": "bytes"}}, "targets": [{"expr": "sum by (container_label_com_docker_compose_service) (container_memory_working_set_bytes{container_label_com_docker_compose_service=~\"frontend|backend|scheduler|mariadb\"})", "legendFormat": "{{container_label_com_docker_compose_service}}", "refId": "A"}]}
+  ],
+  "refresh": "30s",
+  "schemaVersion": 41,
+  "tags": ["ic", "runtime"],
+  "templating": {"list": []},
+  "time": {"from": "now-6h", "to": "now"},
+  "timezone": "browser",
+  "title": "IC runtime overview",
+  "uid": "ic-runtime",
+  "version": 1
+}
