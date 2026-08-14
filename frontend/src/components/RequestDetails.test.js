@@ -383,6 +383,30 @@ describe('RequestDetails characterization', () => {
     app.unmount()
   })
 
+  it.each([
+    ['document', 413, 'Файл слишком большой. Максимальный размер — 200 МБ.'],
+    ['document', 422, 'Разрешены PDF, PNG, JPG, DOCX и XLSX размером до 200 МБ.'],
+    ['document', 409, 'На текущем этапе загружать документы нельзя.'],
+    ['document', 500, 'Не удалось загрузить документ.'],
+    ['report', 413, 'Файл слишком большой. Максимальный размер отчёта — 200 МБ.'],
+    ['report', 422, 'Отчёт должен быть PDF-файлом размером до 200 МБ.'],
+    ['report', 403, 'Загрузить отчёт может назначенный исполнитель или руководитель.'],
+    ['report', 500, 'Не удалось загрузить отчёт.'],
+  ])('maps %s upload status %s to its operation-specific error', async (kind, status, message) => {
+    requestApi.get.mockResolvedValue(requestDetails(1, kind === 'document' ? { can_upload_document: 1 } : { can_upload_report: 1 }))
+    requestApi[kind === 'document' ? 'uploadDocument' : 'uploadReport'].mockRejectedValue({ status })
+    const { app } = mountDetails()
+    await flushRequests()
+
+    const input = document.querySelector(kind === 'document' ? '.request-document-upload input' : '.upload-button input')
+    const file = new File(['invalid'], kind === 'document' ? 'Файл.bin' : 'Отчёт.pdf')
+    Object.defineProperty(input, 'files', { configurable: true, value: [file] })
+    input.dispatchEvent(new Event('change', { bubbles: true }))
+
+    await vi.waitFor(() => expect(document.body.textContent).toContain(message))
+    app.unmount()
+  })
+
   it('opens and closes the audit overlay while restoring focus to its trigger', async () => {
     requestApi.get.mockResolvedValue(requestDetails(1))
     const { app } = mountDetails()
@@ -463,8 +487,8 @@ describe('RequestDetails characterization', () => {
       ...requestDetails(1, { expert_name: 'Эксперт' }),
       history: actions.map((action, index) => ({
         kind: 'transition', id: index + 1, action, actorName: `Автор ${index}`, occurredAt: `2026-08-11T10:${String(index).padStart(2, '0')}:00Z`,
-        versionId: action === 'upload_report' ? 9 : null,
-        originalName: action === 'upload_report' ? 'Результаты.xlsx' : null,
+        versionId: ['upload_report', 'publish_opinion', 'create', 'unknown'].includes(action) ? index + 9 : null,
+        originalName: action === 'upload_report' ? 'Результаты.xlsx' : action === 'publish_opinion' ? 'Заключение.docx' : action === 'create' ? 'Фото.png' : action === 'unknown' ? 'Архив.bin' : null,
       })),
       comments: [
         { id: 20, authorName: 'Эксперт', body: 'Экспертный комментарий', createdAt: '2026-08-11T12:00:00Z' },
@@ -475,11 +499,21 @@ describe('RequestDetails characterization', () => {
     await flushRequests()
 
     expect(document.querySelectorAll('.request-feed-system-avatar')).toHaveLength(actions.length)
-    expect(document.querySelector('.request-feed-file .request-file-type').textContent).toBe('XLSX')
+    expect([...document.querySelectorAll('.request-feed-file .request-file-type')].map(node => node.textContent)).toEqual(expect.arrayContaining(['XLSX', 'DOCX', 'PNG', 'BIN']))
     expect(document.querySelectorAll('.request-feed-event-mark.positive').length).toBeGreaterThan(0)
     expect(document.querySelectorAll('.request-feed-event-mark.critical').length).toBeGreaterThan(0)
     expect(document.body.textContent).toContain('Экспертный комментарий')
     expect(document.body.textContent).toContain('Комментарий исполнителя')
+
+    button('Подробная история').click()
+    await nextTick()
+    const drawer = document.querySelector('[aria-labelledby="audit-title"]')
+    const focusable = [...drawer.querySelectorAll('button')]
+    focusable[0].focus()
+    drawer.dispatchEvent(new KeyboardEvent('keydown', { key: 'Tab', shiftKey: true, bubbles: true }))
+    expect(document.activeElement).toBe(focusable.at(-1))
+    drawer.dispatchEvent(new KeyboardEvent('keydown', { key: 'Tab', bubbles: true }))
+    expect(document.activeElement).toBe(focusable[0])
     app.unmount()
   })
 })
