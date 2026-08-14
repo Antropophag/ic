@@ -1,0 +1,83 @@
+groups:
+  - name: observability
+    rules:
+      - alert: ICReadinessUnavailable
+        expr: probe_success{job="blackbox"} == 0
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: IC readiness endpoint is unavailable
+          description: The existing /health/ready path has failed for more than two minutes.
+
+      - alert: ObservabilityTargetUnavailable
+        expr: up{job=~"prometheus|loki|alloy|node|cadvisor|blackbox-exporter"} == 0
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: Observability target {{ $labels.job }} is unavailable
+          description: Prometheus has not scraped {{ $labels.instance }} successfully for five minutes.
+
+      - alert: ICFrontendContainerMissing
+        expr: absent(container_last_seen{container_label_com_docker_compose_service="frontend"})
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: IC frontend container is missing
+          description: cAdvisor cannot see the expected frontend Compose service.
+
+      - alert: ICBackendContainerMissing
+        expr: absent(container_last_seen{container_label_com_docker_compose_service="backend"})
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: IC backend container is missing
+          description: cAdvisor cannot see the expected backend Compose service.
+
+      - alert: ICSchedulerContainerMissing
+        expr: absent(container_last_seen{container_label_com_docker_compose_service="scheduler"})
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: IC scheduler container is missing
+          description: cAdvisor cannot see the expected scheduler Compose service.
+
+      - alert: ICDatabaseContainerMissing
+        expr: absent(container_last_seen{container_label_com_docker_compose_service="mariadb"})
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: IC database container is missing
+          description: cAdvisor cannot see the expected MariaDB Compose service.
+
+      - alert: HostFilesystemAlmostFull
+        expr: 100 * (1 - node_filesystem_avail_bytes{fstype!~"tmpfs|overlay|squashfs"} / node_filesystem_size_bytes{fstype!~"tmpfs|overlay|squashfs"}) > 85
+        for: 15m
+        labels:
+          severity: warning
+        annotations:
+          summary: Filesystem usage is above 85 percent
+          description: Filesystem {{ $labels.mountpoint }} on {{ $labels.instance }} is nearly full.
+
+      - alert: HostMemoryPressure
+        expr: 100 * (1 - node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes) > 90
+        for: 15m
+        labels:
+          severity: warning
+        annotations:
+          summary: Host memory usage is above 90 percent
+          description: Available host memory has remained below 10 percent for 15 minutes.
+
+      - alert: RepeatedContainerRestarts
+        expr: changes(container_start_time_seconds{container_label_com_docker_compose_service!=""}[30m]) > 2
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: Container {{ $labels.name }} restarted repeatedly
+          description: The container start timestamp changed more than twice in 30 minutes.

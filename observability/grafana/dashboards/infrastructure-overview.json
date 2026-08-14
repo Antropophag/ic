@@ -1,0 +1,25 @@
+{
+  "annotations": {"list": []},
+  "editable": false,
+  "graphTooltip": 1,
+  "panels": [
+    {"type": "stat", "title": "Observability targets up", "id": 1, "gridPos": {"h": 5, "w": 6, "x": 0, "y": 0}, "datasource": {"type": "prometheus", "uid": "prometheus"}, "targets": [{"expr": "sum(up{job=~\"prometheus|loki|alloy|node|cadvisor|blackbox-exporter\"})", "refId": "A"}]},
+    {"type": "gauge", "title": "Host CPU usage", "id": 2, "gridPos": {"h": 5, "w": 6, "x": 6, "y": 0}, "datasource": {"type": "prometheus", "uid": "prometheus"}, "fieldConfig": {"defaults": {"unit": "percent", "min": 0, "max": 100}}, "targets": [{"expr": "100 * (1 - avg(rate(node_cpu_seconds_total{mode=\"idle\"}[5m])))", "refId": "A"}]},
+    {"type": "gauge", "title": "Host RAM usage", "id": 3, "gridPos": {"h": 5, "w": 6, "x": 12, "y": 0}, "datasource": {"type": "prometheus", "uid": "prometheus"}, "fieldConfig": {"defaults": {"unit": "percent", "min": 0, "max": 100}}, "targets": [{"expr": "100 * (1 - node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes)", "refId": "A"}]},
+    {"type": "stat", "title": "Host load (1m)", "id": 4, "gridPos": {"h": 5, "w": 6, "x": 18, "y": 0}, "datasource": {"type": "prometheus", "uid": "prometheus"}, "targets": [{"expr": "node_load1", "refId": "A"}]},
+    {"type": "timeseries", "title": "Filesystem usage", "id": 5, "gridPos": {"h": 8, "w": 12, "x": 0, "y": 5}, "datasource": {"type": "prometheus", "uid": "prometheus"}, "fieldConfig": {"defaults": {"unit": "percent", "min": 0, "max": 100}}, "targets": [{"expr": "100 * (1 - node_filesystem_avail_bytes{fstype!~\"tmpfs|overlay|squashfs\"} / node_filesystem_size_bytes{fstype!~\"tmpfs|overlay|squashfs\"})", "legendFormat": "{{mountpoint}}", "refId": "A"}]},
+    {"type": "timeseries", "title": "Container CPU", "id": 6, "gridPos": {"h": 8, "w": 12, "x": 12, "y": 5}, "datasource": {"type": "prometheus", "uid": "prometheus"}, "fieldConfig": {"defaults": {"unit": "percentunit"}}, "targets": [{"expr": "sum by (name) (rate(container_cpu_usage_seconds_total{name!=\"\"}[5m]))", "legendFormat": "{{name}}", "refId": "A"}]},
+    {"type": "timeseries", "title": "Container memory", "id": 7, "gridPos": {"h": 8, "w": 12, "x": 0, "y": 13}, "datasource": {"type": "prometheus", "uid": "prometheus"}, "fieldConfig": {"defaults": {"unit": "bytes"}}, "targets": [{"expr": "container_memory_working_set_bytes{name!=\"\"}", "legendFormat": "{{name}}", "refId": "A"}]},
+    {"type": "table", "title": "Container state and last seen", "id": 8, "gridPos": {"h": 8, "w": 8, "x": 12, "y": 13}, "datasource": {"type": "prometheus", "uid": "prometheus"}, "targets": [{"expr": "container_last_seen{name!=\"\"}", "format": "table", "instant": true, "refId": "A"}]},
+    {"type": "stat", "title": "Starts/restarts in 30m", "id": 9, "gridPos": {"h": 8, "w": 4, "x": 20, "y": 13}, "datasource": {"type": "prometheus", "uid": "prometheus"}, "targets": [{"expr": "sum(changes(container_start_time_seconds{name!=\"\"}[30m]))", "refId": "A"}]}
+  ],
+  "refresh": "30s",
+  "schemaVersion": 41,
+  "tags": ["ic", "infrastructure"],
+  "templating": {"list": []},
+  "time": {"from": "now-6h", "to": "now"},
+  "timezone": "browser",
+  "title": "Infrastructure overview",
+  "uid": "ic-infrastructure",
+  "version": 1
+}
