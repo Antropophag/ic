@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace Tests\Integration\Request;
 
 use App\Application\Request\Command\RequestLifecycleCommand;
-use App\Application\Request\CreateRequestInput;
+use App\Http\Request\CreateRequest as CreateRequestInput;
 use App\Application\Request\UseCase\RequestLifecycle;
 use App\Domain\Request\RequestAction;
 use App\Infrastructure\Persistence\Request\RequestLifecyclePersistenceAdapter;
@@ -34,7 +34,7 @@ final class RequestLifecycleAtomicityTest extends TestCase
                 'sampleQuantity' => 1,
                 'testMethod' => 'Методика',
             ]);
-            $request = (new RequestRepository($db))->create($input, $initiatorId);
+            $request = (new \App\Application\Request\UseCase\CreateRequest(new \App\Infrastructure\Persistence\Request\RequestCreationPersistenceAdapter($db)))->execute($input->toCommand($initiatorId))->toArray();
 
             try {
                 (new RequestLifecycle(new RequestLifecyclePersistenceAdapter($db)))->execute(

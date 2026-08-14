@@ -2,12 +2,12 @@
 
 declare(strict_types=1);
 
-namespace Tests\Unit\Application\Request;
+namespace Tests\Unit\Http\Request;
 
-use App\Application\Request\CreateRequestInput;
+use App\Http\Request\CreateRequest as CreateRequestInput;
 use PHPUnit\Framework\TestCase;
 
-final class CreateRequestInputTest extends TestCase
+final class CreateRequestTest extends TestCase
 {
     public function testValidRequestDataPassesValidation(): void
     {

@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace Tests\Integration\Request;
 
 use App\Application\Request\Command\SetRequestColorCommand;
-use App\Application\Request\CreateRequestInput;
+use App\Http\Request\CreateRequest as CreateRequestInput;
 use App\Application\Request\UseCase\SetRequestColor;
 use App\Domain\Request\ColorMarkDenied;
 use App\Domain\Request\ConcurrentRequestModification;
@@ -98,7 +98,7 @@ final class SetRequestColorTest extends IntegrationTestCase
             'sampleQuantity' => 1,
             'testMethod' => 'Методика',
         ]);
-        $request = (new RequestRepository($this->db()))->create($input, $initiatorId);
+        $request = (new \App\Application\Request\UseCase\CreateRequest(new \App\Infrastructure\Persistence\Request\RequestCreationPersistenceAdapter($this->db())))->execute($input->toCommand($initiatorId))->toArray();
         return [(int) $request['id'], (int) $request['lock_version'], $managerId];
     }
 

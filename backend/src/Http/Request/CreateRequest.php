@@ -2,11 +2,12 @@
 
 declare(strict_types=1);
 
-namespace App\Application\Request;
+namespace App\Http\Request;
 
+use App\Application\Request\Command\CreateRequestCommand;
 use yii\base\Model;
 
-final class CreateRequestInput extends Model
+final class CreateRequest extends Model
 {
     public ?string $productName = null;
     public ?string $manufacturer = null;
@@ -22,5 +23,17 @@ final class CreateRequestInput extends Model
             ['testMethod', 'string', 'max' => 10000],
             ['sampleQuantity', 'integer', 'min' => 1],
         ];
+    }
+
+    public function toCommand(int $initiatorId): CreateRequestCommand
+    {
+        return new CreateRequestCommand(
+            $initiatorId,
+            (string) $this->productName,
+            (string) $this->manufacturer,
+            (string) $this->supplier,
+            (int) $this->sampleQuantity,
+            (string) $this->testMethod,
+        );
     }
 }
