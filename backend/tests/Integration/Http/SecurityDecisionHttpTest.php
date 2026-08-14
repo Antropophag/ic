@@ -193,6 +193,7 @@ final class SecurityDecisionHttpTest extends IntegrationTestCase
             $gateway->method('recordRejectedDecision')->willThrowException(
                 new \RuntimeException('controlled denied audit failure'),
             );
+            $messageCount = count(Yii::getLogger()->messages);
 
             try {
                 $this->controller([
@@ -201,7 +202,7 @@ final class SecurityDecisionHttpTest extends IntegrationTestCase
                 self::fail("Expected {$expectedException} response.");
             } catch (ForbiddenHttpException | ConflictHttpException $error) {
                 self::assertInstanceOf($expectedException, $error);
-                $messages = Yii::getLogger()->messages;
+                $messages = array_slice(Yii::getLogger()->messages, $messageCount);
                 self::assertNotEmpty(array_filter($messages, static fn (array $message): bool =>
                     $message[2] === 'App\\Http\\Controller\\RequestController::recordRejectedSecurityDecisionSafely'
                     && is_array($message[0])

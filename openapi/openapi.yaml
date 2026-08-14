@@ -1064,9 +1064,10 @@ components:
             lockVersion: {type: integer, minimum: 1}
             reason:
               type: string
-              maxLength: 0
+              maxLength: 5000
+              pattern: '^\s*$'
               nullable: true
-              description: Для согласования допускается только пустое значение
+              description: Для согласования допускается только пустое после обрезки пробелов значение
           additionalProperties: false
         - type: object
           required: [decision, lockVersion, reason]
