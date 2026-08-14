@@ -21,9 +21,17 @@ final class SecurityDecisionRequest extends Model
             ['reason', 'filter', 'filter' => static fn (mixed $value): mixed => is_string($value) ? trim($value) : $value],
             ['reason', 'string', 'max' => 5000],
             ['reason', 'required', 'when' => fn (): bool => $this->decision === 'return'],
+            ['reason', 'validateApproveReason'],
             ['lockVersion', 'required'],
             ['lockVersion', 'integer', 'min' => 1],
         ];
+    }
+
+    public function validateApproveReason(string $attribute): void
+    {
+        if ($this->decision === 'approve' && $this->{$attribute} !== null && $this->{$attribute} !== '') {
+            $this->addError($attribute, 'Причина не допускается при согласовании.');
+        }
     }
 
     public function toCommand(int $requestId, int $actorId): DecideSecurityCommand

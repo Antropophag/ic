@@ -14,6 +14,9 @@ final class SecurityDecisionPolicy
         bool $actorIsActive,
         array $actorRoles,
     ): RequestStatus {
+        if ($decision === 'approve' && trim((string) $reason) !== '') {
+            throw new InvalidSecurityDecisionReason();
+        }
         if (!$actorIsActive) {
             throw new SecurityDecisionDenied('AUTH-003');
         }
