@@ -10,7 +10,6 @@ use App\Application\Request\UseCase\AssignExecutor;
 use App\Infrastructure\Clock;
 use App\Infrastructure\Persistence\Request\ExecutorAssignmentPersistenceAdapter;
 use App\Infrastructure\Request\RequestQuery;
-use App\Infrastructure\Request\RequestRepository;
 use Tests\Integration\IntegrationTestCase;
 
 final class AttentionDashboardTest extends IntegrationTestCase

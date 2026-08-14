@@ -82,4 +82,25 @@ final readonly class RequestColorPersistenceAdapter implements RequestColorGatew
             'created_at' => Clock::now(),
         ])->execute();
     }
+
+    public function recordRejectedColor(int $requestId, int $actorId, string $ruleId): void
+    {
+        $actorExists = $this->db->createCommand(
+            'SELECT 1 FROM {{%users}} WHERE id = :id',
+            [':id' => $actorId],
+        )->queryScalar();
+        if ($actorExists === false) {
+            return;
+        }
+
+        $this->db->createCommand()->insert('{{%audit_events}}', [
+            'event_type' => 'request.color_mark_denied',
+            'entity_type' => 'request',
+            'entity_id' => $requestId,
+            'actor_id' => $actorId,
+            'rule_id' => $ruleId,
+            'payload_json' => [],
+            'created_at' => Clock::now(),
+        ])->execute();
+    }
 }

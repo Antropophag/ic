@@ -49,4 +49,9 @@ final readonly class SetRequestColor
             return new SetRequestColorResult($command->requestId, $command->color, $nextLockVersion);
         });
     }
+
+    public function recordRejected(int $requestId, int $actorId, string $ruleId): void
+    {
+        $this->gateway->recordRejectedColor($requestId, $actorId, $ruleId);
+    }
 }

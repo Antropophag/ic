@@ -14,6 +14,8 @@ final class InMemoryRequestColorGateway implements RequestColorGateway
     public ?int $persistedLockVersion = null;
     /** @var array{requestId: int, actorId: int, color: RequestColor, ruleId: string}|null */
     public ?array $audit = null;
+    /** @var array{requestId: int, actorId: int, ruleId: string}|null */
+    public ?array $deniedAudit = null;
 
     /** @param list<Role> $roles */
     public function __construct(
@@ -52,5 +54,10 @@ final class InMemoryRequestColorGateway implements RequestColorGateway
     public function recordColorMarked(int $requestId, int $actorId, RequestColor $color, string $ruleId): void
     {
         $this->audit = compact('requestId', 'actorId', 'color', 'ruleId');
+    }
+
+    public function recordRejectedColor(int $requestId, int $actorId, string $ruleId): void
+    {
+        $this->deniedAudit = compact('requestId', 'actorId', 'ruleId');
     }
 }
