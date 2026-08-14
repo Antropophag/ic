@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace Tests\Integration\Request;
 
-use App\Application\Request\CreateRequestInput;
+use App\Http\Request\CreateRequest as CreateRequestInput;
 use App\Application\Request\Command\AssignExecutorCommand;
 use App\Application\Request\Command\AssignExpertCommand;
 use App\Application\Request\Command\ExpertAssignmentAction;
@@ -95,7 +95,7 @@ final class RequestRepositoryTest extends IntegrationTestCase
         $input->sampleQuantity = 1;
         $input->testMethod = 'Интеграционный тест';
 
-        return (new RequestRepository($this->db()))->create($input, $initiatorId);
+        return (new \App\Application\Request\UseCase\CreateRequest(new \App\Infrastructure\Persistence\Request\RequestCreationPersistenceAdapter($this->db())))->execute($input->toCommand($initiatorId))->toArray();
     }
 
     public function testCreationWritesOneSafeAuditEventPresentedAsRequestCreation(): void

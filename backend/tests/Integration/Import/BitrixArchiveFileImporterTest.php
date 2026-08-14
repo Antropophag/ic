@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace Tests\Integration\Import;
 
-use App\Application\Request\CreateRequestInput;
+use App\Http\Request\CreateRequest as CreateRequestInput;
 use App\Infrastructure\Document\DocumentStorage;
 use App\Infrastructure\Import\BitrixArchiveFileImporter;
 use App\Infrastructure\Request\RequestRepository;
@@ -42,7 +42,7 @@ final class BitrixArchiveFileImporterTest extends IntegrationTestCase
         $input->supplier = 'Поставщик';
         $input->sampleQuantity = 1;
         $input->testMethod = 'Методика';
-        $request = (new RequestRepository($this->db()))->create($input, $userId);
+        $request = (new \App\Application\Request\UseCase\CreateRequest(new \App\Infrastructure\Persistence\Request\RequestCreationPersistenceAdapter($this->db())))->execute($input->toCommand($userId))->toArray();
         $this->db()->createCommand()->update('{{%requests}}', [
             'legacy_id' => 'bitrix24:114:42',
             'source' => 'bitrix24',
@@ -206,7 +206,7 @@ final class BitrixArchiveFileImporterTest extends IntegrationTestCase
         $input->supplier = 'Поставщик';
         $input->sampleQuantity = 1;
         $input->testMethod = 'Методика';
-        $request = (new RequestRepository($this->db()))->create($input, $userId);
+        $request = (new \App\Application\Request\UseCase\CreateRequest(new \App\Infrastructure\Persistence\Request\RequestCreationPersistenceAdapter($this->db())))->execute($input->toCommand($userId))->toArray();
         $this->db()->createCommand()->update('{{%requests}}', [
             'legacy_id' => 'bitrix24:114:77', 'source' => 'bitrix24', 'is_archived' => 1,
         ], ['id' => $request['id']])->execute();

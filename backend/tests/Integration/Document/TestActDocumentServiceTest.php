@@ -7,7 +7,7 @@ namespace Tests\Integration\Document;
 use App\Application\Document\TestActDocumentService;
 use App\Application\Document\TestActInput;
 use App\Application\Document\TestActConfigurationError;
-use App\Application\Request\CreateRequestInput;
+use App\Http\Request\CreateRequest as CreateRequestInput;
 use App\Domain\Request\ReportDenied;
 use App\Domain\Request\RequestNotFound;
 use App\Infrastructure\Clock;
@@ -132,7 +132,7 @@ final class TestActDocumentServiceTest extends IntegrationTestCase
         $input->supplier = 'Поставщик';
         $input->sampleQuantity = 2;
         $input->testMethod = 'Проверка маркировки';
-        $request = (new RequestRepository($this->db()))->create($input, $initiator);
+        $request = (new \App\Application\Request\UseCase\CreateRequest(new \App\Infrastructure\Persistence\Request\RequestCreationPersistenceAdapter($this->db())))->execute($input->toCommand($initiator))->toArray();
         $requestId = (int) $request['id'];
         $this->db()->createCommand()->update('{{%requests}}', ['status' => 'in_progress'], ['id' => $requestId])->execute();
         $this->db()->createCommand()->insert('{{%request_assignments}}', [

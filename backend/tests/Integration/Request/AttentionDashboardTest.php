@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace Tests\Integration\Request;
 
-use App\Application\Request\CreateRequestInput;
+use App\Http\Request\CreateRequest as CreateRequestInput;
 use App\Application\Request\Command\AssignExecutorCommand;
 use App\Application\Request\UseCase\AssignExecutor;
 use App\Infrastructure\Clock;
@@ -221,7 +221,7 @@ final class AttentionDashboardTest extends IntegrationTestCase
             'sampleQuantity' => 1,
             'testMethod' => 'Интеграционная проверка очередей',
         ]);
-        return (new RequestRepository($this->db()))->create($input, $initiator);
+        return (new \App\Application\Request\UseCase\CreateRequest(new \App\Infrastructure\Persistence\Request\RequestCreationPersistenceAdapter($this->db())))->execute($input->toCommand($initiator))->toArray();
     }
 
     private function updateStatus(int $requestId, string $status): void

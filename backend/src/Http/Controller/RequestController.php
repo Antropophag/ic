@@ -7,7 +7,6 @@ namespace App\Http\Controller;
 use App\Application\Document\TestActDocumentService;
 use App\Application\Document\TestActConfigurationError;
 use App\Application\Document\TestActInput;
-use App\Application\Request\CreateRequestInput;
 use App\Application\Request\Command\RequestLifecycleCommand;
 use App\Application\Request\UseCase\ChangeRequestDepartment;
 use App\Application\Request\ListRequestsInput;
@@ -18,6 +17,7 @@ use App\Application\Request\Command\CancelRequestCommand;
 use App\Application\Request\Command\DecideSecurityCommand;
 use App\Application\Request\PublishOpinionInput;
 use App\Application\Request\UseCase\DecideSecurity;
+use App\Application\Request\UseCase\CreateRequest as CreateRequestUseCase;
 use App\Application\Request\UseCase\SetRequestColor;
 use App\Application\Request\UseCase\RequestLifecycle;
 use App\Application\Request\UseCase\CancelRequest as CancelRequestUseCase;
@@ -60,6 +60,7 @@ use App\Http\Request\CancelRequest;
 use App\Http\Request\AssignExecutorRequest;
 use App\Http\Request\AssignExpertRequest;
 use App\Http\Request\SecurityDecisionRequest;
+use App\Http\Request\CreateRequest;
 use Yii;
 use yii\web\Response;
 use yii\web\ConflictHttpException;
@@ -394,16 +395,16 @@ final class RequestController extends ApiController
     /** @return array<string, mixed> */
     public function actionCreate(): array
     {
-        $input = new CreateRequestInput();
+        $input = new CreateRequest();
         if (($errors = $this->bodyValidationErrors($input)) !== null) {
             return $errors;
         }
 
-        $actorId = $this->currentUserId();
+        $command = $input->toCommand($this->currentUserId());
         try {
-            $request = $this->repository()->create($input, $actorId);
+            $request = Yii::$container->get(CreateRequestUseCase::class)->execute($command)->toArray();
         } catch (RequestCreationDenied $error) {
-            $this->recordRejectedCreateSafely($actorId, $error->ruleId);
+            $this->recordRejectedCreateSafely($command, $error->ruleId);
             throw new ForbiddenHttpException($error->getMessage());
         } catch (RequestDepartmentMissing $error) {
             throw new UnprocessableEntityHttpException($error->getMessage());
@@ -412,7 +413,6 @@ final class RequestController extends ApiController
         Yii::$app->response->headers->set('Location', '/api/v1/requests/' . $request['id']);
         return $request;
     }
-
     /** @return array<string, mixed> */
     public function actionChangeDepartment(int $id): array
     {
@@ -684,12 +684,12 @@ final class RequestController extends ApiController
         }
     }
 
-    private function recordRejectedCreateSafely(int $actorId, string $ruleId): void
+    private function recordRejectedCreateSafely(\App\Application\Request\Command\CreateRequestCommand $command, string $ruleId): void
     {
         $this->recordRejectedSafely(
-            fn () => $this->repository()->recordRejectedCreate($actorId, $ruleId),
+            fn () => Yii::$container->get(CreateRequestUseCase::class)->recordRejected($command, $ruleId),
             'Не удалось записать аудит отклонённого создания заявки.',
-            ['actorId' => $actorId, 'ruleId' => $ruleId],
+            ['actorId' => $command->initiatorId, 'ruleId' => $ruleId],
             __METHOD__,
         );
     }

@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace Tests\Integration\Request;
 
-use App\Application\Request\CreateRequestInput;
+use App\Http\Request\CreateRequest as CreateRequestInput;
 use App\Infrastructure\Request\RequestRepository;
 use PHPUnit\Framework\TestCase;
 use yii\db\Connection;
@@ -39,7 +39,9 @@ final class RequestCreationAuditAtomicityTest extends TestCase
             $input->testMethod = 'Интеграционный тест';
 
             try {
-                (new RequestRepository($db))->create($input, $initiatorId);
+                (new \App\Application\Request\UseCase\CreateRequest(
+                    new \App\Infrastructure\Persistence\Request\RequestCreationPersistenceAdapter($db),
+                ))->execute($input->toCommand($initiatorId));
                 self::fail('Expected the controlled audit write to fail.');
             } catch (\RuntimeException $error) {
                 self::assertStringContainsString('controlled request creation audit failure', $error->getMessage());
