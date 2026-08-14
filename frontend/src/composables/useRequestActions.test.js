@@ -133,4 +133,47 @@ describe('useRequestActions workflows', () => {
     expect(refresh).not.toHaveBeenCalled()
     stop()
   })
+
+  it('keeps each remaining mutation failure in its owning workflow state', async () => {
+    for (const method of ['assignExecutor', 'start', 'claimExpert', 'reassignExpert', 'reject', 'withdraw', 'setColor', 'changeDepartment']) {
+      requestApi[method].mockRejectedValue({ status: 403 })
+    }
+    const { actions, refresh, stop } = createActions()
+
+    actions.executorChoice.value = '8'
+    await confirm(actions, () => actions.assignExecutor())
+    await confirm(actions, () => actions.startRequest())
+    await actions.claimExpert()
+    actions.expertChoice.value = '9'
+    await confirm(actions, () => actions.reassignExpert())
+    await confirm(actions, () => actions.rejectRequest())
+    await confirm(actions, () => actions.withdrawRequest())
+    await actions.setColorMark('red')
+    actions.departmentDraft.value = 'Новый отдел'
+    await actions.changeDepartment()
+
+    expect(actions.actionError.value).toContain('права')
+    expect(actions.claimError.value).toContain('права')
+    expect(actions.reassignError.value).toContain('права')
+    expect(actions.rejectError.value).toContain('руководитель')
+    expect(actions.withdrawError.value).toContain('инициатор')
+    expect(actions.colorError.value).toContain('права')
+    expect(actions.departmentError.value).toBe('Не удалось изменить подразделение.')
+    expect(refresh).not.toHaveBeenCalled()
+    stop()
+  })
+
+  it('recovers department conflicts through the controlled refresh mechanism', async () => {
+    requestApi.changeDepartment.mockRejectedValue({ status: 409 })
+    const { actions, refresh, stop } = createActions()
+    actions.showDepartmentModal.value = true
+    actions.departmentDraft.value = 'Новый отдел'
+
+    await actions.changeDepartment()
+
+    expect(actions.showDepartmentModal.value).toBe(false)
+    expect(refresh).toHaveBeenCalledWith(1, { suppressStaleActions: true })
+    expect(actions.actionError.value).toContain('Данные обновлены')
+    stop()
+  })
 })

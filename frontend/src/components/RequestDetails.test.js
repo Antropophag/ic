@@ -191,6 +191,26 @@ describe('RequestDetails characterization', () => {
     app.unmount()
   })
 
+  it('keeps start disabled without an executor and renders terminal process states', async () => {
+    requestApi.get.mockResolvedValue(requestDetails(1, { status: 'registered', executor_id: null, can_start: 1 }))
+    const { app } = mountDetails()
+    await flushRequests()
+
+    button('Начать работу').click()
+    await nextTick()
+
+    expect(document.body.textContent).toContain('Начать работу можно после назначения исполнителя.')
+    expect(requestApi.start).not.toHaveBeenCalled()
+    app.unmount()
+
+    document.body.replaceChildren()
+    requestApi.get.mockResolvedValue(requestDetails(2, { status: 'rejected' }))
+    const terminal = mountDetails({ requestId: 2 })
+    await flushRequests()
+    expect(document.querySelectorAll('.process-timeline .future')).toHaveLength(4)
+    terminal.app.unmount()
+  })
+
   it('performs a typical mutation and refreshes through the details loader', async () => {
     requestApi.get
       .mockResolvedValueOnce(requestDetails(1, { status: 'registered', can_start: 1 }))
@@ -332,6 +352,35 @@ describe('RequestDetails characterization', () => {
     app.unmount()
   })
 
+  it('presents document conflict, download, and popup failures in document-owned state', async () => {
+    requestApi.get.mockResolvedValue({
+      ...requestDetails(1, { can_delete_report: 1 }),
+      documents: [{ id: 5, versionId: 9, title: 'Отчёт.pdf', originalName: 'Отчёт.pdf', documentType: 'report', mimeType: 'application/pdf', sizeBytes: 10, version: 1, createdAt: '2026-08-11T12:00:00Z' }],
+    })
+    requestApi.deleteReport.mockRejectedValue({ status: 409 })
+    requestApi.downloadDocument.mockRejectedValue(new Error('download failed'))
+    vi.spyOn(window, 'open').mockReturnValue(null)
+    const { app } = mountDetails()
+    await flushRequests()
+
+    button('Удалить отчёт').click()
+    await nextTick()
+    const reason = document.querySelector('.confirm-reason-field textarea')
+    reason.value = 'Конфликтная версия'
+    reason.dispatchEvent(new Event('input', { bubbles: true }))
+    await nextTick()
+    document.querySelector('.modal-actions .primary').click()
+    await flushRequests()
+    document.querySelector('.request-file-action').click()
+    await flushRequests()
+    document.querySelector('.request-file-open').click()
+    await flushRequests()
+
+    expect(requestApi.get).toHaveBeenCalledTimes(2)
+    expect(document.body.textContent).toContain('Браузер заблокировал новую вкладку')
+    app.unmount()
+  })
+
   it('opens and closes the audit overlay while restoring focus to its trigger', async () => {
     requestApi.get.mockResolvedValue(requestDetails(1))
     const { app } = mountDetails()
@@ -384,6 +433,51 @@ describe('RequestDetails characterization', () => {
 
     expect(requestApi.get).toHaveBeenCalledTimes(2)
     expect(document.body.textContent).toContain('На текущем этапе добавлять комментарии нельзя.')
+    app.unmount()
+  })
+
+  it('validates an empty comment and reports older-comment loading failures locally', async () => {
+    requestApi.get.mockResolvedValue({
+      ...requestDetails(1, { can_comment: 1 }),
+      commentsPage: { hasMore: true, nextBeforeId: 2 },
+    })
+    requestApi.comments.mockRejectedValue(new Error('comments failed'))
+    const { app } = mountDetails()
+    await flushRequests()
+
+    document.querySelector('.request-comment-composer').dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }))
+    await flushRequests()
+    expect(document.body.textContent).toContain('Введите текст комментария.')
+
+    button('Показать ранние комментарии').click()
+    await flushRequests()
+    expect(document.body.textContent).toContain('Не удалось загрузить предыдущие комментарии.')
+    app.unmount()
+  })
+
+  it('renders representative actors, tones, and document kinds in the merged activity feed', async () => {
+    const actions = ['create', 'start', 'suspend', 'resume', 'upload_report', 'delete_report', 'publish_opinion', 'security_approve', 'security_return', 'reject', 'withdraw', 'change_department', 'unknown']
+    requestApi.get.mockResolvedValue({
+      ...requestDetails(1, { expert_name: 'Эксперт' }),
+      history: actions.map((action, index) => ({
+        kind: 'transition', id: index + 1, action, actorName: `Автор ${index}`, occurredAt: `2026-08-11T10:${String(index).padStart(2, '0')}:00Z`,
+        versionId: action === 'upload_report' ? 9 : null,
+        originalName: action === 'upload_report' ? 'Результаты.xlsx' : null,
+      })),
+      comments: [
+        { id: 20, authorName: 'Эксперт', body: 'Экспертный комментарий', createdAt: '2026-08-11T12:00:00Z' },
+        { id: 21, authorName: 'Исполнитель', body: 'Комментарий исполнителя', createdAt: '2026-08-11T12:01:00Z' },
+      ],
+    })
+    const { app } = mountDetails()
+    await flushRequests()
+
+    expect(document.querySelectorAll('.request-feed-system-avatar')).toHaveLength(actions.length)
+    expect(document.querySelector('.request-feed-file .request-file-type').textContent).toBe('XLSX')
+    expect(document.querySelectorAll('.request-feed-event-mark.positive').length).toBeGreaterThan(0)
+    expect(document.querySelectorAll('.request-feed-event-mark.critical').length).toBeGreaterThan(0)
+    expect(document.body.textContent).toContain('Экспертный комментарий')
+    expect(document.body.textContent).toContain('Комментарий исполнителя')
     app.unmount()
   })
 })

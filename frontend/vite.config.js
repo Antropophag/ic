@@ -13,8 +13,8 @@ export default defineConfig({
         functions: 80,
         // Vue template compilation adds synthetic statements and branches;
         // line/function thresholds remain the stable behavioral signal.
-        statements: 75,
-        branches: 60,
+        statements: 80,
+        branches: 70,
       },
     },
   },
