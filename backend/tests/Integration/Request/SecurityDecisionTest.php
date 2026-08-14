@@ -8,6 +8,7 @@ use App\Application\Request\Command\DecideSecurityCommand;
 use App\Http\Request\CreateRequest as CreateRequestInput;
 use App\Application\Request\UseCase\DecideSecurity;
 use App\Domain\Request\ConcurrentRequestModification;
+use App\Domain\Request\CurrentAssignmentInvariantViolation;
 use App\Domain\Request\RequestNotFound;
 use App\Domain\Request\SecurityDecisionDenied;
 use App\Domain\Request\SecurityDecisionConflict;
@@ -74,6 +75,74 @@ final class SecurityDecisionTest extends IntegrationTestCase
             "SELECT COUNT(*) FROM {{%notification_outbox}} WHERE request_id = :id AND event_type = 'request.completed'",
             [':id' => $fixture['requestId']],
         ));
+    }
+
+    public function testReturnWithoutExecutorKeepsExistingSuccessWithoutNotification(): void
+    {
+        $fixture = $this->fixture('return-without-executor');
+        $this->db()->createCommand()->delete('{{%request_assignments}}', [
+            'request_id' => $fixture['requestId'],
+            'assignment_type' => 'executor',
+        ])->execute();
+
+        $result = $this->decide($fixture, 'return', 'Уточнить отчёт');
+
+        self::assertSame('in_progress', $result['status']);
+        self::assertSame(0, (int) $this->scalar(
+            "SELECT COUNT(*) FROM {{%notification_outbox}} WHERE request_id = :id AND event_type = 'request.returned'",
+            [':id' => $fixture['requestId']],
+        ));
+    }
+
+    public function testReturnFailsClosedForMultipleCurrentExecutorsWithoutPartialEffects(): void
+    {
+        $fixture = $this->fixture('return-multiple-executors');
+        $wrongEmail = 'security.return-multiple-executors.wrong@example.invalid';
+        $wrongExecutor = $this->createUser(
+            'security.return-multiple-executors.wrong',
+            'Неверный исполнитель',
+            $wrongEmail,
+        );
+        $this->db()->createCommand()->insert('{{%request_assignments}}', [
+            'request_id' => $fixture['requestId'], 'assignment_type' => 'executor', 'user_id' => $wrongExecutor,
+            'assigned_by' => $fixture['officerId'], 'valid_from' => Clock::now(),
+        ])->execute();
+
+        try {
+            $this->decide($fixture, 'return', 'Уточнить отчёт');
+            self::fail('Expected current assignment invariant violation.');
+        } catch (CurrentAssignmentInvariantViolation $error) {
+            self::assertSame(
+                "Request {$fixture['requestId']} has 2 current executor assignments; expected at most one",
+                $error->getMessage(),
+            );
+        }
+
+        $request = $this->db()->createCommand(
+            'SELECT status, lock_version FROM {{%requests}} WHERE id = :id',
+            [':id' => $fixture['requestId']],
+        )->queryOne();
+        self::assertSame('security_review', $request['status']);
+        self::assertSame((int) $fixture['lockVersion'], (int) $request['lock_version']);
+        self::assertSame(0, (int) $this->scalar(
+            'SELECT COUNT(*) FROM {{%security_checks}} WHERE request_id = :id',
+            [':id' => $fixture['requestId']],
+        ));
+        self::assertSame(0, (int) $this->scalar(
+            "SELECT COUNT(*) FROM {{%request_transitions}} WHERE request_id = :id AND action = 'security_return'",
+            [':id' => $fixture['requestId']],
+        ));
+        self::assertSame(0, (int) $this->scalar(
+            "SELECT COUNT(*) FROM {{%audit_events}} WHERE entity_id = :id AND event_type = 'request.security_decided'",
+            [':id' => $fixture['requestId']],
+        ));
+        $recipients = $this->db()->createCommand(
+            "SELECT recipient_email FROM {{%notification_outbox}} WHERE request_id = :id AND event_type = 'request.returned'",
+            [':id' => $fixture['requestId']],
+        )->queryColumn();
+        self::assertNotContains($fixture['executorEmail'], $recipients);
+        self::assertNotContains($wrongEmail, $recipients);
+        self::assertSame([], $recipients);
     }
 
     public function testAuthorizationActiveRoleInvalidStatusAndStaleVersionKeepRuleSemantics(): void
