@@ -70,7 +70,6 @@ return [
     'files' => [
         'backend/src/Http/Controller/RequestController.php' => 856,
         'backend/src/Infrastructure/Request/RequestQuery.php' => 645,
-        'frontend/src/components/RequestDetails.vue' => 1272,
         'frontend/src/components/RequestRegistry.vue' => 847,
     ],
     'methods' => [
