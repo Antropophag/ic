@@ -191,6 +191,42 @@ describe('RequestDetails characterization', () => {
     app.unmount()
   })
 
+  it.each([
+    [{ can_security_decide: 1 }, 'Проверьте заключение и примите решение'],
+    [{ can_publish_opinion: 1 }, 'Подготовьте экспертное заключение'],
+    [{ can_reassign_expert: 1 }, 'Подготовьте заключение или передайте заявку эксперту'],
+    [{ can_claim_expert: 1 }, 'Возьмите заявку на экспертизу'],
+    [{ can_upload_report: 1 }, 'Завершите испытания и загрузите отчёт'],
+    [{ can_delete_report: 1 }, 'Проверьте загруженный отчёт'],
+    [{ can_resume: 1 }, 'Возобновите работы по заявке'],
+    [{ can_assign_executor: 1 }, 'Выберите и назначьте исполнителя'],
+    [{ can_suspend: 1 }, 'Продолжите работу или приостановите её'],
+    [{ can_withdraw: 1 }, 'Заявка ожидает начала работ'],
+    [{ can_reject: 1 }, 'Примите заявку в работу или откажите'],
+  ])('presents the capability-specific next-step prompt for %o', async (capability, prompt) => {
+    requestApi.get.mockResolvedValue(requestDetails(1, capability))
+    requestApi.executors = vi.fn().mockResolvedValue({ items: [] })
+    requestApi.experts = vi.fn().mockResolvedValue({ items: [] })
+    const { app } = mountDetails()
+    await flushRequests()
+
+    expect(document.querySelector('.request-action-context b').textContent).toBe(prompt)
+    app.unmount()
+  })
+
+  it.each([
+    ['opinion_preparation', 'Экспертиза'],
+    ['security_review', 'Контроль СБ'],
+    ['completed', 'Завершена'],
+  ])('marks %s as the current process step', async (status, label) => {
+    requestApi.get.mockResolvedValue(requestDetails(1, { status }))
+    const { app } = mountDetails()
+    await flushRequests()
+
+    expect(document.querySelector('.process-timeline .current b').textContent).toBe(label)
+    app.unmount()
+  })
+
   it('keeps start disabled without an executor and renders terminal process states', async () => {
     requestApi.get.mockResolvedValue(requestDetails(1, { status: 'registered', executor_id: null, can_start: 1 }))
     const { app } = mountDetails()
@@ -407,6 +443,44 @@ describe('RequestDetails characterization', () => {
     app.unmount()
   })
 
+  it.each([
+    [403, 'Сформировать акт может назначенный исполнитель или руководитель.'],
+    [500, 'Не удалось подготовить данные акта.'],
+  ])('maps Test Act preparation status %s to a document-owned error', async (status, message) => {
+    requestApi.get.mockResolvedValue(requestDetails(1, { can_upload_report: 1 }))
+    requestApi.prepareTestAct.mockRejectedValue({ status })
+    const { app } = mountDetails()
+    await flushRequests()
+
+    document.querySelector('[aria-label="Сформировать шаблон отчётного документа"]').click()
+    await vi.waitFor(() => expect(document.body.textContent).toContain(message))
+    app.unmount()
+  })
+
+  it.each([
+    [{ payload: { errors: { result: ['Укажите результат.'] } } }, 'Укажите результат.'],
+    [{ payload: { errors: { actDate: ['Проверьте дату.'] } } }, 'Проверьте дату.'],
+    [{ status: 403 }, 'У вас больше нет права формировать акт по этой заявке.'],
+    [{ message: 'Ошибка генератора.' }, 'Ошибка генератора.'],
+  ])('maps Test Act generation errors without closing its modal', async (failure, message) => {
+    requestApi.get.mockResolvedValue(requestDetails(1, { can_upload_report: 1 }))
+    requestApi.prepareTestAct.mockResolvedValue({ actNumber: '1', actDate: '11.08.2026', basis: 'Заявка № 1', sampleName: 'Образец', testMethod: 'Метод', requestNumber: 1 })
+    requestApi.generateTestAct.mockRejectedValue(failure)
+    const { app } = mountDetails()
+    await flushRequests()
+
+    document.querySelector('[aria-label="Сформировать шаблон отчётного документа"]').click()
+    await flushRequests()
+    const result = document.querySelector('[placeholder="Опишите фактический результат испытаний"]')
+    result.value = 'Испытания пройдены'
+    result.dispatchEvent(new Event('input', { bubbles: true }))
+    document.querySelector('#test-act-modal-title').closest('form').dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }))
+
+    await vi.waitFor(() => expect(document.body.textContent).toContain(message))
+    expect(document.querySelector('#test-act-modal-title')).not.toBeNull()
+    app.unmount()
+  })
+
   it('opens and closes the audit overlay while restoring focus to its trigger', async () => {
     requestApi.get.mockResolvedValue(requestDetails(1))
     const { app } = mountDetails()
@@ -437,6 +511,12 @@ describe('RequestDetails characterization', () => {
     await nextTick()
     const drawer = document.querySelector('[aria-labelledby="help-title"]')
     expect(drawer).not.toBeNull()
+    const focusable = [...drawer.querySelectorAll('button,[href]')]
+    focusable[0].focus()
+    drawer.dispatchEvent(new KeyboardEvent('keydown', { key: 'Tab', shiftKey: true, bubbles: true }))
+    expect(document.activeElement).toBe(focusable.at(-1))
+    drawer.dispatchEvent(new KeyboardEvent('keydown', { key: 'Tab', bubbles: true }))
+    expect(document.activeElement).toBe(focusable[0])
     drawer.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))
     await nextTick()
 
