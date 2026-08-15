@@ -522,7 +522,7 @@ final class RequestWriteSlicesTest extends IntegrationTestCase
         self::assertGreaterThanOrEqual(3, $page['counts']['all']);
     }
 
-    public function testRegistryPaginationDeduplicatesMultipleCurrentAssignments(): void
+    public function testRegistryPaginationUsesCurrentAssignmentWithoutDuplicatingHistory(): void
     {
         $initiator = $this->createUser('dev.it.registry-duplicate', 'Инициатор дубля назначения');
         $firstExecutor = $this->createUser('dev.it.registry-executor1', 'Первый исполнитель');
@@ -530,13 +530,14 @@ final class RequestWriteSlicesTest extends IntegrationTestCase
         $request = $this->createRegisteredRequest($initiator, 'маркер дубля назначения');
         $requestId = (int) $request['id'];
 
-        foreach ([$firstExecutor, $latestExecutor] as $executorId) {
+        foreach ([$firstExecutor, $latestExecutor] as $index => $executorId) {
             $this->db()->createCommand()->insert('{{%request_assignments}}', [
                 'request_id' => $requestId,
                 'assignment_type' => 'executor',
                 'user_id' => $executorId,
                 'assigned_by' => $initiator,
                 'valid_from' => Clock::now(),
+                'valid_to' => $index === 0 ? Clock::now() : null,
             ])->execute();
         }
 
