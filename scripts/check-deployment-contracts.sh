@@ -175,12 +175,32 @@ grep -Fq 'map $request_uri $source_access_request_uri {' docker/nginx/default.co
 grep -Fq '"~^/api/v1/document-links/[a-f0-9]{64}/download(?:\\?|$)" /api/v1/document-links/[masked]/download;' docker/nginx/default.conf
 # shellcheck disable=SC2016 # These are literal nginx variable contracts.
 grep -Fq '"$request_method $source_access_request_uri $server_protocol"' docker/nginx/default.conf
+# shellcheck disable=SC2016 # These are literal nginx variable contracts.
+grep -Fq 'map $http_referer $source_access_referer {' docker/nginx/default.conf
+grep -Fq '"~^.*?/api/v1/document-links/[a-f0-9]{64}/download(?:[?#].*)?$" /api/v1/document-links/[masked]/download;' docker/nginx/default.conf
+# shellcheck disable=SC2016 # These are literal nginx variable contracts.
+grep -Fq '"$source_access_referer" "$http_user_agent" request_time=$request_time' docker/nginx/default.conf
 grep -Fq 'access_log /var/log/nginx/access.log source_access;' docker/nginx/default.conf
 # shellcheck disable=SC2016 # These are literal nginx variable contracts.
-if grep -Eq 'log_format[^;]*(\$request|\$request_uri)([^_a-zA-Z]|$)' docker/nginx/default.conf; then
+source_access_format=$(awk '
+  /^log_format source_access[[:space:]]/ { collecting = 1 }
+  collecting { printf "%s ", $0 }
+  collecting && /;/ { exit }
+' docker/nginx/default.conf)
+# shellcheck disable=SC2016 # These are literal nginx variable contracts.
+if printf '%s\n' "$source_access_format" | grep -Eq '(\$request|\$request_uri)([^_a-zA-Z]|$)'; then
   echo 'Nginx source access log must use the sanitized request URI.' >&2
   exit 1
 fi
+# Prove that the guard rejects a forbidden variable on a continuation line.
+# shellcheck disable=SC2016 # These are literal nginx variable contracts.
+unsafe_source_access_format=$(printf '%s\n' "$source_access_format" | sed 's/\$source_access_request_uri/\$request_uri/')
+# shellcheck disable=SC2016 # These are literal nginx variable contracts.
+printf '%s\n' "$unsafe_source_access_format" | grep -Eq '(\$request|\$request_uri)([^_a-zA-Z]|$)'
+for alloy_config in observability/alloy/config.alloy observability/alloy/config.test.alloy; do
+  grep -Fq 'expression = "(?P<download_token>/api/v1/document-links/[a-f0-9]{64}/download)"' "$alloy_config"
+  grep -Fq 'replace    = "/api/v1/document-links/[REDACTED]/download"' "$alloy_config"
+done
 grep -Fxq 'upload_max_filesize=200M' docker/php/uploads.ini
 grep -Fxq 'post_max_size=210M' docker/php/uploads.ini
 

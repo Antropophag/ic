@@ -7,6 +7,13 @@ cd "$project_root"
 : "${TEST_ENV_FILE:?TEST_ENV_FILE must be provided by Makefile}"
 compose="$COMPOSE -p $TEST_PROJECT --env-file $TEST_ENV_FILE -f compose.test.yaml"
 . scripts/compose-metadata.sh
+
+redact_download_tokens() {
+  sed -E \
+    -e 's#(/api/v1/document-links/)[a-f0-9]{64}(/download)#\1[REDACTED]\2#g' \
+    -e 's#((download_token|token)=)[a-f0-9]{64}#\1[REDACTED]#g'
+}
+
 cleanup() {
   status=$?
   cd "$project_root"
@@ -15,7 +22,7 @@ cleanup() {
     diagnostics=frontend/playwright-report/deployment
     mkdir -p "$diagnostics"
     $compose ps >"$diagnostics/ps.txt" 2>&1 || true
-    $compose logs --tail=200 >"$diagnostics/logs.txt" 2>&1 || true
+    $compose logs --tail=200 2>&1 | redact_download_tokens >"$diagnostics/logs.txt" || true
   fi
   sh scripts/test-env.sh destroy || true
   return "$status"
@@ -23,6 +30,14 @@ cleanup() {
 trap cleanup EXIT
 trap 'exit 130' INT
 trap 'exit 143' TERM
+artifact_probe_token=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+artifact_probe=$(printf '/api/v1/document-links/%s/download?token=%s safe-marker\n' \
+  "$artifact_probe_token" "$artifact_probe_token" | redact_download_tokens)
+printf '%s' "$artifact_probe" | grep -Fq 'safe-marker'
+if printf '%s' "$artifact_probe" | grep -Fq "$artifact_probe_token"; then
+  echo 'Deployment diagnostics redaction contract failed.' >&2
+  exit 1
+fi
 sh scripts/test-env.sh build
 sh scripts/test-env.sh up
 if [ -z "${TEST_BASE_URL:-}" ]; then

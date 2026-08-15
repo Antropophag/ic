@@ -1,0 +1,46 @@
+logging {
+	level  = "info"
+	format = "logfmt"
+}
+
+discovery.docker "test_containers" {
+	host             = "unix:///var/run/docker.sock"
+	refresh_interval = "1s"
+}
+
+discovery.relabel "test_container_logs" {
+	targets = discovery.docker.test_containers.targets
+
+	rule {
+		source_labels = ["__meta_docker_container_label_com_docker_compose_service"]
+		target_label  = "service"
+	}
+
+	rule {
+		source_labels = ["__meta_docker_container_label_com_docker_compose_project"]
+		regex         = "ic-test"
+		action        = "keep"
+	}
+}
+
+loki.source.docker "test_containers" {
+	host             = "unix:///var/run/docker.sock"
+	targets          = discovery.relabel.test_container_logs.output
+	forward_to       = [loki.process.redact.receiver]
+	refresh_interval = "1s"
+}
+
+loki.process "redact" {
+	forward_to = [loki.write.test.receiver]
+
+	stage.replace {
+		expression = "(?P<download_token>/api/v1/document-links/[a-f0-9]{64}/download)"
+		replace    = "/api/v1/document-links/[REDACTED]/download"
+	}
+}
+
+loki.write "test" {
+	endpoint {
+		url = "http://loki:3100/loki/api/v1/push"
+	}
+}
