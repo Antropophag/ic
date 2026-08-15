@@ -4,12 +4,21 @@ cd "$(CDPATH='' cd -- "$(dirname -- "$0")/.." && pwd)"
 : "${COMPOSE:?COMPOSE must be provided by Makefile}"
 : "${TEST_PROJECT:?TEST_PROJECT must be provided by Makefile}"
 : "${TEST_ENV_FILE:?TEST_ENV_FILE must be provided by Makefile}"
+[ "$TEST_PROJECT" = ic-test ] || {
+  echo 'Runtime contracts require TEST_PROJECT=ic-test.' >&2
+  exit 2
+}
+[ "$TEST_ENV_FILE" = .env.test ] || {
+  echo 'Runtime contracts require TEST_ENV_FILE=.env.test.' >&2
+  exit 2
+}
 compose="$COMPOSE -p $TEST_PROJECT --env-file $TEST_ENV_FILE -f compose.test.yaml"
 : "${TEST_BASE_URL:?TEST_BASE_URL must be provided by e2e.sh}"
 base=$TEST_BASE_URL
 : "${MAILPIT_BASE_URL:?MAILPIT_BASE_URL must be provided by e2e.sh}"
 mailpit=$MAILPIT_BASE_URL
 cookie_jar=$(mktemp)
+download_token_hash=
 
 curl_with_timeout() {
   curl --connect-timeout 3 --max-time 10 "$@"
@@ -19,6 +28,9 @@ restore_services() {
   status=$?
   trap - EXIT INT TERM
   $compose start ad mailpit mariadb scheduler >/dev/null 2>&1 || true
+  if [ -n "$download_token_hash" ]; then
+    db_query "DELETE FROM document_download_links WHERE token_hash='$download_token_hash'" >/dev/null 2>&1 || true
+  fi
   rm -f "$cookie_jar"
   exit "$status"
 }
@@ -151,6 +163,55 @@ create_request() {
     -d "{\"productName\":\"$name\",\"manufacturer\":\"Runtime\",\"supplier\":\"Runtime\",\"sampleQuantity\":1,\"testMethod\":\"Recovery\"}" \
     "$base/api/v1/requests"
 }
+
+echo "Проверка маскирования download token в source access log"
+download_token=$(node -e 'process.stdout.write(require("node:crypto").randomBytes(32).toString("hex"))')
+invalid_download_token=$(node -e 'process.stdout.write(require("node:crypto").randomBytes(32).toString("hex"))')
+ordinary_log_marker=issue-297-safe-query
+download_token_hash=$(node -e 'process.stdout.write(require("node:crypto").createHash("sha256").update(process.argv[1]).digest("hex"))' "$download_token")
+download_version_id=$(db_query 'SELECT id FROM request_document_versions WHERE deleted_at IS NULL ORDER BY id LIMIT 1')
+[ -n "$download_version_id" ]
+db_query "INSERT INTO document_download_links (document_version_id, token_hash, created_at) VALUES ($download_version_id, '$download_token_hash', CURRENT_TIMESTAMP(6))"
+$compose up -d loki alloy >/dev/null
+sleep 2
+download_code=$(curl_with_timeout -sS -o /dev/null -w '%{http_code}' \
+  -H "Referer: https://portal.invalid/api/v1/document-links/$download_token/download?token=$download_token" \
+  "$base/api/v1/document-links/$download_token/download?download_token=$download_token&trace=$ordinary_log_marker")
+[ "$download_code" = 200 ]
+invalid_download_code=$(curl_with_timeout -sS -o /dev/null -w '%{http_code}' \
+  "$base/api/v1/document-links/$invalid_download_token/download?token=$invalid_download_token")
+[ "$invalid_download_code" = 404 ]
+safe_referer="https://portal.invalid/requests?trace=$ordinary_log_marker"
+curl_with_timeout -fsS -H "Referer: $safe_referer" "$base/health/live?trace=$ordinary_log_marker" >/dev/null
+frontend_logs=$($compose logs frontend)
+if printf '%s' "$frontend_logs" | grep -Eq "$download_token|$invalid_download_token"; then
+  echo 'Raw download token leaked into the frontend access log.' >&2
+  exit 1
+fi
+printf '%s' "$frontend_logs" | grep -Fq 'GET /api/v1/document-links/[masked]/download HTTP/1.1" 200'
+printf '%s' "$frontend_logs" | grep -Fq 'GET /api/v1/document-links/[masked]/download HTTP/1.1" 404'
+printf '%s' "$frontend_logs" | grep -Fq '"/api/v1/document-links/[masked]/download"'
+printf '%s' "$frontend_logs" | grep -Fq "GET /health/live?trace=$ordinary_log_marker HTTP/1.1\" 200"
+printf '%s' "$frontend_logs" | grep -Fq "\"$safe_referer\""
+printf '%s' "$frontend_logs" | grep -Eq 'request_time=[0-9]+\.[0-9]+'
+
+loki_query='http://127.0.0.1:3100/loki/api/v1/query_range?query=%7Bservice%3D%22frontend%22%7D&limit=500'
+loki_attempt=0
+until loki_logs=$($compose exec -T loki wget -qO- "$loki_query") &&
+  printf '%s' "$loki_logs" | grep -Fq 'GET /api/v1/document-links/[masked]/download HTTP/1.1'; do
+  loki_attempt=$((loki_attempt + 1))
+  [ "$loki_attempt" -lt 30 ] || {
+    echo 'Masked download request did not reach Loki.' >&2
+    exit 1
+  }
+  sleep 1
+done
+if printf '%s' "$loki_logs" | grep -Eq "$download_token|$invalid_download_token"; then
+  echo 'Raw download token leaked into Loki.' >&2
+  exit 1
+fi
+db_query "DELETE FROM document_download_links WHERE token_hash='$download_token_hash'"
+download_token_hash=
 
 echo "Проверка восстановления SMTP и повторной отправки"
 curl_with_timeout -fsS -X DELETE "$mailpit/api/v1/messages" >/dev/null
