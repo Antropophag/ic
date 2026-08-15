@@ -7,22 +7,42 @@ cd "$(CDPATH='' cd -- "$(dirname -- "$0")/.." && pwd)"
 : "${CONTAINER_ENGINE:?CONTAINER_ENGINE должен быть передан из Makefile}"
 
 environment=${1:-}
-action=${2:-}
+scope=${2:-}
+action=${3:-}
 case "$environment" in
 dev)
   label=Разработка
   project=${DEV_PROJECT:?DEV_PROJECT должен быть передан из Makefile}
   env_file=${DEV_ENV_FILE:?DEV_ENV_FILE должен быть передан из Makefile}
-  compose_files='-f compose.yaml -f compose.dev.yaml'
+  app_compose_files='-f compose.yaml -f compose.dev.yaml'
   ;;
 prod)
   label='Промышленная эксплуатация'
   project=${PROD_PROJECT:?PROD_PROJECT должен быть передан из Makefile}
   env_file=${PROD_ENV_FILE:?PROD_ENV_FILE должен быть передан из Makefile}
-  compose_files='-f compose.yaml'
+  app_compose_files='-f compose.yaml'
   ;;
 *)
-  echo "Использование: $0 dev|prod up|down|restart|status|logs" >&2
+  echo "Использование: $0 dev|prod app|obs|stack <action>" >&2
+  exit 2
+  ;;
+esac
+
+application_services='mariadb backend frontend scheduler'
+application_stop_services='frontend scheduler backend mariadb'
+observability_services='grafana prometheus loki alloy node-exporter cadvisor blackbox-exporter'
+case "$scope" in
+app)
+  compose_files=$app_compose_files
+  managed_services=$application_services
+  export COMPOSE_IGNORE_ORPHANS=1
+  ;;
+obs | stack)
+  compose_files="$app_compose_files -f compose.observability.yml"
+  managed_services=$observability_services
+  ;;
+*)
+  echo "Использование: $0 dev|prod app|obs|stack <action>" >&2
   exit 2
   ;;
 esac
@@ -37,6 +57,13 @@ esac
 }
 
 export COMPOSE_ENV_FILE="$env_file"
+if [ "$environment" = dev ] && [ "$scope" != app ] &&
+  [ -z "${GRAFANA_ADMIN_PASSWORD:-}" ]; then
+  unset GRAFANA_ADMIN_PASSWORD
+  if ! grep -Eq '^GRAFANA_ADMIN_PASSWORD=.+$' "$env_file"; then
+    export GRAFANA_ADMIN_PASSWORD=admin
+  fi
+fi
 compose() {
   # shellcheck disable=SC2086 # Provider and Compose files intentionally contain arguments.
   $COMPOSE -p "$project" --env-file "$env_file" $compose_files "$@"
@@ -164,7 +191,14 @@ show_failure_logs() {
   service=$1
   printf '\nПоследние 50 строк логов %s:\n' "$service" >&2
   compose logs --tail=50 "$service" >&2 || true
-  printf '\nПолные логи: make %s-logs SERVICE=%s\n' "$environment" "$service" >&2
+  case " $observability_services " in
+  *" $service "*)
+    printf '\nПолные логи: make %s-obs-logs SERVICE=%s\n' "$environment" "$service" >&2
+    ;;
+  *)
+    printf '\nПолные логи: make %s-logs SERVICE=%s\n' "$environment" "$service" >&2
+    ;;
+  esac
 }
 
 wait_for_service() {
@@ -189,6 +223,7 @@ wait_for_service() {
       return "$state_status"
     fi
     [ "$state" = "$expected" ] && return 0
+    [ "$expected" = ready ] && { [ "$state" = healthy ] || [ "$state" = running ]; } && return 0
     [ "$state" = unhealthy ] && break
     [ "$state" = exited ] && break
     [ "$state" = dead ] && break
@@ -223,7 +258,7 @@ show_service() {
   esac
 }
 
-show_urls() {
+show_application_urls() {
   frontend_binding=$(compose port frontend 8080 2>/dev/null | sed -n '1p') || return 0
   frontend_port=${frontend_binding##*:}
   case "$frontend_port" in '' | *[!0-9]*) return 0 ;; esac
@@ -231,10 +266,10 @@ show_urls() {
   printf '  Swagger UI       %shttp://localhost:%s/api/docs/%s\n' "$blue" "$frontend_port" "$reset"
 }
 
-show_status() {
+show_application_status() {
   status=0
   printf '  Сервисы\n'
-  for service in mariadb backend frontend scheduler; do
+  for service in $application_services; do
     if show_service "$service"; then
       :
     else
@@ -242,11 +277,33 @@ show_status() {
       [ "$status" -ne 0 ] || status=$service_status
     fi
   done
-  show_urls
+  show_application_urls
   return "$status"
 }
 
-start_environment() {
+show_observability_urls() {
+  grafana_binding=$(compose port grafana 3000 2>/dev/null | sed -n '1p') || return 0
+  grafana_port=${grafana_binding##*:}
+  case "$grafana_port" in '' | *[!0-9]*) return 0 ;; esac
+  printf '\n  Grafana          %shttp://localhost:%s%s\n' "$blue" "$grafana_port" "$reset"
+}
+
+show_observability_status() {
+  status=0
+  printf '  Сервисы observability\n'
+  for service in $observability_services; do
+    if show_service "$service"; then
+      :
+    else
+      service_status=$?
+      [ "$status" -ne 0 ] || status=$service_status
+    fi
+  done
+  show_observability_urls
+  return "$status"
+}
+
+start_application() {
   run_quiet 'Проверка конфигурации' compose config --quiet
   if [ "$environment" = dev ]; then
     run_quiet 'Сборка образов' compose build backend scheduler frontend
@@ -270,43 +327,74 @@ start_environment() {
   wait_for_service backend running
   wait_for_service frontend healthy
   wait_for_service scheduler running
-  show_status
+  show_application_status
   printf '\n  %sЛоги%s             make %s-logs\n' "$dim" "$reset" "$environment"
   printf '  %sОстановка%s        make %s-down\n' "$dim" "$reset" "$environment"
 }
 
-stop_environment() {
-  run_quiet 'Остановка сервисов' compose down --remove-orphans
-  printf '\n  %s✓%s Окружение остановлено\n' "$green" "$reset"
+stop_services() {
+  description=$1
+  shift
+  run_quiet "Остановка $description" compose stop "$@"
+  run_quiet "Удаление containers: $description" compose rm -f "$@"
 }
 
-case "$action" in
-up)
-  heading
-  start_environment
-  ;;
-down)
-  heading
-  stop_environment
-  ;;
-restart)
-  heading
-  stop_environment
-  printf '\n'
-  start_environment
-  ;;
-status)
-  heading
-  show_status
-  ;;
-logs)
+stop_application() {
+  # Address app services explicitly so a separately managed obs overlay survives.
+  # shellcheck disable=SC2086 # The service list intentionally expands to arguments.
+  stop_services 'прикладных сервисов' $application_stop_services
+  printf '\n  %s✓%s Приложение остановлено, данные сохранены\n' "$green" "$reset"
+}
+
+remove_application_volumes() {
+  for volume in "${project}_mariadb-data" "${project}_document-data"; do
+    if "$CONTAINER_ENGINE" volume inspect "$volume" >/dev/null 2>&1; then
+      run_quiet "Удаление volume $volume" "$CONTAINER_ENGINE" volume rm "$volume"
+    fi
+  done
+}
+
+start_observability() {
+  run_quiet 'Проверка конфигурации observability' compose config --quiet
+  # shellcheck disable=SC2086 # The service list intentionally expands to arguments.
+  run_quiet 'Запуск observability-сервисов' compose up -d $observability_services
+  printf '\n  Проверка готовности observability…\n'
+  wait_for_service prometheus healthy
+  wait_for_service loki healthy
+  wait_for_service grafana healthy
+  wait_for_service alloy ready
+  wait_for_service node-exporter ready
+  wait_for_service cadvisor ready
+  wait_for_service blackbox-exporter ready
+  show_observability_status
+  printf '\n  %sЛоги%s             make %s-obs-logs\n' "$dim" "$reset" "$environment"
+  printf '  %sОстановка%s        make %s-obs-down\n' "$dim" "$reset" "$environment"
+}
+
+stop_observability() {
+  # shellcheck disable=SC2086 # The service list intentionally expands to arguments.
+  stop_services 'observability-сервисов' $observability_services
+  printf '\n  %s✓%s Observability остановлен, данные сохранены\n' "$green" "$reset"
+}
+
+stop_stack() {
+  run_quiet 'Остановка полного стека' compose down
+  printf '\n  %s✓%s Полный стек остановлен, данные сохранены\n' "$green" "$reset"
+}
+
+run_logs() {
   service=${SERVICE:-}
   log_tail=${LOG_TAIL:-100}
   case "$service" in
-  '' | frontend | backend | scheduler | mariadb) ;;
+  '') ;;
   *)
-    echo "Неизвестный сервис: $service" >&2
-    exit 2
+    case " $managed_services " in
+    *" $service "*) ;;
+    *)
+      echo "Неизвестный сервис: $service" >&2
+      exit 2
+      ;;
+    esac
     ;;
   esac
   case "$log_tail" in
@@ -320,11 +408,70 @@ logs)
   if [ -n "$service" ]; then
     compose logs --follow --tail="$log_tail" "$service"
   else
-    compose logs --follow --tail="$log_tail"
+    # shellcheck disable=SC2086 # The service list intentionally expands to arguments.
+    compose logs --follow --tail="$log_tail" $managed_services
   fi
+}
+
+case "$scope:$action" in
+app:up)
+  heading
+  start_application
+  ;;
+app:down)
+  heading
+  stop_application
+  ;;
+app:restart)
+  heading
+  stop_application
+  printf '\n'
+  start_application
+  ;;
+app:reset)
+  heading
+  stop_application
+  remove_application_volumes
+  printf '\n'
+  start_application
+  ;;
+app:status)
+  heading
+  show_application_status
+  ;;
+app:logs | obs:logs)
+  run_logs
+  ;;
+obs:up)
+  heading
+  start_observability
+  ;;
+obs:down)
+  heading
+  stop_observability
+  ;;
+obs:restart)
+  heading
+  stop_observability
+  printf '\n'
+  start_observability
+  ;;
+obs:status)
+  heading
+  show_observability_status
+  ;;
+stack:up)
+  heading
+  start_application
+  printf '\n'
+  start_observability
+  ;;
+stack:down)
+  heading
+  stop_stack
   ;;
 *)
-  echo "Использование: $0 dev|prod up|down|restart|status|logs" >&2
+  echo "Недопустимое действие '$action' для '$scope'." >&2
   exit 2
   ;;
 esac
