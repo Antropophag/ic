@@ -8,7 +8,7 @@ import RequestActions from './RequestActions.vue'
 import RequestActivity from './RequestActivity.vue'
 import RequestDocuments from './RequestDocuments.vue'
 
-const props = defineProps({ requestId: { type: Number, required: true }, currentInitials: { type: String, default: '' }, initialWarning: { type: String, default: '' } })
+const props = defineProps({ requestId: { type: Number, required: true }, currentInitials: { type: String, default: '' }, currentUserRoles: { type: Array, default: () => [] }, initialWarning: { type: String, default: '' } })
 const emit = defineEmits(['loaded', 'unavailable', 'updated', 'close'])
 const selected = ref(null)
 const detailLoading = ref(false)
@@ -100,7 +100,7 @@ onBeforeUnmount(() => detailRequestGuard.invalidate())
     <div v-if="hasRequestContent && !detailError" class="request-grid">
       <div class="stack">
         <RequestActivity :request="selected" :current-initials="currentInitials" :detail-loading="detailLoading" :refresh="refreshSelected" :document-workflow="documents" @comments-added="addComment" @older-comments-loaded="addOlderComments">
-          <template #process><RequestActions ref="actions" :request="selected" :refresh="refreshSelected" :document-workflow="documents" :initial-warning="initialWarning" /></template>
+          <template #process><RequestActions ref="actions" :request="selected" :refresh="refreshSelected" :document-workflow="documents" :current-user-roles="currentUserRoles" :initial-warning="initialWarning" /></template>
         </RequestActivity>
       </div>
       <aside class="stack side-column">

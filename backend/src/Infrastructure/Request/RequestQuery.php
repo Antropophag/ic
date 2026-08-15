@@ -100,7 +100,6 @@ final class RequestQuery
             . 'AND executor_assignment.valid_to IS NULL) '
             . 'LEFT JOIN {{%users}} executor ON executor.id = current_executor.user_id ';
         $countJoins = $query === '' ? ' FROM {{%requests}} r' : $joins;
-
         $total = (int) $this->db->createCommand(
             'SELECT COUNT(DISTINCT r.id)' . $countJoins . $whereSql,
             $filterParams,
@@ -112,6 +111,7 @@ final class RequestQuery
             'SELECT r.id, r.number, r.status, r.color, r.source, r.is_archived, r.product_name, r.manufacturer, '
             . 'r.supplier, r.sample_quantity, r.legacy_sample_quantity_raw, r.test_method, '
             . 'r.lock_version AS lockVersion, r.created_at, '
+            . RequestAgingSql::selects()
             . "u.display_name AS initiator_name, COALESCE(r.department_name, 'Подразделение не указано') AS department, "
             . 'executor.id AS executor_id, executor.display_name AS executor_name, '
             . 'expert.id AS expert_id, expert.display_name AS expert_name, '
@@ -330,7 +330,8 @@ final class RequestQuery
             'SELECT r.id, r.number, r.status, r.color, r.source, r.is_archived, r.product_name, r.manufacturer, '
             . 'r.supplier, r.sample_quantity, r.legacy_sample_quantity_raw, r.test_method, '
             . 'r.lock_version AS lockVersion, '
-            . "r.created_at, r.updated_at, u.display_name AS initiator_name, "
+            . "r.created_at, r.updated_at, u.display_name AS initiator_name, (r.initiator_id = :initiator_actor) AS is_initiator, "
+            . RequestAgingSql::selects(includeStateReason: true)
             . "COALESCE(r.department_name, 'Подразделение не указано') AS department, "
             . "(EXISTS(SELECT 1 FROM {{%users}} department_actor JOIN {{%user_roles}} department_ur "
             . "ON department_ur.user_id = department_actor.id JOIN {{%roles}} department_role "
@@ -421,7 +422,7 @@ final class RequestQuery
             . 'WHERE r.id = :request_id',
             [
                 ':request_id' => $requestId,
-                ':actor_id' => $actorId,
+                ':actor_id' => $actorId, ':initiator_actor' => $actorId,
                 ':department_actor' => $actorId,
                 ':color_actor' => $actorId,
                 ':assign_actor' => $actorId,
@@ -460,7 +461,6 @@ final class RequestQuery
                 }
             }
         }
-
         $history = $this->db->createCommand(
             'SELECT t.id, \'transition\' AS kind, t.action, t.from_status AS fromStatus, '
             . "t.to_status AS toStatus, t.rule_id AS ruleId, t.reason, DATE_FORMAT(t.created_at, '%Y-%m-%dT%H:%i:%s.%fZ') AS occurredAt, "
@@ -515,11 +515,11 @@ final class RequestQuery
             . "'request.expert_reassigned', 'request.report_deleted', 'request.department_changed') "
             . "AND (a.event_type <> 'request.report_deleted' OR NOT EXISTS (SELECT 1 FROM {{%request_transitions}} deletion_transition "
             . "WHERE deletion_transition.request_id = a.entity_id AND deletion_transition.action = 'delete_report' "
-            . 'AND deletion_transition.created_at = a.created_at)) '
+            . 'AND deletion_transition.created_at = a.created_at)) ' . RequestHistorySql::missingCreation()
             . 'ORDER BY occurredAt DESC, kind DESC, id DESC',
             [
                 ':transition_request_id' => $requestId,
-                ':audit_request_id' => $requestId,
+                ':audit_request_id' => $requestId, ':creation_request_id' => $requestId,
                 ':history_report_viewer' => $actorId,
                 ':history_report_privileged_viewer' => $actorId,
             ],

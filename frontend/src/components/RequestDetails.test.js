@@ -96,6 +96,58 @@ describe('RequestDetails characterization', () => {
     app.unmount()
   })
 
+  it('shows current suspension reason and exposes aging from the current process status', async () => {
+    requestApi.get.mockResolvedValue(requestDetails(1, {
+      status: 'suspended',
+      status_reason: 'Ожидание поверки оборудования',
+      state_changed_at: '2026-08-14T10:00:00Z',
+    }))
+    const { app } = mountDetails()
+    await flushRequests()
+
+    expect(document.querySelector('.request-action-context span').textContent).toBe('Причина приостановки')
+    expect(document.querySelector('.request-action-context b').textContent).toBe('Ожидание поверки оборудования')
+    expect(document.querySelector('.request-action-bar')).toBeNull()
+    expect(document.querySelector('.process-timeline .current b').textContent).toBe('Приостановлена')
+    expect(document.querySelector('.process-timeline .current').classList.contains('tone-orange')).toBe(true)
+    expect(document.querySelector('.process-timeline .current').classList.contains('terminal')).toBe(true)
+    expect(document.querySelector('.process-timeline .current').classList.contains('app-tooltip')).toBe(true)
+    expect(document.querySelector('.process-timeline .current').dataset.tooltip).toContain('В текущем статусе')
+    expect(document.querySelector('.process-timeline .current').tabIndex).toBe(0)
+    expect(document.querySelector('.process-timeline .current').getAttribute('aria-label')).toContain('В текущем статусе')
+    expect(document.body.textContent).not.toContain('Последнее изменение')
+    app.unmount()
+  })
+
+  it.each(['ic_executor', 'ic_manager', 'laboratory_manager'])('hides the suspension reason from IC role %s', async role => {
+    requestApi.get.mockResolvedValue(requestDetails(1, {
+      status: 'suspended',
+      status_reason: 'Ожидание поверки оборудования',
+    }))
+    const { app } = mountDetails({ currentUserRoles: ['employee', role] })
+    await flushRequests()
+
+    expect(document.body.textContent).not.toContain('Причина приостановки')
+    app.unmount()
+  })
+
+  it('does not show a stale suspension reason for an active request', async () => {
+    requestApi.get.mockResolvedValue(requestDetails(1, { status_reason: null }))
+    const { app } = mountDetails()
+    await flushRequests()
+    expect(document.body.textContent).not.toContain('Причина приостановки')
+    app.unmount()
+  })
+
+  it('tells an initiator that no action is required while keeping withdrawal optional', async () => {
+    requestApi.get.mockResolvedValue(requestDetails(1, { is_initiator: 1, can_withdraw: 1 }))
+    const { app } = mountDetails()
+    await flushRequests()
+    expect(document.querySelector('.request-action-context b').textContent).toBe('Сейчас от вас ничего не требуется')
+    expect(button('Отозвать')).not.toBeUndefined()
+    app.unmount()
+  })
+
   it('does not let a late details response overwrite a newer request', async () => {
     const first = deferred()
     const second = deferred()
@@ -242,11 +294,37 @@ describe('RequestDetails characterization', () => {
     app.unmount()
 
     document.body.replaceChildren()
-    requestApi.get.mockResolvedValue(requestDetails(2, { status: 'rejected' }))
+    requestApi.get.mockResolvedValue(requestDetails(2, { status: 'rejected', status_reason: 'Образцы не соответствуют требованиям', state_changed_at: '2026-08-14T10:00:00Z' }))
     const terminal = mountDetails({ requestId: 2 })
     await flushRequests()
-    expect(document.querySelectorAll('.process-timeline .future')).toHaveLength(4)
+    expect(document.querySelector('.process-timeline .current b').textContent).toBe('Отклонена')
+    expect(document.querySelector('.process-timeline .current').classList.contains('tone-red')).toBe(true)
+    expect(document.querySelectorAll('.process-timeline .future')).toHaveLength(3)
+    expect(document.querySelector('.request-action-context span').textContent).toBe('Причина отказа')
+    expect(document.querySelector('.request-action-context b').textContent).toBe('Образцы не соответствуют требованиям')
+    expect(document.querySelector('.process-timeline .current').dataset.tooltip).toContain('Отклонена 14 августа 2026')
     terminal.app.unmount()
+  })
+
+  it('renders a withdrawn request as the current neutral terminal status', async () => {
+    requestApi.get.mockResolvedValue(requestDetails(1, { status: 'withdrawn', state_changed_at: '2026-08-14T10:00:00Z', status_reason: 'Испытания больше не требуются' }))
+    const { app } = mountDetails()
+    await flushRequests()
+    expect(document.querySelector('.process-timeline .current b').textContent).toBe('Отозвана')
+    expect(document.querySelector('.process-timeline .current').classList.contains('tone-gray')).toBe(true)
+    expect(document.querySelector('.request-action-context span').textContent).toBe('Причина отзыва')
+    expect(document.querySelector('.request-action-context b').textContent).toBe('Испытания больше не требуются')
+    expect(document.querySelector('.process-timeline .current').dataset.tooltip).toContain('Отозвана 14 августа 2026')
+    app.unmount()
+  })
+
+  it('shows the completion date instead of terminal-state duration', async () => {
+    requestApi.get.mockResolvedValue(requestDetails(1, { status: 'completed', state_changed_at: '2026-08-14T10:00:00Z' }))
+    const { app } = mountDetails()
+    await flushRequests()
+    expect(document.querySelector('.process-timeline .current').dataset.tooltip).toContain('Завершена 14 августа 2026')
+    expect(document.querySelector('.process-timeline .current').dataset.tooltip).not.toContain('В текущем статусе')
+    app.unmount()
   })
 
   it('performs a typical mutation and refreshes through the details loader', async () => {

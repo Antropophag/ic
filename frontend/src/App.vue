@@ -223,7 +223,7 @@ onBeforeUnmount(() => {
         <ReviewGuide v-if="showReviewGuide && ReviewGuide" />
         <AdminPanel v-else-if="showAdmin" @close="showAdmin = false" @open-request="openAdminRequest" />
         <template v-else>
-          <RequestDetails v-if="selectedRequestId" :request-id="selectedRequestId" :current-initials="currentInitials" :initial-warning="requestWarning" @loaded="selectedRequestTitle = $event" @updated="refreshRegistry" @close="closeRequest()" />
+          <RequestDetails v-if="selectedRequestId" :request-id="selectedRequestId" :current-initials="currentInitials" :current-user-roles="currentProfile.roles" :initial-warning="requestWarning" @loaded="selectedRequestTitle = $event" @updated="refreshRegistry" @close="closeRequest()" />
           <RequestRegistry
             :active="!selectedRequestId"
             :current-user-id="authUser.id"
