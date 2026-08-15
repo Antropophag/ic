@@ -58,9 +58,11 @@ esac
 
 export COMPOSE_ENV_FILE="$env_file"
 if [ "$environment" = dev ] && [ "$scope" != app ] &&
-  [ -z "${GRAFANA_ADMIN_PASSWORD:-}" ] &&
-  ! grep -Eq '^GRAFANA_ADMIN_PASSWORD=.+$' "$env_file"; then
-  export GRAFANA_ADMIN_PASSWORD=admin
+  [ -z "${GRAFANA_ADMIN_PASSWORD:-}" ]; then
+  unset GRAFANA_ADMIN_PASSWORD
+  if ! grep -Eq '^GRAFANA_ADMIN_PASSWORD=.+$' "$env_file"; then
+    export GRAFANA_ADMIN_PASSWORD=admin
+  fi
 fi
 compose() {
   # shellcheck disable=SC2086 # Provider and Compose files intentionally contain arguments.

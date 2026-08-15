@@ -30,6 +30,11 @@ case " $* " in
     echo "unexpected Grafana password contract" >&2
     exit 49
   fi
+  if [ "${EXPECT_GRAFANA_PASSWORD_UNSET:-0}" = 1 ] &&
+    [ "${GRAFANA_ADMIN_PASSWORD+set}" = set ]; then
+    echo "empty shell Grafana password was not unset" >&2
+    exit 50
+  fi
   if [ "${MOCK_FAIL:-}" = config ]; then
     echo "original compose diagnostic" >&2
     exit 42
@@ -81,7 +86,7 @@ run_environment() {
   scope=$1
   shift
   COMPOSE=$mock CONTAINER_ENGINE=$mock DEV_PROJECT=ic-dev \
-    DEV_ENV_FILE=.env.dev.example MOCK_RECORD=$test_dir/record \
+    DEV_ENV_FILE=${DEV_ENV_FILE_OVERRIDE:-.env.dev.example} MOCK_RECORD=$test_dir/record \
     sh scripts/environment.sh dev "$scope" "$@"
 }
 
@@ -224,6 +229,13 @@ grep -q 'up -d grafana prometheus loki alloy node-exporter cadvisor blackbox-exp
 : >"$test_dir/record"
 GRAFANA_ADMIN_PASSWORD=custom-dev-password EXPECT_GRAFANA_PASSWORD=custom-dev-password \
   NO_COLOR=1 run_environment obs status >/dev/null
+
+dev_env_with_password=$test_dir/.env.dev
+cp .env.dev.example "$dev_env_with_password"
+printf '\nGRAFANA_ADMIN_PASSWORD=from-env-file\n' >>"$dev_env_with_password"
+: >"$test_dir/record"
+GRAFANA_ADMIN_PASSWORD='' EXPECT_GRAFANA_PASSWORD_UNSET=1 \
+  DEV_ENV_FILE_OVERRIDE=$dev_env_with_password NO_COLOR=1 run_environment obs up >/dev/null
 
 : >"$test_dir/record"
 NO_COLOR=1 SERVICE=loki run_environment obs logs >/dev/null
