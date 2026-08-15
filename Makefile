@@ -13,7 +13,10 @@ DEV_COMPOSE := $(COMPOSE) -p $(DEV_PROJECT) --env-file $(DEV_ENV_FILE) -f compos
 export COMPOSE CONTAINER_ENGINE PROD_PROJECT DEV_PROJECT TEST_PROJECT PROD_ENV_FILE DEV_ENV_FILE TEST_ENV_FILE
 
 .PHONY: help doctor _doctor init up down logs dev-up dev-down dev-restart dev-status dev-reset dev-logs \
-	prod-up prod-down prod-restart prod-status prod-reset prod-logs env-status check e2e coverage schema-diagram \
+	dev-obs-up dev-obs-down dev-obs-restart dev-obs-status dev-obs-logs dev-stack-up dev-stack-down \
+	prod-up prod-down prod-restart prod-status prod-reset prod-logs \
+	prod-obs-up prod-obs-down prod-obs-restart prod-obs-status prod-obs-logs prod-stack-up prod-stack-down \
+	env-status check e2e coverage schema-diagram \
 	openapi-validate _check-backend _check-frontend _check-repository _dev-contract _test-up _test-reset _test-down
 
 help:
@@ -26,16 +29,30 @@ help:
 	@echo "  make prod-down     Остановить deployment без удаления данных"
 	@echo "  make prod-restart  Перезапустить production deployment"
 	@echo "  make prod-status   Показать готовность production services"
-	@echo "  make prod-reset    Удалить production volumes и поднять чистый deployment"
+	@echo "  make prod-reset    Удалить application volumes и поднять чистый deployment"
 	@echo "  make prod-logs     Показать логи production deployment"
+	@echo "  make prod-obs-up   Поднять observability-контур"
+	@echo "  make prod-obs-down Остановить observability-контур без удаления данных"
+	@echo "  make prod-obs-restart Перезапустить observability-контур"
+	@echo "  make prod-obs-status Показать готовность observability-сервисов"
+	@echo "  make prod-obs-logs Показать логи observability-сервисов"
+	@echo "  make prod-stack-up Поднять приложение и observability-контур"
+	@echo "  make prod-stack-down Остановить весь стек без удаления данных"
 	@echo ""
 	@echo "Разработка:"
 	@echo "  make dev-up        Поднять и подготовить deployment из .env.dev"
 	@echo "  make dev-down      Остановить deployment из .env.dev"
 	@echo "  make dev-restart   Перезапустить development deployment"
 	@echo "  make dev-status    Показать готовность development services"
-	@echo "  make dev-reset     Удалить dev volumes и поднять чистый deployment"
+	@echo "  make dev-reset     Удалить application volumes и поднять чистый deployment"
 	@echo "  make dev-logs      Показать логи deployment"
+	@echo "  make dev-obs-up    Поднять observability-контур"
+	@echo "  make dev-obs-down  Остановить observability-контур без удаления данных"
+	@echo "  make dev-obs-restart Перезапустить observability-контур"
+	@echo "  make dev-obs-status Показать готовность observability-сервисов"
+	@echo "  make dev-obs-logs  Показать логи observability-сервисов"
+	@echo "  make dev-stack-up  Поднять приложение и observability-контур"
+	@echo "  make dev-stack-down Остановить весь стек без удаления данных"
 	@echo "  make env-status    Показать активные локальные окружения без секретов"
 	@echo ""
 	@echo "Проверки качества:"
@@ -64,47 +81,56 @@ up down logs:
 	@exit 2
 
 prod-up: _doctor
-	@sh scripts/environment.sh prod up
+	@sh scripts/environment.sh prod app up
 
 prod-down: _doctor
-	@sh scripts/environment.sh prod down
+	@sh scripts/environment.sh prod app down
 
 prod-restart: _doctor
-	@sh scripts/environment.sh prod restart
+	@sh scripts/environment.sh prod app restart
 
 prod-status: _doctor
-	@sh scripts/environment.sh prod status
+	@sh scripts/environment.sh prod app status
 
 prod-logs: _doctor
-	@sh scripts/environment.sh prod logs
+	@sh scripts/environment.sh prod app logs
+
+prod-obs-up prod-obs-down prod-obs-restart prod-obs-status prod-obs-logs: _doctor
+	@sh scripts/environment.sh prod obs $(patsubst prod-obs-%,%,$@)
+
+prod-stack-up prod-stack-down: _doctor
+	@sh scripts/environment.sh prod stack $(patsubst prod-stack-%,%,$@)
 
 prod-reset: doctor
 	@test -f $(PROD_ENV_FILE) || { echo "Для make prod-reset нужен .env.prod." >&2; exit 2; }
-	@printf "Будут безвозвратно удалены volumes проекта $(PROD_PROJECT). Введите $(PROD_PROJECT): "; \
+	@printf "Будут безвозвратно удалены application volumes проекта $(PROD_PROJECT). Введите $(PROD_PROJECT): "; \
 		read -r answer; test "$$answer" = "$(PROD_PROJECT)" || { echo "Отменено." >&2; exit 2; }
-	COMPOSE_ENV_FILE=$(PROD_ENV_FILE) $(PROD_COMPOSE) down --volumes --remove-orphans
-	$(MAKE) prod-up
+	@sh scripts/environment.sh prod app reset
 
 dev-up: _doctor
-	@sh scripts/environment.sh dev up
+	@sh scripts/environment.sh dev app up
 
 dev-down: _doctor
-	@sh scripts/environment.sh dev down
+	@sh scripts/environment.sh dev app down
 
 dev-restart: _doctor
-	@sh scripts/environment.sh dev restart
+	@sh scripts/environment.sh dev app restart
 
 dev-status: _doctor
-	@sh scripts/environment.sh dev status
+	@sh scripts/environment.sh dev app status
 
 dev-reset: doctor
 	@test -f $(DEV_ENV_FILE) || { echo "Для make dev-reset нужен .env.dev (make init)." >&2; exit 2; }
-	@echo "Удаление dev volumes проекта $(DEV_PROJECT)."
-	COMPOSE_ENV_FILE=$(DEV_ENV_FILE) $(DEV_COMPOSE) down --volumes --remove-orphans
-	$(MAKE) dev-up
+	@sh scripts/environment.sh dev app reset
 
 dev-logs: _doctor
-	@sh scripts/environment.sh dev logs
+	@sh scripts/environment.sh dev app logs
+
+dev-obs-up dev-obs-down dev-obs-restart dev-obs-status dev-obs-logs: _doctor
+	@sh scripts/environment.sh dev obs $(patsubst dev-obs-%,%,$@)
+
+dev-stack-up dev-stack-down: _doctor
+	@sh scripts/environment.sh dev stack $(patsubst dev-stack-%,%,$@)
 
 env-status: doctor
 	sh scripts/env-status.sh
