@@ -51,6 +51,7 @@ return [
     'components' => [
         'db' => [
             'class' => yii\db\Connection::class,
+            'commandClass' => App\Infrastructure\Logging\ParameterSafeCommand::class,
             'dsn' => sprintf(
                 'mysql:host=%s;port=%s;dbname=%s',
                 $env('DB_HOST', 'mariadb'),

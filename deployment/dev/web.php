@@ -5,6 +5,9 @@ declare(strict_types=1);
 return [
     'params' => ['identityHeader' => 'X-Dev-User-ID'],
     'components' => [
+        'db' => [
+            'commandClass' => yii\db\Command::class,
+        ],
         'urlManager' => [
             'rules' => [
                 'GET health/logging' => 'health/logging',
