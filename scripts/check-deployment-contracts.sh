@@ -170,6 +170,17 @@ done
 grep -Fq 'location = /api/openapi.yaml' docker/nginx/default.conf
 grep -Fq 'location ^~ /api/docs/' docker/nginx/default.conf
 grep -Fq 'client_max_body_size 256m;' docker/nginx/default.conf
+# shellcheck disable=SC2016 # These are literal nginx variable contracts.
+grep -Fq 'map $request_uri $source_access_request_uri {' docker/nginx/default.conf
+grep -Fq '"~^/api/v1/document-links/[a-f0-9]{64}/download(?:\\?|$)" /api/v1/document-links/[masked]/download;' docker/nginx/default.conf
+# shellcheck disable=SC2016 # These are literal nginx variable contracts.
+grep -Fq '"$request_method $source_access_request_uri $server_protocol"' docker/nginx/default.conf
+grep -Fq 'access_log /var/log/nginx/access.log source_access;' docker/nginx/default.conf
+# shellcheck disable=SC2016 # These are literal nginx variable contracts.
+if grep -Eq 'log_format[^;]*(\$request|\$request_uri)([^_a-zA-Z]|$)' docker/nginx/default.conf; then
+  echo 'Nginx source access log must use the sanitized request URI.' >&2
+  exit 1
+fi
 grep -Fxq 'upload_max_filesize=200M' docker/php/uploads.ini
 grep -Fxq 'post_max_size=210M' docker/php/uploads.ini
 

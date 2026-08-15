@@ -152,6 +152,25 @@ create_request() {
     "$base/api/v1/requests"
 }
 
+echo "Проверка маскирования download token в source access log"
+download_token=2972972972972972972972972972972972972972972972972972972972972972
+ordinary_log_marker=issue-297-safe-query
+download_token_hash=$(node -e 'process.stdout.write(require("node:crypto").createHash("sha256").update(process.argv[1]).digest("hex"))' "$download_token")
+download_version_id=$(db_query 'SELECT id FROM request_document_versions WHERE deleted_at IS NULL ORDER BY id LIMIT 1')
+[ -n "$download_version_id" ]
+db_query "INSERT INTO document_download_links (document_version_id, token_hash, created_at) VALUES ($download_version_id, '$download_token_hash', CURRENT_TIMESTAMP(6))"
+download_code=$(curl_with_timeout -sS -o /dev/null -w '%{http_code}' \
+  "$base/api/v1/document-links/$download_token/download?download_token=$download_token&trace=$ordinary_log_marker")
+[ "$download_code" = 200 ]
+curl_with_timeout -fsS "$base/health/live?trace=$ordinary_log_marker" >/dev/null
+frontend_logs=$($compose logs frontend)
+if printf '%s' "$frontend_logs" | grep -Fq "$download_token"; then
+  echo 'Raw download token leaked into the frontend access log.' >&2
+  exit 1
+fi
+printf '%s' "$frontend_logs" | grep -Fq 'GET /api/v1/document-links/[masked]/download HTTP/1.1" 200'
+printf '%s' "$frontend_logs" | grep -Fq "GET /health/live?trace=$ordinary_log_marker HTTP/1.1\" 200"
+
 echo "Проверка восстановления SMTP и повторной отправки"
 curl_with_timeout -fsS -X DELETE "$mailpit/api/v1/messages" >/dev/null
 $compose stop mailpit
