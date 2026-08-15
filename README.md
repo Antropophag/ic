@@ -44,10 +44,14 @@ Development-БД обязана оканчиваться на `_dev`: seed пр�
 make dev-down   # остановить, данные сохранить
 make dev-restart
 make dev-status
-make dev-reset  # удалить dev volumes, создать БД и seed заново
+make dev-reset  # удалить application volumes, создать БД и seed заново
 make dev-logs                     # потоковые логи всех сервисов
 make dev-logs SERVICE=backend     # потоковые логи одного сервиса
 make dev-logs LOG_TAIL=all        # вся история вместо последних 100 строк
+make dev-obs-up                    # отдельно поднять observability
+make dev-obs-status
+make dev-stack-up                  # приложение + observability
+make dev-stack-down                # остановить оба контура, данные сохранить
 make env-status
 ```
 
@@ -82,7 +86,11 @@ make prod-restart
 make prod-status
 make prod-logs
 make prod-logs SERVICE=backend
-make prod-reset # с подтверждением удалить production volumes и поднять чистую БД
+make prod-obs-up       # отдельно поднять observability
+make prod-obs-status
+make prod-stack-up     # приложение + observability
+make prod-stack-down   # остановить оба контура, данные сохранить
+make prod-reset # с подтверждением удалить application volumes и поднять чистую БД
 ```
 
 Lifecycle-команды показывают компактный статус сервисов и опубликованные URL.
@@ -132,10 +140,14 @@ project name.
 |---|---|---|---|
 | `make dev-up` | создаёт/пересоздаёт | сохраняет | build, migrate, dev seed |
 | `make dev-down` | удаляет | сохраняет | нет |
-| `make dev-reset` | удаляет и создаёт | **удаляет** | полный `dev-up` |
+| `make dev-obs-down` | удаляет только observability | сохраняет | нет |
+| `make dev-stack-down` | удаляет приложение и observability | сохраняет | нет |
+| `make dev-reset` | удаляет и создаёт приложение | **удаляет application volumes** | полный `dev-up` |
 | `make prod-up` | создаёт/пересоздаёт | сохраняет | полный build, migrate, provisioning |
 | `make prod-down` | удаляет | сохраняет | нет |
-| `make prod-reset` | удаляет и создаёт | **удаляет после подтверждения** | полный `prod-up` |
+| `make prod-obs-down` | удаляет только observability | сохраняет | нет |
+| `make prod-stack-down` | удаляет приложение и observability | сохраняет | нет |
+| `make prod-reset` | удаляет и создаёт приложение | **удаляет application volumes после подтверждения** | полный `prod-up` |
 | `make e2e` | создаёт на время теста | всегда удаляет | автоматический test lifecycle |
 
 Команды `make up`, `make down` и `make logs` намеренно завершаются ошибкой и
@@ -178,6 +190,13 @@ make dev-restart
 make dev-status
 make dev-reset
 make dev-logs
+make dev-obs-up
+make dev-obs-down
+make dev-obs-restart
+make dev-obs-status
+make dev-obs-logs
+make dev-stack-up
+make dev-stack-down
 
 make prod-up
 make prod-down
@@ -185,6 +204,13 @@ make prod-restart
 make prod-status
 make prod-reset
 make prod-logs
+make prod-obs-up
+make prod-obs-down
+make prod-obs-restart
+make prod-obs-status
+make prod-obs-logs
+make prod-stack-up
+make prod-stack-down
 
 make check
 make e2e

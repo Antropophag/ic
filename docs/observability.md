@@ -37,48 +37,61 @@ cookies и request body штатный nginx log format не пишет. При�
 
 ## Конфигурация и запуск
 
-В защищённый `.env.dev` или `.env.prod` добавьте:
+Production требует добавить в защищённый `.env.prod`:
 
 ```dotenv
-GRAFANA_ADMIN_USER=admin
 GRAFANA_ADMIN_PASSWORD=<long-random-secret>
+GRAFANA_ADMIN_USER=admin
 GRAFANA_PORT=3000
 PROMETHEUS_RETENTION=15d
 PROMETHEUS_RETENTION_SIZE=10GB
 ```
 
-В Git не хранится пароль или production env. `GRAFANA_ADMIN_PASSWORD` обязателен;
-Compose прекратит запуск при его отсутствии. На одном сервере нельзя одновременно
-оставить default `GRAFANA_PORT` для dev и prod — одному из проектов назначьте
-другой loopback port.
+В Git не хранится пароль или production env. Для production
+`GRAFANA_ADMIN_PASSWORD` обязателен: `make prod-obs-up` и `make prod-stack-up`
+завершаются ошибкой при его отсутствии. Production fallback и anonymous access
+отсутствуют. На одном сервере нельзя одновременно оставить default
+`GRAFANA_PORT` для dev и prod — одному из проектов назначьте другой loopback
+port.
 
-Сначала поднимите приложение штатной командой. Development:
+Development не требует настройки Grafana: Make использует локальные credentials
+`admin`/`admin`, если `GRAFANA_ADMIN_PASSWORD` не задан в shell или `.env.dev`.
+Grafana всё равно публикуется только на loopback. Явные значения в `.env.dev`
+переопределяют этот dev-only default.
 
-```sh
-make dev-up
-COMPOSE_ENV_FILE=.env.dev docker compose -p ic-dev --env-file .env.dev \
-  -f compose.yaml -f compose.dev.yaml -f compose.observability.yml \
-  up -d grafana prometheus loki alloy node-exporter cadvisor blackbox-exporter
-```
-
-Production (после обязательного штатного `make prod-up`):
+Приложение и observability можно поднять одной командой:
 
 ```sh
-make prod-up
-COMPOSE_ENV_FILE=.env.prod docker compose -p ic-prod --env-file .env.prod \
-  -f compose.yaml -f compose.observability.yml \
-  up -d grafana prometheus loki alloy node-exporter cadvisor blackbox-exporter
+make dev-stack-up
+make prod-stack-up
 ```
 
-Проверка состояния:
+Или управлять overlay отдельно после запуска приложения:
 
 ```sh
-COMPOSE_ENV_FILE=.env.prod docker compose -p ic-prod --env-file .env.prod \
-  -f compose.yaml -f compose.observability.yml ps
-COMPOSE_ENV_FILE=.env.prod docker compose -p ic-prod --env-file .env.prod \
-  -f compose.yaml -f compose.observability.yml \
-  exec -T grafana wget -q --spider http://127.0.0.1:3000/api/health
+make dev-obs-up
+make dev-obs-status
+make dev-obs-logs
+make dev-obs-restart
+make dev-obs-down
+
+make prod-obs-up
+make prod-obs-status
+make prod-obs-logs
+make prod-obs-restart
+make prod-obs-down
 ```
+
+`SERVICE` и `LOG_TAIL` работают так же, как для application logs:
+
+```sh
+make dev-obs-logs SERVICE=loki LOG_TAIL=all
+```
+
+`obs-up` проверяет health Grafana, Prometheus и Loki, состояние exporters и
+Alloy. `stack-up` сначала полностью поднимает приложение и дожидается frontend
+`/health/ready`, затем запускает observability. Compose project, env-файл и
+overlay-аргументы централизованы в lifecycle-скрипте и вручную не передаются.
 
 Grafana provisioning находится в `observability/grafana/provisioning`, dashboard
 JSON — в `observability/grafana/dashboards`, Prometheus alerts — в
@@ -102,30 +115,30 @@ observability-сервисов ограничены тремя файлами п
 переопределяется overlay.
 
 Для обновления сначала измените явно pinned image tag, проверьте release notes и
-config validators, затем выполните ту же `up -d` команду. Named volumes
-сохраняются. Перед несовместимым обновлением сделайте snapshot/backup этих
-volumes.
+config validators, затем выполните `make dev-obs-up` либо `make prod-obs-up`.
+Named volumes сохраняются. Перед несовместимым обновлением сделайте
+snapshot/backup этих volumes.
 
 ## Остановка и полное удаление
 
-Остановить только observability, сохранив данные:
+Остановить и удалить только observability containers, сохранив данные:
 
 ```sh
-COMPOSE_ENV_FILE=.env.prod docker compose -p ic-prod --env-file .env.prod \
-  -f compose.yaml -f compose.observability.yml \
-  stop grafana prometheus loki alloy node-exporter cadvisor blackbox-exporter
+make dev-obs-down
+make prod-obs-down
 ```
 
-Удалить observability containers без воздействия на application containers:
+Остановить приложение и observability вместе, также сохранив все named volumes:
 
 ```sh
-COMPOSE_ENV_FILE=.env.prod docker compose -p ic-prod --env-file .env.prod \
-  -f compose.yaml -f compose.observability.yml rm -f \
-  grafana prometheus loki alloy node-exporter cadvisor blackbox-exporter
+make dev-stack-down
+make prod-stack-down
 ```
 
-Named volumes сохраняются. Для полного удаления данных после отдельного backup
-удалите **точно перечисленные** `<project>_grafana-data`,
+Обычные `dev-down`/`prod-down` и `dev-restart`/`prod-restart` адресно управляют
+только приложением: запущенный observability-контур не удаляется. Named volumes
+сохраняются при всех `*-down` и `*-restart`. Для полного удаления данных после
+отдельного backup удалите **точно перечисленные** `<project>_grafana-data`,
 `<project>_prometheus-data`, `<project>_loki-data` и `<project>_alloy-data` через
 `docker volume rm`. Не используйте `compose down --volumes`: эта команда также
 удалит MariaDB и document volumes приложения. После удаления каталога
