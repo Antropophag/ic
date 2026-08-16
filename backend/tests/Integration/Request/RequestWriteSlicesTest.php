@@ -139,6 +139,92 @@ final class RequestWriteSlicesTest extends IntegrationTestCase
         self::assertSame('success', $page['items'][0]['result']);
         self::assertSame('REQ-007', $page['items'][0]['ruleId']);
         self::assertSame(['to_status' => 'registered'], $page['items'][0]['details']);
+
+        $history = (new RequestQuery($this->db()))->findDetails((int) $request['id'], $initiator)['history'];
+        self::assertCount(1, array_filter($history, static fn (array $entry): bool => $entry['action'] === 'create'));
+    }
+
+    public function testDetailsSynthesizesCreationForARequestWithoutAnInitialTransition(): void
+    {
+        $initiator = $this->createUser('dev.it.creation.history-fallback', 'Инициатор старой заявки');
+        $request = $this->createRegisteredRequest($initiator, 'history-fallback');
+        $this->db()->createCommand()->delete('{{%request_transitions}}', [
+            'request_id' => $request['id'],
+            'action' => 'create',
+        ])->execute();
+
+        $history = (new RequestQuery($this->db()))->findDetails((int) $request['id'], $initiator)['history'];
+
+        self::assertSame('create', $history[array_key_last($history)]['action']);
+        self::assertSame('Инициатор старой заявки', $history[array_key_last($history)]['actorName']);
+    }
+
+    public function testImportTransitionDoesNotSynthesizeDuplicateCreation(): void
+    {
+        $initiator = $this->createUser('dev.it.creation.import-history', 'Инициатор импортированной заявки');
+        $request = $this->createRegisteredRequest($initiator, 'import-history');
+        $this->db()->createCommand()->delete('{{%request_transitions}}', [
+            'request_id' => $request['id'],
+            'action' => 'create',
+        ])->execute();
+        $this->db()->createCommand()->insert('{{%request_transitions}}', [
+            'request_id' => $request['id'],
+            'actor_id' => $initiator,
+            'from_status' => null,
+            'to_status' => 'registered',
+            'action' => 'import',
+            'rule_id' => 'IMP-002',
+            'created_at' => $request['created_at'],
+        ])->execute();
+
+        $history = (new RequestQuery($this->db()))->findDetails((int) $request['id'], $initiator)['history'];
+
+        self::assertCount(1, array_filter($history, static fn (array $entry): bool => $entry['action'] === 'import'));
+        self::assertCount(0, array_filter($history, static fn (array $entry): bool => $entry['action'] === 'create'));
+    }
+
+    public function testReadsAndRejectedMutationDoNotAdvanceLastChangedAt(): void
+    {
+        $manager = $this->createUser('dev.it.aging.manager', 'Руководитель проверки aging');
+        $this->grantRole($manager, 'ic_manager');
+        $initiator = $this->createUser('dev.it.aging.initiator', 'Инициатор проверки aging');
+        $request = $this->createRegisteredRequest($initiator, 'stable-last-change');
+        $requestId = (int) $request['id'];
+        $query = new RequestQuery($this->db());
+        $before = $query->findDetails($requestId, $initiator)['item'];
+
+        $query->findDetails($requestId, $manager);
+        $query->findPage($initiator, 1, 10, 'mine', null, 'stable-last-change', 'desc');
+        try {
+            $this->cancel(
+                $requestId,
+                (int) $request['lock_version'] + 1,
+                $manager,
+                RequestAction::Reject,
+                'Операция должна быть отклонена',
+            );
+            self::fail('Expected stale rejection to fail.');
+        } catch (ConcurrentRequestModification) {
+            // Отклонённая мутация не должна менять временную семантику заявки.
+        }
+
+        $after = $query->findDetails($requestId, $initiator)['item'];
+        self::assertSame($before['updated_at'], $after['updated_at']);
+        self::assertSame($before['last_changed_at'], $after['last_changed_at']);
+
+        $this->db()->createCommand()->insert('{{%audit_events}}', [
+            'event_type' => 'request.comment_added',
+            'entity_type' => 'request',
+            'entity_id' => $requestId,
+            'actor_id' => $initiator,
+            'rule_id' => 'COM-003',
+            'payload_json' => ['comment_id' => 1],
+            'created_at' => '2030-01-01 10:00:00.000000',
+        ])->execute();
+        self::assertSame(
+            '2030-01-01T10:00:00.000000Z',
+            $query->findDetails($requestId, $initiator)['item']['last_changed_at'],
+        );
     }
 
     public function testDepartmentIsSnapshottedAndDoesNotFollowProfileChanges(): void
@@ -290,6 +376,10 @@ final class RequestWriteSlicesTest extends IntegrationTestCase
             [':id' => $request['id']],
         );
         self::assertSame('Не соответствует требованиям', $savedReason);
+        self::assertSame(
+            'Не соответствует требованиям',
+            (new RequestQuery($this->db()))->findDetails((int) $request['id'], $initiator)['item']['status_reason'],
+        );
         self::assertSame(1, (int) $this->scalar(
             "SELECT COUNT(*) FROM {{%notification_outbox}} WHERE request_id = :id AND event_type = 'request.rejected'",
             [':id' => $request['id']],
@@ -383,6 +473,11 @@ final class RequestWriteSlicesTest extends IntegrationTestCase
 
         $suspended = $this->lifecycle($requestId, $started['lockVersion'], $executor, RequestAction::Suspend, 'Ожидание оборудования');
         self::assertSame('suspended', $suspended['status']);
+        $suspendedDetails = (new RequestQuery($this->db()))->findDetails($requestId, $initiator)['item'];
+        self::assertSame('Ожидание оборудования', $suspendedDetails['status_reason']);
+        self::assertNotEmpty($suspendedDetails['state_changed_at']);
+        self::assertNotEmpty($suspendedDetails['last_changed_at']);
+        self::assertSame(1, (int) $suspendedDetails['is_initiator']);
         $savedReason = $this->scalar(
             "SELECT reason FROM {{%request_transitions}} WHERE request_id = :id AND action = 'suspend'",
             [':id' => $requestId],
@@ -391,12 +486,28 @@ final class RequestWriteSlicesTest extends IntegrationTestCase
 
         $resumed = $this->lifecycle($requestId, $suspended['lockVersion'], $manager, RequestAction::Resume);
         self::assertSame('in_progress', $resumed['status']);
+        self::assertNull((new RequestQuery($this->db()))->findDetails($requestId, $initiator)['item']['status_reason']);
+
+        $this->lifecycle($requestId, $resumed['lockVersion'], $manager, RequestAction::Suspend, 'Ожидание нового стенда');
+        $this->db()->createCommand()->update('{{%request_transitions}}', ['created_at' => '2025-12-01 10:00:00.000000'], [
+            'request_id' => $requestId, 'action' => 'suspend', 'reason' => 'Ожидание оборудования',
+        ])->execute();
+        $this->db()->createCommand()->update('{{%request_transitions}}', ['created_at' => '2026-01-01 10:00:00.000000'], [
+            'request_id' => $requestId, 'action' => 'suspend', 'reason' => 'Ожидание нового стенда',
+        ])->execute();
+        $this->db()->createCommand()->insert('{{%request_transitions}}', [
+            'request_id' => $requestId, 'actor_id' => $manager, 'from_status' => 'suspended', 'to_status' => 'suspended',
+            'action' => 'upload_report', 'rule_id' => 'DOC-002', 'created_at' => '2026-02-01 10:00:00.000000',
+        ])->execute();
+        $resuspendedDetails = (new RequestQuery($this->db()))->findDetails($requestId, $initiator)['item'];
+        self::assertSame('Ожидание нового стенда', $resuspendedDetails['status_reason']);
+        self::assertSame('2026-01-01T10:00:00.000000Z', $resuspendedDetails['state_changed_at']);
 
         $transitionCount = $this->scalar(
             "SELECT COUNT(*) FROM {{%request_transitions}} WHERE request_id = :id AND rule_id = 'WF-005'",
             [':id' => $requestId],
         );
-        self::assertSame(2, (int) $transitionCount);
+        self::assertSame(3, (int) $transitionCount);
     }
 
     public function testOnlyAssignedExecutorOrManagerCanSuspend(): void
@@ -471,6 +582,10 @@ final class RequestWriteSlicesTest extends IntegrationTestCase
             [':id' => $requestId],
         );
         self::assertSame('Больше не актуально', $savedReason);
+        self::assertSame(
+            'Больше не актуально',
+            (new RequestQuery($this->db()))->findDetails($requestId, $initiator)['item']['status_reason'],
+        );
         self::assertGreaterThanOrEqual(1, (int) $this->scalar(
             "SELECT COUNT(*) FROM {{%notification_outbox}} WHERE request_id = :id AND event_type = 'request.withdrawn'",
             [':id' => $requestId],
