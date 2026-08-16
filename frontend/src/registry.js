@@ -53,6 +53,7 @@ export function fromApi(item) {
     id: String(item.number).padStart(6, '0'),
     date: new Date(item.created_at).toLocaleDateString('ru-RU'),
     initiator: item.initiator_name,
+    isInitiator: Boolean(Number(item.is_initiator)),
     department: item.department,
     product: item.product_name,
     manufacturer: item.manufacturer,
@@ -65,6 +66,8 @@ export function fromApi(item) {
     expert: item.expert_name || 'Не назначен',
     expertId: item.expert_id ? Number(item.expert_id) : null,
     lockVersion: Number(item.lockVersion),
+    stateChangedAt: item.state_changed_at || null,
+    statusReason: item.status_reason || null,
     canAssignExecutor: Boolean(Number(item.can_assign_executor)),
     canClaimExpert: Boolean(Number(item.can_claim_expert)),
     canReassignExpert: Boolean(Number(item.can_reassign_expert)),
@@ -98,6 +101,16 @@ export function fromApi(item) {
     reportVersionId: item.report_version_id ? Number(item.report_version_id) : null,
     reportOriginalName: item.report_original_name || null,
   }
+}
+
+export function elapsedSince(isoDate, now = Date.now()) {
+  const elapsedSeconds = Math.max(0, Math.floor((now - new Date(isoDate).getTime()) / 1000))
+  if (elapsedSeconds < 60) return 'меньше минуты'
+  const minutes = Math.floor(elapsedSeconds / 60)
+  if (minutes < 60) return `${minutes} мин.`
+  const hours = Math.floor(minutes / 60)
+  if (hours < 24) return `${hours} ч.`
+  return `${Math.floor(hours / 24)} дн.`
 }
 
 export function sampleQuantityDisplay(request) {
