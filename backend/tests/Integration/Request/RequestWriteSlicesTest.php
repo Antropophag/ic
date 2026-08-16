@@ -159,6 +159,30 @@ final class RequestWriteSlicesTest extends IntegrationTestCase
         self::assertSame('Инициатор старой заявки', $history[array_key_last($history)]['actorName']);
     }
 
+    public function testImportTransitionDoesNotSynthesizeDuplicateCreation(): void
+    {
+        $initiator = $this->createUser('dev.it.creation.import-history', 'Инициатор импортированной заявки');
+        $request = $this->createRegisteredRequest($initiator, 'import-history');
+        $this->db()->createCommand()->delete('{{%request_transitions}}', [
+            'request_id' => $request['id'],
+            'action' => 'create',
+        ])->execute();
+        $this->db()->createCommand()->insert('{{%request_transitions}}', [
+            'request_id' => $request['id'],
+            'actor_id' => $initiator,
+            'from_status' => null,
+            'to_status' => 'registered',
+            'action' => 'import',
+            'rule_id' => 'IMP-002',
+            'created_at' => $request['created_at'],
+        ])->execute();
+
+        $history = (new RequestQuery($this->db()))->findDetails((int) $request['id'], $initiator)['history'];
+
+        self::assertCount(1, array_filter($history, static fn (array $entry): bool => $entry['action'] === 'import'));
+        self::assertCount(0, array_filter($history, static fn (array $entry): bool => $entry['action'] === 'create'));
+    }
+
     public function testReadsAndRejectedMutationDoNotAdvanceLastChangedAt(): void
     {
         $manager = $this->createUser('dev.it.aging.manager', 'Руководитель проверки aging');
@@ -187,6 +211,20 @@ final class RequestWriteSlicesTest extends IntegrationTestCase
         $after = $query->findDetails($requestId, $initiator)['item'];
         self::assertSame($before['updated_at'], $after['updated_at']);
         self::assertSame($before['last_changed_at'], $after['last_changed_at']);
+
+        $this->db()->createCommand()->insert('{{%audit_events}}', [
+            'event_type' => 'request.comment_added',
+            'entity_type' => 'request',
+            'entity_id' => $requestId,
+            'actor_id' => $initiator,
+            'rule_id' => 'COM-003',
+            'payload_json' => ['comment_id' => 1],
+            'created_at' => '2030-01-01 10:00:00.000000',
+        ])->execute();
+        self::assertSame(
+            '2030-01-01T10:00:00.000000Z',
+            $query->findDetails($requestId, $initiator)['item']['last_changed_at'],
+        );
     }
 
     public function testDepartmentIsSnapshottedAndDoesNotFollowProfileChanges(): void
@@ -450,7 +488,7 @@ final class RequestWriteSlicesTest extends IntegrationTestCase
         self::assertSame('in_progress', $resumed['status']);
         self::assertNull((new RequestQuery($this->db()))->findDetails($requestId, $initiator)['item']['status_reason']);
 
-        $resuspended = $this->lifecycle($requestId, $resumed['lockVersion'], $manager, RequestAction::Suspend, 'Ожидание нового стенда');
+        $this->lifecycle($requestId, $resumed['lockVersion'], $manager, RequestAction::Suspend, 'Ожидание нового стенда');
         $this->db()->createCommand()->update('{{%request_transitions}}', ['created_at' => '2025-12-01 10:00:00.000000'], [
             'request_id' => $requestId, 'action' => 'suspend', 'reason' => 'Ожидание оборудования',
         ])->execute();

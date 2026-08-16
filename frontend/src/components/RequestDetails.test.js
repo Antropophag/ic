@@ -132,7 +132,7 @@ describe('RequestDetails characterization', () => {
   })
 
   it('does not show a stale suspension reason for an active request', async () => {
-    requestApi.get.mockResolvedValue(requestDetails(1, { status_reason: null }))
+    requestApi.get.mockResolvedValue(requestDetails(1, { status_reason: 'Причина уже завершённой приостановки' }))
     const { app } = mountDetails()
     await flushRequests()
     expect(document.body.textContent).not.toContain('Причина приостановки')
