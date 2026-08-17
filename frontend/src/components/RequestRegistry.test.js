@@ -109,3 +109,169 @@ describe('RequestRegistry request creation permissions', () => {
     mounted.app.unmount()
   })
 })
+
+describe('RequestRegistry operational summary', () => {
+  it('reveals the read-only summary between attention and the registry', async () => {
+    requestApi.dashboard.mockResolvedValue({
+      operational_summary: {
+        active: 4,
+        unassigned: 1,
+        ready_to_start: 1,
+        in_progress: 1,
+        suspended: 1,
+        expertise: 3,
+        security_review: 2,
+        directions: [
+          { id: 'metrology', title: 'Метрологические испытания', color: 'goldenrod', active: 1, unassigned: 1, executors: [] },
+          { id: 'mechanical', title: 'Механические испытания', color: 'blue', active: 2, unassigned: 0, executors: [{ user_id: 12, display_name: 'Кашин', is_available: true, active: 2, in_progress: 1, suspended: 1 }] },
+          { id: 'electrical', title: 'Электротехнические испытания', color: 'violet', active: 1, unassigned: 0, executors: [{ user_id: null, display_name: 'Недоступный исполнитель', is_available: false, active: 1 }] },
+          { id: 'unclassified', title: 'Без направления', color: 'neutral', active: 0, unassigned: 0, executors: [] },
+        ],
+      },
+      categories: [{ id: 'assign_executor', title: 'Назначить исполнителя', description: 'Назначьте ответственного.', count: 1 }],
+    })
+
+    const mounted = mountRegistry(['employee', 'ic_manager'])
+    await flushRequests()
+
+    const summary = document.querySelector('.operational-summary')
+    const attention = document.querySelector('.attention-dashboard')
+    const toolbar = document.querySelector('.registry .toolbar')
+    const toggle = [...document.querySelectorAll('button')].find(button => button.textContent.includes('Монитор'))
+    expect(summary).not.toBeNull()
+    expect(summary.style.display).toBe('none')
+    expect(toggle.textContent).toContain('Монитор ИЦ')
+    expect(toggle.getAttribute('aria-expanded')).toBe('false')
+    toggle.click()
+    await nextTick()
+    expect(summary.style.display).not.toBe('none')
+    expect(summary.querySelector('h2').textContent).toBe('Монитор ИЦ')
+    expect(toggle.getAttribute('aria-expanded')).toBe('true')
+    expect(attention.compareDocumentPosition(summary) & Node.DOCUMENT_POSITION_FOLLOWING).not.toBe(0)
+    expect(toggle.compareDocumentPosition(summary) & Node.DOCUMENT_POSITION_FOLLOWING).not.toBe(0)
+    expect(summary.compareDocumentPosition(toolbar) & Node.DOCUMENT_POSITION_FOLLOWING).not.toBe(0)
+    expect(summary.querySelector('.operational-services').textContent).toContain('4В работе ИЦ')
+    expect(summary.querySelector('.operational-services').textContent).toContain('2Контроль СБ')
+    expect(summary.querySelector('.operational-service--expertise small').textContent).toBe('Подготовказаключения')
+    expect(summary.querySelector('.operational-lead-time')).toBeNull()
+    expect(summary.querySelectorAll('.operational-service--expertise small span')).toHaveLength(2)
+    expect(summary.querySelector('.operational-service--security')).not.toBeNull()
+    expect(summary.querySelector('.operational-service--expertise')).not.toBeNull()
+    expect(summary.querySelector('.operational-stats')).toBeNull()
+    expect(summary.querySelector('.direction-row--goldenrod .direction-people').textContent).toContain('Не назначен1 без исполнителя')
+    expect(summary.querySelector('.operational-flow')).toBeNull()
+    expect(summary.querySelector('.operational-analytics-note').textContent).toBe('Скоро здесь будет больше аналитических данных.')
+    expect(summary.textContent).toContain('Механические испытания')
+    expect(summary.textContent).toContain('Метрологические испытания')
+    expect(summary.textContent).toContain('Электротехнические испытания')
+    expect(summary.textContent).toContain('Без направления')
+    expect([...summary.querySelectorAll('.direction-row')].map(row => row.textContent)).toEqual([
+      expect.stringContaining('Метрологические'),
+      expect.stringContaining('Механические'),
+      expect.stringContaining('Электротехнические'),
+      expect.stringContaining('Без направления'),
+    ])
+    const mechanical = summary.querySelector('.direction-row--blue')
+    expect(mechanical.textContent).toContain('Кашин')
+    expect(mechanical.querySelector('.direction-name').textContent).not.toContain('Исполнители')
+    expect(mechanical.querySelector('.direction-people').textContent).toContain('1 в работе · 1 приостановлено')
+    const disclosure = mechanical.querySelector('.direction-trigger')
+    expect(disclosure.getAttribute('aria-expanded')).toBe('false')
+    disclosure.click()
+    await nextTick()
+    expect(mechanical.classList.contains('direction-row--open')).toBe(true)
+    expect(disclosure.getAttribute('aria-expanded')).toBe('true')
+    disclosure.focus()
+    disclosure.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))
+    await nextTick()
+    expect(mechanical.classList.contains('direction-row--open')).toBe(false)
+    expect(document.activeElement).toBe(disclosure)
+    disclosure.click()
+    document.body.dispatchEvent(new Event('pointerdown', { bubbles: true }))
+    await nextTick()
+    expect(mechanical.classList.contains('direction-row--open')).toBe(false)
+    mounted.roles.value = ['employee']
+    await nextTick()
+    expect(summary.querySelector('.direction-popover')).toBeNull()
+    expect(summary.textContent).not.toContain('Кашин')
+
+    const attentionButton = attention.querySelector('.attention-card')
+    attentionButton.click()
+    await flushRequests()
+    expect(requestApi.list).toHaveBeenLastCalledWith(expect.objectContaining({ attention: 'assign_executor' }))
+    mounted.app.unmount()
+  })
+
+  it('does not render the summary when backend withholds it', async () => {
+    requestApi.dashboard.mockResolvedValue({ operational_summary: null, categories: [] })
+    const mounted = mountRegistry(['employee', 'ic_executor'])
+    await flushRequests()
+    expect(document.querySelector('.operational-summary')).toBeNull()
+    expect([...document.querySelectorAll('button')].some(button => button.textContent.includes('Монитор'))).toBe(false)
+    mounted.app.unmount()
+  })
+
+  it.each([1, 2, 5, 11])('keeps the IC workload label distinct for %i requests', async (active) => {
+    requestApi.dashboard.mockResolvedValue({
+      operational_summary: {
+        active,
+        unassigned: 0,
+        ready_to_start: 0,
+        in_progress: 0,
+        suspended: active,
+        expertise: 3,
+        security_review: 2,
+        directions: [{
+          id: 'mechanical', title: 'Механические испытания', color: 'blue', active, unassigned: 0,
+          executors: [{ user_id: 12, display_name: 'Кашин', is_available: true, active, in_progress: 0, suspended: active }],
+        }],
+      },
+      categories: [],
+    })
+    const mounted = mountRegistry(['employee', 'ic_manager'])
+    await flushRequests()
+    const toggle = [...document.querySelectorAll('button')].find(button => button.textContent.includes('Монитор'))
+    toggle.click()
+    await nextTick()
+    const summary = document.querySelector('.operational-summary')
+    const direction = summary.querySelector('.direction-row')
+    expect(summary.querySelector('.operational-services').textContent).toContain(`${active}В работе ИЦ`)
+    expect(summary.querySelector('.operational-services').textContent).toContain('2Контроль СБ')
+    expect(summary.querySelector('.operational-service--expertise').textContent).toContain('3Подготовказаключения')
+    expect(summary.querySelector('.operational-stats')).toBeNull()
+    expect(direction.querySelector('.direction-volume').textContent).toContain(`${active}в работе`)
+    expect(direction.querySelector('.direction-people').textContent).toContain(`0 в работе · ${active} приостановлено`)
+    expect(direction.querySelector('.direction-volume').textContent).not.toContain('ИЦ')
+    expect(direction.querySelector('.direction-people').textContent).not.toContain('ИЦ')
+    expect(summary.textContent).not.toMatch(/активн(?:ая|ые|ых) заяв/)
+    mounted.app.unmount()
+  })
+})
+
+describe('RequestRegistry status filter', () => {
+  it('filters by multiple semantic status labels and treats no checks as all statuses', async () => {
+    const mounted = mountRegistry(['employee'])
+    await flushRequests()
+
+    const filter = document.querySelector('.status-filter')
+    filter.querySelector('summary').click()
+    const labels = [...filter.querySelectorAll('.status-filter-menu label')]
+    const rejected = labels.find(label => label.textContent.includes('В проведении испытаний отказано'))
+    const completed = labels.find(label => label.textContent.includes('Заявка выполнена'))
+    expect(rejected.querySelector('.request-status--rejected')).not.toBeNull()
+    rejected.querySelector('input').click()
+    completed.querySelector('input').click()
+    await flushRequests()
+
+    expect(filter.hasAttribute('open')).toBe(true)
+    expect(filter.querySelector('summary').textContent).toBe('Выбрано: 2')
+    expect(requestApi.list).toHaveBeenLastCalledWith(expect.objectContaining({ status: 'completed,rejected' }))
+
+    rejected.querySelector('input').click()
+    completed.querySelector('input').click()
+    await flushRequests()
+    expect(filter.querySelector('summary').textContent).toBe('Статусы')
+    expect(requestApi.list).toHaveBeenLastCalledWith(expect.objectContaining({ status: '' }))
+    mounted.app.unmount()
+  })
+})

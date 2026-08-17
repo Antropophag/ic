@@ -9,6 +9,7 @@ defineProps({ name: { type: String, required: true }, size: { type: Number, defa
     <template v-else-if="name === 'arrow-left'"><path d="m10 6-6 6 6 6M4 12h16" /></template>
     <template v-else-if="name === 'chevron-left'"><path d="m15 6-6 6 6 6" /></template>
     <template v-else-if="name === 'chevron-right'"><path d="m9 6 6 6-6 6" /></template>
+    <template v-else-if="name === 'chevron-down'"><path d="m6 9 6 6 6-6" /></template>
     <template v-else-if="name === 'help'"><circle cx="12" cy="12" r="10" stroke-width="2" /><path d="M9.1 9a3 3 0 1 1 5.8 1c0 2-2.9 2.4-2.9 4" stroke-width="2" /><path d="M12 18h.01" stroke-width="2.5" /></template>
     <template v-else-if="name === 'send'"><path d="m4 4 16 8-16 8 3.5-8L4 4Z" /><path d="M7.5 12H20" /></template>
     <template v-else-if="name === 'download'"><path d="M12 4v12m-4-4 4 4 4-4M5 20h14" /></template>
@@ -27,5 +28,8 @@ defineProps({ name: { type: String, required: true }, size: { type: Number, defa
     <template v-else-if="name === 'bell'"><path d="M18 9a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9M10 21h4" /></template>
     <template v-else-if="name === 'external-link'"><path d="M14 5h5v5M19 5l-8 8" /><path d="M19 14v5H5V5h5" /></template>
     <template v-else-if="name === 'magic-wand'"><path class="magic-wand-stick" d="m5 19 9.4-9.4 2 2L7 21H5z" /><path class="magic-wand-spark magic-wand-spark--large" d="m16 3 .65 1.35L18 5l-1.35.65L16 7l-.65-1.35L14 5l1.35-.65z" /><path class="magic-wand-spark magic-wand-spark--small" d="m20 8 .4.85.85.4-.85.4-.4.85-.4-.85-.85-.4.85-.4zM9 4l.35.7.7.35-.7.35L9 6.1l-.35-.7-.7-.35.7-.35z" /></template>
+    <template v-else-if="name === 'cog'"><circle cx="12" cy="12" r="3" /><path d="M19 13.5v-3l-2-.6a7 7 0 0 0-.7-1.6l1-1.8-2.1-2.1-1.8 1a7 7 0 0 0-1.6-.7l-.6-2h-3l-.6 2a7 7 0 0 0-1.6.7l-1.8-1-2.1 2.1 1 1.8a7 7 0 0 0-.7 1.6l-2 .6v3l2 .6a7 7 0 0 0 .7 1.6l-1 1.8 2.1 2.1 1.8-1a7 7 0 0 0 1.6.7l.6 2h3l.6-2a7 7 0 0 0 1.6-.7l1.8 1 2.1-2.1-1-1.8a7 7 0 0 0 .7-1.6z" /></template>
+    <template v-else-if="name === 'gauge'"><path d="M4 18a8 8 0 1 1 16 0" /><path d="m12 15 4-5M7 18h10" /></template>
+    <template v-else-if="name === 'bolt'"><path d="m13.5 2-8 12h6l-1 8 8-12h-6z" /></template>
   </svg>
 </template>

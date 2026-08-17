@@ -76,3 +76,10 @@ describe('authentication ribbon background', () => {
   })
 
 })
+
+describe('request process timeline', () => {
+  it('fills only completed segments before the current stage', () => {
+    expect(compactStyles).toContain('.process-timelineli.done{border-color:var(--blue)}')
+    expect(compactStyles).not.toMatch(/li\.done,\.process-timelineli\.current\{border-color:/)
+  })
+})
