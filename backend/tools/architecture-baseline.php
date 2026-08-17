@@ -69,7 +69,7 @@ return [
     ],
     'files' => [
         'backend/src/Http/Controller/RequestController.php' => 856,
-        'backend/src/Infrastructure/Request/RequestQuery.php' => 645,
+        'backend/src/Infrastructure/Request/RequestQuery.php' => 617,
         'frontend/src/components/RequestRegistry.vue' => 847,
     ],
     'methods' => [
@@ -90,7 +90,7 @@ return [
         ],
         'backend/src/Infrastructure/Request/RequestQuery.php' => [
             'RequestQuery::findDetails' => 260,
-            'RequestQuery::findPage' => 233,
+            'RequestQuery::findPage' => 230,
         ],
     ],
 ];

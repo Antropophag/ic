@@ -6,27 +6,32 @@ export const ACTIVE_STATUSES = [
   'Контроль СБ',
 ]
 
-const STATUS_LABELS = {
-  registered: 'Заявка зарегистрирована',
-  in_progress: 'Заявка в работе',
-  suspended: 'Работы приостановлены',
-  opinion_preparation: 'Подготовка заключения',
-  security_review: 'Контроль СБ',
-  completed: 'Заявка выполнена',
-  rejected: 'В проведении испытаний отказано',
-  withdrawn: 'Заявка отозвана',
-}
+export const REQUEST_STATUS_PRESENTATION = Object.freeze({
+  registered: { label: 'Заявка зарегистрирована', tone: 'request-status--registered', processIndex: 0, processLabel: 'Зарегистрирована', processTone: 'turquoise' },
+  in_progress: { label: 'Заявка в работе', tone: 'request-status--in-progress', processIndex: 1, processLabel: 'В работе', processTone: 'blue' },
+  suspended: { label: 'Работы приостановлены', tone: 'request-status--suspended', processIndex: 1, processLabel: 'Приостановлена', processTone: 'brown' },
+  opinion_preparation: { label: 'Подготовка заключения', tone: 'request-status--expertise', processIndex: 2, processLabel: 'Экспертиза', processTone: 'pink' },
+  security_review: { label: 'Контроль СБ', tone: 'request-status--security', processIndex: 3, processLabel: 'Контроль СБ', processTone: 'orange' },
+  completed: { label: 'Заявка выполнена', tone: 'request-status--completed', processIndex: 4, processLabel: 'Завершена', processTone: 'green', terminalDateLabel: 'Завершена' },
+  rejected: { label: 'В проведении испытаний отказано', tone: 'request-status--rejected', processIndex: 1, processLabel: 'Отклонена', processTone: 'red', terminal: true, terminalDateLabel: 'Отклонена' },
+  withdrawn: { label: 'Заявка отозвана', tone: 'request-status--withdrawn', processIndex: 1, processLabel: 'Отозвана', processTone: 'gray', terminal: true, terminalDateLabel: 'Отозвана' },
+})
+
+const UNKNOWN_STATUS_PRESENTATION = Object.freeze({ tone: 'request-status--unknown' })
+const STATUS_LABELS = Object.fromEntries(Object.entries(REQUEST_STATUS_PRESENTATION).map(([value, status]) => [value, status.label]))
 
 const COMPACT_STATUS_LABELS = {
   rejected: 'Отказано',
 }
 
-export const REQUEST_STATUS_OPTIONS = Object.entries(STATUS_LABELS).map(([value, label]) => ({ value, label }))
+export const REQUEST_STATUS_OPTIONS = Object.entries(REQUEST_STATUS_PRESENTATION).map(([value, status]) => ({
+  value,
+  label: status.label,
+  tone: status.tone,
+}))
 
-const STATUS_TONES = {
-  registered: 'blue', in_progress: 'cyan', suspended: 'orange',
-  opinion_preparation: 'violet', security_review: 'yellow', completed: 'green',
-  rejected: 'red', withdrawn: 'gray',
+export function requestStatusPresentation(status) {
+  return REQUEST_STATUS_PRESENTATION[status] || UNKNOWN_STATUS_PRESENTATION
 }
 
 export const REQUEST_COLORS = ['white', 'red', 'orange', 'blue', 'violet', 'green']
@@ -85,9 +90,10 @@ export function fromApi(item) {
     canReject: Boolean(Number(item.can_reject)),
     canWithdraw: Boolean(Number(item.can_withdraw)),
     color: REQUEST_COLORS.includes(item.color) ? item.color : 'white',
+    statusCode: item.status,
     status: STATUS_LABELS[item.status] || item.status,
     compactStatus: COMPACT_STATUS_LABELS[item.status] || STATUS_LABELS[item.status] || item.status,
-    tone: STATUS_TONES[item.status] || 'blue',
+    tone: requestStatusPresentation(item.status).tone,
     securityMark,
     // Вычисляется один раз при маппинге, а не при каждом обращении к
     // className/label/path в шаблоне (реестр рендерит это на каждую

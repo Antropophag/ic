@@ -109,12 +109,15 @@ describe('RequestDetails characterization', () => {
     expect(document.querySelector('.request-action-context b').textContent).toBe('Ожидание поверки оборудования')
     expect(document.querySelector('.request-action-bar')).toBeNull()
     expect(document.querySelector('.process-timeline .current b').textContent).toBe('Приостановлена')
-    expect(document.querySelector('.process-timeline .current').classList.contains('tone-orange')).toBe(true)
-    expect(document.querySelector('.process-timeline .current').classList.contains('terminal')).toBe(true)
-    expect(document.querySelector('.process-timeline .current').classList.contains('app-tooltip')).toBe(true)
-    expect(document.querySelector('.process-timeline .current').dataset.tooltip).toContain('В текущем статусе')
-    expect(document.querySelector('.process-timeline .current').tabIndex).toBe(0)
-    expect(document.querySelector('.process-timeline .current').getAttribute('aria-label')).toContain('В текущем статусе')
+    expect(document.querySelector('.process-timeline .current').classList.contains('tone-brown')).toBe(true)
+    expect(document.querySelector('.process-timeline .current').classList.contains('terminal')).toBe(false)
+    const currentStep = document.querySelector('.process-timeline .current')
+    const currentMarker = currentStep.querySelector('.process-node')
+    expect(currentStep.classList.contains('app-tooltip')).toBe(false)
+    expect(currentMarker.classList.contains('app-tooltip')).toBe(true)
+    expect(currentMarker.dataset.tooltip).toContain('В текущем статусе')
+    expect(currentMarker.tabIndex).toBe(0)
+    expect(currentMarker.getAttribute('aria-label')).toContain('В текущем статусе')
     expect(document.body.textContent).not.toContain('Последнее изменение')
     app.unmount()
   })
@@ -231,6 +234,8 @@ describe('RequestDetails characterization', () => {
     expect(button('Написать заключение')).not.toBeUndefined()
     expect(document.querySelector('[aria-label="Новый эксперт"]')).not.toBeNull()
     expect(document.querySelector('.request-color-control')).not.toBeNull()
+    expect(document.querySelector('.request-status--suspended')).not.toBeNull()
+    expect(document.querySelector('.request-color-control summary').textContent).toContain('Цветовая метка')
     expect(button('Изменить')).not.toBeUndefined()
     app.unmount()
   })
@@ -269,15 +274,18 @@ describe('RequestDetails characterization', () => {
   })
 
   it.each([
-    ['opinion_preparation', 'Экспертиза'],
-    ['security_review', 'Контроль СБ'],
-    ['completed', 'Завершена'],
-  ])('marks %s as the current process step', async (status, label) => {
+    ['registered', 'Зарегистрирована', 'tone-turquoise'],
+    ['opinion_preparation', 'Экспертиза', 'tone-pink'],
+    ['security_review', 'Контроль СБ', 'tone-orange'],
+    ['completed', 'Завершена', 'tone-green'],
+  ])('marks %s as the current process step', async (status, label, tone) => {
     requestApi.get.mockResolvedValue(requestDetails(1, { status }))
     const { app } = mountDetails()
     await flushRequests()
 
-    expect(document.querySelector('.process-timeline .current b').textContent).toBe(label)
+    const current = document.querySelector('.process-timeline .current')
+    expect(current.querySelector('b').textContent).toBe(label)
+    expect(current.classList.contains(tone)).toBe(true)
     app.unmount()
   })
 
@@ -302,7 +310,7 @@ describe('RequestDetails characterization', () => {
     expect(document.querySelectorAll('.process-timeline .future')).toHaveLength(3)
     expect(document.querySelector('.request-action-context span').textContent).toBe('Причина отказа')
     expect(document.querySelector('.request-action-context b').textContent).toBe('Образцы не соответствуют требованиям')
-    expect(document.querySelector('.process-timeline .current').dataset.tooltip).toContain('Отклонена 14 августа 2026')
+    expect(document.querySelector('.process-timeline .current .process-node').dataset.tooltip).toContain('Отклонена 14 августа 2026')
     terminal.app.unmount()
   })
 
@@ -314,7 +322,7 @@ describe('RequestDetails characterization', () => {
     expect(document.querySelector('.process-timeline .current').classList.contains('tone-gray')).toBe(true)
     expect(document.querySelector('.request-action-context span').textContent).toBe('Причина отзыва')
     expect(document.querySelector('.request-action-context b').textContent).toBe('Испытания больше не требуются')
-    expect(document.querySelector('.process-timeline .current').dataset.tooltip).toContain('Отозвана 14 августа 2026')
+    expect(document.querySelector('.process-timeline .current .process-node').dataset.tooltip).toContain('Отозвана 14 августа 2026')
     app.unmount()
   })
 
@@ -322,8 +330,8 @@ describe('RequestDetails characterization', () => {
     requestApi.get.mockResolvedValue(requestDetails(1, { status: 'completed', state_changed_at: '2026-08-14T10:00:00Z' }))
     const { app } = mountDetails()
     await flushRequests()
-    expect(document.querySelector('.process-timeline .current').dataset.tooltip).toContain('Завершена 14 августа 2026')
-    expect(document.querySelector('.process-timeline .current').dataset.tooltip).not.toContain('В текущем статусе')
+    expect(document.querySelector('.process-timeline .current .process-node').dataset.tooltip).toContain('Завершена 14 августа 2026')
+    expect(document.querySelector('.process-timeline .current .process-node').dataset.tooltip).not.toContain('В текущем статусе')
     app.unmount()
   })
 
