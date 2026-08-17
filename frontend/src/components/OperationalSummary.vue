@@ -56,13 +56,13 @@ onBeforeUnmount(() => document.removeEventListener("pointerdown", handleOutsideP
           <span class="direction-volume"><b>{{ direction.active }}</b><small>в работе</small></span>
         </button>
         <template v-else><span class="direction-icon" aria-hidden="true"><AppIcon :name="DIRECTION_ICONS[direction.id]" :size="20" /></span><span class="direction-name"><b>{{ direction.title }}</b></span><span class="direction-volume"><b>{{ direction.active }}</b><small>в работе</small></span></template>
-        <span v-if="showExecutors" :id="`direction-details-${direction.id}`" class="direction-popover" role="region" :aria-label="`Нагрузка: ${direction.title}`">
+        <span v-if="showExecutors" :id="`direction-details-${direction.id}`" class="direction-popover" role="region" :aria-hidden="openDirection !== direction.id" :aria-label="`Нагрузка: ${direction.title}`">
           <strong>Исполнители</strong>
           <span v-if="direction.executors.length || direction.unassigned" class="direction-people">
             <span v-if="direction.unassigned">
               <b>Не назначен</b><small>{{ direction.unassigned }} без исполнителя</small>
             </span>
-            <span v-for="executor in direction.executors" :key="executor.user_id ?? 'unavailable'">
+            <span v-for="(executor, executorIndex) in direction.executors" :key="executor.user_id ?? `${direction.id}-unavailable-${executorIndex}`">
               <b>{{ executor.display_name }}</b>
               <small>{{ executor.in_progress ?? 0 }} в работе · {{ executor.suspended ?? 0 }} приостановлено</small>
             </span>

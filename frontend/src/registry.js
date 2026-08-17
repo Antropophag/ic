@@ -9,7 +9,7 @@ export const ACTIVE_STATUSES = [
 export const REQUEST_STATUS_PRESENTATION = Object.freeze({
   registered: { label: 'Заявка зарегистрирована', tone: 'request-status--registered', processIndex: 0, processLabel: 'Зарегистрирована', processTone: 'turquoise' },
   in_progress: { label: 'Заявка в работе', tone: 'request-status--in-progress', processIndex: 1, processLabel: 'В работе', processTone: 'blue' },
-  suspended: { label: 'Работы приостановлены', tone: 'request-status--suspended', processIndex: 1, processLabel: 'Приостановлена', processTone: 'brown', terminal: true },
+  suspended: { label: 'Работы приостановлены', tone: 'request-status--suspended', processIndex: 1, processLabel: 'Приостановлена', processTone: 'brown' },
   opinion_preparation: { label: 'Подготовка заключения', tone: 'request-status--expertise', processIndex: 2, processLabel: 'Экспертиза', processTone: 'pink' },
   security_review: { label: 'Контроль СБ', tone: 'request-status--security', processIndex: 3, processLabel: 'Контроль СБ', processTone: 'orange' },
   completed: { label: 'Заявка выполнена', tone: 'request-status--completed', processIndex: 4, processLabel: 'Завершена', processTone: 'green', terminalDateLabel: 'Завершена' },

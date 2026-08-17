@@ -16,24 +16,27 @@ final class RequestDashboardSnapshotTest extends TestCase
     {
         $db = $this->connection();
         $db->open();
-        $managerId = (int) $db->createCommand(
-            "SELECT user.id FROM {{%users}} user JOIN {{%user_roles}} user_role ON user_role.user_id = user.id "
-            . "JOIN {{%roles}} role ON role.id = user_role.role_id WHERE role.code = 'ic_manager' LIMIT 1",
-        )->queryScalar();
-        self::assertGreaterThan(0, $managerId);
-        $beginCount = 0;
-        $db->on(Connection::EVENT_BEGIN_TRANSACTION, static function () use (&$beginCount): void {
-            $beginCount++;
-        });
+        try {
+            $managerId = (int) $db->createCommand(
+                "SELECT user.id FROM {{%users}} user JOIN {{%user_roles}} user_role ON user_role.user_id = user.id "
+                . "JOIN {{%roles}} role ON role.id = user_role.role_id WHERE role.code = 'ic_manager' LIMIT 1",
+            )->queryScalar();
+            self::assertGreaterThan(0, $managerId);
+            $beginCount = 0;
+            $db->on(Connection::EVENT_BEGIN_TRANSACTION, static function () use (&$beginCount): void {
+                $beginCount++;
+            });
 
-        $dashboard = (new RequestDashboardQuery($db))->findFor($managerId);
+            $dashboard = (new RequestDashboardQuery($db))->findFor($managerId);
 
-        self::assertSame(1, $beginCount);
-        self::assertSame(Transaction::REPEATABLE_READ, $db->lastIsolationLevel);
-        self::assertNull($db->getTransaction());
-        self::assertArrayHasKey('categories', $dashboard);
-        self::assertArrayHasKey('active', $dashboard['operational_summary']);
-        $db->close();
+            self::assertSame(1, $beginCount);
+            self::assertSame(Transaction::REPEATABLE_READ, $db->lastIsolationLevel);
+            self::assertNull($db->getTransaction());
+            self::assertArrayHasKey('categories', $dashboard);
+            self::assertArrayHasKey('active', $dashboard['operational_summary']);
+        } finally {
+            $db->close();
+        }
     }
 
     public function testExistingTransactionRemainsCallerOwned(): void
@@ -42,14 +45,18 @@ final class RequestDashboardSnapshotTest extends TestCase
         $db->open();
         $managerId = $this->managerId($db);
         $transaction = $db->beginTransaction(Transaction::READ_COMMITTED);
+        try {
+            (new RequestDashboardQuery($db))->findFor($managerId);
 
-        (new RequestDashboardQuery($db))->findFor($managerId);
-
-        self::assertTrue($transaction->isActive);
-        self::assertSame(1, $transaction->level);
-        self::assertSame(Transaction::READ_COMMITTED, $db->lastIsolationLevel);
-        $transaction->rollBack();
-        $db->close();
+            self::assertTrue($transaction->isActive);
+            self::assertSame(1, $transaction->level);
+            self::assertSame(Transaction::READ_COMMITTED, $db->lastIsolationLevel);
+        } finally {
+            if ($transaction->isActive) {
+                $transaction->rollBack();
+            }
+            $db->close();
+        }
     }
 
     public function testMariaDbReadCommittedAndRepeatableReadHaveDifferentVisibility(): void

@@ -18,7 +18,7 @@ final class OperationalSummaryTest extends IntegrationTestCase
         $initiator = $this->createUser('summary.initiator', 'Инициатор');
         $executor = $this->roleUser('summary.executor', 'Кашин', 'ic_executor');
 
-        $unassigned = $this->request($initiator, 'без исполнителя');
+        $this->request($initiator, 'без исполнителя');
         $ready = $this->request($initiator, 'к запуску');
         $progress = $this->request($initiator, 'в работе');
         $suspended = $this->request($initiator, 'приостановлена');

@@ -114,7 +114,7 @@ describe('RequestRegistry operational summary', () => {
   it('reveals the read-only summary between attention and the registry', async () => {
     requestApi.dashboard.mockResolvedValue({
       operational_summary: {
-        active: 4,
+        active: 5,
         unassigned: 1,
         ready_to_start: 1,
         in_progress: 1,
@@ -124,7 +124,10 @@ describe('RequestRegistry operational summary', () => {
         directions: [
           { id: 'metrology', title: 'Метрологические испытания', color: 'goldenrod', active: 1, unassigned: 1, executors: [] },
           { id: 'mechanical', title: 'Механические испытания', color: 'blue', active: 2, unassigned: 0, executors: [{ user_id: 12, display_name: 'Кашин', is_available: true, active: 2, in_progress: 1, suspended: 1 }] },
-          { id: 'electrical', title: 'Электротехнические испытания', color: 'violet', active: 1, unassigned: 0, executors: [{ user_id: null, display_name: 'Недоступный исполнитель', is_available: false, active: 1 }] },
+          { id: 'electrical', title: 'Электротехнические испытания', color: 'violet', active: 2, unassigned: 0, executors: [
+            { user_id: null, display_name: 'Недоступный исполнитель', is_available: false, active: 1 },
+            { user_id: null, display_name: 'Ещё один недоступный исполнитель', is_available: false, active: 1 },
+          ] },
           { id: 'unclassified', title: 'Без направления', color: 'neutral', active: 0, unassigned: 0, executors: [] },
         ],
       },
@@ -150,7 +153,7 @@ describe('RequestRegistry operational summary', () => {
     expect(attention.compareDocumentPosition(summary) & Node.DOCUMENT_POSITION_FOLLOWING).not.toBe(0)
     expect(toggle.compareDocumentPosition(summary) & Node.DOCUMENT_POSITION_FOLLOWING).not.toBe(0)
     expect(summary.compareDocumentPosition(toolbar) & Node.DOCUMENT_POSITION_FOLLOWING).not.toBe(0)
-    expect(summary.querySelector('.operational-services').textContent).toContain('4В работе ИЦ')
+    expect(summary.querySelector('.operational-services').textContent).toContain('5В работе ИЦ')
     expect(summary.querySelector('.operational-services').textContent).toContain('2Контроль СБ')
     expect(summary.querySelector('.operational-service--expertise small').textContent).toBe('Подготовказаключения')
     expect(summary.querySelector('.operational-lead-time')).toBeNull()
@@ -176,15 +179,20 @@ describe('RequestRegistry operational summary', () => {
     expect(mechanical.querySelector('.direction-name').textContent).not.toContain('Исполнители')
     expect(mechanical.querySelector('.direction-people').textContent).toContain('1 в работе · 1 приостановлено')
     const disclosure = mechanical.querySelector('.direction-trigger')
+    const details = mechanical.querySelector('.direction-popover')
     expect(disclosure.getAttribute('aria-expanded')).toBe('false')
+    expect(details.getAttribute('aria-hidden')).toBe('true')
+    expect(summary.querySelector('.direction-row--violet').textContent).toContain('Ещё один недоступный исполнитель')
     disclosure.click()
     await nextTick()
     expect(mechanical.classList.contains('direction-row--open')).toBe(true)
     expect(disclosure.getAttribute('aria-expanded')).toBe('true')
+    expect(details.getAttribute('aria-hidden')).toBe('false')
     disclosure.focus()
     disclosure.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))
     await nextTick()
     expect(mechanical.classList.contains('direction-row--open')).toBe(false)
+    expect(details.getAttribute('aria-hidden')).toBe('true')
     expect(document.activeElement).toBe(disclosure)
     disclosure.click()
     document.body.dispatchEvent(new Event('pointerdown', { bubbles: true }))

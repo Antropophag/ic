@@ -110,7 +110,7 @@ describe('RequestDetails characterization', () => {
     expect(document.querySelector('.request-action-bar')).toBeNull()
     expect(document.querySelector('.process-timeline .current b').textContent).toBe('Приостановлена')
     expect(document.querySelector('.process-timeline .current').classList.contains('tone-brown')).toBe(true)
-    expect(document.querySelector('.process-timeline .current').classList.contains('terminal')).toBe(true)
+    expect(document.querySelector('.process-timeline .current').classList.contains('terminal')).toBe(false)
     const currentStep = document.querySelector('.process-timeline .current')
     const currentMarker = currentStep.querySelector('.process-node')
     expect(currentStep.classList.contains('app-tooltip')).toBe(false)
