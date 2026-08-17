@@ -204,7 +204,25 @@ npm --prefix frontend run bitrix-files -- verify \
 snapshot, всех файловых ID в `objects/` и успешных checkpoint-записей, а затем
 повторно вычисляет размер и SHA-256 каждого объекта.
 
-`checkpoint.jsonl`, `associations.jsonl`, `objects/` и `browser-profile/`
+Для ретроспективной аналитики сроков отдельный возобновляемый проход читает с
+карточек только дату последнего изменения отчётных файлов. Уже сохранённые
+бинарники повторно не скачиваются:
+
+```bash
+npm --prefix frontend run bitrix-files -- metadata \
+  --snapshot="$BITRIX_SNAPSHOT_DIR" \
+  --workspace="$BITRIX_FILES_DIR" --concurrency=4
+```
+
+Результат сохраняется в приватном `report-metadata.jsonl`, привязанном к снимку
+через `report-metadata-source.jsonl`. Поле Bitrix24 «Изменен» означает дату
+последнего изменения текущей версии файла, а не дату его первой загрузки и не
+доказанную дату готовности отчёта. Максимальная дата среди актуальных `reportFiles`
+заявки может использоваться только как proxy-оценка позднейшего изменения
+актуального комплекта.
+
+`checkpoint.jsonl`, `associations.jsonl`, `report-metadata.jsonl`,
+`report-metadata-source.jsonl`, `objects/` и `browser-profile/`
 содержат миграционные либо авторизационные данные и никогда не коммитятся.
 
 ## Импорт из проверенного снимка

@@ -5,9 +5,12 @@ import { tmpdir } from 'node:os'
 import { afterEach, describe, expect, test, vi } from 'vitest'
 import {
   downloadResponse,
+  collectReportMetadata,
   findLegacyDownloadLink,
   loadCheckpoint,
   normalizeFileUrl,
+  parseLegacyFileModifiedAt,
+  readLegacyFileModifiedAt,
   plusSubstitutionCandidates,
   parseArguments,
   readSnapshotFiles,
@@ -99,6 +102,106 @@ describe('Bitrix file migration tooling', () => {
       { waitUntil: 'domcontentloaded', timeout: 1_000 },
     )
     expect(downloadLink.waitFor).toHaveBeenCalledWith({ state: 'attached', timeout: 1_000 })
+  })
+
+  test('parses the Moscow timestamp displayed by a legacy file card', () => {
+    expect(parseLegacyFileModifiedAt('Размер: 12 МБ\nИзменен:</td><td>02.09.2021 14:52:20</td>')).toBe(
+      '2021-09-02T14:52:20+03:00',
+    )
+    expect(() => parseLegacyFileModifiedAt('Дата отсутствует')).toThrow('FILE_MODIFIED_AT_NOT_FOUND')
+    expect(() => parseLegacyFileModifiedAt('Изменён: 31.02.2021 14:52:20')).toThrow('FILE_MODIFIED_AT_INVALID')
+  })
+
+  test('reads file metadata through the authenticated request context and retries a legacy URL', async () => {
+    const missing = { status: () => 404, url: () => 'https://portal.example/missing', text: vi.fn() }
+    const found = {
+      status: () => 200,
+      url: () => 'https://portal.example/docs/file/FilesProposalTest/one%2Btwo.pdf',
+      text: vi.fn().mockResolvedValue('Изменен:</td><td>02.09.2021 14:52:20</td>'),
+    }
+    const request = { get: vi.fn().mockResolvedValueOnce(missing).mockResolvedValueOnce(found) }
+
+    await expect(readLegacyFileModifiedAt(
+      request,
+      'https://portal.example/docs/file/FilesProposalTest/one%20two.pdf',
+      1_000,
+    )).resolves.toBe('2021-09-02T14:52:20+03:00')
+    expect(request.get).toHaveBeenCalledTimes(2)
+  })
+
+  test('collects only deduplicated reports with bounded concurrency and resumes without a browser', async () => {
+    const snapshot = await fixtureDirectory()
+    const workspace = await fixtureDirectory()
+    await mkdir(join(workspace, 'browser-profile'))
+    const detailUrl = id => `https://portal.example/docs/file/FilesProposalTest/${id}.pdf`
+    await writeSnapshot(snapshot, [
+      element('10', [{ id: 'support', name: 'support.pdf', detailURL: detailUrl('support') }], [
+        { id: 'report-1', name: 'one.pdf', detailURL: detailUrl('one') },
+        { id: 'report-2', name: 'two.pdf', detailURL: detailUrl('two') },
+      ]),
+      element('11', [], [
+        { id: 'report-1', name: 'one.pdf', detailURL: detailUrl('one') },
+        { id: 'report-3', name: 'three.pdf', detailURL: detailUrl('three') },
+      ]),
+    ])
+    let active = 0
+    let maximumActive = 0
+    const request = { get: vi.fn().mockImplementation(async url => {
+      active++
+      maximumActive = Math.max(maximumActive, active)
+      await new Promise(resolve => setTimeout(resolve, 0))
+      active--
+      return { status: () => 200, url: () => url, text: async () => 'Изменен: 02.09.2021 14:52:20' }
+    }) }
+    const context = { request, close: vi.fn().mockResolvedValue(undefined) }
+    const launch = vi.fn().mockResolvedValue(context)
+    vi.spyOn(process.stdout, 'write').mockReturnValue(true)
+
+    await collectReportMetadata(snapshot, workspace, { concurrency: '2' }, launch)
+
+    expect(request.get).toHaveBeenCalledTimes(3)
+    expect(maximumActive).toBe(2)
+    const records = (await readFile(join(workspace, 'report-metadata.jsonl'), 'utf8')).trim().split('\n').map(JSON.parse)
+    expect(records.map(record => record.sourceFileId).sort()).toEqual(['report-1', 'report-2', 'report-3'])
+    expect(records.every(record => record.status === 'collected')).toBe(true)
+
+    await collectReportMetadata(snapshot, workspace, { concurrency: '2' }, vi.fn(() => { throw new Error('must not launch') }))
+    expect((await readFile(join(workspace, 'report-metadata.jsonl'), 'utf8')).trim().split('\n')).toHaveLength(3)
+  })
+
+  test('handles a snapshot without reports without requiring a browser profile', async () => {
+    const snapshot = await fixtureDirectory()
+    const workspace = await fixtureDirectory()
+    await writeSnapshot(snapshot, [element('10', [{
+      id: 'support', name: 'support.pdf', detailURL: 'https://portal.example/docs/file/FilesProposalTest/support.pdf',
+    }], [])])
+    const launch = vi.fn()
+    vi.spyOn(process.stdout, 'write').mockReturnValue(true)
+
+    await collectReportMetadata(snapshot, workspace, {}, launch)
+
+    expect(launch).not.toHaveBeenCalled()
+    expect(await readFile(join(workspace, 'report-metadata-source.jsonl'), 'utf8')).toContain('"reportFiles":0')
+  })
+
+  test('persists an individual failure and aborts explicitly on OAuth', async () => {
+    const snapshot = await fixtureDirectory()
+    const workspace = await fixtureDirectory()
+    await mkdir(join(workspace, 'browser-profile'))
+    await writeSnapshot(snapshot, [element('10', [], [
+      { id: 'failed', name: 'failed.pdf', detailURL: 'https://portal.example/docs/file/FilesProposalTest/failed.pdf' },
+      { id: 'oauth', name: 'oauth.pdf', detailURL: 'https://portal.example/docs/file/FilesProposalTest/oauth.pdf' },
+    ])])
+    const request = { get: vi.fn()
+      .mockResolvedValueOnce({ status: () => 500, url: () => 'https://portal.example/docs/file/FilesProposalTest/failed.pdf' })
+      .mockResolvedValueOnce({ status: () => 302, url: () => 'https://portal.example/oauth/authorize/' }) }
+    const context = { request, close: vi.fn().mockResolvedValue(undefined) }
+
+    await expect(collectReportMetadata(snapshot, workspace, { concurrency: '2' }, async () => context))
+      .rejects.toThrow('AUTH_REQUIRED')
+    const records = (await readFile(join(workspace, 'report-metadata.jsonl'), 'utf8')).trim().split('\n').map(JSON.parse)
+    expect(records).toEqual([expect.objectContaining({ sourceFileId: 'failed', status: 'failed', error: 'FILE_PAGE_HTTP_500' })])
+    expect(context.close).toHaveBeenCalledOnce()
   })
 
   test('verifies snapshot and deduplicates associations by source ID', async () => {
