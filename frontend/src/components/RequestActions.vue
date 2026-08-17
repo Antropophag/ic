@@ -1,6 +1,6 @@
 <script setup>
 import { computed, nextTick, ref, toRef, watch } from 'vue'
-import { canStartNow, elapsedSince } from '../registry'
+import { canStartNow, elapsedSince, requestStatusPresentation } from '../registry'
 import { useRequestActions } from '../composables/useRequestActions'
 import AppIcon from './AppIcon.vue'
 import AppModal from './AppModal.vue'
@@ -22,30 +22,18 @@ const showHelpDrawer = ref(false)
 
 const processSteps = computed(() => {
   const labels = ['Зарегистрирована', 'В работе', 'Экспертиза', 'Контроль СБ', 'Завершена']
-  const statusOverride = {
-    'Работы приостановлены': { index: 1, label: 'Приостановлена', tone: 'orange' },
-    'В проведении испытаний отказано': { index: 1, label: 'Отклонена', tone: 'red' },
-    'Заявка отозвана': { index: 1, label: 'Отозвана', tone: 'gray' },
-  }[request.value?.status]
-  const statusIndex = {
-    'Заявка зарегистрирована': 0, 'Заявка в работе': 1, 'Работы приостановлены': 1,
-    'Подготовка заключения': 2, 'Контроль СБ': 3, 'Заявка выполнена': 4,
-  }[request.value?.status]
-  const currentIndex = statusOverride?.index ?? statusIndex
+  const presentation = requestStatusPresentation(request.value?.statusCode)
+  const currentIndex = presentation.processIndex
   return labels.map((label, index) => ({
-    label: index === currentIndex && statusOverride ? statusOverride.label : label,
+    label: index === currentIndex ? presentation.processLabel || label : label,
     state: index < currentIndex ? 'done' : index === currentIndex ? 'current' : 'future',
-    tone: index === currentIndex ? statusOverride?.tone || 'blue' : '',
-    terminal: Boolean(statusOverride && index === currentIndex),
+    tone: index === currentIndex ? presentation.processTone || 'blue' : '',
+    terminal: Boolean(presentation.terminal && index === currentIndex),
   }))
 })
 const stateAgeLabel = computed(() => {
   if (!request.value?.stateChangedAt) return ''
-  const terminalLabel = {
-    'Заявка выполнена': 'Завершена',
-    'В проведении испытаний отказано': 'Отклонена',
-    'Заявка отозвана': 'Отозвана',
-  }[request.value.status]
+  const terminalLabel = requestStatusPresentation(request.value.statusCode).terminalDateLabel
   if (terminalLabel) {
     const date = new Intl.DateTimeFormat('ru-RU', { dateStyle: 'long' }).format(new Date(request.value.stateChangedAt))
     return `${terminalLabel} ${date}`
@@ -138,7 +126,7 @@ defineExpose({
 </script>
 
 <template>
-  <ol class="process-timeline"><li v-for="(step, index) in processSteps" :key="`${index}-${step.label}`" :class="[step.state, step.tone && `tone-${step.tone}`, { terminal: step.terminal, 'app-tooltip': step.state === 'current' && stateAgeLabel }]" :tabindex="step.state === 'current' && stateAgeLabel ? 0 : undefined" :aria-label="step.state === 'current' && stateAgeLabel ? `${step.label}. ${stateAgeLabel}` : undefined" :data-tooltip="step.state === 'current' ? stateAgeLabel || undefined : undefined"><span class="process-node" aria-hidden="true"></span><b>{{ step.label }}</b><small>{{ step.state === 'current' ? 'Текущий статус' : step.state === 'done' ? 'Завершено' : 'Ожидается' }}</small></li></ol>
+  <ol class="process-timeline"><li v-for="(step, index) in processSteps" :key="`${index}-${step.label}`" :class="[step.state, step.tone && `tone-${step.tone}`, { terminal: step.terminal }]"><span class="process-node" :class="{ 'app-tooltip': step.state === 'current' && stateAgeLabel }" :tabindex="step.state === 'current' && stateAgeLabel ? 0 : undefined" :aria-label="step.state === 'current' && stateAgeLabel ? `${step.label}. ${stateAgeLabel}` : undefined" :aria-hidden="step.state === 'current' && stateAgeLabel ? undefined : true" :data-tooltip="step.state === 'current' ? stateAgeLabel || undefined : undefined"></span><b>{{ step.label }}</b><small>{{ step.state === 'current' ? 'Текущий статус' : step.state === 'done' ? 'Завершено' : 'Ожидается' }}</small></li></ol>
   <div v-if="hasHeroAction || actions.actionError.value" class="request-process-action" :class="{ 'request-process-action--reason': statusReason }">
     <div class="request-process-action-main"><div class="request-action-context"><span>{{ statusReason?.label || 'Следующий шаг' }}</span><b>{{ statusReason?.text || actionPrompt }}</b></div><div v-if="!statusReason" class="request-action-bar">
       <div v-if="request.canAssignExecutor" class="request-action-group"><select v-model="actions.executorChoice.value" :disabled="actions.actionLoading.value" aria-label="Исполнитель ИЦ"><option value="">Выберите исполнителя</option><option v-for="executor in actions.executors.value" :key="executor.id" :value="executor.id">{{ executor.displayName }}</option></select><button type="button" :class="request.executorId ? 'secondary' : 'primary'" :disabled="actions.actionLoading.value || !actions.executorChoice.value" @click="actions.assignExecutor">{{ actions.actionLoading.value ? 'Сохранение…' : (request.executorId ? 'Переназначить' : 'Назначить') }}</button></div>
