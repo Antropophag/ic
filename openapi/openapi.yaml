@@ -149,8 +149,15 @@ paths:
             default: active
         - name: status
           in: query
+          description: Статусы через запятую без пробелов и пустых элементов; пустое значение не ограничивает выборку.
+          style: form
+          explode: false
           schema:
-            $ref: '#/components/schemas/RequestStatus'
+            type: array
+            maxItems: 8
+            uniqueItems: true
+            items:
+              $ref: '#/components/schemas/RequestStatus'
         - name: query
           in: query
           schema:
@@ -188,14 +195,15 @@ paths:
   /api/v1/requests/dashboard:
     get:
       tags: [Requests]
-      summary: Получить персональные очереди действий
+      summary: Получить dashboard заявок
       description: |
-        Возвращает только категории реальных действий текущего активного
+        Возвращает категории реальных действий текущего активного
         пользователя с учётом ролей и действующих назначений. Счётчики точные,
         относятся ко всему доступному scope и не зависят от страницы, вкладки,
         поиска или статусного фильтра реестра. Одна заявка может входить в
         несколько категорий при совмещении полномочий. Категории с нулевым
-        счётчиком не возвращаются.
+        счётчиком не возвращаются. Всем аутентифицированным пользователям также
+        возвращается operational summary общей текущей нагрузки.
       operationId: getRequestDashboard
       security:
         - cookieSession: []
@@ -212,6 +220,27 @@ paths:
                     title: Назначить исполнителя
                     description: Назначьте ответственного за проведение испытаний.
                     count: 4
+                operational_summary:
+                  active: 12
+                  unassigned: 3
+                  ready_to_start: 2
+                  in_progress: 5
+                  suspended: 2
+                  expertise: 3
+                  security_review: 1
+                  directions:
+                    - id: mechanical
+                      title: Механические испытания
+                      color: blue
+                      active: 4
+                      unassigned: 1
+                      executors:
+                        - user_id: 42
+                          display_name: Кашин Алексей
+                          is_available: true
+                          active: 4
+                          in_progress: 3
+                          suspended: 1
         '401':
           $ref: '#/components/responses/Unauthorized'
         '500':
@@ -905,12 +934,89 @@ components:
         - security_decision
     AttentionDashboard:
       type: object
-      required: [categories]
+      required: [categories, operational_summary]
       properties:
         categories:
           type: array
           items:
             $ref: '#/components/schemas/AttentionCategory'
+        operational_summary:
+          $ref: '#/components/schemas/OperationalSummary'
+      additionalProperties: false
+    OperationalSummary:
+      type: object
+      required: [active, unassigned, ready_to_start, in_progress, suspended, expertise, security_review, directions]
+      properties:
+        active:
+          type: integer
+          minimum: 0
+        unassigned:
+          type: integer
+          minimum: 0
+        ready_to_start:
+          type: integer
+          minimum: 0
+        in_progress:
+          type: integer
+          minimum: 0
+        suspended:
+          type: integer
+          minimum: 0
+        expertise:
+          type: integer
+          minimum: 0
+        security_review:
+          type: integer
+          minimum: 0
+        directions:
+          type: array
+          items:
+            $ref: '#/components/schemas/OperationalDirection'
+      additionalProperties: false
+    OperationalDirection:
+      type: object
+      required: [id, title, color, active, unassigned, executors]
+      properties:
+        id:
+          type: string
+          enum: [mechanical, metrology, electrical, unclassified]
+        title:
+          type: string
+        color:
+          type: string
+          enum: [blue, goldenrod, violet, neutral]
+        active:
+          type: integer
+          minimum: 0
+        unassigned:
+          type: integer
+          minimum: 0
+        executors:
+          type: array
+          description: Populated only for IC and laboratory managers; empty for other authenticated roles.
+          items:
+            $ref: '#/components/schemas/OperationalExecutorWorkload'
+      additionalProperties: false
+    OperationalExecutorWorkload:
+      type: object
+      required: [user_id, display_name, is_available, active, in_progress, suspended]
+      properties:
+        user_id:
+          type: integer
+          nullable: true
+        display_name:
+          type: string
+        is_available:
+          type: boolean
+        active:
+          type: integer
+          minimum: 0
+        in_progress:
+          type: integer
+          minimum: 0
+        suspended:
+          type: integer
+          minimum: 0
       additionalProperties: false
     RequestEvents:
       type: object

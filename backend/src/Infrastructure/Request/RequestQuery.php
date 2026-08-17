@@ -56,13 +56,14 @@ final class RequestQuery
         )->queryAll();
     }
 
-    /** @return array{items: list<array<string, mixed>>, total: int, page: int, pageSize: int, pageCount: int, counts: array{active: int, all: int, mine: int}} */
+    /** @param list<string>|string|null $status
+     * @return array{items: list<array<string, mixed>>, total: int, page: int, pageSize: int, pageCount: int, counts: array{active: int, all: int, mine: int}} */
     public function findPage(
         int $actorId,
         int $page,
         int $pageSize,
         string $tab,
-        ?string $status,
+        string|array|null $status,
         string $query,
         string $sort,
         ?string $attention = null,
@@ -75,10 +76,7 @@ final class RequestQuery
             $where[] = 'r.initiator_id = :filter_actor';
             $filterParams[':filter_actor'] = $actorId;
         }
-        if ($status !== null) {
-            $where[] = 'r.status = :filter_status';
-            $filterParams[':filter_status'] = $status;
-        }
+        (new RequestStatusScope())->apply($where, $filterParams, $status);
         if ($query !== '') {
             $where[] = "(LOCATE(:filter_query, LPAD(CAST(r.number AS CHAR), 6, '0')) > 0 "
                 . 'OR LOCATE(:filter_query, r.product_name) > 0 OR LOCATE(:filter_query, u.display_name) > 0 '
@@ -291,36 +289,10 @@ final class RequestQuery
         ];
     }
 
-    /** @return array{categories: list<array{id: string, title: string, description: string, count: int}>} */
+    /** @return array{categories: list<array{id: string, title: string, description: string, count: int}>, operational_summary: array<string, mixed>} */
     public function attentionDashboard(int $actorId): array
     {
-        $queues = AttentionQueue::cases();
-        $scope = new AttentionQueueScope();
-        $columns = [];
-        foreach ($queues as $queue) {
-            $columns[] = 'SUM(CASE WHEN ' . $scope->condition($queue) . ' THEN 1 ELSE 0 END) AS `'
-                . $queue->value . '`';
-        }
-        $counts = $this->db->createCommand(
-            'SELECT ' . implode(', ', $columns) . ' FROM {{%requests}} r',
-            [':attention_actor' => $actorId],
-        )->queryOne();
-
-        $categories = [];
-        foreach ($queues as $queue) {
-            $count = (int) ($counts[$queue->value] ?? 0);
-            if ($count === 0) {
-                continue;
-            }
-            $categories[] = [
-                'id' => $queue->value,
-                'title' => $queue->title(),
-                'description' => $queue->description(),
-                'count' => $count,
-            ];
-        }
-
-        return ['categories' => $categories];
+        return (new RequestDashboardQuery($this->db))->findFor($actorId);
     }
 
     /** @return array{item: array<string, mixed>, history: list<array<string, mixed>>, comments: list<array<string, mixed>>, commentsPage: array{hasMore: bool, nextBeforeId: int|null}, documents: list<array<string, mixed>>} */

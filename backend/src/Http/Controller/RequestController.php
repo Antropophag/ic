@@ -134,14 +134,14 @@ final class RequestController extends ApiController
             (int) $input->page,
             (int) $input->pageSize,
             (string) $input->tab,
-            $input->status === null || $input->status === '' ? null : (string) $input->status,
+            $input->statuses(),
             trim((string) $input->query),
             (string) $input->sort,
             $input->attention === null || $input->attention === '' ? null : (string) $input->attention,
         );
     }
 
-    /** @return array{categories: list<array{id: string, title: string, description: string, count: int}>} */
+    /** @return array{categories: list<array{id: string, title: string, description: string, count: int}>, operational_summary: array<string, mixed>} */
     public function actionDashboard(): array
     {
         return $this->query()->attentionDashboard($this->currentUserId());
