@@ -72,7 +72,8 @@ PROMPT;
     /** @return array<string, list<string>> */
     private function structured(string $content): array
     {
-        $content = preg_replace('/(?:^```(?:json)?\s*|\s*```$)/u', '', trim($content)) ?? $content;
+        $content = preg_replace('/^```(?:json)?\s*/u', '', trim($content)) ?? $content;
+        $content = preg_replace('/\s*```$/u', '', $content) ?? $content;
         $decoded = json_decode($content);
         if (!$decoded instanceof \stdClass) {
             throw new AiFeatureUnavailable(self::MALFORMED_RESPONSE);
