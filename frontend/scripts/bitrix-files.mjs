@@ -319,6 +319,99 @@ async function download(snapshotDirectory, workspace, options) {
   process.stdout.write(`${JSON.stringify({ downloaded, skipped, failed, uniqueFiles: source.uniqueFiles.length })}\n`)
 }
 
+export function parseLegacyFileModifiedAt(text) {
+  const match = text.match(/Измен[её]н:[\s\S]{0,200}?(\d{2})\.(\d{2})\.(\d{4})\s+(\d{2}):(\d{2}):(\d{2})/u)
+  if (!match) throw new Error('FILE_MODIFIED_AT_NOT_FOUND')
+  const [, day, month, year, hour, minute, second] = match
+  const value = `${year}-${month}-${day}T${hour}:${minute}:${second}+03:00`
+  const calendarCheck = new Date(Date.UTC(Number(year), Number(month) - 1, Number(day), Number(hour), Number(minute), Number(second)))
+  if (Number.isNaN(new Date(value).getTime())
+    || calendarCheck.getUTCFullYear() !== Number(year)
+    || calendarCheck.getUTCMonth() + 1 !== Number(month)
+    || calendarCheck.getUTCDate() !== Number(day)
+    || calendarCheck.getUTCHours() !== Number(hour)
+    || calendarCheck.getUTCMinutes() !== Number(minute)
+    || calendarCheck.getUTCSeconds() !== Number(second)) {
+    throw new Error('FILE_MODIFIED_AT_INVALID')
+  }
+  return value
+}
+
+export async function readLegacyFileModifiedAt(request, url, timeout) {
+  for (const candidate of plusSubstitutionCandidates(url)) {
+    const response = await request.get(candidate, { timeout })
+    if (response.url().includes('/oauth/')) throw new Error('AUTH_REQUIRED: request was redirected to OAuth.')
+    if (response.status() === 200) return parseLegacyFileModifiedAt(await response.text())
+    if (![403, 404].includes(response.status())) throw new Error(`FILE_PAGE_HTTP_${response.status()}`)
+  }
+  throw new Error('FILE_PAGE_NOT_FOUND')
+}
+
+export async function collectReportMetadata(snapshotDirectory, workspace, options, launchContext = (...args) => chromium.launchPersistentContext(...args)) {
+  await preparePrivateWorkspace(workspace)
+  const source = await readSnapshotFiles(snapshotDirectory)
+  const reports = [...new Map(source.associations
+    .filter(({ documentType }) => documentType === 'report')
+    .map((association) => [association.sourceFileId, association])).values()]
+  const sourcePath = join(workspace, 'report-metadata-source.jsonl')
+  const checkpointPath = join(workspace, 'report-metadata.jsonl')
+  await writePrivateJsonLines(sourcePath, [{
+    ...workspaceSource(source),
+    reportFiles: reports.length,
+  }])
+  const checkpoint = await loadCheckpoint(checkpointPath)
+  const limit = options.limit === undefined && reports.length === 0 ? 0 : positiveInteger(options.limit ?? String(reports.length), 'limit')
+  const concurrency = positiveInteger(options.concurrency ?? '4', 'concurrency')
+  const timeout = positiveInteger(options['timeout-ms'] ?? '60000', 'timeout-ms')
+  const pending = reports.filter(({ sourceFileId }) => checkpoint.get(sourceFileId)?.status !== 'collected').slice(0, limit)
+
+  if (pending.length === 0) {
+    process.stdout.write(`${JSON.stringify({ collected: 0, skipped: reports.length, failed: 0, reportFiles: reports.length })}\n`)
+    return
+  }
+  const profile = join(workspace, 'browser-profile')
+  if (!existsSync(profile)) throw new Error('Browser profile is missing; run auth first.')
+
+  const context = await launchContext(profile, { headless: true })
+  let collected = 0
+  let failed = 0
+  try {
+    for (let offset = 0; offset < pending.length; offset += concurrency) {
+      const batch = pending.slice(offset, offset + concurrency)
+      const settled = await Promise.allSettled(batch.map(async (file) => {
+        try {
+          return {
+            sourceFileId: file.sourceFileId,
+            status: 'collected',
+            modifiedAt: await readLegacyFileModifiedAt(context.request, file.detailUrl, timeout),
+            sourceField: 'bitrix_file_modified',
+            retrievedAt: new Date().toISOString(),
+          }
+        } catch (error) {
+          const message = error instanceof Error ? error.message : 'UNKNOWN_ERROR'
+          if (message.startsWith('AUTH_REQUIRED')) throw error
+          return { sourceFileId: file.sourceFileId, status: 'failed', error: message, attemptedAt: new Date().toISOString() }
+        }
+      }))
+      const results = settled
+        .filter((result) => result.status === 'fulfilled')
+        .map((result) => result.value)
+      for (const record of results) {
+        await appendCheckpoint(checkpointPath, record)
+        checkpoint.set(record.sourceFileId, record)
+        if (record.status === 'collected') ++collected
+        else ++failed
+      }
+      const aborted = settled.find((result) => result.status === 'rejected')
+      if (aborted) throw aborted.reason
+    }
+  } finally {
+    await context.close()
+    await protectTree(workspace)
+  }
+  process.stdout.write(`${JSON.stringify({ collected, skipped: reports.length - pending.length, failed, reportFiles: reports.length })}\n`)
+}
+
 export async function verifyWorkspace(snapshotDirectory, workspace) {
   const workspacePath = resolve(workspace)
   assertOutsideGit(workspacePath)
@@ -582,14 +675,15 @@ async function waitForEnter() {
 
 async function main() {
   const { command, options } = parseArguments(process.argv.slice(2))
-  if (!['auth', 'download', 'verify'].includes(command)) {
-    throw new Error('Usage: bitrix-files <auth|download|verify> --snapshot=PATH --workspace=PATH')
+  if (!['auth', 'download', 'metadata', 'verify'].includes(command)) {
+    throw new Error('Usage: bitrix-files <auth|download|metadata|verify> --snapshot=PATH --workspace=PATH')
   }
   if (!options.snapshot || !options.workspace) {
     throw new Error('--snapshot and --workspace are required.')
   }
   if (command === 'auth') await auth(options.snapshot, options.workspace)
   else if (command === 'download') await download(options.snapshot, options.workspace, options)
+  else if (command === 'metadata') await collectReportMetadata(options.snapshot, options.workspace, options)
   else process.stdout.write(`${JSON.stringify(await verifyWorkspace(options.snapshot, options.workspace))}\n`)
 }
 
