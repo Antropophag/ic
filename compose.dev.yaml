@@ -12,3 +12,7 @@ services:
   scheduler:
     volumes:
       - ./deployment/dev/console.php:/app/deployment/console.php:ro
+
+  ai-cleanup:
+    volumes:
+      - ./deployment/dev/console.php:/app/deployment/console.php:ro

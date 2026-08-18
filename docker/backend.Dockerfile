@@ -33,6 +33,7 @@ RUN apk add --no-cache freetype-dev libjpeg-turbo-dev libpng-dev libxml2-dev lib
 WORKDIR /app
 COPY --chown=app:app backend/ ./
 COPY docker/php/uploads.ini /usr/local/etc/php/conf.d/uploads.ini
+COPY docker/php/timeouts.ini /usr/local/etc/php/conf.d/timeouts.ini
 COPY docker/php/www-logging.conf /usr/local/etc/php-fpm.d/zz-logging.conf
 RUN chmod +x yii \
     && mkdir -p runtime storage/documents storage/test-documents \

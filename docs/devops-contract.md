@@ -258,6 +258,15 @@ COMPOSE_ENV_FILE=.env.prod docker compose -p ic-prod --env-file .env.prod -f com
 sudo env COMPOSE_ENV_FILE=.env.prod podman-compose --in-pod false -p ic-prod --env-file .env.prod -f compose.yaml exec backend php yii notification/send
 ```
 
+AI-пилот по умолчанию выключен. При `LIZA_AI_ENABLED=1` обязательны backend-only
+настройки ЛИЗЫ и постоянно работающий Compose-сервис `ai-cleanup` (`php yii
+ai/work`). Проверяйте его через `docker compose ... ps ai-cleanup` и безопасные
+счётчики разового `php yii ai/cleanup`; readiness намеренно не зависит от ЛИЗЫ,
+чтобы её отказ не останавливал основной портал. Таймауты reverse proxy/PHP и
+worker runbook согласованы с единым 300-секундным deadline в
+[руководстве интеграции](integrations/liza.md). Текущий пользовательский JWT
+Open WebUI допустим только для internal pilot и блокирует production rollout.
+
 Готовность: `/health/ready`; liveness: `/health/live`. Документы хранятся в
 именованном volume, MariaDB — в отдельном volume.
 

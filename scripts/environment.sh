@@ -28,8 +28,8 @@ prod)
   ;;
 esac
 
-application_services='mariadb backend frontend scheduler'
-application_stop_services='frontend scheduler backend mariadb'
+application_services='mariadb backend frontend scheduler ai-cleanup'
+application_stop_services='frontend ai-cleanup scheduler backend mariadb'
 observability_services='grafana prometheus loki alloy node-exporter cadvisor blackbox-exporter'
 case "$scope" in
 app)
@@ -306,27 +306,28 @@ show_observability_status() {
 start_application() {
   run_quiet 'Проверка конфигурации' compose config --quiet
   if [ "$environment" = dev ]; then
-    run_quiet 'Сборка образов' compose build backend scheduler frontend
-    run_quiet 'Остановка прикладных сервисов перед миграцией' compose stop frontend scheduler backend
+    run_quiet 'Сборка образов' compose build backend scheduler ai-cleanup frontend
+    run_quiet 'Остановка прикладных сервисов перед миграцией' compose stop frontend ai-cleanup scheduler backend
     run_quiet 'Запуск базы данных' compose up -d mariadb
     run_quiet 'Применение миграций' compose run --rm backend php yii migrate/up --interactive=0
     run_quiet 'Загрузка development-данных' compose run --rm backend php yii dev/seed
     run_quiet 'Настройка break-glass доступа' compose run --rm backend php yii admin/provision-break-glass
-    run_quiet 'Запуск прикладных сервисов' compose up -d --no-build --force-recreate backend frontend scheduler
+    run_quiet 'Запуск прикладных сервисов' compose up -d --no-build --force-recreate backend frontend scheduler ai-cleanup
   else
-    run_quiet 'Сборка образов' compose build backend scheduler frontend
-    run_quiet 'Остановка прикладных сервисов перед миграцией' compose stop frontend scheduler backend
+    run_quiet 'Сборка образов' compose build backend scheduler ai-cleanup frontend
+    run_quiet 'Остановка прикладных сервисов перед миграцией' compose stop frontend ai-cleanup scheduler backend
     run_quiet 'Запуск базы данных' compose up -d mariadb
     run_quiet 'Применение миграций' compose run --rm backend php yii migrate/up --interactive=0
     run_quiet 'Настройка break-glass доступа' compose run --rm backend php yii admin/provision-break-glass
     run_quiet 'Настройка администраторов' compose run --rm backend php yii admin/bootstrap
-    run_quiet 'Запуск прикладных сервисов' compose up -d --no-build --force-recreate backend frontend scheduler
+    run_quiet 'Запуск прикладных сервисов' compose up -d --no-build --force-recreate backend frontend scheduler ai-cleanup
   fi
   printf '\n  Проверка готовности…\n'
   wait_for_service mariadb healthy
   wait_for_service backend running
   wait_for_service frontend healthy
   wait_for_service scheduler running
+  wait_for_service ai-cleanup running
   show_application_status
   printf '\n  %sЛоги%s             make %s-logs\n' "$dim" "$reset" "$environment"
   printf '  %sОстановка%s        make %s-down\n' "$dim" "$reset" "$environment"

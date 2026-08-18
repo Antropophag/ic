@@ -5,10 +5,12 @@ import { createApp, h, nextTick, ref } from 'vue'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { requestApi } from '../api'
 import RequestDetails from './RequestDetails.vue'
+import { resetTechnicalSpecificationAiSessions } from './TechnicalSpecificationAi.vue'
 
 vi.mock('../api', () => ({
   requestApi: {
     addComment: vi.fn(),
+    analyzeTechnicalSpecification: vi.fn(),
     comments: vi.fn(),
     deleteReport: vi.fn(),
     downloadDocument: vi.fn(),
@@ -17,6 +19,7 @@ vi.mock('../api', () => ({
     generateTestAct: vi.fn(),
     get: vi.fn(),
     prepareTestAct: vi.fn(),
+    createTestSpecificationDraft: vi.fn(),
     start: vi.fn(),
     uploadDocument: vi.fn(),
     uploadReport: vi.fn(),
@@ -79,11 +82,62 @@ function button(label) {
 }
 
 afterEach(() => {
+  resetTechnicalSpecificationAiSessions()
   vi.resetAllMocks()
   document.body.replaceChildren()
 })
 
 describe('RequestDetails characterization', () => {
+  it('keeps the compact AI trigger in the document heading without nesting the modal in it', async () => {
+    requestApi.get.mockResolvedValue(requestDetails(1))
+    requestApi.analyzeTechnicalSpecification.mockReturnValue(deferred().promise)
+    requestApi.createTestSpecificationDraft.mockReturnValue(deferred().promise)
+    const { app } = mountDetails({ aiEnabled: true })
+    await flushRequests()
+
+    const heading = [...document.querySelectorAll('.request-document-group h4')]
+      .find(candidate => candidate.textContent.includes('Сопроводительная документация'))
+    const trigger = heading.querySelector('[aria-label="AI-анализ"]')
+    expect(trigger).not.toBeNull()
+    expect(trigger.dataset.tooltip).toBe('AI-анализ')
+    expect(trigger.querySelector('.request-ai-pulse-wave')).not.toBeNull()
+    expect(trigger.classList.contains('is-working')).toBe(false)
+    trigger.click()
+    await nextTick()
+
+    expect(document.querySelector('.modal')).not.toBeNull()
+    expect(document.querySelector('.modal').closest('h4')).toBeNull()
+    app.unmount()
+  })
+
+  it('stops background AI work when its UI is closed', async () => {
+    const analysis = deferred(); const draft = deferred()
+    requestApi.get.mockResolvedValue(requestDetails(1))
+    requestApi.analyzeTechnicalSpecification.mockReturnValue(analysis.promise)
+    requestApi.createTestSpecificationDraft.mockReturnValue(draft.promise)
+    const { app } = mountDetails({ aiEnabled: true })
+    await flushRequests()
+
+    const trigger = document.querySelector('[aria-label="AI-анализ"]')
+    trigger.click(); await nextTick()
+    button('Запустить обработку').click(); await nextTick()
+    expect(trigger.classList.contains('is-working')).toBe(true)
+    const analysisSignal = requestApi.analyzeTechnicalSpecification.mock.calls[0][2]
+    const draftSignal = requestApi.createTestSpecificationDraft.mock.calls[0][2]
+    button('Закрыть').click(); await nextTick()
+    expect(analysisSignal.aborted).toBe(true)
+    expect(draftSignal.aborted).toBe(true)
+    analysis.resolve({ status: 'completed', analysis: { criticalContradictions: [] } })
+    draft.resolve({ status: 'completed', draft: 'Черновик' })
+    await flushRequests()
+
+    expect(trigger.classList.contains('is-working')).toBe(false)
+    expect(trigger.querySelector('.request-ai-notification-dot')).toBeNull()
+    trigger.click(); await nextTick()
+    expect(document.body.textContent).toContain('Запустить обработку')
+    app.unmount()
+  })
+
   it('loads and presents current request details through the loaded contract', async () => {
     requestApi.get.mockResolvedValue(requestDetails(1))
     const loaded = vi.fn()

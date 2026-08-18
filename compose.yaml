@@ -61,6 +61,24 @@ services:
     stop_grace_period: 15s
     restart: unless-stopped
 
+  ai-cleanup:
+    build:
+      context: .
+      dockerfile: docker/backend.Dockerfile
+      target: production
+    env_file: ${COMPOSE_ENV_FILE:?COMPOSE_ENV_FILE must select .env.dev or .env.prod}
+    depends_on:
+      mariadb:
+        condition: service_healthy
+    read_only: true
+    tmpfs:
+      - /tmp
+      - /app/runtime
+    command: ["php", "yii", "ai/work"]
+    stop_signal: SIGTERM
+    stop_grace_period: 15s
+    restart: unless-stopped
+
   mariadb:
     image: mariadb:11.4.7-noble
     environment:

@@ -46,6 +46,24 @@ services:
     stop_grace_period: 15s
     restart: unless-stopped
 
+  ai-cleanup:
+    image: shlz-test-registry-test-backend
+    build:
+      context: .
+      dockerfile: docker/backend.Dockerfile
+      target: test
+    env_file: ${TEST_ENV_FILE:?TEST_ENV_FILE must select the test environment}
+    depends_on:
+      mariadb: {condition: service_healthy}
+    read_only: true
+    tmpfs: [/tmp, /app/runtime]
+    volumes:
+      - ./deployment/test/console.php:/app/deployment/console.php:ro
+    command: ["php", "yii", "ai/work"]
+    stop_signal: SIGTERM
+    stop_grace_period: 15s
+    restart: unless-stopped
+
   mariadb:
     image: mariadb:11.4.7-noble
     environment:

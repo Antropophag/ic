@@ -8,7 +8,7 @@ import RequestActions from './RequestActions.vue'
 import RequestActivity from './RequestActivity.vue'
 import RequestDocuments from './RequestDocuments.vue'
 
-const props = defineProps({ requestId: { type: Number, required: true }, currentInitials: { type: String, default: '' }, currentUserRoles: { type: Array, default: () => [] }, initialWarning: { type: String, default: '' } })
+const props = defineProps({ requestId: { type: Number, required: true }, currentInitials: { type: String, default: '' }, currentUserRoles: { type: Array, default: () => [] }, aiEnabled: { type: Boolean, default: false }, initialWarning: { type: String, default: '' } })
 const emit = defineEmits(['loaded', 'unavailable', 'updated', 'close'])
 const selected = ref(null)
 const detailLoading = ref(false)
@@ -105,7 +105,7 @@ onBeforeUnmount(() => detailRequestGuard.invalidate())
       </div>
       <aside class="stack side-column">
         <article class="card request-participants"><h3>Участники</h3><div v-for="person in participants" :key="`${person.role}-${person.name}`" class="request-person-row"><span class="avatar small" :class="avatarRoleClass(person.roleCode)">{{ initialsFor(person.name) }}</span><span><b>{{ person.name }}</b><small>{{ person.role }}</small></span></div><section class="request-security-section" aria-labelledby="security-control-title"><h3 id="security-control-title">Контроль СБ</h3><div class="request-security-status"><span class="security-mark-icon" :class="selected.securityMarkDisplay?.className" aria-hidden="true"><svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" focusable="false"><path :d="selected.securityMarkDisplay?.path" /></svg></span><span><b>{{ selected.securityMarkDisplay?.label }}</b><small>Статус проверки</small></span></div></section></article>
-        <RequestDocuments ref="documents" :request="selected" :refresh="refreshSelected" />
+        <RequestDocuments ref="documents" :request="selected" :refresh="refreshSelected" :ai-enabled="aiEnabled" />
       </aside>
     </div>
   </section>

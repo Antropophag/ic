@@ -8,8 +8,9 @@ import { createLatestRequestGuard } from '../latestRequestGuard'
 import { documentKind } from '../registry'
 import AppIcon from './AppIcon.vue'
 import AppModal from './AppModal.vue'
+import TechnicalSpecificationAi from './TechnicalSpecificationAi.vue'
 
-const props = defineProps({ request: { type: Object, required: true }, refresh: { type: Function, required: true } })
+const props = defineProps({ request: { type: Object, required: true }, refresh: { type: Function, required: true }, aiEnabled: { type: Boolean, default: false } })
 const documentLoading = ref(false)
 const documentError = ref('')
 const reportLoading = ref(false)
@@ -27,14 +28,17 @@ const testActRequestGuard = createLatestRequestGuard()
 const downloadRequestGuard = createLatestRequestGuard()
 const previewRequestGuard = createLatestRequestGuard()
 const confirmDialog = createConfirmDialog()
+const technicalSpecificationAi = ref(null)
 
 const documentGroups = computed(() => {
   const documents = props.request.documents || []
   return [
-    { key: 'attachment', label: 'Сопроводительные документы', items: documents.filter(document => !['report', 'opinion'].includes(document.documentType)) },
+    { key: 'attachment', label: 'Сопроводительная документация', items: documents.filter(document => !['report', 'opinion'].includes(document.documentType)) },
     { key: 'report', label: 'Отчётные документы', items: documents.filter(document => document.documentType === 'report') },
     { key: 'opinion', label: 'Экспертное заключение', items: documents.filter(document => document.documentType === 'opinion') },
-  ].filter(group => group.items.length || (group.key === 'report' && props.request.canUploadReport))
+  ].filter(group => group.items.length
+    || (group.key === 'attachment' && props.aiEnabled)
+    || (group.key === 'report' && props.request.canUploadReport))
 })
 
 function fileExtensionFor(document) {
@@ -237,7 +241,8 @@ defineExpose({ deleteReport, deleteReportError, deleteReportLoading, documentErr
 
 <template>
   <article id="request-documents" class="card documents request-documents"><div class="section-title request-documents-head"><h3>Документы <span class="request-document-count" :aria-label="`Документов: ${request.documents?.length || 0}`">{{ request.documents?.length || 0 }}</span></h3><label v-if="request.canUploadDocument" class="request-document-upload"><AppIcon v-if="!documentLoading" name="plus" :size="14" />{{ documentLoading ? 'Загрузка…' : 'Добавить' }}<input type="file" :disabled="documentLoading" accept=".pdf,.png,.jpg,.jpeg,.docx,.xlsx" @change="uploadDocument" /></label></div>
-    <section v-for="group in documentGroups" :key="group.key" class="request-document-group" :aria-labelledby="`document-group-${group.key}`"><h4 :id="`document-group-${group.key}`"><span class="request-document-group-label">{{ group.label }} <span>{{ group.items.length }}</span></span><button v-if="group.key === 'report' && request.canUploadReport" type="button" class="request-document-group-action app-tooltip app-tooltip-left" data-tooltip="Сформировать шаблон отчётного документа" aria-label="Сформировать шаблон отчётного документа" :disabled="testActLoading" @click="openTestActModal"><AppIcon name="magic-wand" :size="17" /></button></h4><div v-for="document in group.items" :key="document.versionId" class="document-row request-file-card"><button type="button" class="request-file-open app-tooltip" data-tooltip="Открыть документ" :aria-label="`Открыть ${document.title}, версия ${document.version}`" @click="openDocument(document)"><span class="request-file-thumb" aria-hidden="true"><span class="request-file-lines"></span><span class="request-file-type" :class="fileTypeClassFor(document)">{{ fileExtensionFor(document) }}</span></span><span class="request-file-copy"><b :title="document.title">{{ document.title }}</b><small>Версия {{ document.version }} · {{ document.size }}</small><small>{{ document.createdAt }}</small></span></button><button type="button" class="request-file-action app-tooltip" data-tooltip="Скачать документ" :aria-label="`Скачать ${document.title}`" @click.stop="downloadDocument(document)"><AppIcon name="download" :size="14" /></button></div></section>
+    <TechnicalSpecificationAi v-if="aiEnabled" ref="technicalSpecificationAi" :request-id="request.backendId" :show-trigger="false" />
+    <section v-for="group in documentGroups" :key="group.key" class="request-document-group" :aria-labelledby="`document-group-${group.key}`"><h4 :id="`document-group-${group.key}`"><span class="request-document-group-label">{{ group.label }} <span>{{ group.items.length }}</span></span><button v-if="group.key === 'attachment' && aiEnabled" type="button" class="request-ai-action app-tooltip app-tooltip-left" :class="{ 'is-working': technicalSpecificationAi?.isWorking }" data-tooltip="AI-анализ" aria-label="AI-анализ" :aria-busy="technicalSpecificationAi?.isWorking === true" @click="technicalSpecificationAi?.show()"><span class="request-ai-pulse" aria-hidden="true"><svg viewBox="0 0 16 16"><path class="request-ai-pulse-wave" d="M2 8h2l1-3 2 6 2-6 2 6 1-3h2" /><circle cx="2" cy="8" r=".7" /><circle cx="14" cy="8" r=".7" /></svg></span><span v-if="technicalSpecificationAi?.hasUnreadResult" class="request-ai-notification-dot" aria-hidden="true"></span></button><button v-if="group.key === 'report' && request.canUploadReport" type="button" class="request-document-group-action app-tooltip app-tooltip-left" data-tooltip="Сформировать шаблон отчётного документа" aria-label="Сформировать шаблон отчётного документа" :disabled="testActLoading" @click="openTestActModal"><AppIcon name="magic-wand" :size="17" /></button></h4><div v-for="document in group.items" :key="document.versionId" class="document-row request-file-card"><button type="button" class="request-file-open app-tooltip" data-tooltip="Открыть документ" :aria-label="`Открыть ${document.title}, версия ${document.version}`" @click="openDocument(document)"><span class="request-file-thumb" aria-hidden="true"><span class="request-file-lines"></span><span class="request-file-type" :class="fileTypeClassFor(document)">{{ fileExtensionFor(document) }}</span></span><span class="request-file-copy"><b :title="document.title">{{ document.title }}</b><small>Версия {{ document.version }} · {{ document.size }}</small><small>{{ document.createdAt }}</small></span></button><button type="button" class="request-file-action app-tooltip" data-tooltip="Скачать документ" :aria-label="`Скачать ${document.title}`" @click.stop="downloadDocument(document)"><AppIcon name="download" :size="14" /></button></div></section>
     <p v-if="!request.documents?.length" class="placeholder-copy">Документов пока нет.</p>
     <p v-if="documentError" class="action-error">{{ documentError }}</p>
   </article>

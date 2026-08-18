@@ -225,6 +225,23 @@ Frontend показывает «Активен» для activity не старш
 throttle-интервал не даёт непрерывно работающему пользователю мигать между
 состояниями на границе очередного разрешённого обновления.
 
+## AI-пилот обработки технического задания
+
+`POST /api/v1/requests/{id}/ai/technical-specification/analyze` и
+`POST /api/v1/requests/{id}/ai/technical-specification/draft` — независимые
+PILOT endpoints анализа ТЗ и формирования черновика ТЗ на испытания. Оба требуют
+session/CSRF и отдельный `Idempotency-Key`; необязательный `documentVersionId`
+выбирает доступную актуальную PDF/DOCX-версию. Ответ `200` является discriminated
+union по `status`: `completed`, `choice_required` или `not_found`.
+
+Для AI используется специализированный reserve → внешний вызов вне DB transaction
+→ finalize lifecycle. `Idempotency-Replayed` показывает replay сохранённого
+ответа; `409` означает конфликт key, уже выполняющуюся операцию или исчерпанную
+AI concurrency capacity. `422` означает некорректную/недоступную версию, `503` —
+выключенную функцию, timeout, malformed AI response или недоступность ЛИЗЫ.
+Внутренние Open WebUI endpoints не являются публичным API портала. Полные
+эксплуатационные семантики приведены в [руководстве интеграции](integrations/liza.md).
+
 ## Состояние системы для администратора
 
 `GET /api/v1/admin/system-overview` доступен только активному администратору и
