@@ -83,3 +83,16 @@ describe('request process timeline', () => {
     expect(compactStyles).not.toMatch(/li\.done,\.process-timelineli\.current\{border-color:/)
   })
 })
+
+describe('compact control alignment', () => {
+  it('centers text-only compact controls without relying on native button baselines', () => {
+    expect(compactStyles).toContain('.attention-retry{display:inline-flex;align-items:center;justify-content:center;')
+    expect(styles).toMatch(/\.registry\s+\.toolbar-clear\s*\{height:32px;display:inline-flex;align-items:center;justify-content:center;/)
+    expect(compactStyles).toContain('.request-text-button{height:32px;display:inline-flex;align-items:center;justify-content:center;')
+  })
+
+  it('centers drawer icons and compact status badges symmetrically', () => {
+    expect(styles).toMatch(/\.request-drawer-head\s+button\s*\{width:32px;height:32px;display:grid;place-items:center;/)
+    expect(adminStyles).toMatch(/\.admin-service-head\s+\.badge\s*\{height:22px;justify-content:center;border-radius:11px;padding:0 8px;line-height:10px}/)
+  })
+})
