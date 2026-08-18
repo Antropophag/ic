@@ -144,6 +144,15 @@ test('заявка перемещается между персональным�
     await managerQueue.click()
     await page.getByRole('row').filter({ hasText: marker }).click()
 
+    const historyButton = page.getByRole('button', { name: 'Подробная история' })
+    await expect(historyButton).toHaveCSS('display', 'flex')
+    await expect(historyButton).toHaveCSS('align-items', 'center')
+    await historyButton.click()
+    const closeHistoryButton = page.getByRole('button', { name: 'Закрыть историю' })
+    await expect(closeHistoryButton).toHaveCSS('display', 'grid')
+    await expect(closeHistoryButton).toHaveCSS('align-items', 'center')
+    await closeHistoryButton.click()
+
     await expectOk(await manager.post(`/api/v1/requests/${requestId}/executor`, {
       data: { executorId: 2, lockVersion: 1 },
     }))
