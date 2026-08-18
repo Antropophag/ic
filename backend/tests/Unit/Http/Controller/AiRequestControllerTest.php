@@ -25,8 +25,21 @@ use yii\web\NotFoundHttpException;
 
 final class AiRequestControllerTest extends TestCase
 {
+    private mixed $originalAiRequestLifecycleDefinition;
+
+    protected function setUp(): void
+    {
+        parent::setUp();
+        $this->originalAiRequestLifecycleDefinition = Yii::$container->getDefinitions()[AiRequestLifecycle::class] ?? null;
+    }
+
     protected function tearDown(): void
     {
+        if ($this->originalAiRequestLifecycleDefinition === null) {
+            Yii::$container->clear(AiRequestLifecycle::class);
+        } else {
+            Yii::$container->set(AiRequestLifecycle::class, $this->originalAiRequestLifecycleDefinition);
+        }
         Yii::$app?->errorHandler->unregister();
         Yii::$app = null;
         parent::tearDown();
