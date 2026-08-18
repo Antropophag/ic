@@ -88,8 +88,14 @@ final class AnalyzeTechnicalSpecificationTest extends TestCase
     public function testFeatureFlagStopsBeforeDocumentsOrLiza(): void
     {
         $documents = new FakeTechnicalSpecificationDocuments([$this->candidate(11)]);
-        $this->expectException(AiFeatureUnavailable::class);
-        (new AnalyzeTechnicalSpecification($documents, new FakeLiza(), new FakeConversations(), false))->execute(7, 3, null);
+        $liza = new FakeLiza();
+        try {
+            (new AnalyzeTechnicalSpecification($documents, $liza, new FakeConversations(), false))->execute(7, 3, null);
+            self::fail('Disabled feature must fail.');
+        } catch (AiFeatureUnavailable) {
+            self::assertNull($documents->readVersionId);
+            self::assertSame([], $liza->startedPrompts);
+        }
     }
 
     public function testLizaErrorDoesNotCreateConversation(): void
@@ -153,6 +159,7 @@ final class AnalyzeTechnicalSpecificationTest extends TestCase
         self::assertSame('chat-2', $conversations->items[(string) $draft['conversationId']]['chatId']);
         self::assertSame('analysis', $conversations->items[(string) $analysis['conversationId']]['taskType']);
         self::assertSame('draft', $conversations->items[(string) $draft['conversationId']]['taskType']);
+        self::assertSame(['Анализ технического задания', 'Черновик ТЗ на испытания'], $liza->chatTitles);
         self::assertCount(2, $liza->startedFiles);
         self::assertSame('/storage/tz.docx', $liza->startedFiles[1]?->path);
         self::assertStringContainsString('Изучи приложенное исходное техническое задание', $liza->startedPrompts[1]);
@@ -179,6 +186,25 @@ final class AnalyzeTechnicalSpecificationTest extends TestCase
         } catch (AiFeatureUnavailable) {
             self::assertArrayHasKey((string) $analysis['conversationId'], $conversations->items);
             self::assertCount(1, $conversations->items);
+        }
+    }
+
+    public function testEmptyDraftDoesNotCreateConversation(): void
+    {
+        $liza = new FakeLiza();
+        $liza->startContent = " \n ";
+        $conversations = new FakeConversations();
+
+        try {
+            (new CreateTestSpecificationDraft(
+                new FakeTechnicalSpecificationDocuments([$this->candidate(11)]),
+                $liza,
+                $conversations,
+                true,
+            ))->execute(7, 3, null);
+            self::fail('Empty draft must fail.');
+        } catch (AiFeatureUnavailable) {
+            self::assertSame([], $conversations->items);
         }
     }
 

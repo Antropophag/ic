@@ -15,16 +15,22 @@ final class FakeLiza implements LizaPort
     public array $startedPrompts = [];
     /** @var list<TechnicalSpecificationFile|null> */
     public array $startedFiles = [];
+    /** @var list<string> */
+    public array $chatTitles = [];
     public bool $fail = false;
     public ?string $startContent = null;
 
-    public function start(string $prompt, ?TechnicalSpecificationFile $file = null): LizaReply
-    {
+    public function start(
+        string $prompt,
+        ?TechnicalSpecificationFile $file = null,
+        string $chatTitle = 'Анализ технического задания',
+    ): LizaReply {
         if ($this->fail) {
             throw new AiFeatureUnavailable('timeout');
         }
         $this->startedPrompts[] = $prompt;
         $this->startedFiles[] = $file;
+        $this->chatTitles[] = $chatTitle;
         $json = $this->startContent ?? (str_contains($prompt, 'черновик ТЗ')
             ? 'Черновик'
             : '{"criticalContradictions":[],"ambiguousRequirements":[],"missingInformation":[],'

@@ -160,7 +160,6 @@ final class NativeOpenWebUiTransport implements OpenWebUiTransport
                 }
                 return $content;
             }
-            usleep(100_000);
         }
         throw new AiFeatureUnavailable($generationInactive
             ? 'ЛИЗА завершила обработку без ответа. Повторите попытку позже.'

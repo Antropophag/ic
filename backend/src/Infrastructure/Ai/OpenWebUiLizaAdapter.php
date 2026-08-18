@@ -17,12 +17,15 @@ final readonly class OpenWebUiLizaAdapter implements LizaPort
     ) {
     }
 
-    public function start(string $prompt, ?TechnicalSpecificationFile $file = null): LizaReply
-    {
-        return $this->send($prompt, $file);
+    public function start(
+        string $prompt,
+        ?TechnicalSpecificationFile $file = null,
+        string $chatTitle = 'Анализ технического задания',
+    ): LizaReply {
+        return $this->send($prompt, $file, $chatTitle);
     }
 
-    private function send(string $prompt, ?TechnicalSpecificationFile $file): LizaReply
+    private function send(string $prompt, ?TechnicalSpecificationFile $file, string $chatTitle): LizaReply
     {
         $userId = $this->uuid();
         $assistantId = $this->uuid();
@@ -37,7 +40,7 @@ final readonly class OpenWebUiLizaAdapter implements LizaPort
             $files = $uploadedFile === null
                 ? []
                 : [$this->fileDescriptor($uploadedFile, $file, $fileId)];
-            $chatId = $this->transport->createChat($this->initialChat($userId, $assistantId, $prompt, $files));
+            $chatId = $this->transport->createChat($this->initialChat($userId, $assistantId, $prompt, $files, $chatTitle));
             $userMessage = $this->userMessage($userId, $assistantId, null, $prompt, $files);
             $messages = [['id' => $userId, 'role' => 'user', 'content' => $prompt]];
             $payload = [
@@ -149,8 +152,13 @@ final readonly class OpenWebUiLizaAdapter implements LizaPort
      * @param list<array<string, mixed>> $files
      * @return array<string, mixed>
      */
-    private function initialChat(string $userId, string $assistantId, string $prompt, array $files): array
-    {
+    private function initialChat(
+        string $userId,
+        string $assistantId,
+        string $prompt,
+        array $files,
+        string $chatTitle,
+    ): array {
         $user = [
             'id' => $userId,
             'role' => 'user',
@@ -174,7 +182,7 @@ final readonly class OpenWebUiLizaAdapter implements LizaPort
         ];
 
         return [
-            'title' => 'Анализ технического задания',
+            'title' => $chatTitle,
             'models' => [$this->model],
             'messages' => [$user, $assistant],
             'history' => [

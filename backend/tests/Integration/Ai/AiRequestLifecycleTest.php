@@ -30,7 +30,15 @@ final class AiRequestLifecycleTest extends TestCase
 
     protected function tearDown(): void
     {
+        $this->db->createCommand()->delete(
+            '{{%ai_file_cleanup}}',
+            ['external_file_id' => 'external-file-42'],
+        )->execute();
         if ($this->userIds !== []) {
+            $this->db->createCommand()->delete(
+                '{{%ai_idempotency_requests}}',
+                ['actor_id' => $this->userIds],
+            )->execute();
             $this->db->createCommand()->delete('{{%users}}', ['id' => $this->userIds])->execute();
         }
         $this->db->close();
@@ -101,6 +109,29 @@ final class AiRequestLifecycleTest extends TestCase
             static fn (): int => 200,
             static fn (): ?string => null,
         );
+    }
+
+    public function testUnknownRouteUsesExactMatchInsteadOfSuffixCollision(): void
+    {
+        $actor = $this->user();
+        $this->inProgress($actor, 'prefix/custom_operation');
+        $ran = false;
+
+        (new AiIdempotencyStore($this->db, 2, 4, 30))->execute(
+            $actor,
+            'POST',
+            'custom_operation',
+            str_repeat('u', 16),
+            'hash-unknown-route',
+            static function () use (&$ran): array {
+                $ran = true;
+                return [];
+            },
+            static fn (): int => 200,
+            static fn (): ?string => null,
+        );
+
+        self::assertTrue($ran);
     }
 
     public function testTwoParallelPairsAreAllowedAndFifthOperationIsRejected(): void
@@ -267,6 +298,17 @@ final class AiRequestLifecycleTest extends TestCase
         self::assertIsArray($row);
         self::assertSame(\RuntimeException::class, $row['last_error_class']);
         self::assertStringNotContainsString('secret', json_encode($row, JSON_THROW_ON_ERROR));
+
+        $this->db->createCommand()->update(
+            '{{%ai_file_cleanup}}',
+            ['attempts' => 99],
+            ['external_file_id' => 'external-file-42'],
+        )->execute();
+        $queue->schedule('external-file-42', new \RuntimeException('retry'));
+        self::assertSame(0, (int) $this->db->createCommand(
+            'SELECT attempts FROM {{%ai_file_cleanup}} WHERE external_file_id = :id',
+            [':id' => 'external-file-42'],
+        )->queryScalar());
 
         $transport = new CleanupTransport();
         $transport->failDelete = true;

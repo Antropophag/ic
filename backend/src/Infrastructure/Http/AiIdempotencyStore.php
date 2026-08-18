@@ -120,14 +120,14 @@ final class AiIdempotencyStore implements AiRequestLifecycle
         }
     }
 
-    private function operationSuffix(string $route): string
+    private function operationSuffix(string $route): ?string
     {
         foreach (['/analyze', '/draft'] as $suffix) {
             if (str_ends_with($route, $suffix)) {
                 return $suffix;
             }
         }
-        return $route;
+        return null;
     }
 
     private function assertCapacity(int $actorId, string $route, string $now): void
@@ -141,16 +141,24 @@ final class AiIdempotencyStore implements AiRequestLifecycle
             . 'AND lease_expires_at > :now AND actor_id = :actor',
             [':now' => $now, ':actor' => $actorId],
         )->queryScalar();
+        $operationSuffix = $this->operationSuffix($route);
+        $operationMatch = $operationSuffix === null
+            ? 'route = :operation'
+            : 'RIGHT(route, CHAR_LENGTH(:operation)) = :operation';
         $activeUserOperation = (int) $this->db->createCommand(
             "SELECT COUNT(*) FROM {{%ai_idempotency_requests}} WHERE state = 'in_progress' "
-            . 'AND lease_expires_at > :now AND actor_id = :actor AND route LIKE :operation',
-            [':now' => $now, ':actor' => $actorId, ':operation' => '%' . $this->operationSuffix($route)],
+            . 'AND lease_expires_at > :now AND actor_id = :actor '
+            . 'AND ' . $operationMatch,
+            [':now' => $now, ':actor' => $actorId, ':operation' => $operationSuffix ?? $route],
         )->queryScalar();
         if ($activeUserOperation >= 1) {
             throw new IdempotencyConflict('Такая AI-операция у вас уже выполняется. Дождитесь её завершения.');
         }
         if ($activeUser >= $this->perUserLimit) {
-            throw new IdempotencyConflict('У вас уже выполняются две AI-операции. Дождитесь их завершения.');
+            throw new IdempotencyConflict(sprintf(
+                'У вас уже выполняется максимальное число AI-операций (%d). Дождитесь их завершения.',
+                $this->perUserLimit,
+            ));
         }
         if ($activeGlobal >= $this->globalLimit) {
             throw new IdempotencyConflict('ЛИЗА сейчас занята. Повторите попытку позже.');

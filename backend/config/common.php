@@ -5,6 +5,12 @@ declare(strict_types=1);
 $env = static fn (string $name, ?string $default = null): string =>
     (($value = getenv($name)) !== false ? $value : $default)
     ?? throw new RuntimeException("Required environment variable {$name} is missing");
+$documentStoragePath = getenv('DOCUMENT_STORAGE_PATH') ?: '/app/storage/documents';
+$lizaAiEnabled = getenv('LIZA_AI_ENABLED') === '1';
+$lizaToken = getenv('LIZA_TOKEN') ?: '';
+if ($lizaAiEnabled && $lizaToken === '') {
+    throw new RuntimeException('Required environment variable LIZA_TOKEN is missing when LIZA_AI_ENABLED=1');
+}
 
 return [
     'id' => 'shlz-test-registry',
@@ -33,7 +39,7 @@ return [
                 new App\Infrastructure\Persistence\Request\PublishOpinionPersistenceAdapter(
                     Yii::$app->db,
                     new App\Infrastructure\Document\DocumentStorage(
-                        getenv('DOCUMENT_STORAGE_PATH') ?: '/app/storage/documents',
+                        $documentStoragePath,
                     ),
                 ),
             App\Application\Request\Port\OpinionRenderer::class => App\Infrastructure\Document\OpinionRendererAdapter::class,
@@ -41,7 +47,7 @@ return [
                 new App\Infrastructure\Persistence\Request\ReportLifecyclePersistenceAdapter(
                     Yii::$app->db,
                     new App\Infrastructure\Document\DocumentStorage(
-                        getenv('DOCUMENT_STORAGE_PATH') ?: '/app/storage/documents',
+                        $documentStoragePath,
                     ),
                 ),
             App\Application\Request\Port\RequestCreationGateway::class => static fn () =>
@@ -57,9 +63,9 @@ return [
                     $operationTimeout + 60,
                 );
             },
-            App\Application\Ai\TechnicalSpecificationDocumentPort::class => static function () {
+            App\Application\Ai\TechnicalSpecificationDocumentPort::class => static function () use ($documentStoragePath) {
                 $storage = new App\Infrastructure\Document\DocumentStorage(
-                    getenv('DOCUMENT_STORAGE_PATH') ?: '/app/storage/documents',
+                    $documentStoragePath,
                 );
                 return new App\Infrastructure\Ai\RequestTechnicalSpecificationDocuments(
                     Yii::$app->db,
@@ -70,7 +76,7 @@ return [
             App\Infrastructure\Ai\OpenWebUiTransport::class => static fn () =>
                 new App\Infrastructure\Ai\NativeOpenWebUiTransport(
                     getenv('LIZA_BASE_URL') ?: 'https://ai.shlz.ru',
-                    getenv('LIZA_TOKEN') ?: '',
+                    $lizaToken,
                     (float) (getenv('LIZA_TIMEOUT_SECONDS') ?: 45),
                     (float) (getenv('LIZA_CONNECT_TIMEOUT_SECONDS') ?: 10),
                     completionTimeoutSeconds: (float) min(300, max(1, (int) (getenv('LIZA_COMPLETION_TIMEOUT_SECONDS') ?: 300))),
@@ -86,14 +92,14 @@ return [
                     Yii::$container->get(App\Application\Ai\TechnicalSpecificationDocumentPort::class),
                     Yii::$container->get(App\Application\Ai\LizaPort::class),
                     Yii::$container->get(App\Application\Ai\AiConversationPort::class),
-                    getenv('LIZA_AI_ENABLED') === '1',
+                    $lizaAiEnabled,
                 ),
             App\Application\Ai\CreateTestSpecificationDraft::class => static fn () =>
                 new App\Application\Ai\CreateTestSpecificationDraft(
                     Yii::$container->get(App\Application\Ai\TechnicalSpecificationDocumentPort::class),
                     Yii::$container->get(App\Application\Ai\LizaPort::class),
                     Yii::$container->get(App\Application\Ai\AiConversationPort::class),
-                    getenv('LIZA_AI_ENABLED') === '1',
+                    $lizaAiEnabled,
                 ),
         ],
     ],

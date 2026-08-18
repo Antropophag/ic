@@ -13,6 +13,7 @@ final readonly class AnalyzeTechnicalSpecification
 
 Верни только JSON-объект на русском языке с массивами строк: criticalContradictions, ambiguousRequirements, missingInformation, testRequirements, initiatorQuestions, recommendations.
 PROMPT;
+    private const MALFORMED_RESPONSE = 'ЛИЗА вернула ответ в неподдерживаемом формате. Повторите попытку.';
 
     public function __construct(
         private TechnicalSpecificationDocumentPort $documents,
@@ -45,7 +46,7 @@ PROMPT;
         }
 
         $file = $this->documents->file($requestId, $versionId, $actorId);
-        $reply = $this->liza->start(self::PROMPT, $file);
+        $reply = $this->liza->start(self::PROMPT, $file, 'Анализ технического задания');
         $analysis = $this->structured($reply->content);
         $conversationId = $this->conversations->create('analysis', $requestId, $versionId, $actorId, $reply);
 
@@ -71,19 +72,19 @@ PROMPT;
     /** @return array<string, list<string>> */
     private function structured(string $content): array
     {
-        $content = preg_replace('/^```(?:json)?\s*|\s*```$/u', '', trim($content)) ?? $content;
+        $content = preg_replace('/(?:^```(?:json)?\s*|\s*```$)/u', '', trim($content)) ?? $content;
         $decoded = json_decode($content);
         if (!$decoded instanceof \stdClass) {
-            throw new AiFeatureUnavailable('ЛИЗА вернула ответ в неподдерживаемом формате. Повторите попытку.');
+            throw new AiFeatureUnavailable(self::MALFORMED_RESPONSE);
         }
         $result = [];
         foreach ($this->analysisKeys() as $key) {
             if (!property_exists($decoded, $key) || !is_array($decoded->{$key}) || !array_is_list($decoded->{$key})) {
-                throw new AiFeatureUnavailable('ЛИЗА вернула ответ в неподдерживаемом формате. Повторите попытку.');
+                throw new AiFeatureUnavailable(self::MALFORMED_RESPONSE);
             }
             foreach ($decoded->{$key} as $value) {
                 if (!is_string($value)) {
-                    throw new AiFeatureUnavailable('ЛИЗА вернула ответ в неподдерживаемом формате. Повторите попытку.');
+                    throw new AiFeatureUnavailable(self::MALFORMED_RESPONSE);
                 }
             }
             $result[$key] = $decoded->{$key};

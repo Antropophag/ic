@@ -26,7 +26,7 @@ PROMPT;
     public function execute(int $requestId, int $actorId, ?int $versionId): array
     {
         if (!$this->enabled) {
-            throw new AiFeatureUnavailable('AI-анализ пока недоступен.');
+            throw new AiFeatureUnavailable('Формирование черновика ТЗ на испытания пока недоступно.');
         }
         $candidates = $this->documents->candidates($requestId, $actorId);
         if ($versionId === null) {
@@ -45,13 +45,14 @@ PROMPT;
         }
 
         $file = $this->documents->file($requestId, $versionId, $actorId);
-        $reply = $this->liza->start(self::PROMPT, $file);
+        $reply = $this->liza->start(self::PROMPT, $file, 'Черновик ТЗ на испытания');
+        $draft = $this->plainDraft($reply->content);
         $conversationId = $this->conversations->create('draft', $requestId, $versionId, $actorId, $reply);
         return [
             'status' => 'completed',
             'conversationId' => $conversationId,
             'documentVersionId' => $versionId,
-            'draft' => $this->plainDraft($reply->content),
+            'draft' => $draft,
             'notice' => 'Черновик требует проверки специалистом и не изменяет документы заявки.',
         ];
     }

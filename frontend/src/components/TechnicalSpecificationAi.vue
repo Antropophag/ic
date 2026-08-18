@@ -1,5 +1,5 @@
 <script>
-import { markRaw, reactive } from 'vue'
+import { computed, markRaw, onBeforeUnmount, reactive, ref, watch } from 'vue'
 const taskSessions = new Map()
 let authenticatedPrincipalId = null
 
@@ -54,7 +54,6 @@ export function setTechnicalSpecificationAiPrincipal(principalId) {
 </script>
 
 <script setup>
-import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import { requestApi } from '../api'
 import AppIcon from './AppIcon.vue'
 import AppModal from './AppModal.vue'
@@ -210,20 +209,20 @@ defineExpose({ show, hasUnreadResult, isWorking })
   <AppModal :open="open" title="Обработка технического задания" subtitle="Экспериментальная AI-функция" title-id="technical-specification-ai-title" size="large" @close="close">
     <div class="request-ai-workspace">
       <div v-if="idle" class="request-ai-start"><p>ЛИЗА одновременно проанализирует исходное ТЗ и сформирует независимый черновик ТЗ на испытания.</p><button type="button" class="primary" @click="startBoth()">Запустить обработку</button></div>
-      <div v-else-if="documentChoice" class="request-ai-choice"><p>Найдено несколько похожих документов. Выберите актуальное ТЗ для обеих задач:</p><button v-for="document in documentChoice" :key="document.versionId" type="button" @click="startBoth(document.versionId)"><span><b>{{ document.name }}</b><small>Версия {{ document.version }} · {{ document.mimeType.includes('pdf') ? 'PDF' : 'DOCX' }}</small></span><AppIcon name="arrow-right" :size="15" /></button></div>
+      <div v-else-if="documentChoice" class="request-ai-choice"><p>Найдено несколько похожих документов. Выберите актуальное ТЗ для обеих задач:</p><button v-for="document in documentChoice" :key="document.versionId" type="button" @click="startBoth(document.versionId)"><span><b>{{ document.name }}</b><small>Версия {{ document.version }} · {{ document.mimeType?.includes('pdf') ? 'PDF' : 'DOCX' }}</small></span><AppIcon name="arrow-right" :size="15" /></button></div>
       <template v-else>
         <div class="request-ai-tabs" role="tablist" aria-label="Результаты обработки ТЗ">
           <button id="ai-analysis-tab" type="button" role="tab" :aria-selected="activeTab === 'analysis'" aria-controls="ai-analysis-panel" @click="activeTab = 'analysis'">Анализ ТЗ <span v-if="analysisTask.status !== 'idle'" class="request-ai-tab-status" :data-status="analysisTask.status">{{ analysisTask.status === 'loading' ? 'В работе' : analysisTask.status === 'success' ? 'Готово' : analysisTask.status === 'error' ? 'Ошибка' : 'Нет ТЗ' }}</span></button>
           <button id="ai-draft-tab" type="button" role="tab" :aria-selected="activeTab === 'draft'" aria-controls="ai-draft-panel" @click="activeTab = 'draft'">Черновик ТЗ на испытания <span v-if="draftTask.status !== 'idle'" class="request-ai-tab-status" :data-status="draftTask.status">{{ draftTask.status === 'loading' ? 'В работе' : draftTask.status === 'success' ? 'Готово' : draftTask.status === 'error' ? 'Ошибка' : 'Нет ТЗ' }}</span></button>
         </div>
         <section v-show="activeTab === 'analysis'" id="ai-analysis-panel" role="tabpanel" aria-labelledby="ai-analysis-tab" tabindex="0">
-          <div v-if="analysisTask.status === 'loading'" class="request-ai-loading" role="status" aria-live="polite"><span class="request-ai-spinner" aria-hidden="true"></span><span><b>{{ loadingCopy('analysis') }}</b><small>ЛИЗА анализирует документ. Заявка и документы не изменяются.</small></span></div>
+          <output v-if="analysisTask.status === 'loading'" class="request-ai-loading" aria-live="polite"><span class="request-ai-spinner" aria-hidden="true"></span><span><b>{{ loadingCopy('analysis') }}</b><small>ЛИЗА анализирует документ. Заявка и документы не изменяются.</small></span></output>
           <div v-else-if="analysisTask.status === 'not_found'" class="request-ai-empty"><b>Техническое задание не найдено</b><p>{{ analysisTask.data.message }}</p><small>Добавьте PDF или DOCX с «ТЗ» или «техническое задание» в названии и повторите обработку.</small></div>
-          <div v-else-if="analysisTask.status === 'success'" class="request-ai-result"><p class="request-ai-disclaimer">AI-результат носит справочный характер и ничего не меняет в заявке.</p><section v-for="(label, key) in sectionLabels" :key="key"><h4>{{ label }}</h4><ul v-if="analysisTask.data.analysis[key]?.length"><li v-for="(item, index) in analysisTask.data.analysis[key]" :key="index">{{ item }}</li></ul><p v-else class="placeholder-copy">Не выявлено.</p></section></div>
+          <div v-else-if="analysisTask.status === 'success'" class="request-ai-result"><p class="request-ai-disclaimer">AI-результат носит справочный характер и ничего не меняет в заявке.</p><section v-for="(label, key) in sectionLabels" :key="key"><h4>{{ label }}</h4><ul v-if="analysisTask.data?.analysis?.[key]?.length"><li v-for="(item, index) in analysisTask.data.analysis[key]" :key="index">{{ item }}</li></ul><p v-else class="placeholder-copy">Не выявлено.</p></section></div>
           <div v-else-if="analysisTask.status === 'error'" class="request-ai-empty" role="alert"><p class="action-error">{{ analysisTask.error }}</p><button type="button" class="primary" @click="runAnalysis(selectedVersionId, analysisTask.retryWithNewIntent)">Повторить анализ</button></div>
         </section>
         <section v-show="activeTab === 'draft'" id="ai-draft-panel" role="tabpanel" aria-labelledby="ai-draft-tab" tabindex="0">
-          <div v-if="draftTask.status === 'loading'" class="request-ai-loading" role="status" aria-live="polite"><span class="request-ai-spinner" aria-hidden="true"></span><span><b>{{ loadingCopy('draft') }}</b><small>ЛИЗА формирует черновик. Результат появится здесь после завершения.</small></span></div>
+          <output v-if="draftTask.status === 'loading'" class="request-ai-loading" aria-live="polite"><span class="request-ai-spinner" aria-hidden="true"></span><span><b>{{ loadingCopy('draft') }}</b><small>ЛИЗА формирует черновик. Результат появится здесь после завершения.</small></span></output>
           <div v-else-if="draftTask.status === 'not_found'" class="request-ai-empty"><b>Техническое задание не найдено</b><p>{{ draftTask.data.message }}</p></div>
           <div v-else-if="draftTask.status === 'success'" class="request-ai-result request-ai-draft"><p class="request-ai-disclaimer">Черновик требует проверки специалистом.</p><pre>{{ draftTask.data.draft }}</pre></div>
           <div v-else-if="draftTask.status === 'error'" class="request-ai-empty" role="alert"><p class="action-error">{{ draftTask.error }}</p><button type="button" class="primary" @click="runDraft(selectedVersionId, draftTask.retryWithNewIntent)">Повторить формирование</button></div>
