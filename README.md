@@ -232,4 +232,6 @@ OpenAPI-контракт проверяется offline командой `make o
 
 Полный test deployment с Samba AD требует rootful Podman. Подробности:
 [стратегия тестирования](docs/test-strategy.md), [API](docs/api.md),
-[эксплуатационный контракт](docs/devops-contract.md).
+[эксплуатационный контракт](docs/devops-contract.md). Внутренний AI-пилот
+обработки ТЗ через ЛИЗУ, его запуск, ограничения и production blockers описаны
+в [руководстве интеграции](docs/integrations/liza.md).

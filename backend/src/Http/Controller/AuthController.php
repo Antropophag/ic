@@ -125,6 +125,7 @@ final class AuthController extends ApiController
             'department' => $row !== false ? $row['department'] : null,
             'position' => $row !== false ? $row['position'] : null,
             'roles' => $roles,
+            'features' => ['lizaAi' => getenv('LIZA_AI_ENABLED') === '1'],
         ];
     }
 

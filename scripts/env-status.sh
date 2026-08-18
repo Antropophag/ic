@@ -140,7 +140,7 @@ show_environment() {
   if has_containers "$compose_command" "$project"; then
     # `compose images` reports the exact image IDs used by existing containers.
     # shellcheck disable=SC2086 # Compose command intentionally contains provider arguments.
-    if images=$($compose_command images backend frontend scheduler 2>&1); then
+    if images=$($compose_command images backend frontend scheduler ai-cleanup 2>&1); then
       printf '%s\n' "$images"
     else
       printf '%s\n' "$images" >&2

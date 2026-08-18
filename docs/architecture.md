@@ -97,3 +97,12 @@ deployment provisioner создаёт её после migrations и обычно
 Notification scheduler не является микросервисом: это долгоживущая Yii CLI
 команда из того же образа backend. Семантика SMTP — at-least-once; outbox lease
 не делает внешний SMTP идемпотентным.
+
+AI-пилот следует отдельному vertical slice `HTTP → Application AI use case →
+LizaPort → OpenWebUiLizaAdapter`. Анализ и draft не разделяют conversation,
+upload или idempotency record. Внешний AI-вызов выполняется вне DB transaction;
+MariaDB используется для коротких reserve/finalize, технических conversation
+IDs и bounded cleanup queue. Open WebUI HTTP/Socket.IO остаётся Infrastructure
+detail. Полная схема, deadline и эксплуатационные инварианты приведены в
+[руководстве интеграции](integrations/liza.md), решение — в
+[ADR 0009](adr/0009-liza-technical-specification-pilot.md).

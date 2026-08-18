@@ -115,9 +115,9 @@ grep -Fq 'sh scripts/environment.sh dev obs $(patsubst dev-obs-%,%,$@)' Makefile
 grep -Fq 'sh scripts/environment.sh prod stack $(patsubst prod-stack-%,%,$@)' Makefile
 # shellcheck disable=SC2016 # These are literal Make expressions.
 grep -Fq 'sh scripts/environment.sh dev stack $(patsubst dev-stack-%,%,$@)' Makefile
-grep -Fq "compose build backend scheduler frontend" scripts/environment.sh
-grep -Fq "compose stop frontend scheduler backend" scripts/environment.sh
-grep -Fq "compose up -d --no-build --force-recreate backend frontend scheduler" scripts/environment.sh
+grep -Fq "compose build backend scheduler ai-cleanup frontend" scripts/environment.sh
+grep -Fq "compose stop frontend ai-cleanup scheduler backend" scripts/environment.sh
+grep -Fq "compose up -d --no-build --force-recreate backend frontend scheduler ai-cleanup" scripts/environment.sh
 grep -Fq "compose_files=\"\$app_compose_files -f compose.observability.yml\"" scripts/environment.sh
 grep -Fq "export COMPOSE_IGNORE_ORPHANS=1" scripts/environment.sh
 grep -Fq "export GRAFANA_ADMIN_PASSWORD=admin" scripts/environment.sh
@@ -127,9 +127,9 @@ grep -Fq "compose logs --follow" scripts/environment.sh
 grep -Fq "SERVICE_READY_TIMEOUT" scripts/environment.sh
 grep -Fq "compose config --quiet" scripts/environment.sh
 # shellcheck disable=SC2016 # This is a literal Compose interpolation contract.
-[ "$(grep -Fc 'env_file: ${COMPOSE_ENV_FILE:?COMPOSE_ENV_FILE must select .env.dev or .env.prod}' compose.yaml)" -eq 2 ]
+[ "$(grep -Fc 'env_file: ${COMPOSE_ENV_FILE:?COMPOSE_ENV_FILE must select .env.dev or .env.prod}' compose.yaml)" -eq 3 ]
 # shellcheck disable=SC2016 # This is a literal Compose interpolation contract.
-[ "$(grep -Fc 'env_file: ${TEST_ENV_FILE:?TEST_ENV_FILE must select the test environment}' compose.test.yaml)" -eq 2 ]
+[ "$(grep -Fc 'env_file: ${TEST_ENV_FILE:?TEST_ENV_FILE must select the test environment}' compose.test.yaml)" -eq 3 ]
 grep -Fq "exec make --no-print-directory -C \"\$repository_root\" dev-up" scripts/dev.sh
 grep -Fq 'http://127.0.0.1:8080/health/ready' compose.yaml
 

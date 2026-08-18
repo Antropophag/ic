@@ -11,6 +11,43 @@
 
 ```mermaid
 erDiagram
+    ai_conversations {
+        char(32) id PK
+        varchar(16) task_type
+        bigint(20)_unsigned request_id FK "-> requests.id"
+        bigint(20)_unsigned document_version_id FK "-> request_document_versions.id"
+        bigint(20)_unsigned actor_id FK "-> users.id"
+        varchar(64) liza_chat_id
+        varchar(64) parent_message_id
+        datetime(6) created_at
+        datetime(6) updated_at
+    }
+    ai_file_cleanup {
+        bigint(20)_unsigned id PK
+        varchar(128) external_file_id
+        smallint(6)_unsigned attempts
+        datetime(6) next_attempt_at
+        datetime(6) expires_at
+        varchar(255) last_error_class
+        datetime(6) created_at
+        datetime(6) updated_at
+    }
+    ai_idempotency_requests {
+        bigint(20)_unsigned id PK
+        bigint(20)_unsigned actor_id FK "-> users.id"
+        varchar(10) http_method
+        varchar(255) route
+        char(64) key_hash
+        char(64) request_hash
+        varchar(16) state
+        smallint(6)_unsigned status_code
+        mediumtext response_json
+        varchar(2048) location
+        datetime(6) lease_expires_at
+        datetime(6) expires_at
+        datetime(6) created_at
+        datetime(6) updated_at
+    }
     audit_events {
         bigint(20)_unsigned id PK
         varchar(64) event_type
@@ -67,7 +104,7 @@ erDiagram
         varchar(255) recipient_name
         varchar(255) subject
         text body
-        json payload_json "семантические данные без bearer credentials"
+        longtext payload_json
         varchar(16) status
         int(11)_unsigned attempts
         datetime(6) next_attempt_at
@@ -75,10 +112,23 @@ erDiagram
         datetime(6) created_at
         datetime(6) sent_at
     }
+    report_document_drafts {
+        bigint(20)_unsigned id PK
+        bigint(20)_unsigned request_id FK "-> requests.id"
+        varchar(32) document_type
+        smallint(6)_unsigned schema_version
+        longtext content_json
+        int(11)_unsigned revision
+        bigint(20)_unsigned created_by FK "-> users.id"
+        datetime(6) created_at
+        datetime(6) updated_at
+    }
     requests {
         bigint(20)_unsigned id PK
         bigint(20)_unsigned number
         varchar(128) legacy_id
+        varchar(32) source
+        tinyint(1) is_archived
         bigint(20)_unsigned initiator_id FK "-> users.id"
         varchar(255) department_name
         varchar(128) department_external_id
@@ -87,8 +137,8 @@ erDiagram
         varchar(2000) product_name
         varchar(500) manufacturer
         varchar(500) supplier
-        int(11)_unsigned sample_quantity "NULL только для архивного импорта"
-        text legacy_sample_quantity_raw "NULL, исходное значение Б24"
+        int(11)_unsigned sample_quantity
+        text legacy_sample_quantity_raw
         text test_method
         int(11)_unsigned revision
         int(11)_unsigned lock_version
@@ -104,10 +154,11 @@ erDiagram
         bigint(20)_unsigned assigned_by FK "-> users.id"
         datetime(6) valid_from
         datetime(6) valid_to
-        tinyint current_assignment "generated: 1 при valid_to IS NULL, иначе NULL; UNIQUE (request_id, assignment_type, current_assignment)"
+        tinyint(4) current_assignment
     }
     request_comments {
         bigint(20)_unsigned id PK
+        varchar(191) legacy_id
         bigint(20)_unsigned request_id FK "-> requests.id"
         bigint(20)_unsigned author_id FK "-> users.id"
         text body
@@ -115,7 +166,11 @@ erDiagram
     }
     request_documents {
         bigint(20)_unsigned id PK
+        varchar(191) legacy_id
+        varchar(191) title_discriminator
+        bigint(20)_unsigned request_id FK "-> request_comments.request_id"
         bigint(20)_unsigned request_id FK "-> requests.id"
+        bigint(20)_unsigned comment_id FK "-> request_comments.id"
         varchar(32) document_type
         varchar(255) title
         bigint(20)_unsigned created_by FK "-> users.id"
@@ -152,6 +207,13 @@ erDiagram
         varchar(16) rule_id
         datetime(6) created_at
     }
+    review_feedback {
+        bigint(20)_unsigned id PK
+        bigint(20)_unsigned author_id FK "-> users.id"
+        text body
+        longtext checklist_json
+        datetime(6) created_at
+    }
     roles {
         int(10)_unsigned id PK
         varchar(64) code
@@ -185,6 +247,10 @@ erDiagram
         bigint(20)_unsigned assigned_by FK "-> users.id"
         datetime(6) created_at
     }
+    requests ||--o{ ai_conversations : "request_id"
+    request_document_versions ||--o{ ai_conversations : "document_version_id"
+    users ||--o{ ai_conversations : "actor_id"
+    users ||--o{ ai_idempotency_requests : "actor_id"
     users ||--o{ audit_events : "actor_id"
     request_document_versions ||--o{ document_download_links : "document_version_id"
     requests ||--o{ expert_opinions : "request_id"
@@ -192,13 +258,17 @@ erDiagram
     request_document_versions ||--o{ expert_opinions : "document_version_id"
     users ||--o{ idempotency_requests : "actor_id"
     requests ||--o{ notification_outbox : "request_id"
+    requests ||--o{ report_document_drafts : "request_id"
+    users ||--o{ report_document_drafts : "created_by"
     users ||--o{ requests : "initiator_id"
     requests ||--o{ request_assignments : "request_id"
     users ||--o{ request_assignments : "user_id"
     users ||--o{ request_assignments : "assigned_by"
     requests ||--o{ request_comments : "request_id"
     users ||--o{ request_comments : "author_id"
+    request_comments ||--o{ request_documents : "request_id"
     requests ||--o{ request_documents : "request_id"
+    request_comments |o--o{ request_documents : "comment_id"
     users ||--o{ request_documents : "created_by"
     users |o--o{ request_documents : "deleted_by"
     request_documents ||--o{ request_document_versions : "document_id"
@@ -206,6 +276,7 @@ erDiagram
     requests ||--o{ request_transitions : "request_id"
     users ||--o{ request_transitions : "actor_id"
     request_document_versions |o--o{ request_transitions : "document_version_id"
+    users ||--o{ review_feedback : "author_id"
     requests ||--o{ security_checks : "request_id"
     expert_opinions ||--o{ security_checks : "expert_opinion_id"
     users ||--o{ security_checks : "officer_id"

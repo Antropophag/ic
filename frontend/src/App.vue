@@ -6,6 +6,7 @@ import AppModal from './components/AppModal.vue'
 import AdminPanel from './components/AdminPanel.vue'
 import RequestDetails from './components/RequestDetails.vue'
 import RequestRegistry from './components/RequestRegistry.vue'
+import { setTechnicalSpecificationAiPrincipal } from './components/TechnicalSpecificationAi.vue'
 import { createLatestRequestGuard } from './latestRequestGuard'
 import { requestIdFromLocation, setRequestInUrl } from './requestDeepLink'
 import { avatarRoleClass, initialsFor } from './registry'
@@ -30,6 +31,7 @@ const currentProfile = computed(() => ({
   position: authUser.value?.position || '',
   department: authUser.value?.department || '',
   roles: authUser.value?.roles || [],
+  features: authUser.value?.features || {},
 }))
 const currentInitials = computed(() => initialsFor(currentProfile.value.displayName))
 const isAdministrator = computed(() => (currentProfile.value.roles || []).includes('administrator'))
@@ -41,6 +43,7 @@ const accountAvatarClass = computed(() => {
 })
 
 watch(authUser, async user => {
+  setTechnicalSpecificationAiPrincipal(user?.id ?? null)
   if (!user) {
     const panel = document.querySelector('.development-tools')
     if (panel) document.body.append(panel)
@@ -223,7 +226,7 @@ onBeforeUnmount(() => {
         <ReviewGuide v-if="showReviewGuide && ReviewGuide" />
         <AdminPanel v-else-if="showAdmin" @close="showAdmin = false" @open-request="openAdminRequest" />
         <template v-else>
-          <RequestDetails v-if="selectedRequestId" :request-id="selectedRequestId" :current-initials="currentInitials" :current-user-roles="currentProfile.roles" :initial-warning="requestWarning" @loaded="selectedRequestTitle = $event" @updated="refreshRegistry" @close="closeRequest()" />
+          <RequestDetails v-if="selectedRequestId" :request-id="selectedRequestId" :current-initials="currentInitials" :current-user-roles="currentProfile.roles" :ai-enabled="currentProfile.features.lizaAi === true" :initial-warning="requestWarning" @loaded="selectedRequestTitle = $event" @updated="refreshRegistry" @close="closeRequest()" />
           <RequestRegistry
             :active="!selectedRequestId"
             :current-user-id="authUser.id"

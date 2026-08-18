@@ -5,6 +5,7 @@ declare(strict_types=1);
 $common = require __DIR__ . '/common.php';
 $controllerMap = [
     'admin' => App\Console\AdminController::class,
+    'ai' => App\Console\AiController::class,
     'bitrix' => App\Console\BitrixController::class,
     'notification' => App\Console\NotificationController::class,
     'migrate' => [

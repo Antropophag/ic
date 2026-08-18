@@ -331,6 +331,82 @@ paths:
         '500':
           $ref: '#/components/responses/ServerError'
 
+  /api/v1/requests/{id}/ai/technical-specification/analyze:
+    post:
+      tags: [Requests]
+      summary: Проанализировать приложенное ТЗ через ЛИЗУ
+      description: |
+        INTERNAL PILOT. Независимая read-only AI-операция; не изменяет заявку.
+        Ответ replay'ится до 24 часов для того же Idempotency-Key.
+      operationId: analyzeTechnicalSpecification
+      security: [{cookieSession: [], csrfToken: []}]
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: integer, minimum: 1}}
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TechnicalSpecificationAiInput'
+      responses:
+        '200':
+          description: Анализ, список кандидатов или понятное отсутствие ТЗ
+          headers:
+            Idempotency-Replayed: {$ref: '#/components/headers/IdempotencyReplayed'}
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - $ref: '#/components/schemas/TechnicalSpecificationAnalysisCompleted'
+                  - $ref: '#/components/schemas/TechnicalSpecificationChoiceRequired'
+                  - $ref: '#/components/schemas/TechnicalSpecificationNotFound'
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '422': {$ref: '#/components/responses/ValidationError'}
+        '503':
+          description: Функция выключена, timeout или недоступность ЛИЗЫ
+          content: {application/json: {schema: {$ref: '#/components/schemas/HttpError'}}}
+
+  /api/v1/requests/{id}/ai/technical-specification/draft:
+    post:
+      tags: [Requests]
+      summary: Сформировать черновик ТЗ на испытания в независимом AI-chat
+      description: |
+        INTERNAL PILOT. Самостоятельная read-only задача с отдельными chat,
+        upload и idempotency lifecycle; не использует результат анализа.
+      operationId: createTestSpecificationDraft
+      security: [{cookieSession: [], csrfToken: []}]
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: integer, minimum: 1}}
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TechnicalSpecificationAiInput'
+      responses:
+        '200':
+          description: Черновик, список кандидатов или понятное отсутствие ТЗ
+          headers:
+            Idempotency-Replayed: {$ref: '#/components/headers/IdempotencyReplayed'}
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - $ref: '#/components/schemas/TestSpecificationDraftCompleted'
+                  - $ref: '#/components/schemas/TechnicalSpecificationChoiceRequired'
+                  - $ref: '#/components/schemas/TechnicalSpecificationNotFound'
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '422': {$ref: '#/components/responses/ValidationError'}
+        '503':
+          description: Функция выключена, timeout или недоступность ЛИЗЫ
+          content: {application/json: {schema: {$ref: '#/components/schemas/HttpError'}}}
+
   /api/v1/requests/{id}/reject:
     post:
       tags: [Requests]
@@ -586,7 +662,7 @@ components:
 
   headers:
     IdempotencyReplayed:
-      description: "`true`, если сохранённый успешный ответ был воспроизведён"
+      description: "`true`, если сохранённый terminal response был воспроизведён"
       schema:
         type: string
         enum: ['true', 'false']
@@ -681,6 +757,69 @@ components:
             $ref: '#/components/schemas/RequestCommandResult'
 
   schemas:
+    TechnicalSpecificationAiInput:
+      type: object
+      properties:
+        documentVersionId: {type: integer, minimum: 1}
+      additionalProperties: false
+    TechnicalSpecificationCandidate:
+      type: object
+      required: [versionId, name, mimeType, version]
+      properties:
+        versionId: {type: integer, minimum: 1}
+        name: {type: string, minLength: 1}
+        mimeType:
+          type: string
+          enum: [application/pdf, application/vnd.openxmlformats-officedocument.wordprocessingml.document]
+        version: {type: integer, minimum: 1}
+      additionalProperties: false
+    TechnicalSpecificationChoiceRequired:
+      type: object
+      required: [status, documents]
+      properties:
+        status: {type: string, enum: [choice_required]}
+        documents:
+          type: array
+          minItems: 2
+          items: {$ref: '#/components/schemas/TechnicalSpecificationCandidate'}
+      additionalProperties: false
+    TechnicalSpecificationNotFound:
+      type: object
+      required: [status, message]
+      properties:
+        status: {type: string, enum: [not_found]}
+        message: {type: string, minLength: 1}
+      additionalProperties: false
+    TechnicalSpecificationAnalysis:
+      type: object
+      required: [criticalContradictions, ambiguousRequirements, missingInformation, testRequirements, initiatorQuestions, recommendations]
+      properties:
+        criticalContradictions: {type: array, items: {type: string}}
+        ambiguousRequirements: {type: array, items: {type: string}}
+        missingInformation: {type: array, items: {type: string}}
+        testRequirements: {type: array, items: {type: string}}
+        initiatorQuestions: {type: array, items: {type: string}}
+        recommendations: {type: array, items: {type: string}}
+      additionalProperties: false
+    TechnicalSpecificationAnalysisCompleted:
+      type: object
+      required: [status, conversationId, documentVersionId, analysis]
+      properties:
+        status: {type: string, enum: [completed]}
+        conversationId: {type: string, minLength: 1}
+        documentVersionId: {type: integer, minimum: 1}
+        analysis: {$ref: '#/components/schemas/TechnicalSpecificationAnalysis'}
+      additionalProperties: false
+    TestSpecificationDraftCompleted:
+      type: object
+      required: [status, conversationId, documentVersionId, draft, notice]
+      properties:
+        status: {type: string, enum: [completed]}
+        conversationId: {type: string, minLength: 1}
+        documentVersionId: {type: integer, minimum: 1}
+        draft: {type: string, minLength: 1}
+        notice: {type: string, minLength: 1}
+      additionalProperties: false
     SystemOverview:
       type: object
       required: [application, services, checkedAt]
@@ -829,7 +968,7 @@ components:
     UserProfile:
       type: object
       nullable: true
-      required: [id, displayName, email, department, position, roles]
+      required: [id, displayName, email, department, position, roles, features]
       properties:
         id:
           type: integer
@@ -849,6 +988,12 @@ components:
           type: array
           items:
             type: string
+        features:
+          type: object
+          required: [lizaAi]
+          properties:
+            lizaAi: {type: boolean}
+          additionalProperties: false
       additionalProperties: false
     AdminUsersResponse:
       type: object

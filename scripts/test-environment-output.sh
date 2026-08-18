@@ -54,6 +54,7 @@ case " $* " in
   [ "${MOCK_FRONTEND_REPLICAS:-1}" -eq 1 ] || echo frontend-id-2
   ;;
 *" ps -q scheduler "*) echo scheduler-id ;;
+*" ps -q ai-cleanup "*) echo ai-cleanup-id ;;
 *" ps -q grafana "*) echo grafana-id ;;
 *" ps -q prometheus "*) echo prometheus-id ;;
 *" ps -q loki "*) echo loki-id ;;
@@ -73,7 +74,7 @@ if [ "${1:-}" = inspect ]; then
   mariadb-id) echo healthy ;;
   frontend-id) echo "${MOCK_FRONTEND_STATE:-healthy}" ;;
   frontend-id-2) echo "${MOCK_FRONTEND_REPLICA_STATE:-healthy}" ;;
-  backend-id | scheduler-id) echo running ;;
+  backend-id | scheduler-id | ai-cleanup-id) echo running ;;
   grafana-id | prometheus-id | loki-id) echo healthy ;;
   alloy-id | node-exporter-id | blackbox-exporter-id) echo running ;;
   cadvisor-id) echo healthy ;;
@@ -182,7 +183,7 @@ set -e
 [ "$invalid_tail_status" -eq 2 ]
 
 set +e
-MOCK_FAIL_PATTERN='stop frontend scheduler backend mariadb' MOCK_FAIL_STATUS=43 NO_COLOR=1 \
+MOCK_FAIL_PATTERN='stop frontend ai-cleanup scheduler backend mariadb' MOCK_FAIL_STATUS=43 NO_COLOR=1 \
   run_environment app down >/dev/null 2>&1
 down_failure_status=$?
 MOCK_FAIL_PATTERN='ps -q mariadb' MOCK_FAIL_STATUS=44 NO_COLOR=1 \
@@ -191,7 +192,7 @@ status_failure_status=$?
 MOCK_FAIL_PATTERN='logs --follow' MOCK_FAIL_STATUS=45 NO_COLOR=1 \
   run_environment app logs >/dev/null 2>&1
 logs_failure_status=$?
-MOCK_FAIL_PATTERN='stop frontend scheduler backend mariadb' MOCK_FAIL_STATUS=46 NO_COLOR=1 \
+MOCK_FAIL_PATTERN='stop frontend ai-cleanup scheduler backend mariadb' MOCK_FAIL_STATUS=46 NO_COLOR=1 \
   run_environment app restart >/dev/null 2>&1
 restart_failure_status=$?
 set -e
@@ -206,17 +207,17 @@ printf '%s' "$down_output" | grep -q 'Приложение остановлен�
 : >"$test_dir/record"
 restart_output=$(NO_COLOR=1 run_environment app restart)
 [ "$(printf '%s' "$restart_output" | grep -c 'IC · Разработка')" -eq 1 ]
-grep -q 'stop frontend scheduler backend mariadb' "$test_dir/record"
-grep -q 'rm -f frontend scheduler backend mariadb' "$test_dir/record"
+grep -q 'stop frontend ai-cleanup scheduler backend mariadb' "$test_dir/record"
+grep -q 'rm -f frontend ai-cleanup scheduler backend mariadb' "$test_dir/record"
 if grep -q -- '--remove-orphans' "$test_dir/record"; then
   echo "Application lifecycle must not remove observability orphans" >&2
   exit 1
 fi
-grep -q 'stop frontend scheduler backend' "$test_dir/record"
+grep -q 'stop frontend ai-cleanup scheduler backend' "$test_dir/record"
 grep -q 'run --rm backend php yii migrate/up --interactive=0' "$test_dir/record"
-grep -q 'up -d --no-build --force-recreate backend frontend scheduler' "$test_dir/record"
+grep -q 'up -d --no-build --force-recreate backend frontend scheduler ai-cleanup' "$test_dir/record"
 migration_line=$(grep -n 'run --rm backend php yii migrate/up --interactive=0' "$test_dir/record" | tail -1 | cut -d: -f1)
-application_start_line=$(grep -n 'up -d --no-build --force-recreate backend frontend scheduler' "$test_dir/record" | tail -1 | cut -d: -f1)
+application_start_line=$(grep -n 'up -d --no-build --force-recreate backend frontend scheduler ai-cleanup' "$test_dir/record" | tail -1 | cut -d: -f1)
 [ "$migration_line" -lt "$application_start_line" ]
 
 : >"$test_dir/record"
@@ -258,7 +259,7 @@ fi
 
 : >"$test_dir/record"
 NO_COLOR=1 run_environment stack up >/dev/null
-application_start_line=$(grep -n 'up -d --no-build --force-recreate backend frontend scheduler' "$test_dir/record" | tail -1 | cut -d: -f1)
+application_start_line=$(grep -n 'up -d --no-build --force-recreate backend frontend scheduler ai-cleanup' "$test_dir/record" | tail -1 | cut -d: -f1)
 observability_start_line=$(grep -n 'up -d grafana prometheus loki alloy node-exporter cadvisor blackbox-exporter' "$test_dir/record" | tail -1 | cut -d: -f1)
 [ "$application_start_line" -lt "$observability_start_line" ]
 
