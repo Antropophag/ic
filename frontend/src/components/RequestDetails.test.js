@@ -151,7 +151,7 @@ describe('RequestDetails testing direction', () => {
     expect(root.querySelector('.request-color-control')).toBeNull()
     const status = root.querySelector('.shlz-status--neutral')
     expect(status.textContent).toBe('Заявка в работе')
-    expect(status.querySelector('.shlz-badge-dot').getAttribute('aria-hidden')).toBe('true')
+    expect(status.querySelector('.shlz-badge-dot')).toBeNull()
     app.unmount()
   })
 })

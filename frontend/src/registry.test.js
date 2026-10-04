@@ -102,23 +102,7 @@ it('preserves an unknown status so API drift stays visible', () => {
   expect(fromApi({ ...registered, status: 'new_status' })).toMatchObject({
     status: 'new_status',
     compactStatus: 'new_status',
-    tone: 'request-status--unknown',
   })
-})
-
-it.each([
-  ['registered', 'request-status--registered'],
-  ['in_progress', 'request-status--in-progress'],
-  ['suspended', 'request-status--suspended'],
-  ['opinion_preparation', 'request-status--expertise'],
-  ['security_review', 'request-status--security'],
-  ['completed', 'request-status--completed'],
-  ['rejected', 'request-status--rejected'],
-  ['withdrawn', 'request-status--withdrawn'],
-])('maps %s to its process tone independently of testing direction', (status, tone) => {
-  for (const color of ['white', 'orange', 'blue', 'violet', 'red', 'green']) {
-    expect(fromApi({ ...registered, status, color }).tone).toBe(tone)
-  }
 })
 
 it('uses a compact rejected label in the registry without changing the business label', () => {
@@ -143,7 +127,6 @@ it('falls back to white for a missing or unknown color', () => {
 it('hides the start action after the request leaves registered status', () => {
   expect(fromApi({ ...registered, status: 'in_progress', can_start: 1 })).toMatchObject({
     status: 'Заявка в работе',
-    tone: 'request-status--in-progress',
     canStart: false,
   })
 })
@@ -205,7 +188,6 @@ it('maps suspend and resume history actions to user-facing labels', () => {
 it('maps the report stage, permission and history label', () => {
   expect(fromApi({ ...registered, status: 'opinion_preparation', can_upload_report: 1, can_claim_expert: 1 })).toMatchObject({
     status: 'Подготовка заключения',
-    tone: 'request-status--expertise',
     canUploadReport: true,
     canClaimExpert: true,
   })

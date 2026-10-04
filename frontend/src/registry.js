@@ -23,13 +23,6 @@ const COMPACT_STATUS_LABELS = {
 
 export const REQUEST_STATUS_OPTIONS = Object.entries(STATUS_LABELS).map(([value, label]) => ({ value, label }))
 
-const STATUS_TONES = {
-  registered: 'request-status--registered', in_progress: 'request-status--in-progress',
-  suspended: 'request-status--suspended', opinion_preparation: 'request-status--expertise',
-  security_review: 'request-status--security', completed: 'request-status--completed',
-  rejected: 'request-status--rejected', withdrawn: 'request-status--withdrawn',
-}
-
 export const REQUEST_COLORS = ['white', 'orange', 'blue', 'violet', 'red', 'green']
 
 const TESTING_DIRECTIONS = {
@@ -97,7 +90,6 @@ export function fromApi(item) {
     directionLabel: testingDirectionLabel(item.color ?? 'white'),
     status: STATUS_LABELS[item.status] || item.status,
     compactStatus: COMPACT_STATUS_LABELS[item.status] || STATUS_LABELS[item.status] || item.status,
-    tone: STATUS_TONES[item.status] || 'request-status--unknown',
     securityMark,
     // Вычисляется один раз при маппинге, а не при каждом обращении к
     // className/label/path в шаблоне (реестр рендерит это на каждую

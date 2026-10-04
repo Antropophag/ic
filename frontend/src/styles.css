@@ -206,13 +206,10 @@
 .request-color-menu button:focus-visible{outline:2px solid var(--blue);outline-offset:-2px}
 .request-color-dot{width:12px;height:12px;display:inline-block;flex:none;border:1px solid #d1d8df;border-radius:6px;background:#fff}
 .request-color-dot.red{border-color:#cc1f1f;background:#cc1f1f}.request-color-dot.orange{border-color:#d47e2e;background:#d47e2e}.request-color-dot.blue{border-color:#3d88de;background:#3d88de}.request-color-dot.violet{border-color:#8131a7;background:#8131a7}.request-color-dot.green{border-color:#57965c;background:#57965c}
-/* Consumer composition of SHLZ Status and Badge; business tones belong to IC. */
+/* Neutral SHLZ Status keeps process labels separate from testing-direction marks. */
 .request-status{max-width:100%;min-width:0;font-size:12px;font-weight:500}
 .registry .request-status{min-block-size:26px;padding-inline:8px;gap:var(--shlz-source-spacing-4);font-size:10px}
 .request-status-text{min-width:0;overflow:hidden;text-overflow:ellipsis}
-.request-status-dot{flex:none;background:var(--status-dot,#67717b)}
-/* Process palette from 581b61d (#336); apply only to dots, not neutral labels or IC directions. */
-.request-status-dot.request-status--registered{--status-dot:#28687f}.request-status-dot.request-status--in-progress{--status-dot:#1c4678}.request-status-dot.request-status--suspended{--status-dot:#6f592f}.request-status-dot.request-status--expertise{--status-dot:#733075}.request-status-dot.request-status--security{--status-dot:#884a16}.request-status-dot.request-status--completed{--status-dot:#17672b}.request-status-dot.request-status--rejected{--status-dot:#941717}.request-status-dot.request-status--withdrawn{--status-dot:#535b64}
 .request-direction-readonly{display:inline-flex;align-items:center;gap:7px;padding:0 9px;font-size:11px;color:var(--muted)}
 .request-direction-chevron{transform:rotate(90deg);flex:none}
 .request-color-control[open] .request-direction-chevron{transform:rotate(-90deg)}

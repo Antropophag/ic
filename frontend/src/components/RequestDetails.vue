@@ -1077,7 +1077,7 @@ onBeforeUnmount(() => {
         <AppIcon class="request-corner-arrow" name="arrow-left" :size="16" />
       </button>
       <div class="object-status-row">
-        <RequestStatus :label="selected.status" :tone="selected.tone" />
+        <RequestStatus :label="selected.status" />
         <details v-if="selected.canSetColor" ref="colorMenu" class="request-color-control">
           <summary :aria-label="`Направление испытаний: ${selected.directionLabel}`"><span class="request-color-dot" :class="selected.color" aria-hidden="true"></span>{{ selected.directionLabel }}<AppIcon class="request-direction-chevron" name="chevron-right" :size="12" /></summary>
           <fieldset class="request-color-menu" aria-label="Направление испытаний">
