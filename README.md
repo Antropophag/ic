@@ -10,8 +10,9 @@ read-only журнал действий и журнал доставки уве�
 Для статусов используются локальные CSS-примитивы SHLZ UI из коммита
 `1864b3c0cb327485f08c48b14c88730ec852b03c`: `Status`, элементы `Table`, `Popover`, `Choice` и `Button`.
 Версия закреплена в `frontend/scripts/sync-shlz-styles.mjs`; команда
-`node frontend/scripts/sync-shlz-styles.mjs /path/to/shlz-ui` воспроизводит
-токены и исходные стили в `frontend/src/vendor/shlz/`. Эти файлы не редактируют
+`node frontend/scripts/sync-shlz-styles.mjs` читает соседний checkout `../shlz-ui`
+и воспроизводит токены и исходные стили в `frontend/src/vendor/shlz/`.
+Произвольные пути в аргументах не принимаются. Эти файлы не редактируют
 вручную. Семантику направлений и плотность реестра задаёт приложение.
 Сборка и работа портала не требуют соседнего репозитория или CDN.
 

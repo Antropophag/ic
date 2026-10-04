@@ -1,12 +1,12 @@
 import { mkdtemp, mkdir, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { pathToFileURL } from 'node:url'
-import { execFileSync } from 'node:child_process'
+import { fileURLToPath, pathToFileURL } from 'node:url'
+import { execFileSync, spawnSync } from 'node:child_process'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { buildStyles, revision, syncShlzStyles } from './sync-shlz-styles.mjs'
 
-vi.mock('node:child_process', () => ({ execFileSync: vi.fn() }))
+vi.mock('node:child_process', async importOriginal => ({ ...await importOriginal(), execFileSync: vi.fn() }))
 let root
 const tokens = {
   $schema: 'ignored',
@@ -51,11 +51,18 @@ it('fails on cycles and missing token aliases instead of emitting broken CSS', (
 })
 
 it('rejects missing and non-directory repository arguments before running Git', async () => {
-  await expect(syncShlzStyles()).rejects.toThrow('Usage:')
+  await expect(syncShlzStyles()).rejects.toThrow('Source repository is required')
   const file = join(root, '--help')
   await writeFile(file, 'not a directory')
   await expect(syncShlzStyles(file)).rejects.toThrow('must be a directory')
   expect(execFileSync).not.toHaveBeenCalled()
+})
+
+it('rejects arbitrary CLI source paths before inspecting or reading them', () => {
+  const script = fileURLToPath(new URL('./sync-shlz-styles.mjs', import.meta.url))
+  const result = spawnSync(process.execPath, [script, '../../outside-source'], { encoding: 'utf8' })
+  expect(result.status).toBe(1)
+  expect(result.stderr).toContain('does not accept source paths')
 })
 
 it('does not create a partial output when the pinned source revision is missing', async () => {

@@ -1,7 +1,7 @@
 import { execFileSync } from 'node:child_process'
 import { realpathSync, statSync } from 'node:fs'
 import { mkdir, writeFile } from 'node:fs/promises'
-import { pathToFileURL } from 'node:url'
+import { fileURLToPath, pathToFileURL } from 'node:url'
 
 // Read immutable Git objects, never execute code from the supplied repository.
 export const revision = '1864b3c0cb327485f08c48b14c88730ec852b03c'
@@ -25,7 +25,7 @@ export function buildStyles(readSource) {
     if (stack.includes(key)) throw new Error(`Circular token alias: ${key}`)
     if (!flat.has(key)) throw new Error(`Unknown token alias: ${key}`)
     const value = flat.get(key)
-    const alias = typeof value === 'string' && value.match(/^\{(.+)\}$/)
+    const alias = typeof value === 'string' && /^\{(.+)\}$/.exec(value)
     return alias ? resolve(alias[1], [...stack, key]) : value
   }
   const declarations = [...flat.keys()].map(key => {
@@ -42,7 +42,7 @@ export function buildStyles(readSource) {
 
 /** Regenerate the local distribution from the pinned revision of a local Git repository. */
 export async function syncShlzStyles(repository, destination = new URL('../src/vendor/shlz/', import.meta.url)) {
-  if (!repository) throw new Error('Usage: node scripts/sync-shlz-styles.mjs /path/to/shlz-ui')
+  if (!repository) throw new Error('Source repository is required')
   const cwd = realpathSync(repository)
   if (!statSync(cwd).isDirectory()) throw new TypeError('SHLZ source must be a directory')
   const readSource = path => execFileSync('/usr/bin/git', ['--no-replace-objects', 'show', `${revision}:${path}`], { cwd, encoding: 'utf8' })
@@ -52,5 +52,6 @@ export async function syncShlzStyles(repository, destination = new URL('../src/v
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
-  await syncShlzStyles(process.argv[2])
+  if (process.argv.length > 2) throw new Error('This generator does not accept source paths; use the sibling shlz-ui checkout')
+  await syncShlzStyles(fileURLToPath(new URL('../../../shlz-ui/', import.meta.url)))
 }
