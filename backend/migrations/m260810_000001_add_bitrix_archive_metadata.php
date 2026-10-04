@@ -34,6 +34,17 @@ final class m260810_000001_add_bitrix_archive_metadata extends Migration
 
     public function safeDown(): void
     {
+        $duplicate = $this->db->createCommand(
+            'SELECT request_id, title FROM {{%request_documents}} '
+            . 'GROUP BY request_id, title HAVING COUNT(*) > 1 LIMIT 1',
+        )->queryOne();
+        if ($duplicate !== false) {
+            throw new RuntimeException(
+                'Cannot roll back ' . static::class
+                . ': duplicate document titles would violate uq_document_request_title.',
+            );
+        }
+
         $this->dropForeignKey('fk_document_comment_request', '{{%request_documents}}');
         $this->dropIndex('uq_request_documents_legacy_id', '{{%request_documents}}');
         $this->dropIndex('uq_document_request_title', '{{%request_documents}}');

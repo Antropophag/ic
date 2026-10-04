@@ -4,7 +4,10 @@ declare(strict_types=1);
 
 namespace Tests\Integration\Document;
 
-use App\Application\Request\CreateRequestInput;
+use App\Application\Request\Command\DeleteReportCommand;
+use App\Application\Request\Command\UploadReportCommand;
+use App\Application\Request\UseCase\ReportLifecycle;
+use App\Http\Request\CreateRequest as CreateRequestInput;
 use App\Domain\Request\ConcurrentRequestModification;
 use App\Domain\Request\ReportDeletionDenied;
 use App\Domain\Request\ReportDenied;
@@ -12,8 +15,11 @@ use App\Domain\Request\RequestNotFound;
 use App\Infrastructure\Clock;
 use App\Infrastructure\Document\DocumentRepository;
 use App\Infrastructure\Document\DocumentStorage;
+use App\Infrastructure\Notification\NotificationOutboxProcessor;
+use App\Infrastructure\Notification\NotificationOutboxCredentialCleanup;
+use App\Infrastructure\Persistence\Request\ReportLifecyclePersistenceAdapter;
 use App\Infrastructure\Request\RequestQuery;
-use App\Infrastructure\Request\RequestRepository;
+use PHPUnit\Framework\Attributes\DataProvider;
 use Tests\Integration\IntegrationTestCase;
 
 final class DocumentRepositoryTest extends IntegrationTestCase
@@ -51,6 +57,33 @@ final class DocumentRepositoryTest extends IntegrationTestCase
         return new DocumentStorage($this->storageRoot);
     }
 
+    /** @return array<string, mixed> */
+    private function uploadReport(
+        int $requestId,
+        int $actorId,
+        string $originalName,
+        string $mimeType,
+        int $size,
+        string $temporaryPath,
+    ): array {
+        $lifecycle = new ReportLifecycle(new ReportLifecyclePersistenceAdapter($this->db(), $this->storage()));
+        return $lifecycle->upload(new UploadReportCommand(
+            $requestId,
+            $actorId,
+            $originalName,
+            $mimeType,
+            $size,
+            $temporaryPath,
+        ))->toArray();
+    }
+
+    /** @return array{status: string, lockVersion: int} */
+    private function deleteReport(int $requestId, int $lockVersion, int $actorId, string $reason): array
+    {
+        $lifecycle = new ReportLifecycle(new ReportLifecyclePersistenceAdapter($this->db(), $this->storage()));
+        return $lifecycle->delete(new DeleteReportCommand($requestId, $lockVersion, $actorId, $reason))->toArray();
+    }
+
     /** @return array{path: string, size: int, mime: string, name: string} */
     private function tempPdf(string $content = '%PDF-1.4 integration test'): array
     {
@@ -69,7 +102,7 @@ final class DocumentRepositoryTest extends IntegrationTestCase
         $input->supplier = 'Поставщик';
         $input->sampleQuantity = 1;
         $input->testMethod = 'Интеграционный тест';
-        $request = (new RequestRepository($this->db()))->create($input, $initiatorId);
+        $request = (new \App\Application\Request\UseCase\CreateRequest(new \App\Infrastructure\Persistence\Request\RequestCreationPersistenceAdapter($this->db())))->execute($input->toCommand($initiatorId))->toArray();
         $requestId = (int) $request['id'];
         $now = Clock::now();
 
@@ -108,7 +141,7 @@ final class DocumentRepositoryTest extends IntegrationTestCase
         $file = $this->tempPdf();
 
         $repository = new DocumentRepository($this->db(), $this->storage());
-        $result = $repository->uploadReport($requestId, $executor, $file['name'], $file['mime'], $file['size'], $file['path']);
+        $result = $this->uploadReport($requestId, $executor, $file['name'], $file['mime'], $file['size'], $file['path']);
 
         self::assertSame('opinion_preparation', $result['status']);
         self::assertSame((int) $request['lock_version'] + 1, $result['lockVersion']);
@@ -129,6 +162,115 @@ final class DocumentRepositoryTest extends IntegrationTestCase
             [':id' => $requestId],
         );
         self::assertSame(0, (int) $inactiveNotified);
+
+        $persistedNotification = $this->db()->createCommand(
+            "SELECT n.* FROM {{%notification_outbox}} n WHERE n.request_id = :id "
+            . "AND n.event_type = 'request.report_uploaded' AND n.recipient_email = 'active.expert@example.invalid'",
+            [':id' => $requestId],
+        )->queryOne();
+        self::assertNotFalse($persistedNotification);
+        $persistedRepresentation = json_encode(
+            $persistedNotification,
+            JSON_THROW_ON_ERROR | JSON_UNESCAPED_SLASHES,
+        );
+        self::assertFalse(
+            $this->containsActiveDownloadCredential($persistedRepresentation),
+            'ACL-005: persisted notification data must not contain an active raw download credential',
+        );
+        self::assertSame(0, (int) $this->scalar(
+            'SELECT COUNT(*) FROM {{%document_download_links}} WHERE document_version_id = :version_id',
+            [':version_id' => $result['versionId']],
+        ));
+
+        $deliveredBody = null;
+        $processor = new NotificationOutboxProcessor(
+            $this->db(),
+            static function (int $request, string $email, string $name, string $subject, string $body) use (&$deliveredBody): void {
+                if ($email === 'active.expert@example.invalid') {
+                    $deliveredBody = $body;
+                    throw new \RuntimeException('Synthetic SMTP failure');
+                }
+            },
+        );
+        $processor->processAvailableBatch(100);
+        self::assertIsString($deliveredBody);
+        preg_match('~/api/v1/document-links/([a-f0-9]{64})/download~', $deliveredBody, $deliveredLink);
+        self::assertArrayHasKey(1, $deliveredLink);
+        self::assertNotFalse($repository->findVersionByToken($deliveredLink[1]));
+        self::assertSame(1, (int) $this->scalar(
+            'SELECT COUNT(*) FROM {{%document_download_links}} WHERE token_hash = :token_hash',
+            [':token_hash' => hash('sha256', $deliveredLink[1])],
+        ));
+        $linkCountAfterFailure = (int) $this->scalar(
+            'SELECT COUNT(*) FROM {{%document_download_links}} WHERE document_version_id = :version_id',
+            [':version_id' => $result['versionId']],
+        );
+        $failedRepresentation = json_encode(
+            $this->db()->createCommand(
+                "SELECT * FROM {{%notification_outbox}} WHERE request_id = :id "
+                . "AND recipient_email = 'active.expert@example.invalid'",
+                [':id' => $requestId],
+            )->queryOne(),
+            JSON_THROW_ON_ERROR,
+        );
+        self::assertFalse($this->containsActiveDownloadCredential($failedRepresentation));
+
+        $this->db()->createCommand()->update(
+            '{{%notification_outbox}}',
+            ['next_attempt_at' => Clock::now()],
+            ['request_id' => $requestId, 'recipient_email' => 'active.expert@example.invalid'],
+        )->execute();
+        $retriedBody = null;
+        (new NotificationOutboxProcessor(
+            $this->db(),
+            static function (int $request, string $email, string $name, string $subject, string $body) use (&$retriedBody): void {
+                if ($email === 'active.expert@example.invalid') {
+                    $retriedBody = $body;
+                }
+            },
+        ))->processAvailableBatch(100);
+        self::assertSame($deliveredBody, $retriedBody, 'SMTP ambiguity must preserve the same usable credential on retry.');
+        self::assertSame($linkCountAfterFailure, (int) $this->scalar(
+            'SELECT COUNT(*) FROM {{%document_download_links}} WHERE document_version_id = :version_id',
+            [':version_id' => $result['versionId']],
+        ));
+
+        $legacyToken = bin2hex(random_bytes(32));
+        $this->db()->createCommand()->insert('{{%document_download_links}}', [
+            'document_version_id' => $result['versionId'],
+            'token_hash' => hash('sha256', $legacyToken),
+            'created_at' => Clock::now(),
+        ])->execute();
+        $this->db()->createCommand()->update(
+            '{{%notification_outbox}}',
+            [
+                'status' => 'failed',
+                'body' => 'Legacy body' . "\nСсылка на отчёт: http://legacy.invalid/api/v1/document-links/{$legacyToken}/download",
+                'payload_json' => ['documentLinks' => []],
+            ],
+            ['request_id' => $requestId, 'recipient_email' => 'active.expert@example.invalid'],
+        )->execute();
+        (new NotificationOutboxCredentialCleanup($this->db()))->run();
+
+        $remediatedRow = $this->db()->createCommand(
+            "SELECT body, payload_json, status FROM {{%notification_outbox}} WHERE request_id = :id "
+            . "AND recipient_email = 'active.expert@example.invalid'",
+            [':id' => $requestId],
+        )->queryOne();
+        self::assertSame('failed', $remediatedRow['status']);
+        self::assertStringNotContainsString($legacyToken, $remediatedRow['body']);
+        $remediatedPayload = is_array($remediatedRow['payload_json'])
+            ? $remediatedRow['payload_json']
+            : json_decode($remediatedRow['payload_json'], true, flags: JSON_THROW_ON_ERROR);
+        self::assertContains(
+            ['label' => 'отчёт', 'documentVersionId' => $result['versionId']],
+            $remediatedPayload['documentLinks'],
+        );
+        self::assertSame(1, (int) $this->scalar(
+            'SELECT COUNT(*) FROM {{%document_download_links}} WHERE token_hash = :token_hash',
+            [':token_hash' => hash('sha256', $legacyToken)],
+        ));
+        self::assertNotFalse($repository->findVersionByToken($legacyToken));
 
         $auditRuleId = $this->scalar(
             "SELECT rule_id FROM {{%audit_events}} WHERE event_type = 'request.report_uploaded' "
@@ -155,6 +297,27 @@ final class DocumentRepositoryTest extends IntegrationTestCase
         self::assertNull($outsiderUploadEvent[0]['originalName']);
     }
 
+    private function containsActiveDownloadCredential(string $persistedRepresentation): bool
+    {
+        preg_match_all(
+            '~(?<![a-f0-9])([a-f0-9]{64})(?![a-f0-9])~',
+            $persistedRepresentation,
+            $matches,
+        );
+        foreach ($matches[1] as $token) {
+            if (
+                (int) $this->scalar(
+                    'SELECT COUNT(*) FROM {{%document_download_links}} WHERE token_hash = :token_hash',
+                    [':token_hash' => hash('sha256', $token)],
+                ) > 0
+            ) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
     public function testDeletingReportFromCompletedRequestReturnsItToWorkAndWritesTransition(): void
     {
         $initiator = $this->createUser('dev.it.doc.delete-completed-initiator', 'Инициатор');
@@ -163,7 +326,7 @@ final class DocumentRepositoryTest extends IntegrationTestCase
         $requestId = (int) $request['id'];
         $repository = new DocumentRepository($this->db(), $this->storage());
         $file = $this->tempPdf();
-        $uploaded = $repository->uploadReport(
+        $uploaded = $this->uploadReport(
             $requestId,
             $executor,
             $file['name'],
@@ -175,7 +338,7 @@ final class DocumentRepositoryTest extends IntegrationTestCase
             'status' => 'completed',
         ], ['id' => $requestId])->execute();
 
-        $deletion = $repository->deleteReport(
+        $deletion = $this->deleteReport(
             $requestId,
             (int) $uploaded['lockVersion'],
             $executor,
@@ -222,7 +385,7 @@ final class DocumentRepositoryTest extends IntegrationTestCase
 
         $repository = new DocumentRepository($this->db(), $this->storage());
         $this->expectException(ReportDenied::class);
-        $repository->uploadReport((int) $request['id'], $outsider, $file['name'], $file['mime'], $file['size'], $file['path']);
+        $this->uploadReport((int) $request['id'], $outsider, $file['name'], $file['mime'], $file['size'], $file['path']);
     }
 
     public function testManagerCanDeleteReportAndReturnRequestToWork(): void
@@ -235,7 +398,7 @@ final class DocumentRepositoryTest extends IntegrationTestCase
         $requestId = (int) $request['id'];
         $repository = new DocumentRepository($this->db(), $this->storage());
         $file = $this->tempPdf();
-        $uploaded = $repository->uploadReport(
+        $uploaded = $this->uploadReport(
             $requestId,
             $executor,
             $file['name'],
@@ -244,7 +407,7 @@ final class DocumentRepositoryTest extends IntegrationTestCase
             $file['path'],
         );
 
-        $deleted = $repository->deleteReport($requestId, (int) $uploaded['lockVersion'], $manager, 'Исправление отчёта');
+        $deleted = $this->deleteReport($requestId, (int) $uploaded['lockVersion'], $manager, 'Исправление отчёта');
 
         self::assertSame('in_progress', $deleted['status']);
         self::assertSame(0, (int) $this->scalar(
@@ -263,7 +426,7 @@ final class DocumentRepositoryTest extends IntegrationTestCase
         $requestId = (int) $request['id'];
         $repository = new DocumentRepository($this->db(), $this->storage());
         $file = $this->tempPdf();
-        $uploaded = $repository->uploadReport(
+        $uploaded = $this->uploadReport(
             $requestId,
             $executor,
             $file['name'],
@@ -273,7 +436,7 @@ final class DocumentRepositoryTest extends IntegrationTestCase
         );
 
         try {
-            $repository->deleteReport($requestId, (int) $uploaded['lockVersion'], $outsider, 'Нет полномочий');
+            $this->deleteReport($requestId, (int) $uploaded['lockVersion'], $outsider, 'Нет полномочий');
             self::fail('Report deletion by an unrelated employee must be denied.');
         } catch (ReportDeletionDenied) {
             self::assertSame('opinion_preparation', $this->scalar(
@@ -296,7 +459,7 @@ final class DocumentRepositoryTest extends IntegrationTestCase
         $requestId = (int) $request['id'];
         $repository = new DocumentRepository($this->db(), $this->storage());
         $file = $this->tempPdf();
-        $uploaded = $repository->uploadReport(
+        $uploaded = $this->uploadReport(
             $requestId,
             $executor,
             $file['name'],
@@ -306,7 +469,7 @@ final class DocumentRepositoryTest extends IntegrationTestCase
         );
 
         try {
-            $repository->deleteReport($requestId, (int) $uploaded['lockVersion'] - 1, $executor, 'Устаревшая версия');
+            $this->deleteReport($requestId, (int) $uploaded['lockVersion'] - 1, $executor, 'Устаревшая версия');
             self::fail('Report deletion with a stale lock version must be rejected.');
         } catch (ConcurrentRequestModification) {
             $requestAfterConflict = $this->db()->createCommand(
@@ -344,11 +507,11 @@ final class DocumentRepositoryTest extends IntegrationTestCase
 
         $repository = new DocumentRepository($this->db(), $this->storage());
         $first = $this->tempPdf('%PDF-1.4 revision one');
-        $firstResult = $repository->uploadReport($requestId, $executor, $first['name'], $first['mime'], $first['size'], $first['path']);
+        $firstResult = $this->uploadReport($requestId, $executor, $first['name'], $first['mime'], $first['size'], $first['path']);
         self::assertSame(1, $firstResult['version']);
 
         $second = $this->tempPdf('%PDF-1.4 revision two, slightly longer body');
-        $secondResult = $repository->uploadReport($requestId, $executor, $second['name'], $second['mime'], $second['size'], $second['path']);
+        $secondResult = $this->uploadReport($requestId, $executor, $second['name'], $second['mime'], $second['size'], $second['path']);
         self::assertSame(2, $secondResult['version']);
         self::assertSame($firstResult['lockVersion'], $secondResult['lockVersion']);
 
@@ -359,6 +522,143 @@ final class DocumentRepositoryTest extends IntegrationTestCase
             [':id' => $requestId],
         );
         self::assertSame(2, (int) $versionCount);
+    }
+
+    public function testReportUploadAfterDeletionRevivesOnlyDocumentAndRestartsWorkflow(): void
+    {
+        $initiator = $this->createUser('dev.it.doc.revive-initiator', 'Инициатор');
+        $executor = $this->createUser('dev.it.doc.revive-executor', 'Исполнитель');
+        $request = $this->createInProgressRequestWithExecutor($initiator, $executor, 'report-revive');
+        $requestId = (int) $request['id'];
+        $repository = new DocumentRepository($this->db(), $this->storage());
+        $first = $this->tempPdf('%PDF-1.4 report before deletion');
+        $uploaded = $this->uploadReport(
+            $requestId,
+            $executor,
+            $first['name'],
+            $first['mime'],
+            $first['size'],
+            $first['path'],
+        );
+        $oldToken = bin2hex(random_bytes(32));
+        $this->db()->createCommand()->insert('{{%document_download_links}}', [
+            'document_version_id' => $uploaded['versionId'],
+            'token_hash' => hash('sha256', $oldToken),
+            'created_at' => Clock::now(),
+        ])->execute();
+        $this->deleteReport($requestId, (int) $uploaded['lockVersion'], $executor, 'Исправление отчёта');
+
+        $second = $this->tempPdf('%PDF-1.4 report after deletion');
+        $revived = $this->uploadReport(
+            $requestId,
+            $executor,
+            $second['name'],
+            $second['mime'],
+            $second['size'],
+            $second['path'],
+        );
+
+        self::assertSame($uploaded['id'], $revived['id']);
+        self::assertSame(2, $revived['version']);
+        self::assertSame('opinion_preparation', $revived['status']);
+        self::assertFalse($repository->findVersionByToken($oldToken));
+        self::assertSame(1, (int) $this->scalar(
+            'SELECT COUNT(*) FROM {{%request_document_versions}} WHERE id = :id AND deleted_at IS NOT NULL',
+            [':id' => $uploaded['versionId']],
+        ));
+        self::assertSame(1, (int) $this->scalar(
+            "SELECT COUNT(*) FROM {{%request_transitions}} WHERE request_id = :id "
+            . "AND action = 'upload_report' AND rule_id = 'DOC-012'",
+            [':id' => $requestId],
+        ));
+        self::assertSame(1, (int) $this->scalar(
+            "SELECT COUNT(*) FROM {{%audit_events}} WHERE entity_id = :id "
+            . "AND event_type = 'request.report_uploaded' AND rule_id = 'DOC-012'",
+            [':id' => $requestId],
+        ));
+    }
+
+    #[DataProvider('reportUploadFailureProvider')]
+    public function testFailureAfterStorageWriteRollsBackDatabaseAndRemovesOrphanFile(string $failure): void
+    {
+        $initiator = $this->createUser("dev.it.doc.{$failure}-initiator", 'Инициатор');
+        $executor = $this->createUser("dev.it.doc.{$failure}-executor", 'Исполнитель');
+        if ($failure === 'outbox') {
+            $expert = $this->createUser('dev.it.doc.outbox-expert', 'Эксперт');
+            $this->grantRole($expert, 'expert');
+        }
+        $request = $this->createInProgressRequestWithExecutor($initiator, $executor, "report-{$failure}");
+        $requestId = (int) $request['id'];
+        $file = $this->tempPdf("%PDF-1.4 controlled {$failure} failure");
+        $originalCommandClass = $this->db()->commandClass;
+        $this->db()->commandClass = ControlledReportLifecycleFailureCommand::class;
+        ControlledReportLifecycleFailureCommand::$failure = $failure;
+        try {
+            $this->uploadReport($requestId, $executor, $file['name'], $file['mime'], $file['size'], $file['path']);
+            self::fail("Expected controlled {$failure} failure.");
+        } catch (\RuntimeException $error) {
+            self::assertStringContainsString("controlled report upload {$failure} failure", $error->getMessage());
+        } finally {
+            ControlledReportLifecycleFailureCommand::$failure = null;
+            $this->db()->commandClass = $originalCommandClass;
+        }
+
+        self::assertSame([], $this->storedFiles());
+        self::assertSame('in_progress', $this->scalar(
+            'SELECT status FROM {{%requests}} WHERE id = :id',
+            [':id' => $requestId],
+        ));
+        self::assertSame(0, (int) $this->scalar(
+            "SELECT COUNT(*) FROM {{%request_documents}} WHERE request_id = :id AND document_type = 'report'",
+            [':id' => $requestId],
+        ));
+        self::assertSame(0, (int) $this->scalar(
+            "SELECT COUNT(*) FROM {{%request_transitions}} WHERE request_id = :id AND action = 'upload_report'",
+            [':id' => $requestId],
+        ));
+        self::assertSame(0, (int) $this->scalar(
+            "SELECT COUNT(*) FROM {{%audit_events}} WHERE entity_id = :id AND event_type = 'request.report_uploaded'",
+            [':id' => $requestId],
+        ));
+        self::assertSame(0, (int) $this->scalar(
+            "SELECT COUNT(*) FROM {{%notification_outbox}} WHERE request_id = :id "
+            . "AND event_type = 'request.report_uploaded'",
+            [':id' => $requestId],
+        ));
+    }
+
+    public function testRejectedReportMutationsKeepTheirAuditContracts(): void
+    {
+        $initiator = $this->createUser('dev.it.doc.rejected-initiator', 'Инициатор');
+        $actor = $this->createUser('dev.it.doc.rejected-actor', 'Сотрудник');
+        $request = $this->createInProgressRequestWithExecutor($initiator, $actor, 'report-rejected-audit');
+        $requestId = (int) $request['id'];
+        $lifecycle = new ReportLifecycle(new ReportLifecyclePersistenceAdapter($this->db(), $this->storage()));
+
+        $lifecycle->recordRejectedUpload($requestId, $actor, 'DOC-002A');
+        $lifecycle->recordRejectedDeletion($requestId, $actor, 'DOC-011');
+
+        $events = $this->db()->createCommand(
+            "SELECT event_type, rule_id, payload_json FROM {{%audit_events}} WHERE entity_id = :id "
+            . "AND event_type IN ('request.report_upload_rejected', 'request.report_deletion_rejected') "
+            . 'ORDER BY id',
+            [':id' => $requestId],
+        )->queryAll();
+        self::assertSame(['request.report_upload_rejected', 'request.report_deletion_rejected'], array_column($events, 'event_type'));
+        self::assertSame(['DOC-002A', 'DOC-011'], array_column($events, 'rule_id'));
+        foreach ($events as $event) {
+            $payload = is_array($event['payload_json'])
+                ? $event['payload_json']
+                : json_decode($event['payload_json'], true, flags: JSON_THROW_ON_ERROR);
+            self::assertSame(['outcome' => 'rejected'], $payload);
+        }
+    }
+
+    /** @return iterable<string, array{string}> */
+    public static function reportUploadFailureProvider(): iterable
+    {
+        yield 'success audit failure' => ['audit'];
+        yield 'notification outbox failure' => ['outbox'];
     }
 
     public function testAssignedExpertCanDownloadTheReportButUnrelatedEmployeeCannot(): void
@@ -376,7 +676,7 @@ final class DocumentRepositoryTest extends IntegrationTestCase
 
         $repository = new DocumentRepository($this->db(), $this->storage());
         $file = $this->tempPdf();
-        $uploaded = $repository->uploadReport($requestId, $executor, $file['name'], $file['mime'], $file['size'], $file['path']);
+        $uploaded = $this->uploadReport($requestId, $executor, $file['name'], $file['mime'], $file['size'], $file['path']);
 
         $this->db()->createCommand()->insert('{{%request_assignments}}', [
             'request_id' => $requestId,
@@ -412,5 +712,25 @@ final class DocumentRepositoryTest extends IntegrationTestCase
             }
         }
         rmdir($path);
+    }
+
+    /** @return list<string> */
+    private function storedFiles(): array
+    {
+        if ($this->storageRoot === null || !is_dir($this->storageRoot)) {
+            return [];
+        }
+        $files = [];
+        $iterator = new \RecursiveIteratorIterator(new \RecursiveDirectoryIterator(
+            $this->storageRoot,
+            \FilesystemIterator::SKIP_DOTS,
+        ));
+        foreach ($iterator as $item) {
+            if ($item->isFile()) {
+                $files[] = $item->getPathname();
+            }
+        }
+        sort($files);
+        return $files;
     }
 }
