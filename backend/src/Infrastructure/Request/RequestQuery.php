@@ -56,13 +56,14 @@ final class RequestQuery
         )->queryAll();
     }
 
-    /** @return array{items: list<array<string, mixed>>, total: int, page: int, pageSize: int, pageCount: int, counts: array{active: int, all: int, mine: int}} */
+    /** @param list<string>|string|null $status
+     * @return array{items: list<array<string, mixed>>, total: int, page: int, pageSize: int, pageCount: int, counts: array{active: int, all: int, mine: int}} */
     public function findPage(
         int $actorId,
         int $page,
         int $pageSize,
         string $tab,
-        ?string $status,
+        string|array|null $status,
         string $query,
         string $sort,
         ?string $attention = null,
@@ -75,10 +76,7 @@ final class RequestQuery
             $where[] = 'r.initiator_id = :filter_actor';
             $filterParams[':filter_actor'] = $actorId;
         }
-        if ($status !== null) {
-            $where[] = 'r.status = :filter_status';
-            $filterParams[':filter_status'] = $status;
-        }
+        (new RequestStatusScope())->apply($where, $filterParams, $status);
         if ($query !== '') {
             $where[] = "(LOCATE(:filter_query, LPAD(CAST(r.number AS CHAR), 6, '0')) > 0 "
                 . 'OR LOCATE(:filter_query, r.product_name) > 0 OR LOCATE(:filter_query, u.display_name) > 0 '
@@ -100,7 +98,6 @@ final class RequestQuery
             . 'AND executor_assignment.valid_to IS NULL) '
             . 'LEFT JOIN {{%users}} executor ON executor.id = current_executor.user_id ';
         $countJoins = $query === '' ? ' FROM {{%requests}} r' : $joins;
-
         $total = (int) $this->db->createCommand(
             'SELECT COUNT(DISTINCT r.id)' . $countJoins . $whereSql,
             $filterParams,
@@ -112,6 +109,7 @@ final class RequestQuery
             'SELECT r.id, r.number, r.status, r.color, r.source, r.is_archived, r.product_name, r.manufacturer, '
             . 'r.supplier, r.sample_quantity, r.legacy_sample_quantity_raw, r.test_method, '
             . 'r.lock_version AS lockVersion, r.created_at, '
+            . RequestAgingSql::selects()
             . "u.display_name AS initiator_name, COALESCE(r.department_name, 'Подразделение не указано') AS department, "
             . 'executor.id AS executor_id, executor.display_name AS executor_name, '
             . 'expert.id AS expert_id, expert.display_name AS expert_name, '
@@ -291,36 +289,10 @@ final class RequestQuery
         ];
     }
 
-    /** @return array{categories: list<array{id: string, title: string, description: string, count: int}>} */
+    /** @return array{categories: list<array{id: string, title: string, description: string, count: int}>, operational_summary: array<string, mixed>} */
     public function attentionDashboard(int $actorId): array
     {
-        $queues = AttentionQueue::cases();
-        $scope = new AttentionQueueScope();
-        $columns = [];
-        foreach ($queues as $queue) {
-            $columns[] = 'SUM(CASE WHEN ' . $scope->condition($queue) . ' THEN 1 ELSE 0 END) AS `'
-                . $queue->value . '`';
-        }
-        $counts = $this->db->createCommand(
-            'SELECT ' . implode(', ', $columns) . ' FROM {{%requests}} r',
-            [':attention_actor' => $actorId],
-        )->queryOne();
-
-        $categories = [];
-        foreach ($queues as $queue) {
-            $count = (int) ($counts[$queue->value] ?? 0);
-            if ($count === 0) {
-                continue;
-            }
-            $categories[] = [
-                'id' => $queue->value,
-                'title' => $queue->title(),
-                'description' => $queue->description(),
-                'count' => $count,
-            ];
-        }
-
-        return ['categories' => $categories];
+        return (new RequestDashboardQuery($this->db))->findFor($actorId);
     }
 
     /** @return array{item: array<string, mixed>, history: list<array<string, mixed>>, comments: list<array<string, mixed>>, commentsPage: array{hasMore: bool, nextBeforeId: int|null}, documents: list<array<string, mixed>>} */
@@ -330,7 +302,8 @@ final class RequestQuery
             'SELECT r.id, r.number, r.status, r.color, r.source, r.is_archived, r.product_name, r.manufacturer, '
             . 'r.supplier, r.sample_quantity, r.legacy_sample_quantity_raw, r.test_method, '
             . 'r.lock_version AS lockVersion, '
-            . "r.created_at, r.updated_at, u.display_name AS initiator_name, "
+            . "r.created_at, r.updated_at, u.display_name AS initiator_name, (r.initiator_id = :initiator_actor) AS is_initiator, "
+            . RequestAgingSql::selects(includeStateReason: true)
             . "COALESCE(r.department_name, 'Подразделение не указано') AS department, "
             . "(EXISTS(SELECT 1 FROM {{%users}} department_actor JOIN {{%user_roles}} department_ur "
             . "ON department_ur.user_id = department_actor.id JOIN {{%roles}} department_role "
@@ -421,7 +394,7 @@ final class RequestQuery
             . 'WHERE r.id = :request_id',
             [
                 ':request_id' => $requestId,
-                ':actor_id' => $actorId,
+                ':actor_id' => $actorId, ':initiator_actor' => $actorId,
                 ':department_actor' => $actorId,
                 ':color_actor' => $actorId,
                 ':assign_actor' => $actorId,
@@ -460,7 +433,6 @@ final class RequestQuery
                 }
             }
         }
-
         $history = $this->db->createCommand(
             'SELECT t.id, \'transition\' AS kind, t.action, t.from_status AS fromStatus, '
             . "t.to_status AS toStatus, t.rule_id AS ruleId, t.reason, DATE_FORMAT(t.created_at, '%Y-%m-%dT%H:%i:%s.%fZ') AS occurredAt, "
@@ -497,8 +469,7 @@ final class RequestQuery
             . 'FROM {{%audit_events}} a '
             . 'JOIN {{%users}} u ON u.id = a.actor_id '
             // assign_executor/claim_expert/reassign_expert пишут одинаковое
-            // поле assignment_id в payload_json (см. RequestRepository::
-            // assignExecutor()/performExpertAssignment()) — резолвим имя
+            // поле assignment_id в payload_json — резолвим имя
             // адресата действия через саму запись назначения, а не парсим
             // executor_id/expert_id по отдельности (разные ключи на разные
             // события): проще и работает для report_deleted (NULL) тоже.
@@ -516,11 +487,11 @@ final class RequestQuery
             . "'request.expert_reassigned', 'request.report_deleted', 'request.department_changed') "
             . "AND (a.event_type <> 'request.report_deleted' OR NOT EXISTS (SELECT 1 FROM {{%request_transitions}} deletion_transition "
             . "WHERE deletion_transition.request_id = a.entity_id AND deletion_transition.action = 'delete_report' "
-            . 'AND deletion_transition.created_at = a.created_at)) '
+            . 'AND deletion_transition.created_at = a.created_at)) ' . RequestHistorySql::missingCreation()
             . 'ORDER BY occurredAt DESC, kind DESC, id DESC',
             [
                 ':transition_request_id' => $requestId,
-                ':audit_request_id' => $requestId,
+                ':audit_request_id' => $requestId, ':creation_request_id' => $requestId,
                 ':history_report_viewer' => $actorId,
                 ':history_report_privileged_viewer' => $actorId,
             ],

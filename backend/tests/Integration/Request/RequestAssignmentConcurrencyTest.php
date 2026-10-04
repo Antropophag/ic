@@ -4,8 +4,7 @@ declare(strict_types=1);
 
 namespace Tests\Integration\Request;
 
-use App\Application\Request\CreateRequestInput;
-use App\Infrastructure\Request\RequestRepository;
+use App\Http\Request\CreateRequest as CreateRequestInput;
 use PHPUnit\Framework\TestCase;
 use yii\db\Connection;
 
@@ -36,7 +35,7 @@ final class RequestAssignmentConcurrencyTest extends TestCase
             $input->supplier = 'Test supplier';
             $input->sampleQuantity = 1;
             $input->testMethod = 'Controlled two-session assignment';
-            $request = (new RequestRepository($db))->create($input, $users['initiator']);
+            $request = (new \App\Application\Request\UseCase\CreateRequest(new \App\Infrastructure\Persistence\Request\RequestCreationPersistenceAdapter($db)))->execute($input->toCommand($users['initiator']))->toArray();
             $requestId = (int) $request['id'];
             $version = (int) $request['lock_version'];
 
@@ -146,7 +145,7 @@ final class RequestAssignmentConcurrencyTest extends TestCase
             $deadline = microtime(true) + 10.0;
             while (!file_exists($argv[6])) { if (microtime(true) >= $deadline) { exit(2); } usleep(1000); }
             try {
-                (new \App\Infrastructure\Request\RequestRepository($db))->assignExecutor((int) $argv[1], (int) $argv[2], (int) $argv[3], (int) $argv[4]);
+                (new \App\Application\Request\UseCase\AssignExecutor(new \App\Infrastructure\Persistence\Request\ExecutorAssignmentPersistenceAdapter($db)))->execute(new \App\Application\Request\Command\AssignExecutorCommand((int) $argv[1], (int) $argv[2], (int) $argv[3], (int) $argv[4]));
                 $result = ['outcome' => 'ok', 'executor' => (int) $argv[2]];
             } catch (\App\Domain\Request\ConcurrentRequestModification) {
                 $result = ['outcome' => 'conflict', 'executor' => (int) $argv[2]];

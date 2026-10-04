@@ -24,6 +24,8 @@ import {
 import AppIcon from "./AppIcon.vue";
 import AppModal from "./AppModal.vue";
 import HelpArticle from "./HelpArticle.vue";
+import OperationalMonitorToggle from "./OperationalMonitorToggle.vue";
+import OperationalSummary from "./OperationalSummary.vue";
 import {
   REQUEST_STATUS_OPTIONS,
   avatarRoleClass,
@@ -37,9 +39,7 @@ const props = defineProps({
   currentUserRoles: { type: Array, default: () => [] },
   refreshTrigger: { type: Number, default: 0 },
 });
-const emit = defineEmits([
-  "select-request",
-]);
+const emit = defineEmits(["select-request"]);
 const ATTENTION_ICONS = Object.freeze({
   assign_executor: "user",
   start_or_resume_work: "play",
@@ -51,14 +51,12 @@ const ATTENTION_ICONS = Object.freeze({
 const PAGE_SIZE_OPTIONS = REGISTRY_PAGE_SIZES;
 const activeTab = ref("active");
 const activeAttention = ref("");
-const attentionCategories = ref([]);
-const dashboardLoading = ref(true);
-const dashboardError = ref("");
-const showDashboardHelp = ref(false);
+const attentionCategories = ref([]), operationalSummary = ref(null), showOperationalSummary = ref(false);
+const dashboardLoading = ref(true), dashboardError = ref(""), showDashboardHelp = ref(false);
 const dashboardHelpTrigger = ref(null);
 const dashboardHelpDrawer = ref(null);
 const query = ref("");
-const statusFilter = ref("");
+const statusFilters = ref([]), selectedStatusOptions = computed(() => REQUEST_STATUS_OPTIONS.filter(status => statusFilters.value.includes(status.value)));
 const sortDirection = ref("desc");
 const currentPage = ref(1);
 const pageSize = ref(readRegistryPageSize());
@@ -143,7 +141,7 @@ async function clearCreateDraft() {
   resetCreateForm({ removeStored: true });
 }
 
-const canUsePersonalRequests = computed(() => canCreateRequest(props.currentUserRoles));
+const canUsePersonalRequests = computed(() => canCreateRequest(props.currentUserRoles)), canViewOperationalExecutors = computed(() => props.currentUserRoles.some(role => ["ic_manager", "laboratory_manager"].includes(role)));
 const tabs = computed(() => {
   const items = [
     { id: "active", label: "Активные заявки", count: registryPage.counts.active },
@@ -176,7 +174,7 @@ async function loadRequests({ rethrow = false } = {}) {
       page: currentPage.value,
       pageSize: pageSize.value,
       tab: activeTab.value,
-      status: statusFilter.value,
+      status: selectedStatusOptions.value.map(status => status.value).join(','),
       query: query.value.trim(),
       sort: sortDirection.value,
       attention: activeAttention.value,
@@ -214,6 +212,7 @@ async function loadDashboard() {
     if (!dashboardGuard.isCurrent(token, true)) return;
     dashboardError.value = "";
     attentionCategories.value = result.categories || [];
+    operationalSummary.value = result.operational_summary || null;
     if (activeAttention.value && !attentionCategories.value.some(category => category.id === activeAttention.value)) {
       activeAttention.value = "";
     }
@@ -314,7 +313,13 @@ function handleDashboardHelpKeydown(event) {
 
 function clearRegistryFilters() {
   query.value = "";
-  statusFilter.value = "";
+  statusFilters.value = [];
+}
+
+function toggleStatusFilter(value) {
+  statusFilters.value = statusFilters.value.includes(value)
+    ? statusFilters.value.filter(status => status !== value)
+    : [...statusFilters.value, value];
 }
 
 function commentAvatarClass(item) {
@@ -328,7 +333,7 @@ function reloadFirstPage() {
   loadRequests();
 }
 
-watch([activeTab, activeAttention, statusFilter, sortDirection], reloadFirstPage);
+watch([activeTab, activeAttention, statusFilters, sortDirection], reloadFirstPage);
 watch(query, () => {
   registryLoadLifecycle.scheduleReload(reloadFirstPage);
 });
@@ -541,30 +546,25 @@ onBeforeUnmount(() => {
             <span class="tab-label">{{ tab.label }}</span><span class="tab-count">{{ tab.count }}</span>
           </button>
         </div>
-        <button v-if="canUsePersonalRequests" class="primary tabs-cta" @click="showCreate = true">
-          <AppIcon name="plus" :size="16" />
-          Новая заявка
-        </button>
+        <div class="registry-head-actions">
+          <OperationalMonitorToggle
+            v-if="operationalSummary"
+            :open="showOperationalSummary"
+            @toggle="showOperationalSummary = !showOperationalSummary"
+          />
+          <button v-if="canUsePersonalRequests" class="primary tabs-cta" @click="showCreate = true">
+            <AppIcon name="plus" :size="16" /> Новая заявка
+          </button>
+        </div>
       </div>
+      <OperationalSummary v-if="operationalSummary" v-show="showOperationalSummary" :summary="operationalSummary" :show-executors="canViewOperationalExecutors" />
       <div class="toolbar">
         <label class="search">
           <AppIcon name="search" :size="17" />
           <input v-model="query" type="search" placeholder="Поиск по заявкам" aria-label="Поиск по заявкам" />
         </label>
-        <label class="status-filter">
-          <span class="visually-hidden">Статус заявки</span>
-          <select v-model="statusFilter">
-            <option value="">Все статусы</option>
-            <option
-              v-for="status in REQUEST_STATUS_OPTIONS"
-              :key="status.value"
-              :value="status.value"
-            >
-              {{ status.label }}
-            </option>
-          </select>
-        </label>
-        <button v-if="query || statusFilter" type="button" class="toolbar-clear" @click="clearRegistryFilters">
+        <details class="status-filter"><summary aria-label="Фильтр по статусу заявки"><span v-if="selectedStatusOptions.length === 1" class="badge request-status" :class="selectedStatusOptions[0].tone">{{ selectedStatusOptions[0].label }}</span><span v-else-if="selectedStatusOptions.length">Выбрано: {{ selectedStatusOptions.length }}</span><span v-else>Статусы</span></summary><div class="status-filter-menu" role="group" aria-label="Статус заявки"><label v-for="status in REQUEST_STATUS_OPTIONS" :key="status.value" :class="{ active: statusFilters.includes(status.value) }"><input type="checkbox" :checked="statusFilters.includes(status.value)" @change="toggleStatusFilter(status.value)" /><span class="badge request-status" :class="status.tone">{{ status.label }}</span></label></div></details>
+        <button v-if="query || statusFilters.length" type="button" class="toolbar-clear" @click="clearRegistryFilters">
           Сбросить
         </button>
         <button type="button" class="registry-notifications" :aria-label="newNotifications.length ? 'Есть новые события в заявках' : 'Новых событий в заявках нет'" @click="openNotifications">
@@ -624,7 +624,7 @@ onBeforeUnmount(() => {
               </td>
               <td>{{ item.executor }}</td>
               <td>
-                <span class="badge" :class="item.tone">{{ item.compactStatus }}</span>
+                <span class="badge request-status" :class="item.tone">{{ item.compactStatus }}</span>
               </td>
               <td class="registry-indicator-cell">
                 <span
@@ -686,8 +686,8 @@ onBeforeUnmount(() => {
         <div v-if="!registryLoading && !registryError && !paged.total" class="empty">
           <div class="empty-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6" /><path d="m15 15 4 4" /></svg></div>
           <h3>Ничего не найдено</h3>
-          <p>{{ query || statusFilter ? "Измените запрос или сбросьте фильтры." : "В этом представлении пока нет заявок." }}</p>
-          <button v-if="query || statusFilter" type="button" class="secondary empty-action" @click="clearRegistryFilters">Сбросить фильтры</button>
+          <p>{{ query || statusFilters.length ? "Измените запрос или сбросьте фильтры." : "В этом представлении пока нет заявок." }}</p>
+          <button v-if="query || statusFilters.length" type="button" class="secondary empty-action" @click="clearRegistryFilters">Сбросить фильтры</button>
         </div>
       </div>
       <footer v-if="paged.total" class="pagination">
