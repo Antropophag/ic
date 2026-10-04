@@ -1,0 +1,125 @@
+/* Generated from shlz-ui 1864b3c0cb327485f08c48b14c88730ec852b03c. Run frontend/scripts/sync-shlz-styles.mjs to update. */
+.shlz-button {
+  --shlz-button-size: var(--shlz-semantic-control-height-medium);
+
+  display: inline-flex;
+  gap: var(--shlz-source-spacing-8);
+  align-items: center;
+  justify-content: center;
+  min-inline-size: var(--shlz-button-size);
+  max-inline-size: 100%;
+  min-block-size: var(--shlz-button-size);
+  padding: 0 var(--shlz-source-spacing-16);
+  color: var(--shlz-semantic-color-text-primary);
+  background: var(--shlz-source-color-blue-blue-50);
+  border: 0;
+  border-radius: var(--shlz-source-radius-max);
+  font-family: var(--shlz-semantic-font-family);
+  font-size: 15px;
+  font-weight: 400;
+  line-height: 19.5px;
+  letter-spacing: -0.01em;
+  text-decoration: none;
+  overflow-wrap: anywhere;
+  cursor: pointer;
+}
+
+.shlz-button:hover:not(:disabled),
+.shlz-button--visual-hover {
+  color: var(--shlz-semantic-color-action-primary);
+  background: var(--shlz-source-color-blue-blue-50);
+}
+
+.shlz-button:active:not(:disabled),
+.shlz-button--visual-active {
+  color: var(--shlz-source-color-blue-blue-300);
+  background: var(--shlz-source-color-blue-blue-100);
+}
+
+.shlz-button:focus-visible {
+  outline: var(--shlz-semantic-border-width-icon) solid
+    var(--shlz-semantic-color-action-primary);
+  outline-offset: 2px;
+}
+
+.shlz-button:disabled {
+  color: var(--shlz-semantic-color-text-secondary);
+  background: var(--shlz-source-color-blue-blue-50);
+  cursor: not-allowed;
+}
+
+.shlz-button--primary {
+  color: var(--shlz-semantic-color-text-inverse);
+  background: var(--shlz-semantic-color-action-primary);
+}
+
+.shlz-button--primary:hover:not(:disabled),
+.shlz-button--primary.shlz-button--visual-hover {
+  color: var(--shlz-semantic-color-text-inverse);
+
+  /* Buttons.svg FACT: primary hover is #425ba6; it is not a palette token. */
+  background: #425ba6;
+}
+
+.shlz-button--primary:active:not(:disabled),
+.shlz-button--primary.shlz-button--visual-active {
+  color: var(--shlz-semantic-color-text-inverse);
+  background: var(--shlz-source-color-blue-blue-300);
+}
+
+.shlz-button--primary:disabled {
+  color: var(--shlz-semantic-color-text-inverse);
+
+  /* Buttons.svg FACT: primary disabled fill is component-specific. */
+  background: #7383be;
+}
+
+.shlz-button--text {
+  color: var(--shlz-semantic-color-text-primary);
+  background: var(--shlz-semantic-color-surface-base);
+}
+
+.shlz-button--text:hover:not(:disabled),
+.shlz-button--text.shlz-button--visual-hover {
+  color: var(--shlz-semantic-color-action-primary);
+  background: var(--shlz-source-color-blue-blue-50);
+}
+
+.shlz-button--text:active:not(:disabled),
+.shlz-button--text.shlz-button--visual-active {
+  color: var(--shlz-source-color-blue-blue-300);
+  background: var(--shlz-source-color-blue-blue-100);
+}
+
+.shlz-button--text:disabled {
+  color: var(--shlz-semantic-color-text-secondary);
+  background: var(--shlz-semantic-color-surface-base);
+}
+
+.shlz-button--sm {
+  --shlz-button-size: var(--shlz-semantic-control-height-small);
+
+  padding-inline: 12px; /* Buttons.svg component geometry */
+  font-size: 14px;
+  line-height: 18.2px;
+}
+
+.shlz-button--xs {
+  /* FACT: Buttons.svg contains a distinct 26px row; not a system-wide control token. */
+  --shlz-button-size: 26px;
+
+  padding-inline: 12px; /* Buttons.svg component geometry */
+  font-size: 14px;
+  line-height: 18.2px;
+}
+
+.shlz-button--icon {
+  padding-inline: 0;
+}
+
+.shlz-button__icon {
+  inline-size: 1.25em;
+  block-size: 1.25em;
+  flex: none;
+  color: inherit;
+}

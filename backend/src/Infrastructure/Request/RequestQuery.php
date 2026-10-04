@@ -56,7 +56,10 @@ final class RequestQuery
         )->queryAll();
     }
 
-    /** @return array{items: list<array<string, mixed>>, total: int, page: int, pageSize: int, pageCount: int, counts: array{active: int, all: int, mine: int}} */
+    /**
+     * @param list<string> $colors
+     * @return array{items: list<array<string, mixed>>, total: int, page: int, pageSize: int, pageCount: int, counts: array{active: int, all: int, mine: int}}
+     */
     public function findPage(
         int $actorId,
         int $page,
@@ -66,6 +69,7 @@ final class RequestQuery
         string $query,
         string $sort,
         ?string $attention = null,
+        array $colors = [],
     ): array {
         $where = [];
         $filterParams = [];
@@ -78,6 +82,15 @@ final class RequestQuery
         if ($status !== null) {
             $where[] = 'r.status = :filter_status';
             $filterParams[':filter_status'] = $status;
+        }
+        if ($colors !== []) {
+            $placeholders = [];
+            foreach ($colors as $index => $color) {
+                $key = ':filter_color_' . $index;
+                $placeholders[] = $key;
+                $filterParams[$key] = $color;
+            }
+            $where[] = 'r.color IN (' . implode(', ', $placeholders) . ')';
         }
         if ($query !== '') {
             $where[] = "(LOCATE(:filter_query, LPAD(CAST(r.number AS CHAR), 6, '0')) > 0 "

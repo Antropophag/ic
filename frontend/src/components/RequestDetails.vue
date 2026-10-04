@@ -4,11 +4,12 @@ import { requestApi } from '../api'
 import AppIcon from './AppIcon.vue'
 import AppModal from './AppModal.vue'
 import HelpArticle from './HelpArticle.vue'
+import RequestStatus from './RequestStatus.vue'
 import { createConfirmDialog } from '../confirmDialog'
 import { confirmRequestAction } from '../confirmRequestAction'
 import { triggerBlobDownload } from '../download'
 import { createLatestRequestGuard } from '../latestRequestGuard'
-import { REQUEST_COLORS, avatarRoleClass, canStartNow, canSubmitComment, commentFromApi, documentFromApi, documentKind, fromApi, historyFromApi, initialsFor, newestFirstFeed, withoutStaleActions } from '../registry'
+import { REQUEST_COLORS, testingDirectionLabel, avatarRoleClass, canStartNow, canSubmitComment, commentFromApi, documentFromApi, documentKind, fromApi, historyFromApi, initialsFor, newestFirstFeed, withoutStaleActions } from '../registry'
 
 const props = defineProps({ requestId: { type: Number, required: true }, currentInitials: { type: String, default: '' }, initialWarning: { type: String, default: '' } })
 const emit = defineEmits(['loaded', 'unavailable', 'updated', 'close'])
@@ -129,11 +130,6 @@ function eventIconTone(action) {
   return 'neutral'
 }
 
-const COLOR_LABELS = { white: 'Без цвета', red: 'Красный', orange: 'Оранжевый', blue: 'Синий', violet: 'Фиолетовый', green: 'Зелёный' }
-
-function colorLabel(color) {
-  return COLOR_LABELS[color] || color
-}
 const processSteps = computed(() => {
   const labels = ['Зарегистрирована', 'В работе', 'Экспертиза', 'Контроль СБ', 'Завершена']
   const statusIndex = {
@@ -585,7 +581,7 @@ async function recoverConflict(requestId, message) {
 }
 
 async function setColorMark(color) {
-  if (colorLoading.value || color === selected.value.color) return
+  if (colorLoading.value || color === selected.value.colorValue) return
   const requestId = selected.value.backendId
   const requestToken = colorRequestGuard.begin(requestId)
   colorLoading.value = true
@@ -598,7 +594,7 @@ async function setColorMark(color) {
       colorMenu.value?.removeAttribute('open')
     } catch {
       if (!colorRequestGuard.isCurrent(requestToken, selected.value?.backendId)) return
-      colorError.value = 'Цвет сохранён, но данные на экране не обновились.'
+      colorError.value = 'Направление сохранено, но данные на экране не обновились.'
     }
   } catch (error) {
     if (!colorRequestGuard.isCurrent(requestToken, selected.value?.backendId)) return
@@ -606,8 +602,8 @@ async function setColorMark(color) {
       await recoverConflict(requestId, 'Заявка уже изменена.')
     } else {
       colorError.value = error.status === 403
-        ? 'У вас нет права менять цвет заявки.'
-        : 'Не удалось сохранить цвет. Повторите попытку.'
+        ? 'У вас нет права менять направление испытаний.'
+        : 'Не удалось сохранить направление испытаний. Повторите попытку.'
     }
   } finally {
     if (colorRequestGuard.isCurrent(requestToken, selected.value?.backendId)) {
@@ -1081,13 +1077,14 @@ onBeforeUnmount(() => {
         <AppIcon class="request-corner-arrow" name="arrow-left" :size="16" />
       </button>
       <div class="object-status-row">
-        <span class="badge" :class="selected.tone">{{ selected.status }}</span>
+        <RequestStatus :label="selected.status" />
         <details v-if="selected.canSetColor" ref="colorMenu" class="request-color-control">
-          <summary><span class="request-color-dot" :class="selected.color" aria-hidden="true"></span>Цвет</summary>
-          <div class="request-color-menu" role="group" aria-label="Цвет заявки в реестре">
-            <button v-for="color in REQUEST_COLORS" :key="color" type="button" :class="{ active: selected.color === color }" :disabled="colorLoading" @click="setColorMark(color)"><span>{{ colorLabel(color) }}</span><span class="request-color-dot" :class="color" aria-hidden="true"></span></button>
-          </div>
+          <summary :aria-label="`Направление испытаний: ${selected.directionLabel}`"><span class="request-color-dot" :class="selected.color" aria-hidden="true"></span>{{ selected.directionLabel }}<AppIcon class="request-direction-chevron" name="chevron-right" :size="12" /></summary>
+          <fieldset class="request-color-menu" aria-label="Направление испытаний">
+            <button v-for="color in REQUEST_COLORS" :key="color" type="button" :class="{ active: selected.colorValue === color }" :aria-pressed="selected.colorValue === color" :disabled="colorLoading" @click="setColorMark(color)"><span>{{ testingDirectionLabel(color) }}</span><span class="request-color-dot" :class="color" aria-hidden="true"></span></button>
+          </fieldset>
         </details>
+        <span v-else class="request-direction-readonly" :title="`Направление испытаний: ${selected.directionLabel}`"><span class="request-color-dot" :class="selected.color" aria-hidden="true"></span>{{ selected.directionLabel }}</span>
       </div>
       <p v-if="colorError" class="action-error">{{ colorError }}</p>
       <h2 class="object-title">{{ selected.product }}</h2>
@@ -1182,20 +1179,20 @@ onBeforeUnmount(() => {
       </aside>
     </div>
   </section>
-  <div v-if="showAuditDrawer" class="request-drawer-overlay" @click.self="closeAuditDrawer">
-    <aside ref="auditDrawer" class="request-drawer" role="dialog" aria-modal="true" aria-labelledby="audit-title" @keydown="handleAuditKeydown">
+  <div v-if="showAuditDrawer" class="request-drawer-overlay" @click.self="closeAuditDrawer" @keydown="handleAuditKeydown">
+    <dialog ref="auditDrawer" open class="request-drawer" aria-modal="true" aria-labelledby="audit-title">
       <header class="request-drawer-head"><div><p>Заявка №{{ selected.id }}</p><h2 id="audit-title">История процесса</h2></div><button type="button" aria-label="Закрыть историю" @click="closeAuditDrawer"><AppIcon name="close" /></button></header>
       <div class="request-drawer-body">
         <div v-for="entry in selected.history || []" :key="entry.id" class="request-audit-entry"><span class="request-audit-node" aria-hidden="true"></span><div><b>{{ entry.actor }}</b><p>{{ entry.description }}</p><time>{{ entry.occurredAt }}</time><div v-if="entry.versionId && entry.originalName" class="request-audit-file"><button type="button" class="request-audit-file-open app-tooltip" data-tooltip="Открыть документ" :aria-label="`Открыть ${entry.originalName}`" @click="openDocument(entry)"><span class="request-file-thumb request-audit-file-thumb" aria-hidden="true"><span class="request-file-lines"></span><span class="request-file-type" :class="fileTypeClassFor(entry)">{{ fileExtensionFor(entry) }}</span></span><span><b :title="entry.originalName">{{ entry.originalName }}</b><small>Открыть вложение</small></span></button><button type="button" class="request-file-action app-tooltip" data-tooltip="Скачать документ" :aria-label="`Скачать ${entry.originalName}`" @click.stop="downloadDocument(entry)"><AppIcon name="download" :size="14" /></button></div></div></div>
         <p v-if="!selected.history?.length" class="placeholder-copy">История процесса пока пуста.</p>
       </div>
-    </aside>
+    </dialog>
   </div>
-  <div v-if="showHelpDrawer && actionHelp" class="request-drawer-overlay" @click.self="closeHelpDrawer">
-    <aside ref="helpDrawer" class="request-drawer request-help-drawer" role="dialog" aria-modal="true" aria-labelledby="help-title" @keydown="handleHelpKeydown">
+  <div v-if="showHelpDrawer && actionHelp" class="request-drawer-overlay" @click.self="closeHelpDrawer" @keydown="handleHelpKeydown">
+    <dialog ref="helpDrawer" open class="request-drawer request-help-drawer" aria-modal="true" aria-labelledby="help-title">
       <header class="request-drawer-head"><div><p>Заявка №{{ selected.id }}</p><h2 id="help-title">Справка</h2></div><button type="button" aria-label="Закрыть справку" @click="closeHelpDrawer"><AppIcon name="close" /></button></header>
       <HelpArticle :src="actionHelp.href" />
-    </aside>
+    </dialog>
   </div>
   <AppModal :open="confirmDialog.state.open" title="Подтвердите действие" title-id="request-confirm-title" description-id="request-confirm-message" size="small" alert @close="confirmDialog.cancel">
     <p id="request-confirm-message">{{ confirmDialog.state.message }}</p>

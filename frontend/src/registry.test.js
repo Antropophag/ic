@@ -127,7 +127,6 @@ it('falls back to white for a missing or unknown color', () => {
 it('hides the start action after the request leaves registered status', () => {
   expect(fromApi({ ...registered, status: 'in_progress', can_start: 1 })).toMatchObject({
     status: 'Заявка в работе',
-    tone: 'cyan',
     canStart: false,
   })
 })
@@ -189,7 +188,6 @@ it('maps suspend and resume history actions to user-facing labels', () => {
 it('maps the report stage, permission and history label', () => {
   expect(fromApi({ ...registered, status: 'opinion_preparation', can_upload_report: 1, can_claim_expert: 1 })).toMatchObject({
     status: 'Подготовка заключения',
-    tone: 'violet',
     canUploadReport: true,
     canClaimExpert: true,
   })

@@ -63,6 +63,36 @@ afterEach(() => {
   document.body.replaceChildren()
 })
 
+it('keeps number sorting and resets the scroll position', async () => {
+  const mounted = mountRegistry(['employee'])
+  await flushRequests()
+  const scroll = document.querySelector('.table-wrap')
+  scroll.scrollTop = 300
+  document.querySelector('.registry-number-heading span').click()
+  await flushRequests()
+  expect(scroll.scrollTop).toBe(0)
+  expect(requestApi.list).toHaveBeenLastCalledWith(expect.objectContaining({ sort: 'asc', page: 1, colors: '' }))
+  expect(document.querySelector('[aria-label="Сортировать по направлению испытаний"]')).toBeNull()
+  mounted.app.unmount()
+})
+
+it('scrolls rows from a focused table control without consuming control shortcuts', async () => {
+  const mounted = mountRegistry(['employee'])
+  await flushRequests()
+  const scroll = document.querySelector('.table-wrap')
+  const filter = document.querySelector('[aria-label="Фильтр по направлению испытаний"]')
+  const down = new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true, cancelable: true })
+  filter.dispatchEvent(down)
+  expect(scroll.scrollTop).toBe(40)
+  expect(down.defaultPrevented).toBe(true)
+  filter.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', ctrlKey: true, bubbles: true }))
+  filter.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))
+  expect(scroll.scrollTop).toBe(40)
+  filter.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true }))
+  expect(scroll.scrollLeft).toBe(40)
+  mounted.app.unmount()
+})
+
 describe('RequestRegistry request creation permissions', () => {
   it('opens the creation form only for an allowed role', async () => {
     const allowed = mountRegistry(['employee'])

@@ -15,6 +15,15 @@ E2E job обязателен и не использует `allow_failure`. Он 
 deployment, выполняет Integration, Playwright, LDAP/SMTP contracts, MariaDB
 reconnect и SIGTERM scheduler, затем всегда запускает teardown. Playwright
 report вместе с container status и последними логами сохраняется при падении.
+
+Markdown проверяется `frontend/scripts/lint-markdown.mjs` через API `markdownlint`.
+Набор файлов и правила сохранены в `.markdownlint-cli2.mjs`. Обёртка CLI заменена,
+поскольку её цепочка glob-зависимостей содержит уязвимый `braces` без исправленной
+версии; исключения из dependency audit не добавляются.
+
+Frontend LCOV включает новые компоненты фильтра, статуса и сортировщика,
+клавиатурную прокрутку реестра и инструменты генерации стилей/Markdown lint.
+Их unit-тесты дополняют браузерные e2e; прежние пороги покрытия не снижены.
 Обе CI-системы выполняют один и тот же `make e2e`; hosted Docker/BuildKit cache
 между запусками отдельно не настраивается.
 

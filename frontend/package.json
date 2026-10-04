@@ -25,12 +25,13 @@
     "@apidevtools/swagger-parser": "12.1.0",
     "@eslint/js": "10.0.1",
     "@playwright/test": "1.62.1",
-    "@vitest/coverage-v8": "^4.1.10",
+    "@vitest/coverage-v8": "^4.1.11",
     "eslint": "10.8.0",
     "eslint-plugin-vue": "10.10.0",
     "globals": "17.9.0",
     "happy-dom": "^20.11.2",
-    "markdownlint-cli2": "0.23.2",
-    "vitest": "^4.1.10"
+    "markdownlint": "0.41.1",
+    "tinyglobby": "0.2.17",
+    "vitest": "^4.1.11"
   }
 }

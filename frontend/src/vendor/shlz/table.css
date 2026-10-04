@@ -1,0 +1,534 @@
+/* Generated from shlz-ui 1864b3c0cb327485f08c48b14c88730ec852b03c. Run frontend/scripts/sync-shlz-styles.mjs to update. */
+.shlz-table-wrap {
+  position: relative;
+  overflow-x: auto;
+}
+
+.shlz-table {
+  inline-size: 100%;
+  border-spacing: 0;
+  border-collapse: collapse;
+  color: var(--shlz-semantic-color-text-primary);
+
+  /* Table Cell visible text: Golos Text Regular 15px / 130%, -1%. */
+  font-size: 15px;
+  line-height: 19.5px;
+  letter-spacing: -0.01em;
+}
+
+.shlz-table__cell {
+  min-block-size: 50px;
+  block-size: 50px;
+  padding: 0 8px;
+  text-align: start;
+  vertical-align: middle;
+  background: transparent;
+  border-block-end: 1px solid var(--shlz-semantic-color-border-default);
+}
+
+/* Source Status and Switch cells use the softer Blue 100 divider. */
+.shlz-table__cell--status,
+.shlz-table__cell:has(> .shlz-status, > .shlz-switch__input, > .shlz-switch) {
+  border-block-end-color: var(--shlz-source-color-blue-blue-100);
+}
+
+.shlz-table__head .shlz-table__cell {
+  color: var(--shlz-semantic-color-text-supporting-accessible);
+  font-size: var(--shlz-semantic-typography-role-data-heading-size);
+  font-weight: var(--shlz-semantic-typography-weight-medium);
+  line-height: var(--shlz-semantic-typography-role-data-heading-line-height);
+  text-transform: uppercase;
+  letter-spacing: 0;
+}
+
+.shlz-table__row:hover > .shlz-table__cell,
+.shlz-table__cell--visual-hover {
+  background: var(--shlz-semantic-color-surface-muted);
+}
+
+.shlz-table__cell--visual-pressed {
+  background: transparent;
+}
+
+.shlz-table__cell--check,
+.shlz-table__cell--icon,
+.shlz-table__cell--priority {
+  inline-size: 1%;
+  text-align: center;
+  white-space: nowrap;
+}
+
+.shlz-table__cell--numeric {
+  font-variant-numeric: tabular-nums;
+  text-align: end;
+}
+
+.shlz-table__truncate {
+  display: block;
+  min-inline-size: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.shlz-table__header-content,
+.shlz-table__cell-content {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  min-inline-size: 0;
+}
+
+.shlz-table__header-content {
+  justify-content: space-between;
+}
+
+.shlz-table__actions {
+  display: inline-flex;
+  gap: 4px;
+  align-items: center;
+}
+
+.shlz-table__affordance {
+  display: inline-grid;
+  inline-size: 18px;
+  block-size: 18px;
+  padding: 0;
+  place-items: center;
+  color: var(--shlz-semantic-color-text-secondary);
+  background: transparent;
+  border: 0;
+  border-radius: 3px;
+  cursor: pointer;
+}
+
+.shlz-table__affordance:hover,
+.shlz-table__affordance[aria-pressed="true"] {
+  color: var(--shlz-semantic-color-action-primary);
+}
+
+.shlz-table__affordance:focus-visible {
+  outline: 2px solid var(--shlz-semantic-color-action-primary);
+  outline-offset: 1px;
+}
+
+.shlz-table__affordance :is(img, .shlz-icon) {
+  display: block;
+  inline-size: 16px;
+  block-size: 16px;
+  color: inherit;
+}
+
+.shlz-table__sort--descending :is(img, .shlz-icon) {
+  transform: rotate(180deg);
+}
+
+.shlz-table__editor {
+  appearance: none;
+  inline-size: 100%;
+  min-block-size: 0;
+  padding: 0;
+  color: inherit;
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  font: inherit;
+  letter-spacing: inherit;
+}
+
+.shlz-table__editor:focus {
+  outline: 0;
+}
+
+.shlz-table__cell:has(.shlz-table__editor:focus),
+.shlz-table__cell--typing {
+  border-block-end-color: var(--shlz-semantic-color-action-primary);
+}
+
+.shlz-table__empty {
+  color: var(--shlz-semantic-color-text-supporting-accessible);
+}
+
+.shlz-table__cell-icon {
+  display: block;
+  inline-size: 20px;
+  block-size: 20px;
+  margin-inline: auto;
+  color: inherit;
+}
+
+.shlz-table__dropdown {
+  display: inline-flex;
+  gap: 8px;
+  align-items: center;
+  min-block-size: 26px;
+  padding: 0 8px;
+  color: inherit;
+  background: transparent;
+  border: 0;
+  border-radius: var(--shlz-source-radius-regular);
+  font: inherit;
+  cursor: pointer;
+}
+
+.shlz-table__dropdown:hover,
+.shlz-table__dropdown:focus-visible {
+  background: var(--shlz-semantic-color-surface-muted);
+}
+
+/* Source: Table Cell.svg header control group. Width follows the label;
+   88px/42px in the export are composition geometry, not width tokens. */
+.shlz-table__heading {
+  display: inline-flex;
+  gap: 0;
+  align-items: center;
+  min-block-size: 24px;
+  max-inline-size: calc(100% + 12px);
+  margin-inline: -6px;
+  padding-inline: 6px;
+  border-radius: 6px;
+}
+
+.shlz-table__heading > :first-child:not(button) {
+  min-inline-size: 0;
+  overflow-wrap: anywhere;
+}
+
+.shlz-table__heading .shlz-table__actions {
+  flex: none;
+  gap: 0;
+  margin-inline-start: 4px;
+  opacity: 0;
+}
+
+.shlz-table__cell:hover > .shlz-table__heading,
+.shlz-table__heading:focus-within,
+.shlz-table__heading--visual-hover,
+.shlz-table__cell:is([aria-sort="ascending"], [aria-sort="descending"])
+  > .shlz-table__heading,
+.shlz-table__heading:has(
+  .shlz-table__filter:is([aria-pressed="true"], [data-filter-active="true"])
+) {
+  background: var(--shlz-source-color-blue-blue-50);
+}
+
+.shlz-table__cell:hover > .shlz-table__heading .shlz-table__actions,
+.shlz-table__heading:focus-within .shlz-table__actions,
+.shlz-table__heading--visual-hover .shlz-table__actions,
+.shlz-table__cell:is([aria-sort="ascending"], [aria-sort="descending"])
+  > .shlz-table__heading
+  .shlz-table__actions,
+.shlz-table__heading:has(
+    .shlz-table__filter:is([aria-pressed="true"], [data-filter-active="true"])
+  )
+  .shlz-table__actions {
+  opacity: 1;
+}
+
+.shlz-table__heading--icon {
+  position: relative;
+  justify-content: center;
+  min-block-size: 18px;
+  inline-size: 42px;
+  margin-inline: -5px;
+  padding-inline: 5px;
+  border-radius: 4px;
+}
+
+.shlz-table__heading--icon .shlz-table__actions {
+  margin: 0;
+}
+
+.shlz-table__heading--icon > .shlz-table__header-icon {
+  position: absolute;
+  inline-size: 16px;
+  block-size: 16px;
+  color: var(--shlz-semantic-color-text-primary);
+}
+
+.shlz-table__cell:hover .shlz-table__heading--icon > .shlz-table__header-icon,
+.shlz-table__heading--icon:is(:focus-within, .shlz-table__heading--visual-hover)
+  > .shlz-table__header-icon,
+.shlz-table__cell[aria-sort="ascending"] .shlz-table__header-icon {
+  opacity: 0;
+}
+
+.shlz-table__sorter,
+.shlz-table__filter {
+  flex: none;
+  inline-size: 16px;
+  block-size: 18px;
+  color: var(--shlz-source-color-gray-gray-200);
+}
+
+.shlz-table__sorter svg {
+  inline-size: 16px;
+  block-size: 16px;
+  fill: var(--shlz-source-color-gray-gray-200);
+}
+
+.shlz-table__filter svg {
+  inline-size: 16px;
+  block-size: 18px;
+  fill: currentcolor;
+}
+
+.shlz-table__filter:hover,
+.shlz-table__filter--visual-hover {
+  color: var(--shlz-source-color-gray-gray-100);
+}
+
+.shlz-table__filter:is([aria-pressed="true"], [data-filter-active="true"]) {
+  color: var(--shlz-semantic-color-action-primary);
+}
+
+[aria-sort="ascending"] .shlz-table__sort-up,
+[aria-sort="descending"] .shlz-table__sort-down {
+  fill: var(--shlz-semantic-color-action-primary);
+}
+
+.shlz-table__affordance:disabled {
+  cursor: default;
+  opacity: 0.4;
+}
+
+.shlz-table__cell--editable {
+  position: relative;
+}
+
+.shlz-table__cell--editable:hover {
+  background: var(--shlz-semantic-color-surface-muted);
+}
+
+.shlz-table__cell--editable:focus-within,
+.shlz-table__cell--editable:has([aria-expanded="true"]),
+.shlz-table__cell--editable.shlz-table__cell--visual-pressed,
+.shlz-table__cell--typing {
+  background: transparent;
+  border-block-end-color: var(--shlz-semantic-color-action-primary);
+}
+
+/* Expanded source exports include a popup, not a 154px table row. */
+.shlz-table__cell-choice {
+  display: block;
+  inline-size: 100%;
+}
+
+.shlz-table__cell-choice-trigger {
+  display: flex;
+  align-items: center;
+  inline-size: 100%;
+  min-block-size: 48px;
+  padding: 0;
+  color: inherit;
+  text-align: start;
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  font: inherit;
+  letter-spacing: inherit;
+  cursor: pointer;
+}
+
+.shlz-table__cell-choice-trigger:focus-visible {
+  outline: 2px solid var(--shlz-semantic-color-action-primary);
+  outline-offset: -2px;
+}
+
+.shlz-table__cell-choice-menu {
+  position: absolute;
+  inset-block-start: calc(100% + 4px);
+  inset-inline-start: 0;
+  z-index: 30;
+  padding-block: 10px;
+  color: var(--shlz-semantic-color-text-primary);
+  background: var(--shlz-semantic-color-surface-base);
+  border-radius: 12px;
+  box-shadow:
+    0 4px 30px rgb(0 0 0 / 10%),
+    0 1px 3px rgb(0 0 0 / 5%);
+  inline-size: 140px;
+  max-inline-size: calc(100vw - 16px);
+  text-transform: none;
+  font-size: 15px;
+  line-height: 19.5px;
+  letter-spacing: -0.01em;
+}
+
+.shlz-table__row--visual-hover > .shlz-table__cell {
+  background: var(--shlz-semantic-color-surface-muted);
+}
+
+.shlz-table__row[data-selected="true"] > .shlz-table__cell,
+.shlz-table__row--visual-active > .shlz-table__cell {
+  background: var(--shlz-source-color-background-primary);
+}
+
+.shlz-table__priority {
+  display: inline-block;
+  inline-size: 16px;
+  block-size: 16px;
+  vertical-align: middle;
+  fill: #45b64e; /* FACT: Table Cell priority bars; not a global color token. */
+}
+
+.shlz-table__priority-muted {
+  fill: #57965c; /* FACT: muted bar in Table Cell.svg. */
+  fill-opacity: 0.25;
+}
+
+.shlz-table__cell--icon
+  .shlz-table__affordance:not(.shlz-table__sorter, .shlz-table__filter) {
+  inline-size: 24px;
+  block-size: 24px;
+  color: var(--shlz-semantic-color-action-primary);
+}
+
+.shlz-table__cell--icon:active,
+.shlz-table__cell--icon.shlz-table__cell--visual-pressed {
+  background: transparent;
+}
+
+@media (hover: none) {
+  .shlz-table__heading .shlz-table__actions {
+    opacity: 1;
+  }
+}
+
+.shlz-table__icon-action {
+  display: inline-grid;
+  place-items: center;
+  inline-size: 24px;
+  block-size: 24px;
+  padding: 0;
+  color: var(--shlz-semantic-color-action-primary);
+  background: transparent;
+  border: 0;
+  cursor: pointer;
+}
+
+.shlz-table__icon-action:focus-visible {
+  outline: 2px solid var(--shlz-semantic-color-action-primary);
+  outline-offset: 1px;
+}
+
+.shlz-table__icon-action:disabled {
+  cursor: default;
+  opacity: 0.4;
+}
+
+.shlz-table__cell-choice-option {
+  display: flex;
+  align-items: center;
+  block-size: 40px;
+  padding-inline: 16px;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  inline-size: 100%;
+  color: inherit;
+  text-align: start;
+  background: transparent;
+  border: 0;
+  font: inherit;
+  letter-spacing: inherit;
+}
+
+.shlz-table__cell-choice-option[aria-selected="true"] {
+  background: var(--shlz-semantic-color-surface-muted);
+}
+
+.shlz-table__cell-choice-option[hidden] {
+  display: none;
+}
+
+/* Table Cell button variants: subdued add icon, uppercase dense text. */
+.shlz-table__add-row {
+  display: inline-flex;
+  gap: 8px;
+  align-items: center;
+  min-block-size: 26px;
+  max-inline-size: 100%;
+  padding: 0;
+  color: var(--shlz-semantic-color-text-supporting-accessible);
+  white-space: nowrap;
+  text-transform: uppercase;
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  font: inherit;
+  font-size: 12px;
+  line-height: 18px;
+  font-weight: 500;
+  letter-spacing: 0;
+  cursor: pointer;
+}
+
+.shlz-table__add-row :is(img, svg) {
+  flex: none;
+  inline-size: 20px;
+  block-size: 20px;
+  color: var(--shlz-source-color-gray-gray-100);
+}
+
+.shlz-table__add-row:active,
+.shlz-table__add-row--visual-pressed {
+  color: var(--shlz-semantic-color-action-primary);
+}
+
+.shlz-table__add-row:focus-visible {
+  outline: 2px solid var(--shlz-semantic-color-action-primary);
+  outline-offset: 2px;
+}
+
+.shlz-table__add-row:disabled {
+  cursor: default;
+  opacity: 0.4;
+}
+
+.shlz-table__cell--button.shlz-table__cell--visual-pressed {
+  background: transparent;
+}
+
+.shlz-table__cell-choice-menu[hidden] {
+  display: none;
+}
+
+.shlz-table__cell-choice-menu .shlz-dropdown__item {
+  min-block-size: 40px;
+  padding-inline: 16px;
+}
+
+/* Source text-header ascending-only variant has a 26px group (others 24px). */
+.shlz-table__cell[aria-sort="ascending"]
+  > .shlz-table__heading:not(
+    .shlz-table__heading--icon,
+    :has(
+      .shlz-table__filter:is([aria-pressed="true"], [data-filter-active="true"])
+    )
+  ) {
+  min-block-size: 26px;
+}
+
+/* Source paint diagnostics retain the original low-contrast text. Production
+   text uses the repository's existing accessible supporting-text role. */
+[inert] .shlz-table__head .shlz-table__cell,
+[inert] .shlz-table__add-row:not(.shlz-table__add-row--visual-pressed) {
+  color: var(--shlz-source-color-gray-gray-200);
+}
+
+.shlz-table__row
+  > .shlz-table__cell--editable:is(
+    :focus-within,
+    :has([aria-expanded="true"])
+  ) {
+  background: transparent;
+  border-block-end-color: var(--shlz-semantic-color-action-primary);
+}
+
+/* Embedded Status is 15px in Table Cell; standalone Status stays independent. */
+.shlz-table .shlz-status {
+  font-size: 15px;
+  line-height: 19.5px;
+  letter-spacing: -0.01em;
+}

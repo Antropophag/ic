@@ -163,6 +163,21 @@ paths:
             type: string
             enum: [asc, desc]
             default: desc
+        - name: colors
+          in: query
+          description: |
+            Одно или несколько направлений испытаний, через запятую.
+            Пустое или отсутствующее значение не ограничивает направления.
+            Фильтр применяется совместно с поиском, статусом, вкладкой и рабочей очередью.
+            white означает только «Без направления», а не неизвестные старые метки.
+          style: form
+          explode: false
+          schema:
+            type: array
+            maxItems: 6
+            items:
+              type: string
+              enum: [white, orange, blue, violet, red, green]
         - name: attention
           in: query
           description: |

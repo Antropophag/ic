@@ -23,13 +23,17 @@ const COMPACT_STATUS_LABELS = {
 
 export const REQUEST_STATUS_OPTIONS = Object.entries(STATUS_LABELS).map(([value, label]) => ({ value, label }))
 
-const STATUS_TONES = {
-  registered: 'blue', in_progress: 'cyan', suspended: 'orange',
-  opinion_preparation: 'violet', security_review: 'yellow', completed: 'green',
-  rejected: 'red', withdrawn: 'gray',
+export const REQUEST_COLORS = ['white', 'orange', 'blue', 'violet', 'red', 'green']
+
+const TESTING_DIRECTIONS = {
+  white: 'Без направления', red: 'Резерв 1', orange: 'Метрологические испытания',
+  blue: 'Механические испытания', violet: 'Электротехнические испытания', green: 'Резерв 2',
 }
 
-export const REQUEST_COLORS = ['white', 'red', 'orange', 'blue', 'violet', 'green']
+/** Display names preserve the API's existing color codes and permissions. */
+export function testingDirectionLabel(color) {
+  return TESTING_DIRECTIONS[color] || 'Направление не определено'
+}
 
 export function initialsFor(displayName) {
   return (displayName || '').split(' ').filter(Boolean).map(part => part[0]).join('').slice(0, 2).toUpperCase() || '?'
@@ -82,9 +86,10 @@ export function fromApi(item) {
     canReject: Boolean(Number(item.can_reject)),
     canWithdraw: Boolean(Number(item.can_withdraw)),
     color: REQUEST_COLORS.includes(item.color) ? item.color : 'white',
+    colorValue: item.color ?? 'white',
+    directionLabel: testingDirectionLabel(item.color ?? 'white'),
     status: STATUS_LABELS[item.status] || item.status,
     compactStatus: COMPACT_STATUS_LABELS[item.status] || STATUS_LABELS[item.status] || item.status,
-    tone: STATUS_TONES[item.status] || 'blue',
     securityMark,
     // Вычисляется один раз при маппинге, а не при каждом обращении к
     // className/label/path в шаблоне (реестр рендерит это на каждую
