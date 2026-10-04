@@ -83,7 +83,7 @@ final class NotificationOutboxProcessor
         }
 
         $row = $this->db->createCommand(
-            'SELECT request_id, recipient_email, recipient_name, subject, body, attempts '
+            'SELECT request_id, recipient_email, recipient_name, subject, body, payload_json, attempts '
             . 'FROM {{%notification_outbox}} WHERE id = :id',
             [':id' => $id],
         )->queryOne();
@@ -93,11 +93,17 @@ final class NotificationOutboxProcessor
         }
 
         try {
+            $documentLinks = NotificationDocumentLinksPayload::parse($row['payload_json']);
+            $body = (new NotificationDownloadLinks($this->db))->appendToBody(
+                $id,
+                (string) $row['body'],
+                $documentLinks,
+            );
             [$recipientEmail, $subject, $body] = NotificationTestRedirect::apply(
                 (string) $row['recipient_email'],
                 (string) $row['recipient_name'],
                 (string) $row['subject'],
-                (string) $row['body'],
+                $body,
                 getenv('NOTIFICATION_TEST_REDIRECT_EMAIL') ?: null,
             );
             ($this->sender)(
@@ -119,14 +125,19 @@ final class NotificationOutboxProcessor
             )->execute();
             $result['sent']++;
         } catch (\Throwable $error) {
-            $this->recordFailure($id, (int) $row['attempts'], $error);
+            $this->recordFailure(
+                $id,
+                (int) $row['attempts'],
+                $error,
+                $error instanceof InvalidNotificationPayload || $error instanceof \JsonException,
+            );
             $result['failed']++;
         }
     }
 
-    private function recordFailure(int $id, int $attempts, \Throwable $error): void
+    private function recordFailure(int $id, int $attempts, \Throwable $error, bool $terminal = false): void
     {
-        if ($attempts >= self::MAX_ATTEMPTS) {
+        if ($terminal || $attempts >= self::MAX_ATTEMPTS) {
             $values = [
                 'status' => 'failed',
                 'next_attempt_at' => Clock::now(),

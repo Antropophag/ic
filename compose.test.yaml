@@ -91,6 +91,31 @@ services:
       start_period: 15s
     restart: unless-stopped
 
+  loki:
+    image: docker.io/grafana/loki:3.5.3
+    command: ["-config.file=/etc/loki/config.yml"]
+    volumes:
+      - ./observability/loki/config.yml:/etc/loki/config.yml:ro
+    tmpfs: ["/loki:uid=10001,gid=10001"]
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q --spider http://127.0.0.1:3100/ready"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+  alloy:
+    image: docker.io/grafana/alloy:v1.10.0
+    command:
+      - run
+      - --storage.path=/var/lib/alloy/data
+      - /etc/alloy/config.alloy
+    volumes:
+      - ./observability/alloy/config.test.alloy:/etc/alloy/config.alloy:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    tmpfs: [/var/lib/alloy/data]
+    depends_on:
+      loki: {condition: service_healthy}
+
 volumes:
   test-mariadb-data:
   test-document-data:

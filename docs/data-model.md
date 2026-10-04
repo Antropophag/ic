@@ -67,6 +67,7 @@ erDiagram
         varchar(255) recipient_name
         varchar(255) subject
         text body
+        json payload_json "семантические данные без bearer credentials"
         varchar(16) status
         int(11)_unsigned attempts
         datetime(6) next_attempt_at
@@ -103,6 +104,7 @@ erDiagram
         bigint(20)_unsigned assigned_by FK "-> users.id"
         datetime(6) valid_from
         datetime(6) valid_to
+        tinyint current_assignment "generated: 1 при valid_to IS NULL, иначе NULL; UNIQUE (request_id, assignment_type, current_assignment)"
     }
     request_comments {
         bigint(20)_unsigned id PK
