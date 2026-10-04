@@ -1,5 +1,23 @@
 # Архитектура deployment
 
+## Application architecture
+
+Сейчас код имеет переходную слоистость: Domain остаётся независимым, но часть
+Application input models наследует `yii\base\Model`, один document service
+обращается к Infrastructure/Yii, а HTTP controllers напрямую собирают и вызывают
+Infrastructure. Эти исключения не описывают целевую архитектуру и не означают,
+что переход уже завершён.
+
+Целевое направление зависимостей — `Http/Console → Application → Domain`.
+Infrastructure реализует persistence, read models и внешние технические границы
+Application/Domain; обратные зависимости Application/Domain на Infrastructure
+не допускаются. Миграция идёт небольшими волнами по реальным responsibilities.
+Текущие исключения перечислены exact baseline автоматического architecture guard:
+новое нарушение запрещено, а удалённое исключение требует уменьшить baseline.
+
+Подробности и целевое дерево зафиксированы в
+[ADR 0008](adr/0008-layer-boundaries-and-incremental-refactoring.md).
+
 Во всех окружениях запускается одна кодовая база:
 
 ```text
@@ -17,7 +35,13 @@ Production не получает ни одного из этих файлов.
 Чтение заявок для HTTP/UI разделено без дополнительного слоя: `RequestController`
 обращается к `RequestQuery` за реестром, карточкой, комментариями и списками
 исполнителей/экспертов. Изменяющие транзакционные операции, аудит и постановка
-уведомлений в outbox остаются в `RequestRepository`.
+уведомлений в outbox разделены на узкие vertical slices; общий
+`RequestRepository` удалён. Создание и комментарии, цветовая метка, смена
+подразделения, назначения исполнителя и эксперта, lifecycle, отказ/отзыв и
+решение СБ следуют схеме: controller переводит HTTP-ввод в command,
+Application применяет domain policy/workflow и оркестрирует транзакцию через
+узкий port, а отдельный Infrastructure/Persistence adapter реализует
+SQL-примитивы.
 
 Перед production POST-командами заявок и администрирования `ApiController`
 создаёт внешнюю транзакционную границу идемпотентности в MariaDB. Вложенные
@@ -46,6 +70,12 @@ replay-ит результат, либо получает `409` при друг�
 Контролируемый `4xx` после отката repository savepoint удаляет claim, но
 фиксирует намеренный denied audit; неожиданный exception и любой `5xx`
 откатывают claim, audit и остальные DB-эффекты внешней транзакции.
+Для отклонённого решения СБ существующее событие
+`request.security_decision_rejected` записывается best-effort только при
+существующих ссылках на заявку и actor. Ошибка этой записи логируется и не
+заменяет исходный `403` или `409`; для отсутствующих ссылок искусственная запись
+не создаётся, поэтому аудит не образует отдельный канал раскрытия существования
+заявки.
 
 Development identity — обычная запись `users` и ролей в MariaDB. Development
 bootstrap до запуска Vue устанавливает fetch interceptor; dev-модуль получает

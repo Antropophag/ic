@@ -4,10 +4,12 @@ declare(strict_types=1);
 
 namespace Tests\Integration\Request;
 
-use App\Application\Request\CreateRequestInput;
+use App\Http\Request\CreateRequest as CreateRequestInput;
+use App\Application\Request\Command\AssignExecutorCommand;
+use App\Application\Request\UseCase\AssignExecutor;
 use App\Infrastructure\Clock;
+use App\Infrastructure\Persistence\Request\ExecutorAssignmentPersistenceAdapter;
 use App\Infrastructure\Request\RequestQuery;
-use App\Infrastructure\Request\RequestRepository;
 use Tests\Integration\IntegrationTestCase;
 
 final class AttentionDashboardTest extends IntegrationTestCase
@@ -128,11 +130,13 @@ final class AttentionDashboardTest extends IntegrationTestCase
         $query = new RequestQuery($this->db());
         self::assertSame(1, $this->queueCount($query->attentionDashboard($manager), 'assign_executor'));
 
-        (new RequestRepository($this->db()))->assignExecutor(
-            (int) $request['id'],
-            $executor,
-            (int) $request['lock_version'],
-            $manager,
+        (new AssignExecutor(new ExecutorAssignmentPersistenceAdapter($this->db())))->execute(
+            new AssignExecutorCommand(
+                (int) $request['id'],
+                $executor,
+                (int) $request['lock_version'],
+                $manager,
+            ),
         );
 
         $this->assertQueueAbsent($query->attentionDashboard($manager), 'assign_executor');
@@ -216,7 +220,7 @@ final class AttentionDashboardTest extends IntegrationTestCase
             'sampleQuantity' => 1,
             'testMethod' => 'Интеграционная проверка очередей',
         ]);
-        return (new RequestRepository($this->db()))->create($input, $initiator);
+        return (new \App\Application\Request\UseCase\CreateRequest(new \App\Infrastructure\Persistence\Request\RequestCreationPersistenceAdapter($this->db())))->execute($input->toCommand($initiator))->toArray();
     }
 
     private function updateStatus(int $requestId, string $status): void

@@ -7,18 +7,26 @@ namespace App\Http\Controller;
 use App\Application\Document\TestActDocumentService;
 use App\Application\Document\TestActConfigurationError;
 use App\Application\Document\TestActInput;
-use App\Application\Request\CreateRequestInput;
-use App\Application\Request\ChangeDepartmentInput;
+use App\Application\Request\Command\RequestLifecycleCommand;
+use App\Application\Request\UseCase\ChangeRequestDepartment;
 use App\Application\Request\ListRequestsInput;
-use App\Application\Request\AddCommentInput;
-use App\Application\Request\AssignExecutorInput;
-use App\Application\Request\AssignExpertInput;
-use App\Application\Request\CancelRequestInput;
-use App\Application\Request\LockVersionInput;
-use App\Application\Request\ReasonedLockVersionInput;
-use App\Application\Request\PublishOpinionInput;
-use App\Application\Request\SecurityDecisionInput;
-use App\Application\Request\SetColorInput;
+use App\Application\Request\Command\AssignExpertCommand;
+use App\Application\Request\Command\AssignExecutorCommand;
+use App\Application\Request\Command\CancelRequestCommand;
+use App\Application\Request\Command\DecideSecurityCommand;
+use App\Application\Request\Command\DeleteReportCommand;
+use App\Application\Request\Command\PublishOpinionCommand;
+use App\Application\Request\Command\UploadReportCommand;
+use App\Application\Request\UseCase\DecideSecurity;
+use App\Application\Request\UseCase\PublishOpinion;
+use App\Application\Request\UseCase\ReportLifecycle;
+use App\Application\Request\UseCase\CreateRequest as CreateRequestUseCase;
+use App\Application\Request\UseCase\SetRequestColor;
+use App\Application\Request\UseCase\RequestLifecycle;
+use App\Application\Request\UseCase\CancelRequest as CancelRequestUseCase;
+use App\Application\Request\UseCase\AssignExecutor;
+use App\Application\Request\UseCase\AssignExpert;
+use App\Application\Request\UseCase\AddComment;
 use App\Domain\Request\AssignmentDenied;
 use App\Domain\Request\AssignmentTargetNotFound;
 use App\Domain\Request\AttachmentDenied;
@@ -31,10 +39,11 @@ use App\Domain\Request\RequestCreationDenied;
 use App\Domain\Request\RequestDepartmentChangeDenied;
 use App\Domain\Request\RequestDepartmentMissing;
 use App\Domain\Request\RequestNotFound;
+use App\Domain\Request\RequestAction;
 use App\Domain\Request\ReportDenied;
 use App\Domain\Request\ReportDeletionDenied;
 use App\Domain\Request\OpinionDenied;
-use App\Domain\Request\SecurityDecisionDenied;
+use App\Domain\Request\{SecurityDecisionConflict, SecurityDecisionDenied};
 use App\Domain\Request\StartDenied;
 use App\Domain\Request\SuspendResumeDenied;
 use App\Domain\Request\TransitionDenied;
@@ -43,10 +52,19 @@ use App\Infrastructure\Identity\CurrentUser;
 use App\Infrastructure\Document\DocumentRepository;
 use App\Infrastructure\Document\DocumentStorage;
 use App\Infrastructure\Document\OfficeDocumentInspector;
-use App\Infrastructure\Document\OpinionPdfRenderer;
 use App\Infrastructure\Document\TestActDocumentGenerator;
 use App\Infrastructure\Request\RequestQuery;
-use App\Infrastructure\Request\RequestRepository;
+use App\Http\Request\AddCommentRequest;
+use App\Http\Request\SetColorRequest;
+use App\Http\Request\ChangeDepartmentRequest;
+use App\Http\Request\LockVersionRequest;
+use App\Http\Request\ReasonedLockVersionRequest;
+use App\Http\Request\CancelRequest;
+use App\Http\Request\AssignExecutorRequest;
+use App\Http\Request\AssignExpertRequest;
+use App\Http\Request\SecurityDecisionRequest;
+use App\Http\Request\PublishOpinionRequest;
+use App\Http\Request\CreateRequest;
 use Yii;
 use yii\web\Response;
 use yii\web\ConflictHttpException;
@@ -149,19 +167,17 @@ final class RequestController extends ApiController
     /** @return array<string, mixed> */
     public function actionAddComment(int $id): array
     {
-        $input = new AddCommentInput();
+        $input = new AddCommentRequest();
         if (($errors = $this->bodyValidationErrors($input)) !== null) {
             return $errors;
         }
 
         try {
-            $comment = $this->repository()->addComment(
-                $id,
-                $this->currentUserId(),
-                (string) $input->body,
+            $comment = Yii::$container->get(AddComment::class)->execute(
+                $input->toCommand($id, $this->currentUserId()),
             );
             Yii::$app->response->statusCode = 201;
-            return $comment;
+            return $comment->toArray();
         } catch (RequestNotFound $error) {
             throw new NotFoundHttpException($error->getMessage());
         } catch (CommentDenied $error) {
@@ -244,14 +260,8 @@ final class RequestController extends ApiController
         }
 
         try {
-            $report = $this->documents()->uploadReport(
-                $id,
-                $actorId,
-                $file->name,
-                $mimeType,
-                $size,
-                $file->tempName,
-            );
+            $command = new UploadReportCommand($id, $actorId, $file->name, $mimeType, $size, $file->tempName);
+            $report = Yii::$container->get(ReportLifecycle::class)->upload($command)->toArray();
             Yii::$app->response->statusCode = 201;
             return $report;
         } catch (RequestNotFound $error) {
@@ -269,14 +279,15 @@ final class RequestController extends ApiController
     /** @return array<string, mixed> */
     public function actionDeleteReport(int $id): array
     {
-        $input = new ReasonedLockVersionInput();
+        $input = new ReasonedLockVersionRequest();
         if (($errors = $this->bodyValidationErrors($input)) !== null) {
             return $errors;
         }
 
         $actorId = $this->currentUserId();
         try {
-            return $this->documents()->deleteReport($id, (int) $input->lockVersion, $actorId, (string) $input->reason);
+            $command = new DeleteReportCommand($id, (int) $input->lockVersion, $actorId, (string) $input->reason);
+            return Yii::$container->get(ReportLifecycle::class)->delete($command)->toArray();
         } catch (RequestNotFound $error) {
             throw new NotFoundHttpException($error->getMessage());
         } catch (ReportDeletionDenied $error) {
@@ -381,16 +392,16 @@ final class RequestController extends ApiController
     /** @return array<string, mixed> */
     public function actionCreate(): array
     {
-        $input = new CreateRequestInput();
+        $input = new CreateRequest();
         if (($errors = $this->bodyValidationErrors($input)) !== null) {
             return $errors;
         }
 
-        $actorId = $this->currentUserId();
+        $command = $input->toCommand($this->currentUserId());
         try {
-            $request = $this->repository()->create($input, $actorId);
+            $request = Yii::$container->get(CreateRequestUseCase::class)->execute($command)->toArray();
         } catch (RequestCreationDenied $error) {
-            $this->recordRejectedCreateSafely($actorId, $error->ruleId);
+            $this->recordRejectedCreateSafely($command, $error->ruleId);
             throw new ForbiddenHttpException($error->getMessage());
         } catch (RequestDepartmentMissing $error) {
             throw new UnprocessableEntityHttpException($error->getMessage());
@@ -399,21 +410,18 @@ final class RequestController extends ApiController
         Yii::$app->response->headers->set('Location', '/api/v1/requests/' . $request['id']);
         return $request;
     }
-
     /** @return array<string, mixed> */
     public function actionChangeDepartment(int $id): array
     {
-        $input = new ChangeDepartmentInput();
+        $input = new ChangeDepartmentRequest();
         if (($errors = $this->bodyValidationErrors($input)) !== null) {
             return $errors;
         }
         try {
-            return $this->repository()->changeDepartment(
-                $id,
-                (string) $input->department,
-                (int) $input->lockVersion,
-                $this->currentUserId(),
+            $result = Yii::$container->get(ChangeRequestDepartment::class)->execute(
+                $input->toCommand($id, $this->currentUserId()),
             );
+            return $result->toArray();
         } catch (RequestNotFound $error) {
             throw new NotFoundHttpException($error->getMessage());
         } catch (RequestDepartmentChangeDenied $error) {
@@ -426,15 +434,14 @@ final class RequestController extends ApiController
     /** @return array<string, mixed> */
     public function actionSetColor(int $id): array
     {
-        $input = new SetColorInput();
+        $input = new SetColorRequest();
         if (($errors = $this->bodyValidationErrors($input)) !== null) {
             return $errors;
         }
-
         $actorId = $this->currentUserId();
-
         try {
-            return $this->repository()->setColor($id, (string) $input->color, (int) $input->lockVersion, $actorId);
+            $result = Yii::$container->get(SetRequestColor::class)->execute($input->toCommand($id, $actorId));
+            return $result->toArray();
         } catch (RequestNotFound $error) {
             throw new NotFoundHttpException($error->getMessage());
         } catch (ColorMarkDenied $error) {
@@ -449,28 +456,23 @@ final class RequestController extends ApiController
     /** @return array<string, mixed> */
     public function actionAssignExecutor(int $id): array
     {
-        $input = new AssignExecutorInput();
+        $input = new AssignExecutorRequest();
         if (($errors = $this->bodyValidationErrors($input)) !== null) {
             return $errors;
         }
 
-        $executorId = (int) $input->executorId;
         $actorId = $this->currentUserId();
+        $command = $input->toCommand($id, $actorId);
 
         try {
-            return $this->repository()->assignExecutor(
-                $id,
-                $executorId,
-                (int) $input->lockVersion,
-                $actorId,
-            );
+            return Yii::$container->get(AssignExecutor::class)->execute($command)->toArray();
         } catch (AssignmentTargetNotFound $error) {
             throw new NotFoundHttpException($error->getMessage());
         } catch (AssignmentDenied $error) {
-            $this->recordRejectedAssignmentSafely($id, $executorId, $actorId, $error->ruleId);
+            $this->recordRejectedAssignmentSafely($command, $error->ruleId);
             throw new ForbiddenHttpException($error->getMessage());
         } catch (ConcurrentRequestModification $error) {
-            $this->recordRejectedAssignmentSafely($id, $executorId, $actorId, $error->ruleId);
+            $this->recordRejectedAssignmentSafely($command, $error->ruleId);
             throw new ConflictHttpException($error->getMessage());
         }
     }
@@ -478,44 +480,41 @@ final class RequestController extends ApiController
     /** @return array<string, mixed> */
     public function actionClaimExpert(int $id): array
     {
-        $input = new LockVersionInput();
+        $input = new LockVersionRequest();
         if (($errors = $this->bodyValidationErrors($input)) !== null) {
             return $errors;
         }
 
         $actorId = $this->currentUserId();
-        try {
-            return $this->repository()->claimExpert($id, (int) $input->lockVersion, $actorId);
-        } catch (AssignmentTargetNotFound $error) {
-            throw new NotFoundHttpException($error->getMessage());
-        } catch (ExpertAssignmentDenied $error) {
-            $this->recordRejectedExpertAssignmentSafely($id, $actorId, $actorId, $error->ruleId);
-            throw new ForbiddenHttpException($error->getMessage());
-        } catch (ConcurrentRequestModification $error) {
-            $this->recordRejectedExpertAssignmentSafely($id, $actorId, $actorId, $error->ruleId);
-            throw new ConflictHttpException($error->getMessage());
-        }
+        $command = AssignExpertCommand::claim($id, (int) $input->lockVersion, $actorId);
+        return $this->executeExpertAssignment($command);
     }
 
     /** @return array<string, mixed> */
     public function actionReassignExpert(int $id): array
     {
-        $input = new AssignExpertInput();
+        $input = new AssignExpertRequest();
         if (($errors = $this->bodyValidationErrors($input)) !== null) {
             return $errors;
         }
 
-        $expertId = (int) $input->expertId;
         $actorId = $this->currentUserId();
+        $command = $input->toCommand($id, $actorId);
+        return $this->executeExpertAssignment($command);
+    }
+
+    /** @return array<string, mixed> */
+    private function executeExpertAssignment(AssignExpertCommand $command): array
+    {
         try {
-            return $this->repository()->reassignExpert($id, $expertId, (int) $input->lockVersion, $actorId);
+            return Yii::$container->get(AssignExpert::class)->execute($command)->toArray();
         } catch (AssignmentTargetNotFound $error) {
             throw new NotFoundHttpException($error->getMessage());
         } catch (ExpertAssignmentDenied $error) {
-            $this->recordRejectedExpertAssignmentSafely($id, $expertId, $actorId, $error->ruleId);
+            $this->recordRejectedExpertAssignmentSafely($command, $error->ruleId);
             throw new ForbiddenHttpException($error->getMessage());
         } catch (ConcurrentRequestModification $error) {
-            $this->recordRejectedExpertAssignmentSafely($id, $expertId, $actorId, $error->ruleId);
+            $this->recordRejectedExpertAssignmentSafely($command, $error->ruleId);
             throw new ConflictHttpException($error->getMessage());
         }
     }
@@ -523,27 +522,21 @@ final class RequestController extends ApiController
     /** @return array<string, mixed> */
     public function actionPublishOpinion(int $id): array
     {
-        $input = new PublishOpinionInput();
+        $input = new PublishOpinionRequest();
         if (($errors = $this->bodyValidationErrors($input)) !== null) {
             return $errors;
         }
 
-        $actorId = $this->currentUserId();
+        $command = $input->toCommand($id, $this->currentUserId());
         try {
-            return $this->documents()->publishOpinion(
-                $id,
-                $actorId,
-                trim((string) $input->body),
-                (int) $input->lockVersion,
-                new OpinionPdfRenderer(),
-            );
+            return Yii::$container->get(PublishOpinion::class)->execute($command)->toArray();
         } catch (RequestNotFound $error) {
             throw new NotFoundHttpException($error->getMessage());
         } catch (OpinionDenied $error) {
-            $this->recordRejectedOpinionSafely($id, $actorId, $error->ruleId);
+            $this->recordRejectedOpinionSafely($command, $error->ruleId);
             throw new ForbiddenHttpException($error->getMessage());
         } catch (ConcurrentRequestModification $error) {
-            $this->recordRejectedOpinionSafely($id, $actorId, $error->ruleId);
+            $this->recordRejectedOpinionSafely($command, $error->ruleId);
             throw new ConflictHttpException($error->getMessage());
         }
     }
@@ -551,27 +544,22 @@ final class RequestController extends ApiController
     /** @return array<string, mixed> */
     public function actionSecurityDecision(int $id): array
     {
-        $input = new SecurityDecisionInput();
+        $input = new SecurityDecisionRequest();
         if (($errors = $this->bodyValidationErrors($input)) !== null) {
             return $errors;
         }
 
         $actorId = $this->currentUserId();
+        $command = $input->toCommand($id, $actorId);
         try {
-            return $this->repository()->decideSecurity(
-                $id,
-                $actorId,
-                (string) $input->decision,
-                $input->reason === '' ? null : (string) $input->reason,
-                (int) $input->lockVersion,
-            );
+            return Yii::$container->get(DecideSecurity::class)->execute($command)->toArray();
         } catch (RequestNotFound $error) {
             throw new NotFoundHttpException($error->getMessage());
         } catch (SecurityDecisionDenied $error) {
-            $this->recordRejectedSecurityDecisionSafely($id, $actorId, $error->ruleId);
+            $this->recordRejectedSecurityDecisionSafely($command, $error->ruleId);
             throw new ForbiddenHttpException($error->getMessage());
-        } catch (ConcurrentRequestModification $error) {
-            $this->recordRejectedSecurityDecisionSafely($id, $actorId, $error->ruleId);
+        } catch (ConcurrentRequestModification | SecurityDecisionConflict $error) {
+            $this->recordRejectedSecurityDecisionSafely($command, $error->ruleId);
             throw new ConflictHttpException($error->getMessage());
         }
     }
@@ -579,21 +567,22 @@ final class RequestController extends ApiController
     /** @return array<string, mixed> */
     public function actionStart(int $id): array
     {
-        $input = new LockVersionInput();
+        $input = new LockVersionRequest();
         if (($errors = $this->bodyValidationErrors($input)) !== null) {
             return $errors;
         }
 
         $actorId = $this->currentUserId();
+        $command = $input->toLifecycleCommand($id, $actorId, RequestAction::Start);
         try {
-            return $this->repository()->startRequest($id, (int) $input->lockVersion, $actorId);
+            return Yii::$container->get(RequestLifecycle::class)->execute($command)->toArray();
         } catch (RequestNotFound $error) {
             throw new NotFoundHttpException($error->getMessage());
         } catch (StartDenied $error) {
-            $this->recordRejectedStartSafely($id, $actorId, $error->ruleId);
+            $this->recordRejectedStartSafely($command, $error->ruleId);
             throw new ForbiddenHttpException($error->getMessage());
         } catch (TransitionDenied | ConcurrentRequestModification $error) {
-            $this->recordRejectedStartSafely($id, $actorId, $error->ruleId);
+            $this->recordRejectedStartSafely($command, $error->ruleId);
             throw new ConflictHttpException($error->getMessage());
         }
     }
@@ -601,45 +590,41 @@ final class RequestController extends ApiController
     /** @return array<string, mixed> */
     public function actionSuspend(int $id): array
     {
-        $input = new ReasonedLockVersionInput();
+        $input = new ReasonedLockVersionRequest();
         if (($errors = $this->bodyValidationErrors($input)) !== null) {
             return $errors;
         }
 
-        $actorId = $this->currentUserId();
-        try {
-            return $this->repository()->suspendRequest($id, (int) $input->lockVersion, $actorId, (string) $input->reason);
-        } catch (RequestNotFound $error) {
-            throw new NotFoundHttpException($error->getMessage());
-        } catch (SuspendResumeDenied $error) {
-            $this->recordRejectedSuspendResumeSafely($id, $actorId, $error->ruleId);
-            throw new ForbiddenHttpException($error->getMessage());
-        } catch (TransitionDenied $error) {
-            $this->recordRejectedSuspendResumeSafely($id, $actorId, $error->ruleId);
-            throw new ConflictHttpException($error->getMessage());
-        } catch (ConcurrentRequestModification $error) {
-            throw new ConflictHttpException($error->getMessage());
-        }
+        return $this->executeSuspendResume(
+            $input->toLifecycleCommand($id, $this->currentUserId(), RequestAction::Suspend),
+        );
     }
 
     /** @return array<string, mixed> */
     public function actionResume(int $id): array
     {
-        $input = new LockVersionInput();
+        $input = new LockVersionRequest();
         if (($errors = $this->bodyValidationErrors($input)) !== null) {
             return $errors;
         }
 
-        $actorId = $this->currentUserId();
+        return $this->executeSuspendResume(
+            $input->toLifecycleCommand($id, $this->currentUserId(), RequestAction::Resume),
+        );
+    }
+
+    /** @return array<string, mixed> */
+    private function executeSuspendResume(RequestLifecycleCommand $command): array
+    {
         try {
-            return $this->repository()->resumeRequest($id, (int) $input->lockVersion, $actorId);
+            return Yii::$container->get(RequestLifecycle::class)->execute($command)->toArray();
         } catch (RequestNotFound $error) {
             throw new NotFoundHttpException($error->getMessage());
         } catch (SuspendResumeDenied $error) {
-            $this->recordRejectedSuspendResumeSafely($id, $actorId, $error->ruleId);
+            $this->recordRejectedSuspendResumeSafely($command, $error->ruleId);
             throw new ForbiddenHttpException($error->getMessage());
         } catch (TransitionDenied $error) {
-            $this->recordRejectedSuspendResumeSafely($id, $actorId, $error->ruleId);
+            $this->recordRejectedSuspendResumeSafely($command, $error->ruleId);
             throw new ConflictHttpException($error->getMessage());
         } catch (ConcurrentRequestModification $error) {
             throw new ConflictHttpException($error->getMessage());
@@ -649,26 +634,21 @@ final class RequestController extends ApiController
     /** @return array<string, mixed> */
     public function actionReject(int $id): array
     {
-        $input = new CancelRequestInput();
+        $input = new CancelRequest();
         if (($errors = $this->bodyValidationErrors($input)) !== null) {
             return $errors;
         }
 
-        $actorId = $this->currentUserId();
+        $command = $input->toCommand($id, $this->currentUserId(), RequestAction::Reject);
         try {
-            return $this->repository()->rejectRequest(
-                $id,
-                (int) $input->lockVersion,
-                $actorId,
-                (string) $input->reason,
-            );
+            return Yii::$container->get(CancelRequestUseCase::class)->execute($command)->toArray();
         } catch (RequestNotFound $error) {
             throw new NotFoundHttpException($error->getMessage());
         } catch (RejectDenied $error) {
-            $this->recordRejectedRejectSafely($id, $actorId, $error->ruleId);
+            $this->recordRejectedCancellationSafely($command, $error->ruleId);
             throw new ForbiddenHttpException($error->getMessage());
         } catch (ConcurrentRequestModification $error) {
-            $this->recordRejectedRejectSafely($id, $actorId, $error->ruleId);
+            $this->recordRejectedCancellationSafely($command, $error->ruleId);
             throw new ConflictHttpException($error->getMessage());
         }
     }
@@ -676,76 +656,61 @@ final class RequestController extends ApiController
     /** @return array<string, mixed> */
     public function actionWithdraw(int $id): array
     {
-        $input = new CancelRequestInput();
+        $input = new CancelRequest();
         if (($errors = $this->bodyValidationErrors($input)) !== null) {
             return $errors;
         }
 
-        $actorId = $this->currentUserId();
+        $command = $input->toCommand($id, $this->currentUserId(), RequestAction::Withdraw);
         try {
-            return $this->repository()->withdrawRequest(
-                $id,
-                (int) $input->lockVersion,
-                $actorId,
-                (string) $input->reason,
-            );
+            return Yii::$container->get(CancelRequestUseCase::class)->execute($command)->toArray();
         } catch (RequestNotFound $error) {
             throw new NotFoundHttpException($error->getMessage());
         } catch (WithdrawDenied $error) {
-            $this->recordRejectedWithdrawSafely($id, $actorId, $error->ruleId);
+            $this->recordRejectedCancellationSafely($command, $error->ruleId);
             throw new ForbiddenHttpException($error->getMessage());
         } catch (ConcurrentRequestModification $error) {
-            $this->recordRejectedWithdrawSafely($id, $actorId, $error->ruleId);
+            $this->recordRejectedCancellationSafely($command, $error->ruleId);
             throw new ConflictHttpException($error->getMessage());
         }
     }
 
-    private function recordRejectedCreateSafely(int $actorId, string $ruleId): void
+    private function recordRejectedCreateSafely(\App\Application\Request\Command\CreateRequestCommand $command, string $ruleId): void
     {
         $this->recordRejectedSafely(
-            fn () => $this->repository()->recordRejectedCreate($actorId, $ruleId),
+            fn () => Yii::$container->get(CreateRequestUseCase::class)->recordRejected($command, $ruleId),
             'Не удалось записать аудит отклонённого создания заявки.',
-            ['actorId' => $actorId, 'ruleId' => $ruleId],
+            ['actorId' => $command->initiatorId, 'ruleId' => $ruleId],
             __METHOD__,
         );
     }
 
-    private function recordRejectedStartSafely(int $requestId, int $actorId, string $ruleId): void
+    private function recordRejectedStartSafely(RequestLifecycleCommand $command, string $ruleId): void
     {
         $this->recordRejectedSafely(
-            fn () => $this->repository()->recordRejectedStart($requestId, $actorId, $ruleId),
+            fn () => Yii::$container->get(RequestLifecycle::class)->recordRejected($command, $ruleId),
             'Не удалось записать аудит отклонённого запуска заявки.',
-            ['requestId' => $requestId, 'actorId' => $actorId, 'ruleId' => $ruleId],
+            ['requestId' => $command->requestId, 'actorId' => $command->actorId, 'ruleId' => $ruleId],
             __METHOD__,
         );
     }
 
-    private function recordRejectedSuspendResumeSafely(int $requestId, int $actorId, string $ruleId): void
+    private function recordRejectedSuspendResumeSafely(RequestLifecycleCommand $command, string $ruleId): void
     {
         $this->recordRejectedSafely(
-            fn () => $this->repository()->recordRejectedSuspendResume($requestId, $actorId, $ruleId),
+            fn () => Yii::$container->get(RequestLifecycle::class)->recordRejected($command, $ruleId),
             'Не удалось записать аудит отклонённой приостановки/возобновления заявки.',
-            ['requestId' => $requestId, 'actorId' => $actorId, 'ruleId' => $ruleId],
+            ['requestId' => $command->requestId, 'actorId' => $command->actorId, 'ruleId' => $ruleId],
             __METHOD__,
         );
     }
 
-    private function recordRejectedRejectSafely(int $requestId, int $actorId, string $ruleId): void
+    private function recordRejectedCancellationSafely(CancelRequestCommand $command, string $ruleId): void
     {
         $this->recordRejectedSafely(
-            fn () => $this->repository()->recordRejectedReject($requestId, $actorId, $ruleId),
-            'Не удалось записать аудит отклонённого отказа в испытаниях.',
-            ['requestId' => $requestId, 'actorId' => $actorId, 'ruleId' => $ruleId],
-            __METHOD__,
-        );
-    }
-
-    private function recordRejectedWithdrawSafely(int $requestId, int $actorId, string $ruleId): void
-    {
-        $this->recordRejectedSafely(
-            fn () => $this->repository()->recordRejectedWithdraw($requestId, $actorId, $ruleId),
-            'Не удалось записать аудит отклонённого отзыва заявки.',
-            ['requestId' => $requestId, 'actorId' => $actorId, 'ruleId' => $ruleId],
+            fn () => Yii::$container->get(CancelRequestUseCase::class)->recordRejected($command, $ruleId),
+            'Не удалось записать аудит отклонённой отмены заявки.',
+            ['requestId' => $command->requestId, 'actorId' => $command->actorId, 'ruleId' => $ruleId],
             __METHOD__,
         );
     }
@@ -753,26 +718,22 @@ final class RequestController extends ApiController
     private function recordRejectedColorSafely(int $requestId, int $actorId, string $ruleId): void
     {
         $this->recordRejectedSafely(
-            fn () => $this->repository()->recordRejectedColor($requestId, $actorId, $ruleId),
+            fn () => Yii::$container->get(SetRequestColor::class)->recordRejected($requestId, $actorId, $ruleId),
             'Не удалось записать аудит отклонённой цветовой метки.',
             ['requestId' => $requestId, 'actorId' => $actorId, 'ruleId' => $ruleId],
             __METHOD__,
         );
     }
 
-    private function recordRejectedAssignmentSafely(
-        int $requestId,
-        int $executorId,
-        int $actorId,
-        string $ruleId,
-    ): void {
+    private function recordRejectedAssignmentSafely(AssignExecutorCommand $command, string $ruleId): void
+    {
         $this->recordRejectedSafely(
-            fn () => $this->repository()->recordRejectedAssignment($requestId, $executorId, $actorId, $ruleId),
+            fn () => Yii::$container->get(AssignExecutor::class)->recordRejected($command, $ruleId),
             'Не удалось записать аудит отклонённого назначения.',
             [
-                'requestId' => $requestId,
-                'executorId' => $executorId,
-                'actorId' => $actorId,
+                'requestId' => $command->requestId,
+                'executorId' => $command->executorId,
+                'actorId' => $command->actorId,
                 'ruleId' => $ruleId,
             ],
             __METHOD__,
@@ -780,18 +741,16 @@ final class RequestController extends ApiController
     }
 
     private function recordRejectedExpertAssignmentSafely(
-        int $requestId,
-        int $expertId,
-        int $actorId,
+        AssignExpertCommand $command,
         string $ruleId,
     ): void {
         $this->recordRejectedSafely(
-            fn () => $this->repository()->recordRejectedExpertAssignment($requestId, $expertId, $actorId, $ruleId),
+            fn () => Yii::$container->get(AssignExpert::class)->recordRejected($command, $ruleId),
             'Не удалось записать аудит отклонённого назначения эксперта.',
             [
-                'requestId' => $requestId,
-                'expertId' => $expertId,
-                'actorId' => $actorId,
+                'requestId' => $command->requestId,
+                'expertId' => $command->expertId,
+                'actorId' => $command->actorId,
                 'ruleId' => $ruleId,
             ],
             __METHOD__,
@@ -811,7 +770,8 @@ final class RequestController extends ApiController
     private function recordRejectedReportSafely(int $requestId, int $actorId, string $ruleId): void
     {
         $this->recordRejectedSafely(
-            fn () => $this->documents()->recordRejectedReportUpload($requestId, $actorId, $ruleId),
+            fn () => Yii::$container->get(ReportLifecycle::class)
+                ->recordRejectedUpload($requestId, $actorId, $ruleId),
             'Не удалось записать аудит отклонённой загрузки отчёта.',
             ['requestId' => $requestId, 'actorId' => $actorId, 'ruleId' => $ruleId],
             __METHOD__,
@@ -821,29 +781,30 @@ final class RequestController extends ApiController
     private function recordRejectedReportDeletionSafely(int $requestId, int $actorId, string $ruleId): void
     {
         $this->recordRejectedSafely(
-            fn () => $this->documents()->recordRejectedReportDeletion($requestId, $actorId, $ruleId),
+            fn () => Yii::$container->get(ReportLifecycle::class)
+                ->recordRejectedDeletion($requestId, $actorId, $ruleId),
             'Не удалось записать аудит отклонённого удаления отчёта.',
             ['requestId' => $requestId, 'actorId' => $actorId, 'ruleId' => $ruleId],
             __METHOD__,
         );
     }
 
-    private function recordRejectedOpinionSafely(int $requestId, int $actorId, string $ruleId): void
+    private function recordRejectedOpinionSafely(PublishOpinionCommand $command, string $ruleId): void
     {
         $this->recordRejectedSafely(
-            fn () => $this->documents()->recordRejectedOpinion($requestId, $actorId, $ruleId),
+            fn () => Yii::$container->get(PublishOpinion::class)->recordRejected($command, $ruleId),
             'Не удалось записать аудит отклонённой публикации заключения.',
-            ['requestId' => $requestId, 'actorId' => $actorId, 'ruleId' => $ruleId],
+            ['requestId' => $command->requestId, 'actorId' => $command->actorId, 'ruleId' => $ruleId],
             __METHOD__,
         );
     }
 
-    private function recordRejectedSecurityDecisionSafely(int $requestId, int $actorId, string $ruleId): void
+    private function recordRejectedSecurityDecisionSafely(DecideSecurityCommand $command, string $ruleId): void
     {
         $this->recordRejectedSafely(
-            fn () => $this->repository()->recordRejectedSecurityDecision($requestId, $actorId, $ruleId),
+            fn () => Yii::$container->get(DecideSecurity::class)->recordRejected($command, $ruleId),
             'Не удалось записать аудит отклонённого решения СБ.',
-            ['requestId' => $requestId, 'actorId' => $actorId, 'ruleId' => $ruleId],
+            ['requestId' => $command->requestId, 'actorId' => $command->actorId, 'ruleId' => $ruleId],
             __METHOD__,
         );
     }
@@ -871,11 +832,6 @@ final class RequestController extends ApiController
     private function currentUserId(): int
     {
         return (new CurrentUser(Yii::$app->db))->id(Yii::$app->request);
-    }
-
-    private function repository(): RequestRepository
-    {
-        return new RequestRepository(Yii::$app->db);
     }
 
     private function query(): RequestQuery

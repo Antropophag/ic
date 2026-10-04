@@ -13,14 +13,19 @@ make dev-up
 make dev-status
 make dev-restart
 make dev-logs SERVICE=backend
+make dev-obs-up
+make dev-stack-up
 make env-status
 ```
 
 Development использует project `ic-dev`, `.env.dev`, `compose.yaml` и
 `compose.dev.yaml`. `dev-up` выполняет build, поднимает сервисы, применяет
-migrations, seed и break-glass provisioning. `dev-down` удаляет containers и
-network, сохраняя named volumes. `dev-reset` явно удаляет volumes project
-`ic-dev`, после чего выполняет полный `dev-up`.
+migrations, seed и break-glass provisioning. `dev-down` адресно удаляет только
+application containers, сохраняя named volumes, общую network и отдельно
+запущенный observability-контур. `dev-stack-down` удаляет application и
+observability containers вместе с общей network, но также сохраняет volumes.
+`dev-reset` явно удаляет application volumes project `ic-dev`, после чего
+выполняет полный `dev-up`.
 
 ## Промышленная эксплуатация
 
@@ -40,8 +45,18 @@ make prod-status
 make prod-restart
 make prod-logs
 make prod-logs SERVICE=backend
+make prod-obs-up
+make prod-stack-up
 make prod-down
 ```
+
+Observability подключается только Make-командами через
+`compose.observability.yml`. Команды `dev-obs-*`/`prod-obs-*` управляют только
+Grafana, Prometheus, Loki, Alloy и exporters; `dev-stack-*`/`prod-stack-*` —
+приложением и observability вместе. В development при отсутствии явной настройки
+используются локальные Grafana credentials `admin`/`admin`. Production требует
+непустой `GRAFANA_ADMIN_PASSWORD` из `.env.prod`; fallback и anonymous access
+запрещены. Grafana в обоих режимах публикуется только на loopback.
 
 Lifecycle-команды выводят только этапы операции, readiness ключевых сервисов и
 пользовательские URL. Полный Compose output временно сохраняется и печатается
@@ -248,12 +263,16 @@ sudo env COMPOSE_ENV_FILE=.env.prod podman-compose --in-pod false -p ic-prod --e
 
 ## Жизненный цикл данных
 
-- `dev-up`, `prod-up` и соответствующие `down` не удаляют volumes;
-- `dev-reset` без скрытых шагов выполняет `down --volumes`, затем новый
-  `dev-up`; это штатный способ получить чистую development БД;
+- `dev-up`, `prod-up`, `*-obs-up`, `*-stack-up` и соответствующие `down` не
+  удаляют volumes;
+- application `down`/`restart` не удаляют отдельно запущенный observability;
+- `*-obs-down` не затрагивает application containers, а `*-stack-down` удаляет
+  оба набора containers и общую network;
+- `dev-reset` адресно удаляет application containers и volumes MariaDB/documents,
+  затем выполняет новый `dev-up`; observability containers и volumes сохраняются;
 - `prod-reset` требует вручную ввести `ic-prod`, затем выполняет
-  `down --volumes` и полный `prod-up`; это аварийная разрушительная операция,
-  не средство обновления;
+  тот же адресный сброс application volumes и полный `prod-up`; это аварийная
+  разрушительная операция, не средство обновления;
 - `make e2e` всегда удаляет test volumes в cleanup;
 - `env-status` читает только имя БД и Compose metadata, не печатает env,
   credentials или значения секретов.
