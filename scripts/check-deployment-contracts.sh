@@ -93,16 +93,36 @@ done
 grep -q '^prod-up: _doctor$' Makefile
 grep -q '^prod-restart: _doctor$' Makefile
 grep -q '^prod-status: _doctor$' Makefile
+grep -q '^prod-obs-up prod-obs-down prod-obs-restart prod-obs-status prod-obs-logs: _doctor$' Makefile
+grep -q '^prod-stack-up prod-stack-down: _doctor$' Makefile
 grep -q '^dev-up: _doctor$' Makefile
 grep -q '^dev-restart: _doctor$' Makefile
 grep -q '^dev-status: _doctor$' Makefile
+grep -q '^dev-obs-up dev-obs-down dev-obs-restart dev-obs-status dev-obs-logs: _doctor$' Makefile
+grep -q '^dev-stack-up dev-stack-down: _doctor$' Makefile
 grep -q '^dev-reset: doctor$' Makefile
 grep -q '^prod-reset: doctor$' Makefile
 grep -q '^env-status: doctor$' Makefile
-grep -Fq "sh scripts/environment.sh prod up" Makefile
-grep -Fq "sh scripts/environment.sh dev up" Makefile
+grep -Fq "sh scripts/environment.sh prod app up" Makefile
+grep -Fq "sh scripts/environment.sh dev app up" Makefile
+grep -Fq "sh scripts/environment.sh prod app reset" Makefile
+grep -Fq "sh scripts/environment.sh dev app reset" Makefile
+# shellcheck disable=SC2016 # These are literal Make expressions.
+grep -Fq 'sh scripts/environment.sh prod obs $(patsubst prod-obs-%,%,$@)' Makefile
+# shellcheck disable=SC2016 # These are literal Make expressions.
+grep -Fq 'sh scripts/environment.sh dev obs $(patsubst dev-obs-%,%,$@)' Makefile
+# shellcheck disable=SC2016 # These are literal Make expressions.
+grep -Fq 'sh scripts/environment.sh prod stack $(patsubst prod-stack-%,%,$@)' Makefile
+# shellcheck disable=SC2016 # These are literal Make expressions.
+grep -Fq 'sh scripts/environment.sh dev stack $(patsubst dev-stack-%,%,$@)' Makefile
 grep -Fq "compose build backend scheduler frontend" scripts/environment.sh
-grep -Fq "compose up -d --no-build --force-recreate frontend scheduler" scripts/environment.sh
+grep -Fq "compose stop frontend scheduler backend" scripts/environment.sh
+grep -Fq "compose up -d --no-build --force-recreate backend frontend scheduler" scripts/environment.sh
+grep -Fq "compose_files=\"\$app_compose_files -f compose.observability.yml\"" scripts/environment.sh
+grep -Fq "export COMPOSE_IGNORE_ORPHANS=1" scripts/environment.sh
+grep -Fq "export GRAFANA_ADMIN_PASSWORD=admin" scripts/environment.sh
+# shellcheck disable=SC2016 # This is a literal shell expression contract.
+grep -Fq '"${project}_mariadb-data" "${project}_document-data"' scripts/environment.sh
 grep -Fq "compose logs --follow" scripts/environment.sh
 grep -Fq "SERVICE_READY_TIMEOUT" scripts/environment.sh
 grep -Fq "compose config --quiet" scripts/environment.sh
@@ -169,6 +189,37 @@ done
 grep -Fq 'location = /api/openapi.yaml' docker/nginx/default.conf
 grep -Fq 'location ^~ /api/docs/' docker/nginx/default.conf
 grep -Fq 'client_max_body_size 256m;' docker/nginx/default.conf
+# shellcheck disable=SC2016 # These are literal nginx variable contracts.
+grep -Fq 'map $request_uri $source_access_request_uri {' docker/nginx/default.conf
+grep -Fq '"~^/api/v1/document-links/[a-f0-9]{64}/download(?:\\?|$)" /api/v1/document-links/[masked]/download;' docker/nginx/default.conf
+# shellcheck disable=SC2016 # These are literal nginx variable contracts.
+grep -Fq '"$request_method $source_access_request_uri $server_protocol"' docker/nginx/default.conf
+# shellcheck disable=SC2016 # These are literal nginx variable contracts.
+grep -Fq 'map $http_referer $source_access_referer {' docker/nginx/default.conf
+grep -Fq '"~^.*?/api/v1/document-links/[a-f0-9]{64}/download(?:[?#].*)?$" /api/v1/document-links/[masked]/download;' docker/nginx/default.conf
+# shellcheck disable=SC2016 # These are literal nginx variable contracts.
+grep -Fq '"$source_access_referer" "$http_user_agent" request_time=$request_time' docker/nginx/default.conf
+grep -Fq 'access_log /var/log/nginx/access.log source_access;' docker/nginx/default.conf
+# shellcheck disable=SC2016 # These are literal nginx variable contracts.
+source_access_format=$(awk '
+  /^log_format source_access[[:space:]]/ { collecting = 1 }
+  collecting { printf "%s ", $0 }
+  collecting && /;/ { exit }
+' docker/nginx/default.conf)
+# shellcheck disable=SC2016 # These are literal nginx variable contracts.
+if printf '%s\n' "$source_access_format" | grep -Eq '(\$request|\$request_uri)([^_a-zA-Z]|$)'; then
+  echo 'Nginx source access log must use the sanitized request URI.' >&2
+  exit 1
+fi
+# Prove that the guard rejects a forbidden variable on a continuation line.
+# shellcheck disable=SC2016 # These are literal nginx variable contracts.
+unsafe_source_access_format=$(printf '%s\n' "$source_access_format" | sed 's/\$source_access_request_uri/\$request_uri/')
+# shellcheck disable=SC2016 # These are literal nginx variable contracts.
+printf '%s\n' "$unsafe_source_access_format" | grep -Eq '(\$request|\$request_uri)([^_a-zA-Z]|$)'
+for alloy_config in observability/alloy/config.alloy observability/alloy/config.test.alloy; do
+  grep -Fq 'expression = "(?P<download_token>/api/v1/document-links/[a-f0-9]{64}/download)"' "$alloy_config"
+  grep -Fq 'replace    = "/api/v1/document-links/[REDACTED]/download"' "$alloy_config"
+done
 grep -Fxq 'upload_max_filesize=200M' docker/php/uploads.ini
 grep -Fxq 'post_max_size=210M' docker/php/uploads.ini
 
@@ -186,6 +237,8 @@ cp .env.test "$compose_config_dir/.env.test"
 ln -s "$PWD/compose.yaml" "$compose_config_dir/compose.yaml"
 ln -s "$PWD/compose.dev.yaml" "$compose_config_dir/compose.dev.yaml"
 ln -s "$PWD/compose.test.yaml" "$compose_config_dir/compose.test.yaml"
+ln -s "$PWD/compose.observability.yml" "$compose_config_dir/compose.observability.yml"
+ln -s "$PWD/observability" "$compose_config_dir/observability"
 (
   cd "$compose_config_dir"
   # shellcheck disable=SC2086 # Compose provider command intentionally contains arguments.
@@ -194,6 +247,20 @@ ln -s "$PWD/compose.test.yaml" "$compose_config_dir/compose.test.yaml"
   $compose_provider --env-file .env.dev config --quiet
   # shellcheck disable=SC2086 # Compose provider command intentionally contains arguments.
   $compose_provider --env-file .env.test config --quiet
+  GRAFANA_ADMIN_PASSWORD='admin'
+  export GRAFANA_ADMIN_PASSWORD
+  $compose_provider --env-file .env.dev \
+    -f compose.yaml -f compose.dev.yaml -f compose.observability.yml config --quiet
+  GRAFANA_ADMIN_PASSWORD='production-contract-placeholder'
+  export GRAFANA_ADMIN_PASSWORD
+  $compose_provider --env-file .env.prod \
+    -f compose.yaml -f compose.observability.yml config --quiet
+  unset GRAFANA_ADMIN_PASSWORD
+  if $compose_provider --env-file .env.prod \
+    -f compose.yaml -f compose.observability.yml config --quiet >/dev/null 2>&1; then
+    echo 'Production observability must require GRAFANA_ADMIN_PASSWORD.' >&2
+    exit 1
+  fi
 )
 cleanup_compose_config_dir
 trap - EXIT HUP INT TERM
