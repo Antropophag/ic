@@ -95,8 +95,8 @@ onBeforeUnmount(() => {
   </button>
   <span :id="`${id}-state`" class="visually-hidden">{{ state }}</span>
   <Teleport to="body">
-    <div
-      :id="id" ref="panel" popover="auto" role="dialog" :aria-labelledby="`${id}-title`"
+    <dialog
+      :id="id" ref="panel" popover="auto" :aria-labelledby="`${id}-title`"
       class="shlz-popover direction-filter-panel" @beforetoggle="beforeToggle" @toggle="toggled"
     >
       <div :id="`${id}-title`" class="shlz-popover__header">Направления испытаний</div>
@@ -111,6 +111,6 @@ onBeforeUnmount(() => {
           <button class="shlz-button" type="button" @click="apply([])">Сбросить</button>
         </div>
       </div>
-    </div>
+    </dialog>
   </Teleport>
 </template>

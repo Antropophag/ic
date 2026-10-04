@@ -100,6 +100,23 @@ describe('RequestDetails test-act draft lifecycle', () => {
 })
 
 describe('RequestDetails testing direction', () => {
+  it('lets a manager explicitly replace an unknown legacy mark with no direction', async () => {
+    const response = requestDetails(1, 'Образец')
+    Object.assign(response.item, { color: 'yellow', can_set_color: 1 })
+    requestApi.get.mockResolvedValue(response)
+    requestApi.setColor.mockImplementation(async (_id, color) => { response.item.color = color })
+    const { app, root } = mountDetails(ref(1))
+    await flushRequests()
+    expect(root.querySelector('.request-color-control summary').textContent).toContain('Направление не определено')
+    const menu = root.querySelector('[aria-label="Направление испытаний"]')
+    expect(menu.querySelector('[aria-pressed="true"]')).toBeNull()
+    menu.querySelector('button').click()
+    await flushRequests()
+    expect(requestApi.setColor).toHaveBeenCalledWith(1, 'white', 1)
+    expect(root.querySelector('.request-color-control summary').textContent).toContain('Без направления')
+    app.unmount()
+  })
+
   it('names directions and saves the existing color code and version', async () => {
     const response = requestDetails(1, 'Образец')
     Object.assign(response.item, { color: 'blue', can_set_color: 1 })

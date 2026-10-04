@@ -35,6 +35,7 @@ final class ListRequestsInput extends Model
         ];
     }
 
+    /** Validate comma-separated direction codes after Yii's scalar string check. */
     public function validateColors(): void
     {
         if (!is_string($this->colors)) {

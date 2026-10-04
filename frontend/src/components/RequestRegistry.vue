@@ -27,6 +27,7 @@ import HelpArticle from "./HelpArticle.vue";
 import RequestStatus from "./RequestStatus.vue";
 import TableSorter from "./TableSorter.vue";
 import DirectionFilter from "./DirectionFilter.vue";
+import { scrollRegistryTable } from "../registryScroll";
 import {
   REQUEST_STATUS_OPTIONS,
   avatarRoleClass,
@@ -65,6 +66,8 @@ const statusFilter = ref("");
 const sortDirection = ref("desc");
 const colorFilters = ref([]);
 const tableScroll = ref(null);
+
+
 const currentPage = ref(1);
 const pageSize = ref(readRegistryPageSize());
 const notificationItems = ref([]);
@@ -580,7 +583,7 @@ onBeforeUnmount(() => {
           <AppIcon name="bell" :size="18" /><span v-if="newNotifications.length" class="notification-dot" aria-hidden="true"></span>
         </button>
       </div>
-      <div ref="tableScroll" class="table-wrap" tabindex="0" role="region" aria-label="Реестр заявок с закреплённой шапкой">
+      <section ref="tableScroll" class="table-wrap" aria-label="Реестр заявок с закреплённой шапкой" @keydown="scrollRegistryTable(tableScroll, $event)">
         <table>
           <thead>
             <tr>
@@ -593,7 +596,7 @@ onBeforeUnmount(() => {
                 scope="col"
                 :aria-sort="sortDirection === 'asc' ? 'ascending' : 'descending'"
               >
-                <span class="registry-number-heading"><span>№ заявки</span><TableSorter label="Сортировать по номеру заявки" @click="sortDirection = sortDirection === 'desc' ? 'asc' : 'desc'" /></span>
+                <TableSorter class="registry-number-heading" label="Сортировать по номеру заявки" @click="sortDirection = sortDirection === 'desc' ? 'asc' : 'desc'"><span>№ заявки</span></TableSorter>
               </th>
               <th>Дата</th>
               <th>Объект испытаний</th>
@@ -697,7 +700,7 @@ onBeforeUnmount(() => {
           <p>{{ query || statusFilter ? "Измените запрос или сбросьте фильтры." : "В этом представлении пока нет заявок." }}</p>
           <button v-if="query || statusFilter || colorFilters.length" type="button" class="secondary empty-action" @click="clearRegistryFilters">Сбросить фильтры</button>
         </div>
-      </div>
+      </section>
       <footer v-if="paged.total" class="pagination">
         <span v-if="paged.pageCount > 1" class="pagination-pages"><button
           :disabled="paged.page <= 1" aria-label="Предыдущая страница" @click="goToPage(paged.page - 1)"
@@ -726,11 +729,11 @@ onBeforeUnmount(() => {
     </div>
   </section>
 
-  <div v-if="active && showDashboardHelp" class="request-drawer-overlay" @click.self="closeDashboardHelp()">
-    <aside ref="dashboardHelpDrawer" class="request-drawer request-help-drawer" role="dialog" aria-modal="true" aria-labelledby="dashboard-help-title" @keydown="handleDashboardHelpKeydown">
+  <div v-if="active && showDashboardHelp" class="request-drawer-overlay" @click.self="closeDashboardHelp()" @keydown="handleDashboardHelpKeydown">
+    <dialog ref="dashboardHelpDrawer" open class="request-drawer request-help-drawer" aria-modal="true" aria-labelledby="dashboard-help-title">
       <header class="request-drawer-head"><div><p>Реестр заявок</p><h2 id="dashboard-help-title">Справка</h2></div><button type="button" aria-label="Закрыть справку" @click="closeDashboardHelp()"><AppIcon name="close" /></button></header>
       <HelpArticle src="/help/dashboard.html" />
-    </aside>
+    </dialog>
   </div>
   <AppModal
     :open="active && showNotifications" title="Новые события в заявках" title-id="registry-notifications-title" size="medium" @close="closeNotifications"

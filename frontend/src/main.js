@@ -17,7 +17,7 @@ const loadDevelopmentTools = import.meta.env.MODE === 'development'
   ? developmentToolsLoader(window, document, () => import('../dev/dev-tools.js'))
   : null
 
-bootstrapApplication({
+void bootstrapApplication({
   loadDevelopmentTools,
   startApplication: () => createApp(App).mount('#app'),
 })
