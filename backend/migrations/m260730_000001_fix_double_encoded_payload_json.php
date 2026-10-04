@@ -5,7 +5,7 @@ declare(strict_types=1);
 use yii\db\Migration;
 
 /**
- * До исправления (см. RequestRepository и др., issue про двойное
+ * До исправления (см. request persistence adapters и др., issue про двойное
  * кодирование payload_json) весь код вставки audit_events.payload_json
  * вручную вызывал json_encode() перед insert(), а Yii2 для колонок типа
  * json дополнительно сам кодирует переданное значение
