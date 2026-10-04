@@ -130,4 +130,5 @@ for database in ic ic_test; do
 done
 
 $compose ps --status running scheduler | grep -q scheduler
+$compose ps --status running ai-cleanup | grep -q ai-cleanup
 echo "Development runtime contracts passed"

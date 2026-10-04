@@ -40,6 +40,38 @@ it('passes cancellation signals to development feedback requests', async () => {
   }))
 })
 
+it('passes cancellation to AI requests and does not reuse an aborted intent', async () => {
+  const fetchMock = vi.fn()
+    .mockRejectedValueOnce(Object.assign(new Error('aborted'), { name: 'AbortError' }))
+    .mockResolvedValueOnce(new Response('{"status":"completed"}', { status: 200 }))
+  vi.stubGlobal('fetch', fetchMock)
+  const controller = new AbortController()
+
+  await expect(requestApi.analyzeTechnicalSpecification(7, 12, controller.signal)).rejects.toMatchObject({ name: 'AbortError' })
+  await requestApi.analyzeTechnicalSpecification(7, 12)
+
+  expect(fetchMock.mock.calls[0][1].signal).toBe(controller.signal)
+  expect(fetchMock.mock.calls[0][1].headers['Idempotency-Key'])
+    .not.toBe(fetchMock.mock.calls[1][1].headers['Idempotency-Key'])
+})
+
+it('sends independent document-based analysis and draft intents', async () => {
+  const fetchMock = vi.fn()
+    .mockResolvedValueOnce(new Response('{"status":"completed"}', { status: 200 }))
+    .mockResolvedValueOnce(new Response('{"status":"completed"}', { status: 200 }))
+  vi.stubGlobal('fetch', fetchMock)
+
+  await Promise.all([
+    requestApi.analyzeTechnicalSpecification(7, 12),
+    requestApi.createTestSpecificationDraft(7, 12),
+  ])
+
+  expect(fetchMock.mock.calls[0][1].body).toBe(JSON.stringify({ documentVersionId: 12 }))
+  expect(fetchMock.mock.calls[1][1].body).toBe(JSON.stringify({ documentVersionId: 12 }))
+  expect(fetchMock.mock.calls[0][1].headers['Idempotency-Key'])
+    .not.toBe(fetchMock.mock.calls[1][1].headers['Idempotency-Key'])
+})
+
 it('loads the registry as JSON', async () => {
   const fetchMock = vi.fn().mockResolvedValue(new Response(
     JSON.stringify({ items: [] }),
@@ -63,6 +95,15 @@ it('sends registry pagination, filters, search, and sorting', async () => {
     '/api/v1/requests?page=3&pageSize=10&tab=mine&status=completed&query=%D0%BD%D0%B0%D1%81%D0%BE%D1%81&sort=asc',
     expect.any(Object),
   )
+})
+
+it('serializes multiple statuses as one comma-separated query parameter', async () => {
+  const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({ items: [] }), { status: 200 }))
+  vi.stubGlobal('fetch', fetchMock)
+
+  await requestApi.list({ status: 'completed,rejected' })
+
+  expect(fetchMock).toHaveBeenCalledWith('/api/v1/requests?status=completed%2Crejected', expect.any(Object))
 })
 
 it('loads dashboard counts and sends an attention queue filter', async () => {
@@ -124,6 +165,19 @@ it('reuses the idempotency key when retrying after a server error', async () => 
   const firstKey = fetchMock.mock.calls[0][1].headers['Idempotency-Key']
   const secondKey = fetchMock.mock.calls[1][1].headers['Idempotency-Key']
   expect(firstKey).toBe(secondKey)
+})
+
+it('uses a new idempotency key for an explicit AI retry after a terminal error', async () => {
+  const fetchMock = vi.fn()
+    .mockResolvedValueOnce(new Response('{"message":"ЛИЗА недоступна"}', { status: 503 }))
+    .mockResolvedValueOnce(new Response('{"status":"completed"}', { status: 200 }))
+  vi.stubGlobal('fetch', fetchMock)
+
+  await expect(requestApi.analyzeTechnicalSpecification(22)).rejects.toMatchObject({ status: 503 })
+  await expect(requestApi.analyzeTechnicalSpecification(22, null, undefined, true)).resolves.toEqual({ status: 'completed' })
+
+  expect(fetchMock.mock.calls[0][1].headers['Idempotency-Key'])
+    .not.toBe(fetchMock.mock.calls[1][1].headers['Idempotency-Key'])
 })
 
 it('uses a new key for a new identical intent after success', async () => {

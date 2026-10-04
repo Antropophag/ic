@@ -149,8 +149,15 @@ paths:
             default: active
         - name: status
           in: query
+          description: Статусы через запятую без пробелов и пустых элементов; пустое значение не ограничивает выборку.
+          style: form
+          explode: false
           schema:
-            $ref: '#/components/schemas/RequestStatus'
+            type: array
+            maxItems: 8
+            uniqueItems: true
+            items:
+              $ref: '#/components/schemas/RequestStatus'
         - name: query
           in: query
           schema:
@@ -188,14 +195,15 @@ paths:
   /api/v1/requests/dashboard:
     get:
       tags: [Requests]
-      summary: Получить персональные очереди действий
+      summary: Получить dashboard заявок
       description: |
-        Возвращает только категории реальных действий текущего активного
+        Возвращает категории реальных действий текущего активного
         пользователя с учётом ролей и действующих назначений. Счётчики точные,
         относятся ко всему доступному scope и не зависят от страницы, вкладки,
         поиска или статусного фильтра реестра. Одна заявка может входить в
         несколько категорий при совмещении полномочий. Категории с нулевым
-        счётчиком не возвращаются.
+        счётчиком не возвращаются. Всем аутентифицированным пользователям также
+        возвращается operational summary общей текущей нагрузки.
       operationId: getRequestDashboard
       security:
         - cookieSession: []
@@ -212,6 +220,27 @@ paths:
                     title: Назначить исполнителя
                     description: Назначьте ответственного за проведение испытаний.
                     count: 4
+                operational_summary:
+                  active: 12
+                  unassigned: 3
+                  ready_to_start: 2
+                  in_progress: 5
+                  suspended: 2
+                  expertise: 3
+                  security_review: 1
+                  directions:
+                    - id: mechanical
+                      title: Механические испытания
+                      color: blue
+                      active: 4
+                      unassigned: 1
+                      executors:
+                        - user_id: 42
+                          display_name: Кашин Алексей
+                          is_available: true
+                          active: 4
+                          in_progress: 3
+                          suspended: 1
         '401':
           $ref: '#/components/responses/Unauthorized'
         '500':
@@ -301,6 +330,82 @@ paths:
           $ref: '#/components/responses/ValidationError'
         '500':
           $ref: '#/components/responses/ServerError'
+
+  /api/v1/requests/{id}/ai/technical-specification/analyze:
+    post:
+      tags: [Requests]
+      summary: Проанализировать приложенное ТЗ через ЛИЗУ
+      description: |
+        INTERNAL PILOT. Независимая read-only AI-операция; не изменяет заявку.
+        Ответ replay'ится до 24 часов для того же Idempotency-Key.
+      operationId: analyzeTechnicalSpecification
+      security: [{cookieSession: [], csrfToken: []}]
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: integer, minimum: 1}}
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TechnicalSpecificationAiInput'
+      responses:
+        '200':
+          description: Анализ, список кандидатов или понятное отсутствие ТЗ
+          headers:
+            Idempotency-Replayed: {$ref: '#/components/headers/IdempotencyReplayed'}
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - $ref: '#/components/schemas/TechnicalSpecificationAnalysisCompleted'
+                  - $ref: '#/components/schemas/TechnicalSpecificationChoiceRequired'
+                  - $ref: '#/components/schemas/TechnicalSpecificationNotFound'
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '422': {$ref: '#/components/responses/ValidationError'}
+        '503':
+          description: Функция выключена, timeout или недоступность ЛИЗЫ
+          content: {application/json: {schema: {$ref: '#/components/schemas/HttpError'}}}
+
+  /api/v1/requests/{id}/ai/technical-specification/draft:
+    post:
+      tags: [Requests]
+      summary: Сформировать черновик ТЗ на испытания в независимом AI-chat
+      description: |
+        INTERNAL PILOT. Самостоятельная read-only задача с отдельными chat,
+        upload и idempotency lifecycle; не использует результат анализа.
+      operationId: createTestSpecificationDraft
+      security: [{cookieSession: [], csrfToken: []}]
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: integer, minimum: 1}}
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TechnicalSpecificationAiInput'
+      responses:
+        '200':
+          description: Черновик, список кандидатов или понятное отсутствие ТЗ
+          headers:
+            Idempotency-Replayed: {$ref: '#/components/headers/IdempotencyReplayed'}
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - $ref: '#/components/schemas/TestSpecificationDraftCompleted'
+                  - $ref: '#/components/schemas/TechnicalSpecificationChoiceRequired'
+                  - $ref: '#/components/schemas/TechnicalSpecificationNotFound'
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '422': {$ref: '#/components/responses/ValidationError'}
+        '503':
+          description: Функция выключена, timeout или недоступность ЛИЗЫ
+          content: {application/json: {schema: {$ref: '#/components/schemas/HttpError'}}}
 
   /api/v1/requests/{id}/reject:
     post:
@@ -557,7 +662,7 @@ components:
 
   headers:
     IdempotencyReplayed:
-      description: "`true`, если сохранённый успешный ответ был воспроизведён"
+      description: "`true`, если сохранённый terminal response был воспроизведён"
       schema:
         type: string
         enum: ['true', 'false']
@@ -652,6 +757,69 @@ components:
             $ref: '#/components/schemas/RequestCommandResult'
 
   schemas:
+    TechnicalSpecificationAiInput:
+      type: object
+      properties:
+        documentVersionId: {type: integer, minimum: 1}
+      additionalProperties: false
+    TechnicalSpecificationCandidate:
+      type: object
+      required: [versionId, name, mimeType, version]
+      properties:
+        versionId: {type: integer, minimum: 1}
+        name: {type: string, minLength: 1}
+        mimeType:
+          type: string
+          enum: [application/pdf, application/vnd.openxmlformats-officedocument.wordprocessingml.document]
+        version: {type: integer, minimum: 1}
+      additionalProperties: false
+    TechnicalSpecificationChoiceRequired:
+      type: object
+      required: [status, documents]
+      properties:
+        status: {type: string, enum: [choice_required]}
+        documents:
+          type: array
+          minItems: 2
+          items: {$ref: '#/components/schemas/TechnicalSpecificationCandidate'}
+      additionalProperties: false
+    TechnicalSpecificationNotFound:
+      type: object
+      required: [status, message]
+      properties:
+        status: {type: string, enum: [not_found]}
+        message: {type: string, minLength: 1}
+      additionalProperties: false
+    TechnicalSpecificationAnalysis:
+      type: object
+      required: [criticalContradictions, ambiguousRequirements, missingInformation, testRequirements, initiatorQuestions, recommendations]
+      properties:
+        criticalContradictions: {type: array, items: {type: string}}
+        ambiguousRequirements: {type: array, items: {type: string}}
+        missingInformation: {type: array, items: {type: string}}
+        testRequirements: {type: array, items: {type: string}}
+        initiatorQuestions: {type: array, items: {type: string}}
+        recommendations: {type: array, items: {type: string}}
+      additionalProperties: false
+    TechnicalSpecificationAnalysisCompleted:
+      type: object
+      required: [status, conversationId, documentVersionId, analysis]
+      properties:
+        status: {type: string, enum: [completed]}
+        conversationId: {type: string, minLength: 1}
+        documentVersionId: {type: integer, minimum: 1}
+        analysis: {$ref: '#/components/schemas/TechnicalSpecificationAnalysis'}
+      additionalProperties: false
+    TestSpecificationDraftCompleted:
+      type: object
+      required: [status, conversationId, documentVersionId, draft, notice]
+      properties:
+        status: {type: string, enum: [completed]}
+        conversationId: {type: string, minLength: 1}
+        documentVersionId: {type: integer, minimum: 1}
+        draft: {type: string, minLength: 1}
+        notice: {type: string, minLength: 1}
+      additionalProperties: false
     SystemOverview:
       type: object
       required: [application, services, checkedAt]
@@ -800,7 +968,7 @@ components:
     UserProfile:
       type: object
       nullable: true
-      required: [id, displayName, email, department, position, roles]
+      required: [id, displayName, email, department, position, roles, features]
       properties:
         id:
           type: integer
@@ -820,6 +988,12 @@ components:
           type: array
           items:
             type: string
+        features:
+          type: object
+          required: [lizaAi]
+          properties:
+            lizaAi: {type: boolean}
+          additionalProperties: false
       additionalProperties: false
     AdminUsersResponse:
       type: object
@@ -905,12 +1079,89 @@ components:
         - security_decision
     AttentionDashboard:
       type: object
-      required: [categories]
+      required: [categories, operational_summary]
       properties:
         categories:
           type: array
           items:
             $ref: '#/components/schemas/AttentionCategory'
+        operational_summary:
+          $ref: '#/components/schemas/OperationalSummary'
+      additionalProperties: false
+    OperationalSummary:
+      type: object
+      required: [active, unassigned, ready_to_start, in_progress, suspended, expertise, security_review, directions]
+      properties:
+        active:
+          type: integer
+          minimum: 0
+        unassigned:
+          type: integer
+          minimum: 0
+        ready_to_start:
+          type: integer
+          minimum: 0
+        in_progress:
+          type: integer
+          minimum: 0
+        suspended:
+          type: integer
+          minimum: 0
+        expertise:
+          type: integer
+          minimum: 0
+        security_review:
+          type: integer
+          minimum: 0
+        directions:
+          type: array
+          items:
+            $ref: '#/components/schemas/OperationalDirection'
+      additionalProperties: false
+    OperationalDirection:
+      type: object
+      required: [id, title, color, active, unassigned, executors]
+      properties:
+        id:
+          type: string
+          enum: [mechanical, metrology, electrical, unclassified]
+        title:
+          type: string
+        color:
+          type: string
+          enum: [blue, goldenrod, violet, neutral]
+        active:
+          type: integer
+          minimum: 0
+        unassigned:
+          type: integer
+          minimum: 0
+        executors:
+          type: array
+          description: Populated only for IC and laboratory managers; empty for other authenticated roles.
+          items:
+            $ref: '#/components/schemas/OperationalExecutorWorkload'
+      additionalProperties: false
+    OperationalExecutorWorkload:
+      type: object
+      required: [user_id, display_name, is_available, active, in_progress, suspended]
+      properties:
+        user_id:
+          type: integer
+          nullable: true
+        display_name:
+          type: string
+        is_available:
+          type: boolean
+        active:
+          type: integer
+          minimum: 0
+        in_progress:
+          type: integer
+          minimum: 0
+        suspended:
+          type: integer
+          minimum: 0
       additionalProperties: false
     RequestEvents:
       type: object
@@ -1062,7 +1313,12 @@ components:
           properties:
             decision: {type: string, enum: [approve]}
             lockVersion: {type: integer, minimum: 1}
-            reason: {type: string, maxLength: 5000}
+            reason:
+              type: string
+              maxLength: 5000
+              pattern: '^\s*$'
+              nullable: true
+              description: Для согласования допускается только пустое после обрезки пробелов значение
           additionalProperties: false
         - type: object
           required: [decision, lockVersion, reason]

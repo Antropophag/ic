@@ -2,5 +2,6 @@
 set -eu
 
 project_root=$(git rev-parse --show-toplevel)
+sh "$project_root/scripts/check-git-push-identity.sh" "$1"
 make -C "$project_root" check
 exec git lfs pre-push "$@"

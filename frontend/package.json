@@ -11,7 +11,7 @@
     "openapi:validate": "node scripts/check-openapi.mjs",
     "audit": "npm audit --audit-level=high",
     "test": "vitest run",
-    "coverage": "vitest run --coverage",
+    "coverage": "vitest run --coverage && vitest run scripts/bitrix-files.test.js --coverage --coverage.include=scripts/bitrix-files.mjs --coverage.reporter=lcov --coverage.reportsDirectory=coverage/sonar --coverage.thresholds.lines=0 --coverage.thresholds.functions=0 --coverage.thresholds.statements=0 --coverage.thresholds.branches=0",
     "e2e": "playwright test"
   },
   "dependencies": {

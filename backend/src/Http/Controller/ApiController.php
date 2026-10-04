@@ -20,6 +20,11 @@ use yii\web\UnprocessableEntityHttpException;
 
 abstract class ApiController extends Controller
 {
+    protected function authenticatedUserId(): int
+    {
+        return (new CurrentUser(Yii::$app->db))->id(Yii::$app->request);
+    }
+
     /** @param array<string, mixed> $params */
     public function runAction($id, $params = []): mixed
     {
@@ -40,7 +45,7 @@ abstract class ApiController extends Controller
         }
         $storageCheckpoint = DocumentStorage::writeCheckpoint();
         try {
-            $result = (new IdempotencyStore(Yii::$app->db))->execute(
+            $result = $this->executeIdempotent(
                 $actorId,
                 $request->method,
                 $request->pathInfo,
@@ -73,6 +78,34 @@ abstract class ApiController extends Controller
     protected function requiresIdempotency(string $actionId): bool
     {
         return true;
+    }
+
+    /**
+     * @param callable(): mixed $operation
+     * @param callable(): int $statusCode
+     * @param callable(): (string|null) $location
+     * @return array{body: mixed, statusCode: int, location: string|null, replayed: bool}
+     */
+    protected function executeIdempotent(
+        int $actorId,
+        string $method,
+        string $route,
+        string $key,
+        string $requestHash,
+        callable $operation,
+        callable $statusCode,
+        callable $location,
+    ): array {
+        return (new IdempotencyStore(Yii::$app->db))->execute(
+            $actorId,
+            $method,
+            $route,
+            $key,
+            $requestHash,
+            $operation,
+            $statusCode,
+            $location,
+        );
     }
 
     /** @return array{errors: array<string, list<string>>}|null */

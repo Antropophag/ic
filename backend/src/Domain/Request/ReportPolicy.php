@@ -10,7 +10,7 @@ final class ReportPolicy
     {
         // ТЗ 7.8: после удаления отчёта его можно загрузить заново, даже
         // если заявка уже выполнена — цикл ГК → СБ запускается повторно
-        // (см. DocumentRepository::uploadReport()).
+        // (см. ReportLifecycle::upload()).
         $statusAllowed = in_array($status, [RequestStatus::InProgress, RequestStatus::OpinionPreparation], true)
             || ($status === RequestStatus::Completed && !$hasActiveReport);
         if (!$statusAllowed || (!$isExecutor && !$isManager)) {

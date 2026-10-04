@@ -22,9 +22,9 @@ function authHeaders() {
   return csrfToken ? { 'X-CSRF-Token': csrfToken } : {}
 }
 
-async function request(path, options = {}) {
+async function request(path, options = {}, requestOptions = {}) {
   if (options.method === 'POST' && path.startsWith('/api/v1/') && !path.startsWith('/api/v1/auth/')) {
-    return idempotentRequest(path, options)
+    return idempotentRequest(path, options, requestOptions.newIdempotencyIntent === true)
   }
   return performRequest(path, options)
 }
@@ -81,8 +81,9 @@ function pruneMutationIntents(now) {
   }
 }
 
-function idempotentRequest(path, options) {
+function idempotentRequest(path, options, newIntent = false) {
   const signature = mutationSignature(path, options.body)
+  if (newIntent) mutationIntents.delete(signature)
   const existing = mutationIntents.get(signature)
   if (existing?.promise) return existing.promise
 
@@ -97,8 +98,11 @@ function idempotentRequest(path, options) {
     return payload
   }).catch(error => {
     if (mutationIntents.get(signature) === intent) {
-      intent.promise = null
-      mutationIntents.set(signature, intent)
+      if (error?.name === 'AbortError') mutationIntents.delete(signature)
+      else {
+        intent.promise = null
+        mutationIntents.set(signature, intent)
+      }
     }
     throw error
   })
@@ -129,6 +133,16 @@ export const requestApi = {
     body.append('file', file)
     return request(`/api/v1/requests/${requestId}/documents`, { method: 'POST', body })
   },
+  analyzeTechnicalSpecification: (requestId, documentVersionId = null, signal = undefined, newOperation = false) => request(`/api/v1/requests/${requestId}/ai/technical-specification/analyze`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(documentVersionId === null ? {} : { documentVersionId }),
+    signal,
+  }, { newIdempotencyIntent: newOperation }),
+  createTestSpecificationDraft: (requestId, documentVersionId = null, signal = undefined, newOperation = false) => request(`/api/v1/requests/${requestId}/ai/technical-specification/draft`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(documentVersionId === null ? {} : { documentVersionId }),
+    signal,
+  }, { newIdempotencyIntent: newOperation }),
   uploadReport: (requestId, file) => {
     const body = new FormData()
     body.append('file', file)

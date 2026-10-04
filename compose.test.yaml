@@ -46,6 +46,24 @@ services:
     stop_grace_period: 15s
     restart: unless-stopped
 
+  ai-cleanup:
+    image: shlz-test-registry-test-backend
+    build:
+      context: .
+      dockerfile: docker/backend.Dockerfile
+      target: test
+    env_file: ${TEST_ENV_FILE:?TEST_ENV_FILE must select the test environment}
+    depends_on:
+      mariadb: {condition: service_healthy}
+    read_only: true
+    tmpfs: [/tmp, /app/runtime]
+    volumes:
+      - ./deployment/test/console.php:/app/deployment/console.php:ro
+    command: ["php", "yii", "ai/work"]
+    stop_signal: SIGTERM
+    stop_grace_period: 15s
+    restart: unless-stopped
+
   mariadb:
     image: mariadb:11.4.7-noble
     environment:
@@ -90,6 +108,31 @@ services:
       retries: 40
       start_period: 15s
     restart: unless-stopped
+
+  loki:
+    image: docker.io/grafana/loki:3.5.3
+    command: ["-config.file=/etc/loki/config.yml"]
+    volumes:
+      - ./observability/loki/config.yml:/etc/loki/config.yml:ro
+    tmpfs: ["/loki:uid=10001,gid=10001"]
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q --spider http://127.0.0.1:3100/ready"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+  alloy:
+    image: docker.io/grafana/alloy:v1.10.0
+    command:
+      - run
+      - --storage.path=/var/lib/alloy/data
+      - /etc/alloy/config.alloy
+    volumes:
+      - ./observability/alloy/config.test.alloy:/etc/alloy/config.alloy:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    tmpfs: [/var/lib/alloy/data]
+    depends_on:
+      loki: {condition: service_healthy}
 
 volumes:
   test-mariadb-data:

@@ -85,14 +85,14 @@ up)
   require_image shlz-test-registry-test-backend
   require_image shlz-test-registry-test-frontend
   require_image shlz-test-registry-test-ad
-  $compose stop frontend scheduler >/dev/null 2>&1 || true
+  $compose stop frontend scheduler ai-cleanup >/dev/null 2>&1 || true
   $compose up -d --no-build mariadb
   $compose up -d --no-build ad
   $compose up -d --no-build mailpit
   wait_url "$(mailpit_base_url)/api/v1/info"
   $compose up -d --no-build --force-recreate backend
   "$0" reset
-  $compose up -d --no-build --force-recreate frontend scheduler
+  $compose up -d --no-build --force-recreate frontend scheduler ai-cleanup
   assert_health "$(test_base_url)/health/live" ok
   assert_health "$(test_base_url)/health/ready" ready
   ;;
@@ -103,9 +103,14 @@ reset)
   }
   restart_frontend=0
   restart_scheduler=0
+  restart_ai_cleanup=0
   if service_running scheduler; then
     restart_scheduler=1
     $compose stop scheduler
+  fi
+  if service_running ai-cleanup; then
+    restart_ai_cleanup=1
+    $compose stop ai-cleanup
   fi
   if service_running frontend; then
     restart_frontend=1
@@ -122,6 +127,9 @@ reset)
     if [ "$restart_scheduler" -eq 1 ]; then
       $compose up -d --no-build --force-recreate scheduler || true
     fi
+    if [ "$restart_ai_cleanup" -eq 1 ]; then
+      $compose up -d --no-build --force-recreate ai-cleanup || true
+    fi
     exit "$reset_status"
   fi
   if [ "$restart_frontend" -eq 1 ]; then
@@ -129,6 +137,9 @@ reset)
   fi
   if [ "$restart_scheduler" -eq 1 ]; then
     $compose up -d --no-build --force-recreate scheduler
+  fi
+  if [ "$restart_ai_cleanup" -eq 1 ]; then
+    $compose up -d --no-build --force-recreate ai-cleanup
   fi
   if [ "$restart_frontend" -eq 1 ]; then
     assert_health "$(test_base_url)/health/live" ok
