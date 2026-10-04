@@ -1,0 +1,48 @@
+/* Generated from shlz-ui 1864b3c0cb327485f08c48b14c88730ec852b03c. Run frontend/scripts/sync-shlz-styles.mjs to update. */
+.shlz-popover {
+  position: fixed;
+  z-index: 20;
+  inset-block-start: 0;
+  inset-inline-start: 0;
+  inline-size: min(236px, calc(100vw - var(--shlz-source-spacing-16)));
+  color: var(--shlz-semantic-color-text-primary);
+  background: var(--shlz-semantic-color-surface-base);
+  border-radius: var(--shlz-source-radius-regular);
+  font-size: 14px;
+  line-height: 19px;
+
+  /* FACT: the same two filter layers are repeated for every Popover surface. */
+  box-shadow:
+    0 4px 15px rgb(11 22 35 / 10%),
+    0 1px 1.5px rgb(11 22 35 / 8%);
+}
+
+.shlz-popover[hidden] {
+  display: none;
+}
+
+.shlz-popover__header {
+  block-size: var(--shlz-semantic-control-height-medium);
+  padding: 10px var(--shlz-source-spacing-16);
+  border-block-end: var(--shlz-semantic-border-width-default) solid
+    var(--shlz-source-color-dark-blue-dark-blue-10);
+  font-weight: 600;
+}
+
+.shlz-popover__body {
+  block-size: 50px;
+  padding: 12px var(--shlz-source-spacing-16); /* Popover.svg geometry */
+}
+
+.shlz-popover__body--fluid {
+  block-size: auto;
+  min-block-size: 50px;
+}
+
+.shlz-popover__arrow {
+  position: absolute;
+  inline-size: 10px;
+  block-size: 10px;
+  background: var(--shlz-semantic-color-surface-base);
+  transform: rotate(45deg);
+}

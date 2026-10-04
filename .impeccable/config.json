@@ -1,0 +1,17 @@
+{
+  "detector": {
+    "ignoreRules": [],
+    "ignoreFiles": [],
+    "ignoreValues": [
+      {
+        "rule": "side-tab",
+        "value": "*",
+        "files": [
+          "frontend/src/styles.css"
+        ],
+        "createdAt": "2026-10-04T17:34:04.526Z",
+        "reason": "User confirmed: retain a narrow testing-direction color strip in registry rows (issue #316). Agent review: other matches are pre-existing neutral timeline/history separators and legacy row shadows overridden by box-shadow:none; Chromium and WebKit verified the active strip is 3px."
+      }
+    ]
+  }
+}

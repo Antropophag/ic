@@ -63,6 +63,19 @@ afterEach(() => {
   document.body.replaceChildren()
 })
 
+it('keeps number sorting and resets the scroll position', async () => {
+  const mounted = mountRegistry(['employee'])
+  await flushRequests()
+  const scroll = document.querySelector('.table-wrap')
+  scroll.scrollTop = 300
+  document.querySelector('[aria-label="Сортировать по номеру заявки"]').click()
+  await flushRequests()
+  expect(scroll.scrollTop).toBe(0)
+  expect(requestApi.list).toHaveBeenLastCalledWith(expect.objectContaining({ sort: 'asc', page: 1, colors: '' }))
+  expect(document.querySelector('[aria-label="Сортировать по направлению испытаний"]')).toBeNull()
+  mounted.app.unmount()
+})
+
 describe('RequestRegistry request creation permissions', () => {
   it('opens the creation form only for an allowed role', async () => {
     const allowed = mountRegistry(['employee'])

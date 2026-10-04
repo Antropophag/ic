@@ -24,6 +24,9 @@ import {
 import AppIcon from "./AppIcon.vue";
 import AppModal from "./AppModal.vue";
 import HelpArticle from "./HelpArticle.vue";
+import RequestStatus from "./RequestStatus.vue";
+import TableSorter from "./TableSorter.vue";
+import DirectionFilter from "./DirectionFilter.vue";
 import {
   REQUEST_STATUS_OPTIONS,
   avatarRoleClass,
@@ -60,6 +63,8 @@ const dashboardHelpDrawer = ref(null);
 const query = ref("");
 const statusFilter = ref("");
 const sortDirection = ref("desc");
+const colorFilters = ref([]);
+const tableScroll = ref(null);
 const currentPage = ref(1);
 const pageSize = ref(readRegistryPageSize());
 const notificationItems = ref([]);
@@ -179,6 +184,7 @@ async function loadRequests({ rethrow = false } = {}) {
       status: statusFilter.value,
       query: query.value.trim(),
       sort: sortDirection.value,
+      colors: colorFilters.value.join(","),
       attention: activeAttention.value,
     });
     if (!registryGuard.isCurrent(token, true)) return;
@@ -315,6 +321,7 @@ function handleDashboardHelpKeydown(event) {
 function clearRegistryFilters() {
   query.value = "";
   statusFilter.value = "";
+  colorFilters.value = [];
 }
 
 function commentAvatarClass(item) {
@@ -325,10 +332,11 @@ function commentAvatarClass(item) {
 
 function reloadFirstPage() {
   currentPage.value = 1;
+  if (tableScroll.value) tableScroll.value.scrollTop = 0;
   loadRequests();
 }
 
-watch([activeTab, activeAttention, statusFilter, sortDirection], reloadFirstPage);
+watch([activeTab, activeAttention, statusFilter, sortDirection, colorFilters], reloadFirstPage);
 watch(query, () => {
   registryLoadLifecycle.scheduleReload(reloadFirstPage);
 });
@@ -362,6 +370,7 @@ watch(
 function goToPage(page) {
   if (page === currentPage.value) return;
   currentPage.value = page;
+  if (tableScroll.value) tableScroll.value.scrollTop = 0;
   loadRequests();
 }
 
@@ -491,7 +500,7 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <section v-show="active" class="page screen-panel" :class="{ 'screen-panel--active': active }">
+  <section v-show="active" class="page registry-page screen-panel" :class="{ 'screen-panel--active': active }">
     <section
       v-if="dashboardLoading || dashboardError || attentionCategories.length"
       class="attention-dashboard"
@@ -564,29 +573,27 @@ onBeforeUnmount(() => {
             </option>
           </select>
         </label>
-        <button v-if="query || statusFilter" type="button" class="toolbar-clear" @click="clearRegistryFilters">
+        <button v-if="query || statusFilter || colorFilters.length" type="button" class="toolbar-clear" @click="clearRegistryFilters">
           Сбросить
         </button>
         <button type="button" class="registry-notifications" :aria-label="newNotifications.length ? 'Есть новые события в заявках' : 'Новых событий в заявках нет'" @click="openNotifications">
           <AppIcon name="bell" :size="18" /><span v-if="newNotifications.length" class="notification-dot" aria-hidden="true"></span>
         </button>
       </div>
-      <div class="table-wrap">
+      <div ref="tableScroll" class="table-wrap" tabindex="0" role="region" aria-label="Реестр заявок с закреплённой шапкой">
         <table>
           <thead>
             <tr>
+              <th class="registry-direction-heading" scope="col">
+                <span class="visually-hidden">Направление испытаний</span>
+                <DirectionFilter v-model="colorFilters" :active="active" />
+              </th>
               <th
                 class="sortable"
                 scope="col"
-                :aria-sort="sortDirection === 'desc' ? 'descending' : 'ascending'"
+                :aria-sort="sortDirection === 'asc' ? 'ascending' : 'descending'"
               >
-                <button
-                  type="button"
-                  class="sort-control"
-                  @click="sortDirection = sortDirection === 'desc' ? 'asc' : 'desc'"
-                >
-                  <span>№ заявки</span><svg viewBox="0 0 16 16" aria-hidden="true" :class="{ ascending: sortDirection === 'asc' }"><path d="m5 6 3 3 3-3" /></svg>
-                </button>
+                <span class="registry-number-heading"><span>№ заявки</span><TableSorter label="Сортировать по номеру заявки" @click="sortDirection = sortDirection === 'desc' ? 'asc' : 'desc'" /></span>
               </th>
               <th>Дата</th>
               <th>Объект испытаний</th>
@@ -600,7 +607,7 @@ onBeforeUnmount(() => {
           </thead>
           <tbody v-if="registryLoading && !paged.items.length" aria-label="Загрузка заявок">
             <tr v-for="index in 7" :key="`skeleton-${index}`" class="registry-skeleton" aria-hidden="true">
-              <td v-for="cell in 9" :key="cell"><span /></td>
+              <td v-for="cell in 10" :key="cell"><span /></td>
             </tr>
           </tbody>
           <tbody v-else>
@@ -613,6 +620,7 @@ onBeforeUnmount(() => {
               @keydown.enter="emit('select-request', item)"
               @keydown.space.prevent="emit('select-request', item)"
             >
+              <td class="registry-direction-cell" :title="item.directionLabel"><span class="visually-hidden">{{ item.directionLabel }}</span></td>
               <td class="number">{{ item.id }}</td>
               <td>{{ item.date }}</td>
               <td class="registry-object-cell">
@@ -624,7 +632,7 @@ onBeforeUnmount(() => {
               </td>
               <td>{{ item.executor }}</td>
               <td>
-                <span class="badge" :class="item.tone">{{ item.compactStatus }}</span>
+                <RequestStatus :label="item.compactStatus" :full-label="item.status" :tone="item.tone" />
               </td>
               <td class="registry-indicator-cell">
                 <span
@@ -687,7 +695,7 @@ onBeforeUnmount(() => {
           <div class="empty-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6" /><path d="m15 15 4 4" /></svg></div>
           <h3>Ничего не найдено</h3>
           <p>{{ query || statusFilter ? "Измените запрос или сбросьте фильтры." : "В этом представлении пока нет заявок." }}</p>
-          <button v-if="query || statusFilter" type="button" class="secondary empty-action" @click="clearRegistryFilters">Сбросить фильтры</button>
+          <button v-if="query || statusFilter || colorFilters.length" type="button" class="secondary empty-action" @click="clearRegistryFilters">Сбросить фильтры</button>
         </div>
       </div>
       <footer v-if="paged.total" class="pagination">

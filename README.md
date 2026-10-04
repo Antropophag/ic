@@ -7,6 +7,14 @@ read-only журнал действий и журнал доставки уве�
 
 ## Локальная разработка
 
+Для статусов используются локальные CSS-примитивы SHLZ UI из коммита
+`1864b3c0cb327485f08c48b14c88730ec852b03c`: `Status`, `Badge`, элементы `Table`, `Popover`, `Choice` и `Button`.
+Версия закреплена в `frontend/scripts/sync-shlz-styles.mjs`; команда
+`node frontend/scripts/sync-shlz-styles.mjs /path/to/shlz-ui` воспроизводит
+токены и исходные стили в `frontend/src/vendor/shlz/`. Эти файлы не редактируют
+вручную. Цвета бизнес-статусов и плотность реестра задаёт приложение.
+Сборка и работа портала не требуют соседнего репозитория или CDN.
+
 Нужны Git, Node.js 22 и Docker Compose либо Podman Compose. При использовании
 Docker требуются Compose 2.20.2+ и Engine 25.0+ (API 1.44+): frontend healthcheck
 использует `start_interval`.

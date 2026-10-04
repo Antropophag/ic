@@ -20,6 +20,33 @@ use Tests\Integration\IntegrationTestCase;
 
 final class RequestRepositoryTest extends IntegrationTestCase
 {
+    public function testDirectionFilterCombinesWithSearchStatusOwnershipAndPagination(): void
+    {
+        $actor = $this->createUser('dev.it.direction.filter', 'Фильтр');
+        $other = $this->createUser('dev.it.direction.other', 'Другой инициатор');
+        $matching = [];
+        foreach (['white', 'orange', 'blue', 'violet', 'green', 'blue', 'red'] as $color) {
+            $request = $this->createRegisteredRequest($actor, 'direction-filter');
+            $this->db()->createCommand()->update('{{%requests}}', ['color' => $color], ['id' => $request['id']])->execute();
+            if (in_array($color, ['orange', 'blue'], true)) {
+                $matching[] = (int) $request['id'];
+            }
+        }
+        $excluded = $this->createRegisteredRequest($other, 'direction-filter');
+        $this->db()->createCommand()->update('{{%requests}}', ['color' => 'blue'], ['id' => $excluded['id']])->execute();
+        $query = new RequestQuery($this->db());
+        $page = $query->findPage($actor, 1, 2, 'mine', 'registered', 'direction-filter', 'desc', null, ['blue', 'orange']);
+        self::assertSame(3, $page['total']);
+        self::assertSame(2, $page['pageCount']);
+        self::assertSame(array_reverse(array_slice($matching, 1)), array_map('intval', array_column($page['items'], 'id')));
+        $last = $query->findPage($actor, 2, 2, 'mine', 'registered', 'direction-filter', 'desc', null, ['blue', 'orange']);
+        self::assertSame([$matching[0]], array_map('intval', array_column($last['items'], 'id')));
+        $empty = $query->findPage($actor, 1, 2, 'mine', 'completed', 'direction-filter', 'desc', null, ['blue']);
+        self::assertSame(0, $empty['total']);
+        $all = $query->findPage($actor, 1, 100, 'mine', null, 'direction-filter', 'desc');
+        self::assertSame(7, $all['total']);
+    }
+
     /** @return array<string, mixed> */
     private function createRegisteredRequest(int $initiatorId, string $marker): array
     {

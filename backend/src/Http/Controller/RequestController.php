@@ -120,6 +120,7 @@ final class RequestController extends ApiController
             trim((string) $input->query),
             (string) $input->sort,
             $input->attention === null || $input->attention === '' ? null : (string) $input->attention,
+            $input->colorValues(),
         );
     }
 

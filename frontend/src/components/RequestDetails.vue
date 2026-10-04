@@ -4,11 +4,12 @@ import { requestApi } from '../api'
 import AppIcon from './AppIcon.vue'
 import AppModal from './AppModal.vue'
 import HelpArticle from './HelpArticle.vue'
+import RequestStatus from './RequestStatus.vue'
 import { createConfirmDialog } from '../confirmDialog'
 import { confirmRequestAction } from '../confirmRequestAction'
 import { triggerBlobDownload } from '../download'
 import { createLatestRequestGuard } from '../latestRequestGuard'
-import { REQUEST_COLORS, avatarRoleClass, canStartNow, canSubmitComment, commentFromApi, documentFromApi, documentKind, fromApi, historyFromApi, initialsFor, newestFirstFeed, withoutStaleActions } from '../registry'
+import { REQUEST_COLORS, testingDirectionLabel, avatarRoleClass, canStartNow, canSubmitComment, commentFromApi, documentFromApi, documentKind, fromApi, historyFromApi, initialsFor, newestFirstFeed, withoutStaleActions } from '../registry'
 
 const props = defineProps({ requestId: { type: Number, required: true }, currentInitials: { type: String, default: '' }, initialWarning: { type: String, default: '' } })
 const emit = defineEmits(['loaded', 'unavailable', 'updated', 'close'])
@@ -129,11 +130,6 @@ function eventIconTone(action) {
   return 'neutral'
 }
 
-const COLOR_LABELS = { white: 'Без цвета', red: 'Красный', orange: 'Оранжевый', blue: 'Синий', violet: 'Фиолетовый', green: 'Зелёный' }
-
-function colorLabel(color) {
-  return COLOR_LABELS[color] || color
-}
 const processSteps = computed(() => {
   const labels = ['Зарегистрирована', 'В работе', 'Экспертиза', 'Контроль СБ', 'Завершена']
   const statusIndex = {
@@ -598,7 +594,7 @@ async function setColorMark(color) {
       colorMenu.value?.removeAttribute('open')
     } catch {
       if (!colorRequestGuard.isCurrent(requestToken, selected.value?.backendId)) return
-      colorError.value = 'Цвет сохранён, но данные на экране не обновились.'
+      colorError.value = 'Направление сохранено, но данные на экране не обновились.'
     }
   } catch (error) {
     if (!colorRequestGuard.isCurrent(requestToken, selected.value?.backendId)) return
@@ -606,8 +602,8 @@ async function setColorMark(color) {
       await recoverConflict(requestId, 'Заявка уже изменена.')
     } else {
       colorError.value = error.status === 403
-        ? 'У вас нет права менять цвет заявки.'
-        : 'Не удалось сохранить цвет. Повторите попытку.'
+        ? 'У вас нет права менять направление испытаний.'
+        : 'Не удалось сохранить направление испытаний. Повторите попытку.'
     }
   } finally {
     if (colorRequestGuard.isCurrent(requestToken, selected.value?.backendId)) {
@@ -1081,13 +1077,14 @@ onBeforeUnmount(() => {
         <AppIcon class="request-corner-arrow" name="arrow-left" :size="16" />
       </button>
       <div class="object-status-row">
-        <span class="badge" :class="selected.tone">{{ selected.status }}</span>
+        <RequestStatus :label="selected.status" :tone="selected.tone" />
         <details v-if="selected.canSetColor" ref="colorMenu" class="request-color-control">
-          <summary><span class="request-color-dot" :class="selected.color" aria-hidden="true"></span>Цвет</summary>
-          <div class="request-color-menu" role="group" aria-label="Цвет заявки в реестре">
-            <button v-for="color in REQUEST_COLORS" :key="color" type="button" :class="{ active: selected.color === color }" :disabled="colorLoading" @click="setColorMark(color)"><span>{{ colorLabel(color) }}</span><span class="request-color-dot" :class="color" aria-hidden="true"></span></button>
+          <summary :aria-label="`Направление испытаний: ${selected.directionLabel}`"><span class="request-color-dot" :class="selected.color" aria-hidden="true"></span>{{ selected.directionLabel }}<AppIcon class="request-direction-chevron" name="chevron-right" :size="12" /></summary>
+          <div class="request-color-menu" role="group" aria-label="Направление испытаний">
+            <button v-for="color in REQUEST_COLORS" :key="color" type="button" :class="{ active: selected.color === color }" :aria-pressed="selected.color === color" :disabled="colorLoading" @click="setColorMark(color)"><span>{{ testingDirectionLabel(color) }}</span><span class="request-color-dot" :class="color" aria-hidden="true"></span></button>
           </div>
         </details>
+        <span v-else class="request-direction-readonly" :title="`Направление испытаний: ${selected.directionLabel}`"><span class="request-color-dot" :class="selected.color" aria-hidden="true"></span>{{ selected.directionLabel }}</span>
       </div>
       <p v-if="colorError" class="action-error">{{ colorError }}</p>
       <h2 class="object-title">{{ selected.product }}</h2>
