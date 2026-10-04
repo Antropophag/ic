@@ -65,6 +65,15 @@ it('sends registry pagination, filters, search, and sorting', async () => {
   )
 })
 
+it('serializes multiple statuses as one comma-separated query parameter', async () => {
+  const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({ items: [] }), { status: 200 }))
+  vi.stubGlobal('fetch', fetchMock)
+
+  await requestApi.list({ status: 'completed,rejected' })
+
+  expect(fetchMock).toHaveBeenCalledWith('/api/v1/requests?status=completed%2Crejected', expect.any(Object))
+})
+
 it('loads dashboard counts and sends an attention queue filter', async () => {
   const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({ categories: [] }), { status: 200 }))
   vi.stubGlobal('fetch', fetchMock)

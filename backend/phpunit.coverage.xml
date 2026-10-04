@@ -5,15 +5,12 @@
             <directory>tests/Unit</directory>
         </testsuite>
         <testsuite name="covered-integration">
-            <file>tests/Integration/Identity/UserAdministrationRepositoryTest.php</file>
-            <file>tests/Integration/Identity/UserRoleAuditAtomicityTest.php</file>
+            <directory>tests/Integration</directory>
         </testsuite>
     </testsuites>
     <source>
         <include>
-            <directory>src/Domain</directory>
-            <directory>src/Application</directory>
-            <file>src/Infrastructure/Identity/UserAdministrationRepository.php</file>
+            <directory>src</directory>
         </include>
     </source>
 </phpunit>

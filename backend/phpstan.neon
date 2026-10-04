@@ -3,6 +3,7 @@ parameters:
     paths:
         - src
         - tests
+        - tools
     bootstrapFiles:
         - phpstan-bootstrap.php
     tmpDir: build/phpstan
