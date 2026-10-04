@@ -26,5 +26,5 @@ else
   echo "Не найден обязательный инструмент: yamllint или uvx" >&2
   exit 1
 fi
-frontend/node_modules/.bin/markdownlint-cli2
+node frontend/scripts/lint-markdown.mjs
 git diff --check

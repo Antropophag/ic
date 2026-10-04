@@ -152,7 +152,7 @@ _check-backend:
 	$(CONTAINER_ENGINE) run --rm shlz-test-registry-coverage composer test
 
 _check-repository:
-	@if test ! -x frontend/node_modules/.bin/markdownlint-cli2; then npm --prefix frontend ci --no-audit --no-fund; fi
+	@if test ! -d frontend/node_modules/markdownlint; then npm --prefix frontend ci --no-audit --no-fund; fi
 	sh scripts/lint-repository.sh
 
 _test-up:
