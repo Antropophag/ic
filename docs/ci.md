@@ -15,6 +15,10 @@ E2E job обязателен и не использует `allow_failure`. Он 
 deployment, выполняет Integration, Playwright, LDAP/SMTP contracts, MariaDB
 reconnect и SIGTERM scheduler, затем всегда запускает teardown. Playwright
 report вместе с container status и последними логами сохраняется при падении.
+Обзор `/review-guide` доступен только в development-сборке: отдельный Playwright
+project `review-guide` запускает Vite на `127.0.0.1:5175` с подменённым API.
+Остальные браузерные сценарии проверяют production-сборку test deployment.
+Проверка только обзора: `npm --prefix frontend run e2e -- --project review-guide`.
 
 Markdown проверяется `frontend/scripts/lint-markdown.mjs` через API `markdownlint`.
 Набор файлов и правила сохранены в `.markdownlint-cli2.mjs`. Обёртка CLI заменена,

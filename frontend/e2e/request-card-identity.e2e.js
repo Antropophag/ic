@@ -212,9 +212,11 @@ test('существующая подсказка содержит все дес
   await expect.poll(() => trigger.evaluate(element => getComputedStyle(element, '::after').opacity)).toBe('1')
   const presentation = await trigger.evaluate(element => {
     const style = getComputedStyle(element, '::after')
-    return { whiteSpace: style.whiteSpace, content: style.content, background: style.backgroundColor, fontSize: style.fontSize }
+    return { textAlign: style.textAlign, textIndent: style.textIndent, whiteSpace: style.whiteSpace, content: style.content, background: style.backgroundColor, fontSize: style.fontSize }
   })
   expect(presentation.whiteSpace).toBe('pre-line')
+  expect(presentation.textAlign).toBe('left')
+  expect(presentation.textIndent).toBe('0px')
   expect(presentation.background).toBe('rgb(22, 39, 115)')
   expect(presentation.fontSize).toBe('10px')
   for (let index = 1; index <= 10; index += 1) expect(presentation.content).toContain(`Позиция ${index}:`)
