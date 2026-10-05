@@ -280,7 +280,7 @@ export function documentFromApi(item) {
     size: `${Math.max(1, Math.ceil(Number(item.sizeBytes) / 1024))} КБ`,
     sha256: item.sha256,
     uploadedBy: item.uploadedBy,
-    createdAt: new Date(item.createdAt).toLocaleString('ru-RU'),
+    createdAt: item.createdAt ? new Date(item.createdAt).toLocaleString('ru-RU', { timeZone: 'Europe/Moscow' }) : null,
   }
 }
 

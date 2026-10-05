@@ -8,6 +8,7 @@ use App\Application\Request\CreateRequestInput;
 use App\Infrastructure\Document\DocumentStorage;
 use App\Infrastructure\Import\BitrixArchiveFileImporter;
 use App\Infrastructure\Request\RequestRepository;
+use App\Infrastructure\Request\RequestQuery;
 use Tests\Integration\IntegrationTestCase;
 
 final class BitrixArchiveFileImporterTest extends IntegrationTestCase
@@ -81,6 +82,9 @@ final class BitrixArchiveFileImporterTest extends IntegrationTestCase
         ))->import($this->workspace, true);
 
         self::assertSame(1, $summary['created']);
+        $document = (new RequestQuery($this->db()))->findDetails((int) $request['id'], $userId)['documents'][0];
+        self::assertSame('Автор', $document['uploadedBy']);
+        self::assertSame('2024-02-03T12:34:56.000000Z', $document['createdAt']);
         $timestamps = $this->db()->createCommand(
             'SELECT d.created_at AS document_created_at, v.created_at AS version_created_at '
             . 'FROM {{%request_documents}} d JOIN {{%request_document_versions}} v ON v.document_id = d.id '

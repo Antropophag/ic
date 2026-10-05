@@ -490,6 +490,14 @@ it('resolves a security mark icon for each SEC-002/SEC-003 state', () => {
   expect(securityMarkIcon('unexpected')).toMatchObject({ className: 'security-mark--pending' })
 })
 
+
+it('formats document upload time in Moscow and preserves unknown metadata', () => {
+  expect(documentFromApi({ id: 1, createdAt: '2026-07-28T23:30:00Z' }).createdAt)
+    .toBe('29.07.2026, 02:30:00')
+  expect(documentFromApi({ id: 2, uploadedBy: null, createdAt: null }))
+    .toMatchObject({ uploadedBy: null, createdAt: null })
+})
+
 it('uses every object name for the registry tooltip in the saved order', () => {
   expect(fromApi({ ...registered, object_names: ['Первая позиция', 'Вторая позиция'] }).objectTooltip).toBe('Первая позиция\nВторая позиция')
   expect(fromApi(registered).objectTooltip).toBe('Лебёдка')

@@ -555,11 +555,13 @@ final class RequestQuery
 
         $commentsPage = $this->queryCommentsPage($requestId, null);
 
+        // Imported first versions outside comments contain the request initiator/date, not upload metadata.
+        $unknownUpload = "d.legacy_id IS NOT NULL AND d.document_type <> 'comment' AND v.version = 1";
         $documents = $this->db->createCommand(
             'SELECT d.id, d.comment_id AS commentId, d.document_type AS documentType, d.title, v.id AS versionId, v.version, v.original_name AS originalName, '
             . 'v.mime_type AS mimeType, v.size_bytes AS sizeBytes, v.sha256, '
-            . "DATE_FORMAT(v.created_at, '%Y-%m-%dT%H:%i:%s.%fZ') AS createdAt, "
-            . 'u.display_name AS uploadedBy FROM {{%request_documents}} d '
+            . "CASE WHEN {$unknownUpload} THEN NULL ELSE DATE_FORMAT(v.created_at, '%Y-%m-%dT%H:%i:%s.%fZ') END AS createdAt, "
+            . "CASE WHEN {$unknownUpload} THEN NULL ELSE u.display_name END AS uploadedBy FROM {{%request_documents}} d "
             . 'JOIN {{%request_document_versions}} v ON v.document_id = d.id '
             . 'JOIN {{%users}} u ON u.id = v.uploaded_by '
             . 'JOIN {{%requests}} item_request ON item_request.id = d.request_id '

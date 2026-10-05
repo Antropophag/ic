@@ -42,6 +42,34 @@ final class DocumentRepositoryTest extends IntegrationTestCase
         }
     }
 
+    public function testDocumentMetadataDistinguishesLegacyPlaceholdersFromKnownUploaders(): void
+    {
+        $initiator = $this->createUser('dev.it.metadata.initiator', 'Инициатор');
+        $uploader = $this->createUser('dev.it.metadata.uploader', 'Автор загрузки');
+        $request = $this->createInProgressRequestWithExecutor($initiator, $uploader, 'metadata');
+        $requestId = (int) $request['id'];
+        $file = $this->tempPdf();
+        $repository = new DocumentRepository($this->db(), $this->storage());
+        $repository->upload($requestId, $uploader, $file['name'], $file['mime'], $file['size'], $file['path']);
+        $query = new RequestQuery($this->db());
+        $document = $query->findDetails($requestId, $initiator)['documents'][0];
+        self::assertSame('Автор загрузки', $document['uploadedBy']);
+        self::assertNotNull($document['createdAt']);
+
+        $this->db()->createCommand()->update('{{%request_documents}}', [
+            'legacy_id' => 'bitrix24:file:42:supporting:file_1',
+        ], ['id' => $document['id']])->execute();
+        $legacyDocument = $query->findDetails($requestId, $initiator)['documents'][0];
+        self::assertNull($legacyDocument['uploadedBy']);
+        self::assertNull($legacyDocument['createdAt']);
+
+        $repository->upload($requestId, $uploader, $file['name'], $file['mime'], $file['size'], $file['path']);
+        $latest = $query->findDetails($requestId, $initiator)['documents'][0];
+        self::assertSame(2, (int) $latest['version']);
+        self::assertSame('Автор загрузки', $latest['uploadedBy']);
+        self::assertNotNull($latest['createdAt']);
+    }
+
     private function storage(): DocumentStorage
     {
         if ($this->storageRoot === null) {
