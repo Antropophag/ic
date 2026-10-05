@@ -57,7 +57,9 @@ final class RequestRepositoryTest extends IntegrationTestCase
         $input->sampleQuantity = 1;
         $input->testMethod = 'Интеграционный тест';
 
-        return (new RequestRepository($this->db()))->create($input, $initiatorId);
+        $request = (new RequestRepository($this->db()))->create($input, $initiatorId);
+        $this->db()->createCommand()->update('{{%requests}}', ['route' => 'protocol'], ['id' => $request['id']])->execute();
+        return $request;
     }
 
     public function testDepartmentIsSnapshottedAndDoesNotFollowProfileChanges(): void
@@ -305,7 +307,7 @@ final class RequestRepositoryTest extends IntegrationTestCase
             'request_id' => $requestId,
             'expert_opinion_id' => $opinionId,
             'officer_id' => $expert,
-            'decision' => 'return',
+            'decision' => 'decline',
             'created_at' => $now,
         ])->execute();
 

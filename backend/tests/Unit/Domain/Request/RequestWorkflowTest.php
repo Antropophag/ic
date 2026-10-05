@@ -33,7 +33,7 @@ final class RequestWorkflowTest extends TestCase
         yield 'executor uploads report' => [RequestStatus::InProgress, RequestAction::UploadReport, Role::IcExecutor, RequestStatus::OpinionPreparation];
         yield 'expert publishes' => [RequestStatus::OpinionPreparation, RequestAction::PublishOpinion, Role::Expert, RequestStatus::SecurityReview];
         yield 'security approves' => [RequestStatus::SecurityReview, RequestAction::SecurityApprove, Role::SecurityOfficer, RequestStatus::Completed];
-        yield 'security returns' => [RequestStatus::SecurityReview, RequestAction::SecurityReturn, Role::SecurityOfficer, RequestStatus::InProgress];
+        yield 'security declines' => [RequestStatus::SecurityReview, RequestAction::SecurityDecline, Role::SecurityOfficer, RequestStatus::Completed];
     }
 
     public function testEmployeeCannotCompleteRegisteredRequest(): void

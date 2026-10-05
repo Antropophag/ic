@@ -38,6 +38,7 @@ final class RequestAssignmentConcurrencyTest extends TestCase
             $input->testMethod = 'Controlled two-session assignment';
             $request = (new RequestRepository($db))->create($input, $users['initiator']);
             $requestId = (int) $request['id'];
+            $db->createCommand()->update('{{%requests}}', ['route' => 'protocol'], ['id' => $requestId])->execute();
             $version = (int) $request['lock_version'];
 
             // Hold the request row until both independent sessions are ready.
@@ -168,7 +169,7 @@ final class RequestAssignmentConcurrencyTest extends TestCase
                 $info = (string) ($process['Info'] ?? '');
                 if (
                     in_array($connectionId, $connectionIds, true)
-                    && str_contains($info, 'SELECT status, lock_version FROM')
+                    && str_contains($info, 'SELECT status, lock_version, route FROM')
                 ) {
                     $active[] = $connectionId;
                 }

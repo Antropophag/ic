@@ -344,11 +344,11 @@ it('sends a security decision with optimistic locking', async () => {
   const fetchMock = vi.fn().mockResolvedValue(new Response('{}', { status: 200 }))
   vi.stubGlobal('fetch', fetchMock)
 
-  await requestApi.decideSecurity(7, 'return', 'Нужно уточнить вывод.', 7)
+  await requestApi.decideSecurity(7, 'decline', 'Нужно уточнить вывод.', 7)
 
   expect(fetchMock).toHaveBeenCalledWith('/api/v1/requests/7/security-decision', expect.objectContaining({
     method: 'POST',
-    body: JSON.stringify({ decision: 'return', reason: 'Нужно уточнить вывод.', lockVersion: 7 }),
+    body: JSON.stringify({ decision: 'decline', reason: 'Нужно уточнить вывод.', lockVersion: 7 }),
   }))
 })
 
@@ -598,4 +598,14 @@ it('assigns and revokes a role for a user', async () => {
     method: 'POST',
     body: JSON.stringify({ reason: 'Смена обязанностей' }),
   }))
+})
+
+it.each([
+  ['chooseRoute', [7, 'act', 3], '/api/v1/requests/7/route', { route: 'act', lockVersion: 3 }],
+  ['completeAct', [7, 4], '/api/v1/requests/7/complete-act', { lockVersion: 4 }],
+])('sends %s to its versioned command endpoint', async (method, args, path, body) => {
+  const fetchMock = vi.fn().mockResolvedValue(new Response('{"status":"registered","lockVersion":4}', { status: 200 }))
+  vi.stubGlobal('fetch', fetchMock)
+  await requestApi[method](...args)
+  expect(fetchMock).toHaveBeenCalledWith(path, expect.objectContaining({ method: 'POST', body: JSON.stringify(body) }))
 })

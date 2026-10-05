@@ -49,7 +49,7 @@ export function avatarRoleClass(role) {
 }
 
 export function fromApi(item) {
-  const securityMark = item.security_mark === 'approve' || item.security_mark === 'return' ? item.security_mark : null
+  const securityMark = ['approve', 'decline'].includes(item.security_mark) ? item.security_mark : null
   return {
     backendId: Number(item.id),
     isArchived: Boolean(Number(item.is_archived)),
@@ -76,6 +76,10 @@ export function fromApi(item) {
     expert: item.expert_name || 'Не назначен',
     expertId: item.expert_id ? Number(item.expert_id) : null,
     lockVersion: Number(item.lockVersion),
+    route: item.route || null,
+    routeLabel: item.route === 'act' ? 'Акт испытаний' : item.route === 'protocol' ? 'Протокол испытаний' : 'Не выбран',
+    canChooseRoute: Boolean(Number(item.can_choose_route)),
+    canCompleteAct: Boolean(Number(item.can_complete_act)),
     canAssignExecutor: Boolean(Number(item.can_assign_executor)),
     canClaimExpert: Boolean(Number(item.can_claim_expert)),
     canReassignExpert: Boolean(Number(item.can_reassign_expert)),
@@ -125,6 +129,8 @@ export function sampleQuantityDisplay(request) {
 export function withoutStaleActions(item) {
   return {
     ...item,
+    canChooseRoute: false,
+    canCompleteAct: false,
     canAssignExecutor: false,
     canClaimExpert: false,
     canReassignExpert: false,
@@ -153,8 +159,10 @@ const HISTORY_LABELS = {
   upload_report: 'Отчёт испытаний загружен',
   delete_report: 'Отчёт испытаний удалён',
   publish_opinion: 'Экспертное заключение опубликовано',
-  security_approve: 'Заключение согласовано',
-  security_return: 'Заявка возвращена в работу',
+  choose_route: 'Маршрут выбран',
+  complete_act: 'Акт испытаний завершён',
+  security_approve: 'СБ: согласовано, заявка выполнена',
+  security_decline: 'СБ: не согласовано, заявка выполнена',
   reject: 'В проведении испытаний отказано',
   withdraw: 'Заявка отозвана',
   change_department: 'Подразделение заявки изменено',
@@ -169,8 +177,8 @@ export function historyFromApi(item) {
   const description = HISTORY_LABELS[item.action] || item.action
   // В ленте display_name остаётся в исходном именительном падеже
   // без риска грамматической ошибки — имя добавляется через двоеточие, тем
-  // же приёмом, что и причина возврата СБ, а не согласованием окончаний.
-  const qualifier = item.reason || (ACTIONS_WITH_TARGET.has(item.action) || item.action === 'change_department' ? item.targetName : '')
+  // же приёмом, что и комментарий к решению СБ, а не согласованием окончаний.
+  const qualifier = item.reason || (ACTIONS_WITH_TARGET.has(item.action) || ['change_department', 'choose_route'].includes(item.action) ? item.targetName : '')
   return {
     type: 'milestone',
     id: `${item.kind}-${item.id}`,
@@ -236,17 +244,17 @@ export function canStartNow(item) {
   return Boolean(item?.canStart && item?.executorId)
 }
 
-// SEC-002/SEC-003: approve/return — решения последнего контроля СБ,
+// SEC-002/SEC-003: approve/decline — решения последнего контроля СБ.
 // null — контроль ещё не проводился. Символьное соответствие (было ✓/✕/—)
 // сохранено семантически, изменилось только визуальное представление
 // (issue #148) — иконка вместо текстового Unicode-символа, зависевшего от
 // шрифта/ОС и не имевшего явной семантики для скринридеров.
-// Классы с префиксом security-mark--, а не голые approve/return/pending:
+// Классы с префиксом security-mark--, а не голые approve/decline/pending:
 // styles.css общий на всё приложение, обычные слова легко столкнутся с
 // каким-нибудь будущим (или уже существующим где-то) классом (Qodo).
 const SECURITY_MARK_ICONS = {
   approve: { className: 'security-mark--approve', label: 'Согласовано', path: 'M3 8.5L6.5 12L13 4' },
-  return: { className: 'security-mark--return', label: 'Возвращено на доработку', path: 'M4 4L12 12M12 4L4 12' },
+  decline: { className: 'security-mark--decline', label: 'Не согласовано', path: 'M4 4L12 12M12 4L4 12' },
 }
 const DEFAULT_SECURITY_MARK_ICON = { className: 'security-mark--pending', label: 'Контроль ещё не проводился', path: 'M4 8H12' }
 

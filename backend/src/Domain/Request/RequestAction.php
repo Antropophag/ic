@@ -12,7 +12,8 @@ enum RequestAction: string
     case UploadReport = 'upload_report';
     case PublishOpinion = 'publish_opinion';
     case SecurityApprove = 'security_approve';
-    case SecurityReturn = 'security_return';
+    case SecurityDecline = 'security_decline';
+    case CompleteAct = 'complete_act';
     case Reject = 'reject';
     case Withdraw = 'withdraw';
 }

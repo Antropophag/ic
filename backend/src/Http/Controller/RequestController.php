@@ -8,6 +8,9 @@ use App\Application\Document\TestActDocumentService;
 use App\Application\Document\TestActConfigurationError;
 use App\Application\Document\TestActInput;
 use App\Application\Request\CreateRequestInput;
+use App\Application\Request\ChooseRouteInput;
+use App\Domain\Request\RequestRoute;
+use App\Domain\Request\RequestRouteDenied;
 use App\Application\Request\ChangeDepartmentInput;
 use App\Application\Request\ListRequestsInput;
 use App\Application\Request\AddCommentInput;
@@ -92,7 +95,7 @@ final class RequestController extends ApiController
         $mutations = [
             'add-comment', 'upload-document', 'upload-report', 'delete-report', 'change-department',
             'set-color', 'assign-executor', 'claim-expert', 'reassign-expert', 'publish-opinion',
-            'security-decision', 'start', 'suspend', 'resume', 'reject', 'withdraw',
+            'choose-route', 'complete-act', 'security-decision', 'start', 'suspend', 'resume', 'reject', 'withdraw',
         ];
         $requestId = filter_var($params['id'] ?? null, FILTER_VALIDATE_INT, ['options' => ['min_range' => 1]]);
         if (in_array($action->id, $mutations, true) && $requestId !== false && $this->query()->isArchived($requestId)) {
@@ -550,6 +553,48 @@ final class RequestController extends ApiController
     }
 
     /** @return array<string, mixed> */
+    public function actionChooseRoute(int $id): array
+    {
+        $input = new ChooseRouteInput();
+        if (($errors = $this->bodyValidationErrors($input)) !== null) {
+            return $errors;
+        }
+        $actorId = $this->currentUserId();
+        try {
+            return $this->repository()->chooseRoute($id, RequestRoute::from((string) $input->route), (int) $input->lockVersion, $actorId);
+        } catch (RequestNotFound $error) {
+            throw new NotFoundHttpException($error->getMessage());
+        } catch (RequestRouteDenied $error) {
+            $this->recordRejectedRouteSafely($id, $actorId, $error->ruleId);
+            throw new ForbiddenHttpException($error->getMessage());
+        } catch (ConcurrentRequestModification $error) {
+            $this->recordRejectedRouteSafely($id, $actorId, $error->ruleId);
+            throw new ConflictHttpException($error->getMessage());
+        }
+    }
+
+    /** @return array<string, mixed> */
+    public function actionCompleteAct(int $id): array
+    {
+        $input = new LockVersionInput();
+        if (($errors = $this->bodyValidationErrors($input)) !== null) {
+            return $errors;
+        }
+        $actorId = $this->currentUserId();
+        try {
+            return $this->repository()->completeAct($id, (int) $input->lockVersion, $actorId);
+        } catch (RequestNotFound $error) {
+            throw new NotFoundHttpException($error->getMessage());
+        } catch (RequestRouteDenied $error) {
+            $this->recordRejectedRouteSafely($id, $actorId, $error->ruleId);
+            throw new ForbiddenHttpException($error->getMessage());
+        } catch (ConcurrentRequestModification $error) {
+            $this->recordRejectedRouteSafely($id, $actorId, $error->ruleId);
+            throw new ConflictHttpException($error->getMessage());
+        }
+    }
+
+    /** @return array<string, mixed> */
     public function actionSecurityDecision(int $id): array
     {
         $input = new SecurityDecisionInput();
@@ -834,6 +879,16 @@ final class RequestController extends ApiController
         $this->recordRejectedSafely(
             fn () => $this->documents()->recordRejectedOpinion($requestId, $actorId, $ruleId),
             'Не удалось записать аудит отклонённой публикации заключения.',
+            ['requestId' => $requestId, 'actorId' => $actorId, 'ruleId' => $ruleId],
+            __METHOD__,
+        );
+    }
+
+    private function recordRejectedRouteSafely(int $requestId, int $actorId, string $ruleId): void
+    {
+        $this->recordRejectedSafely(
+            fn () => $this->repository()->recordRejectedRouteAction($requestId, $actorId, $ruleId),
+            'Не удалось записать аудит отклонённого действия с маршрутом.',
             ['requestId' => $requestId, 'actorId' => $actorId, 'ruleId' => $ruleId],
             __METHOD__,
         );

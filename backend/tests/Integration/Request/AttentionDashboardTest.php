@@ -216,7 +216,9 @@ final class AttentionDashboardTest extends IntegrationTestCase
             'sampleQuantity' => 1,
             'testMethod' => 'Интеграционная проверка очередей',
         ]);
-        return (new RequestRepository($this->db()))->create($input, $initiator);
+        $request = (new RequestRepository($this->db()))->create($input, $initiator);
+        $this->db()->createCommand()->update('{{%requests}}', ['route' => 'protocol'], ['id' => $request['id']])->execute();
+        return $request;
     }
 
     private function updateStatus(int $requestId, string $status): void

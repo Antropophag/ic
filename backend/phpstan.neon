@@ -3,6 +3,8 @@ parameters:
     paths:
         - src
         - tests
+    scanFiles:
+        - migrations/m261005_000002_add_request_routes.php
     bootstrapFiles:
         - phpstan-bootstrap.php
     tmpDir: build/phpstan

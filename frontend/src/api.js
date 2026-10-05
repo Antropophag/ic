@@ -193,6 +193,16 @@ export const requestApi = {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ body, lockVersion }),
   }),
+  chooseRoute: (requestId, route, lockVersion) => request(`/api/v1/requests/${requestId}/route`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ route, lockVersion }),
+  }),
+  completeAct: (requestId, lockVersion) => request(`/api/v1/requests/${requestId}/complete-act`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ lockVersion }),
+  }),
   decideSecurity: (requestId, decision, reason, lockVersion) => request(`/api/v1/requests/${requestId}/security-decision`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },

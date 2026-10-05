@@ -21,6 +21,11 @@ use App\Domain\Request\RequestStatus;
 use App\Domain\Request\RequestWorkflow;
 use App\Domain\Request\Role;
 use App\Domain\Request\SecurityDecisionPolicy;
+use App\Domain\Request\SecurityDecisionDenied;
+use App\Domain\Request\RequestRoute;
+use App\Domain\Request\StartDenied;
+use App\Domain\Request\RequestRoutePolicy;
+use App\Domain\Request\RequestRouteDenied;
 use App\Domain\Request\StartRequestPolicy;
 use App\Domain\Request\SuspendResumePolicy;
 use App\Domain\Request\WithdrawPolicy;
@@ -68,6 +73,7 @@ final class RequestRepository
                 'department_name' => (string) $department,
                 'department_source' => 'current_profile',
                 'status' => RequestStatus::Registered->value,
+                'route' => null,
                 'product_name' => $input->objectValues()[0]['productName'],
                 'manufacturer' => $input->manufacturer,
                 'supplier' => $input->supplier,
@@ -205,7 +211,7 @@ final class RequestRepository
         $transaction = $this->db->beginTransaction();
         try {
             $request = $this->db->createCommand(
-                'SELECT r.status, r.lock_version AS lockVersion, actor.is_active AS actorIsActive, '
+                'SELECT r.status, r.route, r.lock_version AS lockVersion, actor.is_active AS actorIsActive, '
                 . "GROUP_CONCAT(DISTINCT role.code ORDER BY role.code SEPARATOR ',') AS roleCodes "
                 . 'FROM {{%requests}} r JOIN {{%users}} actor ON actor.id = :actor_id '
                 . 'LEFT JOIN {{%user_roles}} ur ON ur.user_id = actor.id '
@@ -220,6 +226,12 @@ final class RequestRepository
                 static fn (string $role): Role => Role::from($role),
                 array_filter(explode(',', (string) $request['roleCodes'])),
             );
+            if ((int) $request['lockVersion'] !== $expectedLockVersion) {
+                throw new ConcurrentRequestModification();
+            }
+            if ($request['route'] !== RequestRoute::Protocol->value) {
+                throw new SecurityDecisionDenied('SEC-001');
+            }
             $targetStatus = (new SecurityDecisionPolicy())->targetStatus(
                 RequestStatus::from((string) $request['status']),
                 $decision,
@@ -227,18 +239,18 @@ final class RequestRepository
                 (bool) $request['actorIsActive'],
                 $roles,
             );
-            if ((int) $request['lockVersion'] !== $expectedLockVersion) {
-                throw new ConcurrentRequestModification();
-            }
             $opinionId = $this->db->createCommand(
                 'SELECT eo.id FROM {{%expert_opinions}} eo '
-                . 'LEFT JOIN {{%security_checks}} sc ON sc.expert_opinion_id = eo.id '
-                . 'WHERE eo.request_id = :request_id AND sc.id IS NULL '
-                . 'ORDER BY eo.revision DESC LIMIT 1 FOR UPDATE',
+                . 'JOIN {{%request_document_versions}} ov ON ov.id = eo.document_version_id AND ov.deleted_at IS NULL '
+                . 'JOIN {{%request_documents}} od ON od.id = ov.document_id AND od.deleted_at IS NULL '
+                . 'WHERE eo.request_id = :request_id '
+                . 'AND eo.revision = (SELECT MAX(latest.revision) FROM {{%expert_opinions}} latest WHERE latest.request_id = eo.request_id) '
+                . 'AND NOT EXISTS(SELECT 1 FROM {{%security_checks}} sc WHERE sc.expert_opinion_id = eo.id) '
+                . 'FOR UPDATE',
                 [':request_id' => $requestId],
             )->queryScalar();
-            if ($opinionId === false) {
-                throw new \RuntimeException('Current expert opinion not found or already checked.');
+            if ($opinionId === false || $this->latestDocumentVersionId($requestId, 'report') === null) {
+                throw new SecurityDecisionDenied('SEC-001');
             }
 
             $now = Clock::now();
@@ -247,7 +259,7 @@ final class RequestRepository
                 'expert_opinion_id' => (int) $opinionId,
                 'officer_id' => $actorId,
                 'decision' => $decision,
-                'reason' => $decision === 'return' ? $reason : null,
+                'reason' => $reason,
                 'created_at' => $now,
             ])->execute();
             $nextLockVersion = $expectedLockVersion + 1;
@@ -263,7 +275,7 @@ final class RequestRepository
             if ($updated !== 1) {
                 throw new ConcurrentRequestModification();
             }
-            $action = $decision === 'approve' ? 'security_approve' : 'security_return';
+            $action = $decision === 'approve' ? 'security_approve' : 'security_decline';
             $ruleId = $decision === 'approve' ? 'SEC-002' : 'SEC-003';
             $this->db->createCommand()->insert('{{%request_transitions}}', [
                 'request_id' => $requestId,
@@ -272,7 +284,7 @@ final class RequestRepository
                 'to_status' => $targetStatus->value,
                 'action' => $action,
                 'rule_id' => $ruleId,
-                'reason' => $decision === 'return' ? $reason : null,
+                'reason' => $reason,
                 'created_at' => $now,
             ])->execute();
             $this->db->createCommand()->insert('{{%audit_events}}', [
@@ -284,44 +296,7 @@ final class RequestRepository
                 'payload_json' => ['decision' => $decision, 'reason' => $reason],
                 'created_at' => $now,
             ])->execute();
-            $outbox = new NotificationOutbox($this->db);
-            if ($decision === 'approve') {
-                $initiator = $this->initiatorContact($requestId);
-                if ($initiator !== null) {
-                    $links = '';
-                    $reportVersionId = $this->latestDocumentVersionId($requestId, 'report');
-                    if ($reportVersionId !== null) {
-                        $links .= "\nСсылка на отчёт: " . DocumentDownloadUrl::build($this->issueDocumentLink($reportVersionId));
-                    }
-                    $opinionVersionId = $this->latestDocumentVersionId($requestId, 'opinion');
-                    if ($opinionVersionId !== null) {
-                        $links .= "\nСсылка на заключение: " . DocumentDownloadUrl::build($this->issueDocumentLink($opinionVersionId));
-                    }
-                    $outbox->enqueue(
-                        $requestId,
-                        'request.completed',
-                        $initiator['email'],
-                        $initiator['name'],
-                        'Испытания завершены',
-                        'Испытания по вашей заявке завершены. Служба безопасности согласовала заключение. '
-                        . 'Отчёт и заключение доступны в портале.'
-                        . $links,
-                    );
-                }
-            } else {
-                $executor = $this->currentAssigneeContact($requestId, 'executor');
-                if ($executor !== null) {
-                    $outbox->enqueue(
-                        $requestId,
-                        'request.returned',
-                        $executor['email'],
-                        $executor['name'],
-                        'Заявка возвращена на доработку',
-                        "Служба безопасности вернула заявку на доработку.\nПричина: {$reason}\n\n"
-                        . 'Загрузите исправленный отчёт в портале.',
-                    );
-                }
-            }
+            $this->notifyCompletion($requestId, $decision);
             $transaction->commit();
 
             return ['requestId' => $requestId, 'decision' => $decision, 'status' => $targetStatus->value, 'lockVersion' => $nextLockVersion];
@@ -329,6 +304,161 @@ final class RequestRepository
             $transaction->rollBack();
             throw $error;
         }
+    }
+
+    /** @return array<string, mixed> */
+    public function chooseRoute(int $requestId, RequestRoute $route, int $expectedLockVersion, int $actorId): array
+    {
+        $transaction = $this->db->beginTransaction();
+        try {
+            $request = $this->lockRouteRequest($requestId, $expectedLockVersion);
+            $hasReportHistory = (bool) $this->db->createCommand(
+                "SELECT 1 FROM {{%request_documents}} WHERE request_id = :id AND document_type = 'report' LIMIT 1",
+                [':id' => $requestId],
+            )->queryScalar();
+            (new RequestRoutePolicy())->assertCanChoose(
+                RequestStatus::from((string) $request['status']),
+                $request['route'] === null ? null : RequestRoute::from((string) $request['route']),
+                $route,
+                $hasReportHistory,
+                $this->isActiveUser($actorId),
+                $this->rolesFor($actorId),
+            );
+            $now = Clock::now();
+            $this->db->createCommand()->update('{{%requests}}', [
+                'route' => $route->value,
+                'route_selected_by' => $actorId,
+                'route_selected_at' => $now,
+                'lock_version' => $expectedLockVersion + 1,
+                'updated_at' => $now,
+            ], ['id' => $requestId])->execute();
+            $this->db->createCommand()->insert('{{%audit_events}}', [
+                'event_type' => 'request.route_selected',
+                'entity_type' => 'request',
+                'entity_id' => $requestId,
+                'actor_id' => $actorId,
+                'rule_id' => 'WF-014',
+                'payload_json' => ['from_route' => $request['route'], 'route' => $route->value],
+                'created_at' => $now,
+            ])->execute();
+            $transaction->commit();
+            return ['requestId' => $requestId, 'status' => $request['status'], 'route' => $route->value,
+                'lockVersion' => $expectedLockVersion + 1, 'selectedBy' => $actorId, 'selectedAt' => $now];
+        } catch (\Throwable $error) {
+            $transaction->rollBack();
+            throw $error;
+        }
+    }
+
+    /** @return array{requestId: int, status: string, lockVersion: int} */
+    public function completeAct(int $requestId, int $expectedLockVersion, int $actorId): array
+    {
+        $transaction = $this->db->beginTransaction();
+        try {
+            $request = $this->lockRouteRequest($requestId, $expectedLockVersion);
+            $reportVersionId = $this->latestDocumentVersionId($requestId, 'report');
+            $roles = $this->rolesFor($actorId);
+            (new RequestRoutePolicy())->assertCanComplete(
+                RequestStatus::from((string) $request['status']),
+                $request['route'] === null ? null : RequestRoute::from((string) $request['route']),
+                $reportVersionId !== null,
+                $this->isActiveUser($actorId),
+                $roles,
+            );
+            $target = (new RequestWorkflow())->transition(RequestStatus::InProgress, RequestAction::CompleteAct, $roles);
+            $now = Clock::now();
+            $nextLockVersion = $expectedLockVersion + 1;
+            $this->db->createCommand()->update('{{%requests}}', [
+                'status' => $target->value,
+                'lock_version' => $nextLockVersion,
+                'updated_at' => $now,
+            ], ['id' => $requestId])->execute();
+            $this->db->createCommand()->insert('{{%request_transitions}}', [
+                'request_id' => $requestId,
+                'actor_id' => $actorId,
+                'from_status' => RequestStatus::InProgress->value,
+                'to_status' => $target->value,
+                'action' => RequestAction::CompleteAct->value,
+                'rule_id' => 'WF-015',
+                'document_version_id' => $reportVersionId,
+                'created_at' => $now,
+            ])->execute();
+            $this->db->createCommand()->insert('{{%audit_events}}', [
+                'event_type' => 'request.act_completed',
+                'entity_type' => 'request',
+                'entity_id' => $requestId,
+                'actor_id' => $actorId,
+                'rule_id' => 'WF-015',
+                'payload_json' => ['report_version_id' => $reportVersionId, 'lock_version' => $nextLockVersion],
+                'created_at' => $now,
+            ])->execute();
+            $this->notifyCompletion($requestId, null);
+            $transaction->commit();
+            return ['requestId' => $requestId, 'status' => $target->value, 'lockVersion' => $nextLockVersion];
+        } catch (\Throwable $error) {
+            $transaction->rollBack();
+            throw $error;
+        }
+    }
+
+    /** @return array<string, mixed> */
+    private function lockRouteRequest(int $requestId, int $expectedLockVersion): array
+    {
+        $request = $this->db->createCommand(
+            'SELECT status, route, lock_version, is_archived FROM {{%requests}} WHERE id = :id FOR UPDATE',
+            [':id' => $requestId],
+        )->queryOne();
+        if ($request === false) {
+            throw new RequestNotFound('Request not found');
+        }
+        if ((int) $request['is_archived'] === 1) {
+            throw new RequestRouteDenied('WF-014');
+        }
+        if ((int) $request['lock_version'] !== $expectedLockVersion) {
+            throw new ConcurrentRequestModification();
+        }
+        return $request;
+    }
+
+    private function notifyCompletion(int $requestId, ?string $decision): void
+    {
+        $initiator = $this->initiatorContact($requestId);
+        if ($initiator === null) {
+            return;
+        }
+        $body = 'Испытания по вашей заявке завершены. ';
+        $body .= $decision === null
+            ? 'Маршрут «Акт испытаний» завершён руководителем. Отчёт доступен в портале.'
+            : 'Решение СБ: «' . ($decision === 'approve' ? 'Согласовано' : 'Не согласовано')
+                . '». Отчёт и заключение доступны в портале.';
+        $documentTypes = $decision === null ? ['report' => 'отчёт'] : ['report' => 'отчёт', 'opinion' => 'заключение'];
+        foreach ($documentTypes as $type => $label) {
+            $versionId = $this->latestDocumentVersionId($requestId, $type);
+            if ($versionId !== null) {
+                $body .= "\nСсылка на {$label}: " . DocumentDownloadUrl::build($this->issueDocumentLink($versionId));
+            }
+        }
+        (new NotificationOutbox($this->db))->enqueue(
+            $requestId,
+            'request.completed',
+            $initiator['email'],
+            $initiator['name'],
+            'Испытания завершены',
+            $body,
+        );
+    }
+
+    public function recordRejectedRouteAction(int $requestId, int $actorId, string $ruleId): void
+    {
+        $this->db->createCommand()->insert('{{%audit_events}}', [
+            'event_type' => 'request.route_action_denied',
+            'entity_type' => 'request',
+            'entity_id' => $requestId,
+            'actor_id' => $actorId,
+            'rule_id' => $ruleId,
+            'payload_json' => [],
+            'created_at' => Clock::now(),
+        ])->execute();
     }
 
     public function recordRejectedSecurityDecision(int $requestId, int $actorId, string $ruleId): void
@@ -619,7 +749,7 @@ final class RequestRepository
         $transaction = $this->db->beginTransaction();
         try {
             $request = $this->db->createCommand(
-                'SELECT status, lock_version FROM {{%requests}} WHERE id = :id FOR UPDATE',
+                'SELECT status, lock_version, route FROM {{%requests}} WHERE id = :id FOR UPDATE',
                 [':id' => $requestId],
             )->queryOne();
             if ($request === false) {
@@ -646,6 +776,7 @@ final class RequestRepository
             }
 
             (new AssignmentPolicy())->assertCanAssign(
+                $request['route'] !== null,
                 $this->rolesFor($actorId),
                 (bool) $executor['is_active'],
                 $this->rolesFor($executorId),
@@ -826,7 +957,7 @@ final class RequestRepository
         $transaction = $this->db->beginTransaction();
         try {
             $request = $this->db->createCommand(
-                'SELECT status, lock_version FROM {{%requests}} WHERE id = :id FOR UPDATE',
+                'SELECT status, route, lock_version FROM {{%requests}} WHERE id = :id FOR UPDATE',
                 [':id' => $requestId],
             )->queryOne();
             if ($request === false) {
@@ -845,6 +976,9 @@ final class RequestRepository
                 $this->isActiveUser($actorId),
             );
 
+            if ($request['route'] === null) {
+                throw new StartDenied('WF-014');
+            }
             $currentStatus = RequestStatus::from((string) $request['status']);
             $targetStatus = (new RequestWorkflow())->transition(
                 $currentStatus,
@@ -1380,6 +1514,7 @@ final class RequestRepository
             'SELECT v.id FROM {{%request_document_versions}} v '
             . 'JOIN {{%request_documents}} d ON d.id = v.document_id '
             . 'WHERE d.request_id = :request_id AND d.document_type = :document_type '
+            . 'AND d.deleted_at IS NULL AND v.deleted_at IS NULL '
             . 'ORDER BY v.version DESC LIMIT 1',
             [':request_id' => $requestId, ':document_type' => $documentType],
         )->queryScalar();
@@ -1463,7 +1598,7 @@ final class RequestRepository
         return $this->db->createCommand(
             'SELECT id, number, legacy_id, initiator_id, status, product_name, manufacturer, supplier, '
             . 'sample_quantity, legacy_sample_quantity_raw, test_method, revision, lock_version, color, '
-            . 'department_name AS department, '
+            . 'department_name AS department, route, route_selected_by, route_selected_at, '
             . 'created_at, updated_at FROM {{%requests}} WHERE id = :id',
             [':id' => $id],
         )->queryOne();

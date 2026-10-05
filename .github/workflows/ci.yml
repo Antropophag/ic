@@ -43,13 +43,22 @@ jobs:
       - uses: actions/setup-python@v7
         with: {python-version: "3.13"}
       - run: make coverage
+      - name: Verify coverage reports
+        run: |
+          test -s backend/build/coverage/clover.xml
+          test -s backend/build/coverage/workflow-clover.xml
+          test -s backend/build/coverage/python.xml
+          test -s frontend/coverage/lcov.info
+          test -s frontend/coverage/workflow/lcov.info
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7
         with:
           name: sonar-coverage
           path: |
             backend/build/coverage/clover.xml
+            backend/build/coverage/workflow-clover.xml
             backend/build/coverage/python.xml
             frontend/coverage/lcov.info
+            frontend/coverage/workflow/lcov.info
           if-no-files-found: error
           retention-days: 1
 
@@ -112,9 +121,14 @@ jobs:
           name: sonar-coverage
       - name: Normalize container paths in PHP coverage
         run: |
-          grep -q 'name="/app/' backend/build/coverage/clover.xml
-          sed -i 's#name="/app/#name="backend/#g' backend/build/coverage/clover.xml
-          ! grep -q 'name="/app/' backend/build/coverage/clover.xml
+          for report in backend/build/coverage/clover.xml backend/build/coverage/workflow-clover.xml; do
+            grep -q 'name="/app/' "$report"
+            sed -i 's#name="/app/#name="backend/#g' "$report"
+            if grep -q 'name="/app/' "$report"; then
+              echo "Container paths remain in $report" >&2
+              exit 1
+            fi
+          done
       - uses: SonarSource/sonarqube-scan-action@22918119ff8e1ca75a623e15c8296b6ea4fbe28f  # v8.2.1
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}

@@ -70,6 +70,8 @@ const ATTENTION_ICONS = Object.freeze({
   claim_expert: "file",
   publish_opinion: "file-check",
   security_decision: "shield-check",
+  choose_route: "file-check",
+  complete_act: "file-check",
 });
 const PAGE_SIZE_OPTIONS = REGISTRY_PAGE_SIZES;
 const activeTab = ref("active");

@@ -11,19 +11,19 @@ final class SecurityDecisionInputTest extends TestCase
 {
     public function testValidDecisions(): void
     {
-        foreach ([['approve', null], ['return', 'Нужны повторные испытания']] as [$decision, $reason]) {
+        foreach ([['approve', null], ['decline', null], ['decline', 'Есть замечания']] as [$decision, $reason]) {
             $input = new SecurityDecisionInput();
             $input->load(['decision' => $decision, 'reason' => $reason, 'lockVersion' => 6], '');
             self::assertTrue($input->validate());
         }
     }
 
-    public function testReturnRequiresReasonAndVersion(): void
+    public function testInvalidDecisionAndVersion(): void
     {
         $input = new SecurityDecisionInput();
         $input->load(['decision' => 'return', 'reason' => '   ', 'lockVersion' => 0], '');
         self::assertFalse($input->validate());
-        self::assertArrayHasKey('reason', $input->errors);
+        self::assertArrayHasKey('decision', $input->errors);
         self::assertArrayHasKey('lockVersion', $input->errors);
     }
 
@@ -31,7 +31,7 @@ final class SecurityDecisionInputTest extends TestCase
     {
         foreach ([['не строка'], (object) ['reason' => 'не строка']] as $reason) {
             $input = new SecurityDecisionInput();
-            $input->load(['decision' => 'return', 'reason' => $reason, 'lockVersion' => 6], '');
+            $input->load(['decision' => 'decline', 'reason' => $reason, 'lockVersion' => 6], '');
 
             self::assertFalse($input->validate());
             self::assertArrayHasKey('reason', $input->errors);
@@ -42,7 +42,7 @@ final class SecurityDecisionInputTest extends TestCase
     public function testStringReasonIsTrimmed(): void
     {
         $input = new SecurityDecisionInput();
-        $input->load(['decision' => 'return', 'reason' => '  Уточнить вывод  ', 'lockVersion' => 6], '');
+        $input->load(['decision' => 'decline', 'reason' => '  Уточнить вывод  ', 'lockVersion' => 6], '');
 
         self::assertTrue($input->validate());
         self::assertSame('Уточнить вывод', $input->reason);

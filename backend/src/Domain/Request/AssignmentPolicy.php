@@ -11,6 +11,7 @@ final class AssignmentPolicy
      * @param list<Role> $executorRoles
      */
     public function assertCanAssign(
+        bool $routeSelected,
         array $actorRoles,
         bool $executorActive,
         array $executorRoles,
@@ -22,6 +23,10 @@ final class AssignmentPolicy
         }
         if (!$this->hasAny($actorRoles, [Role::IcManager, Role::LaboratoryManager])) {
             throw new AssignmentDenied('WF-001');
+        }
+
+        if (!$routeSelected) {
+            throw new AssignmentDenied('WF-014');
         }
 
         if (!$executorActive || !$this->hasAny($executorRoles, [Role::IcExecutor])) {

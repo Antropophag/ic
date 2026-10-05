@@ -65,11 +65,19 @@ final class RequestWorkflow
                 $from,
                 $action,
             ),
-            [RequestStatus::SecurityReview, RequestAction::SecurityReturn] => $this->forRoles(
+            [RequestStatus::SecurityReview, RequestAction::SecurityDecline] => $this->forRoles(
                 $roles,
                 [Role::SecurityOfficer],
-                RequestStatus::InProgress,
+                RequestStatus::Completed,
                 'SEC-003',
+                $from,
+                $action,
+            ),
+            [RequestStatus::InProgress, RequestAction::CompleteAct] => $this->forRoles(
+                $roles,
+                [Role::IcManager, Role::LaboratoryManager],
+                RequestStatus::Completed,
+                'WF-015',
                 $from,
                 $action,
             ),

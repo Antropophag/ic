@@ -25,7 +25,7 @@ async function apiFor(baseURL, userId) {
     get: (...args) => context.get(...args),
     post: (path, options = {}) => context.post(path, {
       ...options,
-      headers: { ...options.headers, 'Idempotency-Key': crypto.randomUUID() },
+      headers: { ...options.headers, 'Idempotency-Key': options.headers?.['Idempotency-Key'] || crypto.randomUUID() },
     }),
     dispose: () => context.dispose(),
   }
@@ -42,7 +42,8 @@ async function useTestIdentity(page, userId) {
   })
 }
 
-test('заявка проходит критический путь до согласования СБ', async ({ page, baseURL }) => {
+for (const label of ['Согласовано', 'Не согласовано']) {
+test(`заявка завершается после решения СБ «${label}»`, async ({ page, baseURL }) => {
   const marker = `E2E-${Date.now()}`
   const initiator = await apiFor(baseURL, 3)
   const manager = await apiFor(baseURL, 1)
@@ -70,23 +71,24 @@ test('заявка проходит критический путь до сог�
     lockVersion: 1,
   })
 
+  await expectOk(await manager.post(`/api/v1/requests/${requestId}/route`, { data: { route: 'protocol', lockVersion: 1 } }))
   const assigned = await expectOk(await manager.post(`/api/v1/requests/${requestId}/executor`, {
-    data: { executorId: 2, lockVersion: 1 },
+    data: { executorId: 2, lockVersion: 2 },
   }))
-  expect(assigned).toMatchObject({ executorId: 2, lockVersion: 2 })
+  expect(assigned).toMatchObject({ executorId: 2, lockVersion: 3 })
 
   const started = await expectOk(await manager.post(`/api/v1/requests/${requestId}/start`, {
-    data: { lockVersion: 2 },
+    data: { lockVersion: 3 },
   }))
-  expect(started).toMatchObject({ status: 'in_progress', lockVersion: 3 })
+  expect(started).toMatchObject({ status: 'in_progress', lockVersion: 4 })
   await expectOk(await executor.post(`/api/v1/requests/${requestId}/report`, {
     multipart: { file: { name: 'e2e-report.pdf', mimeType: 'application/pdf', buffer: Buffer.from('%PDF-1.4\n%%EOF') } },
   }))
   await expectOk(await expert.post(`/api/v1/requests/${requestId}/expert/claim`, {
-    data: { lockVersion: 4 },
+    data: { lockVersion: 5 },
   }))
   await expectOk(await expert.post(`/api/v1/requests/${requestId}/opinion`, {
-    data: { body: 'Образец соответствует требованиям критического E2E-сценария.', lockVersion: 5 },
+    data: { body: 'Образец соответствует требованиям критического E2E-сценария.', lockVersion: 6 },
   }))
 
   await page.route('**/api/**', async route => {
@@ -102,13 +104,15 @@ test('заявка проходит критический путь до сог�
   await expect(securityMarkIcon).toHaveCSS('display', 'flex')
   await expect(securityMarkIcon).toHaveCSS('align-items', 'center')
   await expect(securityMarkIcon).toHaveCSS('margin-bottom', '0px')
-  await page.getByRole('button', { name: 'Согласовать', exact: true }).click()
-  await page.getByRole('alertdialog').getByRole('button', { name: 'Согласовать', exact: true }).click()
+  await page.getByRole('button', { name: label, exact: true }).click()
+  await page.getByRole('alertdialog').getByRole('button', { name: label, exact: true }).click()
   await expect(page.locator('.request-objects-status').getByText('Заявка выполнена', { exact: true })).toBeVisible()
-  await expect(page.getByRole('button', { name: 'Согласовать', exact: true })).toHaveCount(0)
+  await expect(page.getByRole('button', { name: label, exact: true })).toHaveCount(0)
 
   await Promise.all([initiator.dispose(), manager.dispose(), executor.dispose(), expert.dispose()])
 })
+
+}
 
 test('заявка перемещается между персональными очередями ролей', async ({ page, context, baseURL }) => {
   const marker = `E2E-queue-${Date.now()}`
@@ -130,6 +134,7 @@ test('заявка перемещается между персональным�
       testMethod: 'Перемещение между очередями — E2E',
     } }))
     const requestId = created.id
+  await expectOk(await manager.post(`/api/v1/requests/${requestId}/route`, { data: { route: 'protocol', lockVersion: 1 } }))
 
     await useTestIdentity(page, 1)
     await page.goto('/')
@@ -142,21 +147,21 @@ test('заявка перемещается между персональным�
     await page.getByRole('button', { name: 'Закрыть справку' }).click()
     await expect(dashboardHelpDialog).toBeHidden()
     const managerQueue = page.getByRole('button', { name: /Назначить исполнителя/ })
-    const managerCountBefore = Number(await managerQueue.locator('.attention-count').innerText())
     await managerQueue.click()
     await page.getByRole('row').filter({ hasText: marker }).click()
 
     await expectOk(await manager.post(`/api/v1/requests/${requestId}/executor`, {
-      data: { executorId: 2, lockVersion: 1 },
+      data: { executorId: 2, lockVersion: 2 },
     }))
     await Promise.all([
       page.waitForResponse(response => response.url().includes('/api/v1/requests/dashboard') && response.ok()),
       page.getByTitle('На главную').click(),
     ])
-    if (managerCountBefore === 1) {
-      await expect(managerQueue).toHaveCount(0)
-    } else {
-      await expect(managerQueue.locator('.attention-count')).toHaveText(String(managerCountBefore - 1))
+    // Other parallel scenarios can register requests, so assert this request's
+    // membership instead of a delta in the shared global counter.
+    const remainingAssignments = await expectOk(await manager.get(`/api/v1/requests?tab=all&attention=assign_executor&query=${encodeURIComponent(marker)}`))
+    expect(remainingAssignments.total).toBe(0)
+    if (await managerQueue.count()) {
       await expect(managerQueue).toHaveAttribute('aria-pressed', 'true')
       await expect(page.getByRole('row').filter({ hasText: marker })).toHaveCount(0)
     }
@@ -167,7 +172,7 @@ test('заявка перемещается между персональным�
     await executorPage.getByRole('button', { name: /Начать или возобновить работы/ }).click()
     await expect(executorPage.getByRole('row').filter({ hasText: marker })).toBeVisible()
     await expectOk(await executor.post(`/api/v1/requests/${requestId}/start`, {
-      data: { lockVersion: 2 },
+      data: { lockVersion: 3 },
     }))
     await executorPage.reload()
     await executorPage.getByRole('button', { name: /Загрузить отчёт/ }).click()
@@ -182,13 +187,13 @@ test('заявка перемещается между персональным�
     await expertPage.getByRole('button', { name: /Взять заявку на экспертизу/ }).click()
     await expect(expertPage.getByRole('row').filter({ hasText: marker })).toBeVisible()
     await expectOk(await expert.post(`/api/v1/requests/${requestId}/expert/claim`, {
-      data: { lockVersion: 4 },
+      data: { lockVersion: 5 },
     }))
     await expertPage.reload()
     await expertPage.getByRole('button', { name: /Подготовить заключение/ }).click()
     await expect(expertPage.getByRole('row').filter({ hasText: marker })).toBeVisible()
     await expectOk(await expert.post(`/api/v1/requests/${requestId}/opinion`, {
-      data: { body: 'Заключение для проверки перемещения между очередями.', lockVersion: 5 },
+      data: { body: 'Заключение для проверки перемещения между очередями.', lockVersion: 6 },
     }))
 
     const securityPage = await context.newPage()
@@ -199,9 +204,9 @@ test('заявка перемещается между персональным�
     await securityQueue.click()
     await expect(securityPage.getByRole('row').filter({ hasText: marker })).toBeVisible()
     await securityPage.getByRole('row').filter({ hasText: marker }).click()
-    await securityPage.getByRole('button', { name: 'Согласовать', exact: true }).click()
-    await securityPage.getByRole('alertdialog').getByRole('button', { name: 'Согласовать', exact: true }).click()
-    await expect(securityPage.getByRole('button', { name: 'Согласовать', exact: true })).toHaveCount(0)
+    await securityPage.getByRole('button', { name: 'Согласовано', exact: true }).click()
+    await securityPage.getByRole('alertdialog').getByRole('button', { name: 'Согласовано', exact: true }).click()
+    await expect(securityPage.getByRole('button', { name: 'Согласовано', exact: true })).toHaveCount(0)
     await Promise.all([
       securityPage.waitForResponse(response => response.url().includes('/api/v1/requests/dashboard') && response.ok()),
       securityPage.getByTitle('На главную').click(),
@@ -279,11 +284,12 @@ test('реестр показывает индикаторы последнег�
     testMethod: 'Индикаторы реестра — E2E',
   } }))
   const requestId = created.id
+  await expectOk(await manager.post(`/api/v1/requests/${requestId}/route`, { data: { route: 'protocol', lockVersion: 1 } }))
   await expectOk(await manager.post(`/api/v1/requests/${requestId}/executor`, {
-    data: { executorId: 2, lockVersion: 1 },
+    data: { executorId: 2, lockVersion: 2 },
   }))
   await expectOk(await manager.post(`/api/v1/requests/${requestId}/start`, {
-    data: { lockVersion: 2 },
+    data: { lockVersion: 3 },
   }))
   await expectOk(await executor.post(`/api/v1/requests/${requestId}/report`, {
     multipart: { file: { name: 'e2e-report.pdf', mimeType: 'application/pdf', buffer: Buffer.from('%PDF-1.4\n%%EOF') } },
@@ -471,8 +477,9 @@ test('администратор читает журналы действий и
     sampleQuantity: 1,
     testMethod: 'Read-only admin logs E2E',
   } }))
+  await expectOk(await manager.post(`/api/v1/requests/${created.id}/route`, { data: { route: 'protocol', lockVersion: 1 } }))
   await expectOk(await manager.post(`/api/v1/requests/${created.id}/executor`, {
-    data: { executorId: 2, lockVersion: 1 },
+    data: { executorId: 2, lockVersion: 2 },
   }))
   await expect.poll(async () => {
     const notifications = await expectOk(await admin.get(`/api/v1/admin/notifications?requestId=${created.id}`))
@@ -503,5 +510,83 @@ test('администратор читает журналы действий и
   await expect(page.getByRole('rowheader', { name: marker, exact: false })).toBeVisible()
   } finally {
     await Promise.allSettled(contexts.map(context => context.dispose()))
+  }
+})
+
+for (const managerId of [1, 7]) {
+  test(`маршрут Акт выбирает и завершает руководитель ${managerId}`, async ({ page, baseURL }) => {
+    const initiator = await apiFor(baseURL, 3)
+    const manager = await apiFor(baseURL, managerId)
+    const executor = await apiFor(baseURL, 2)
+    try {
+      const created = await expectOk(await initiator.post('/api/v1/requests', { data: {
+        productName: `Акт E2E ${managerId} ${Date.now()}`, manufacturer: 'Завод', supplier: 'Поставщик', sampleQuantity: 1, testMethod: 'Программа испытаний',
+      } }))
+      const requestId = created.id
+      expect((await manager.post(`/api/v1/requests/${requestId}/route`, { data: { route: true, lockVersion: 1 } })).status()).toBe(422)
+      await useTestIdentity(page, managerId)
+      await page.goto(`/?request=${requestId}`)
+      await expect(page.getByLabel('Исполнитель ИЦ', { exact: true })).toHaveCount(0)
+      await page.getByLabel('Маршрут', { exact: true }).selectOption('act')
+      await page.getByRole('button', { name: 'Сохранить маршрут', exact: true }).click()
+      await expect(page.getByRole('button', { name: 'Сохранить маршрут', exact: true })).toHaveCount(0)
+      await expect(page.getByLabel('Исполнитель ИЦ', { exact: true })).toBeVisible()
+      await expect(page.locator('.request-objects-status').getByText('Заявка зарегистрирована', { exact: true })).toBeVisible()
+      let details = await expectOk(await manager.get(`/api/v1/requests/${requestId}`))
+      expect(details.item.route).toBe('act')
+      await expectOk(await manager.post(`/api/v1/requests/${requestId}/executor`, { data: { executorId: 2, lockVersion: details.item.lockVersion } }))
+      details = await expectOk(await manager.get(`/api/v1/requests/${requestId}`))
+      await expectOk(await executor.post(`/api/v1/requests/${requestId}/start`, { data: { lockVersion: details.item.lockVersion } }))
+      details = await expectOk(await manager.get(`/api/v1/requests/${requestId}`))
+      expect((await manager.post(`/api/v1/requests/${requestId}/complete-act`, { data: { lockVersion: details.item.lockVersion } })).status()).toBe(403)
+      await expectOk(await executor.post(`/api/v1/requests/${requestId}/report`, {
+        multipart: { file: { name: 'act.pdf', mimeType: 'application/pdf', buffer: Buffer.from('%PDF-1.4\n%%EOF') } },
+      }))
+      await page.reload()
+      await expect(page.locator('.process-timeline li')).toHaveCount(3)
+      await expect(page.getByRole('heading', { name: 'Контроль СБ', exact: true })).toHaveCount(0)
+      await page.getByRole('button', { name: 'Завершить заявку', exact: true }).click()
+      await page.getByRole('alertdialog').getByRole('button', { name: 'Завершить заявку', exact: true }).click()
+      await expect(page.locator('.request-objects-status').getByText('Заявка выполнена', { exact: true })).toBeVisible()
+      details = await expectOk(await initiator.get(`/api/v1/requests/${requestId}`))
+      expect(details.item.route).toBe('act')
+      expect(details.documents.some(document => document.documentType === 'report')).toBe(true)
+      expect(details.history.filter(event => event.action === 'complete_act')).toHaveLength(1)
+    } finally {
+      await Promise.all([initiator.dispose(), manager.dispose(), executor.dispose()])
+    }
+  })
+}
+
+
+test('выбор маршрута защищён от гонки, завершение акта идемпотентно', async ({ baseURL }) => {
+  const initiator = await apiFor(baseURL, 3)
+  const manager = await apiFor(baseURL, 1)
+  const laboratory = await apiFor(baseURL, 7)
+  try {
+    const created = await expectOk(await initiator.post('/api/v1/requests', { data: {
+      productName: `Гонка маршрутов ${Date.now()}`, manufacturer: 'Завод', supplier: 'Поставщик', sampleQuantity: 1, testMethod: 'Программа',
+    } }))
+    const id = created.id
+    const results = await Promise.all([manager, laboratory].map(actor => actor.post(`/api/v1/requests/${id}/route`, {
+      data: { route: 'act', lockVersion: 1 },
+    })))
+    expect(results.map(response => response.status()).sort()).toEqual([200, 409])
+    await expectOk(await manager.post(`/api/v1/requests/${id}/executor`, { data: { executorId: 2, lockVersion: 2 } }))
+    await expectOk(await manager.post(`/api/v1/requests/${id}/start`, { data: { lockVersion: 3 } }))
+    await expectOk(await manager.post(`/api/v1/requests/${id}/report`, {
+      multipart: { file: { name: 'act.pdf', mimeType: 'application/pdf', buffer: Buffer.from('%PDF-1.4\n%%EOF') } },
+    }))
+    const options = { headers: { 'Idempotency-Key': crypto.randomUUID() }, data: { lockVersion: 5 } }
+    const completed = await expectOk(await manager.post(`/api/v1/requests/${id}/complete-act`, options))
+    const replay = await manager.post(`/api/v1/requests/${id}/complete-act`, options)
+    expect(await expectOk(replay)).toEqual(completed)
+    expect(replay.headers()['idempotency-replayed']).toBe('true')
+    expect((await laboratory.post(`/api/v1/requests/${id}/complete-act`, { data: { lockVersion: 5 } })).status()).toBe(409)
+    const details = await expectOk(await initiator.get(`/api/v1/requests/${id}`))
+    expect(details.history.filter(event => event.action === 'complete_act')).toHaveLength(1)
+    expect(details.history.filter(event => event.action === 'choose_route')).toHaveLength(1)
+  } finally {
+    await Promise.all([initiator.dispose(), manager.dispose(), laboratory.dispose()])
   }
 })

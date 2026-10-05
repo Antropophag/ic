@@ -6,6 +6,7 @@ namespace App\Infrastructure\Development;
 
 use App\Infrastructure\Document\DocumentStorage;
 use App\Infrastructure\Document\OpinionPdfRenderer;
+use App\Infrastructure\Request\RequestObjects;
 use Dompdf\Dompdf;
 use Dompdf\Options;
 use Yii;
@@ -73,6 +74,8 @@ final class DevelopmentRequestSeeder
             $this->clearRequestData();
             for ($index = 0; $index < self::REQUEST_COUNT; ++$index) {
                 $fixture = self::REQUESTS[$index % count(self::REQUESTS)];
+                $fixture['route'] = $fixture['status'] === 'registered' ? null
+                    : (in_array($fixture['status'], ['in_progress', 'completed'], true) && intdiv($index, count(self::REQUESTS)) % 3 === 0 ? 'act' : 'protocol');
                 $fixture['age'] = 8 + ($index % 83);
                 $initiator = self::INITIATORS[$index % count(self::INITIATORS)];
                 $initiatorId = $users[$initiator];
@@ -93,7 +96,7 @@ final class DevelopmentRequestSeeder
                 $newKeys[] = $version['key'];
                 ++$counts['documents'];
 
-                if (in_array($fixture['status'], ['opinion_preparation', 'security_review', 'completed'], true)) {
+                if (in_array($fixture['status'], ['opinion_preparation', 'security_review', 'completed'], true) || ($fixture['route'] === 'act' && $fixture['status'] === 'in_progress')) {
                     $version = $this->insertAttachment(
                         $requestId,
                         'report',
@@ -106,7 +109,7 @@ final class DevelopmentRequestSeeder
                     $reportVersionId = $version['id'];
                     ++$counts['documents'];
                 }
-                if (in_array($fixture['status'], ['opinion_preparation', 'security_review', 'completed'], true)) {
+                if ($fixture['route'] === 'protocol' && in_array($fixture['status'], ['security_review', 'completed'], true)) {
                     $expert = $index % 2 === 0 ? $users['expert2'] : $users['expert'];
                     $version = $this->insertAttachment(
                         $requestId,
@@ -121,10 +124,10 @@ final class DevelopmentRequestSeeder
                     ++$counts['documents'];
                     $opinionId = $this->insertOpinion($requestId, $version['id'], $expert, $fixture['age'] - 4);
                     if ($fixture['status'] !== 'security_review') {
-                        $this->insertSecurityCheck($requestId, $opinionId, $users['security'], $fixture['status'] === 'completed' ? 'approve' : 'return', $fixture['age'] - 5);
+                        $this->insertSecurityCheck($requestId, $opinionId, $users['security'], intdiv($index, count(self::REQUESTS)) % 3 === 1 ? 'approve' : 'decline', $fixture['age'] - 5);
                     }
                 }
-                $this->insertWorkflow($requestId, $index, $fixture['status'], $fixture['age'], $users, $reportVersionId);
+                $this->insertWorkflow($requestId, $index, $fixture['status'], $fixture['age'], $users, $reportVersionId, $fixture['route']);
             }
             $this->db->createCommand()->update('{{%request_number_sequence}}', ['value' => 1000 + self::REQUEST_COUNT], ['id' => 1])->execute();
             $transaction->commit();
@@ -220,15 +223,36 @@ final class DevelopmentRequestSeeder
         $this->db->createCommand()->insert('{{%requests}}', [
             'number' => 1001 + $index, 'legacy_id' => null, 'initiator_id' => $initiatorId,
             'department_name' => $department, 'department_source' => 'current_profile',
-            'status' => $fixture['status'], 'product_name' => sprintf('%s — демо-серия %03d', $fixture['product'], $index + 1),
+            'status' => $fixture['status'], 'route' => $fixture['route'], 'product_name' => sprintf('%s — демо-серия %03d', $fixture['product'], $index + 1),
             'manufacturer' => $fixture['manufacturer'], 'supplier' => $fixture['supplier'],
             'sample_quantity' => $fixture['quantity'], 'test_method' => $fixture['method'],
             'revision' => 1, 'lock_version' => 1, 'color' => $fixture['color'],
             'created_at' => $created, 'updated_at' => $this->time(max(0, $fixture['age'] - 1)),
         ])->execute();
         $requestId = (int) $this->db->getLastInsertID();
-        (new \App\Infrastructure\Request\RequestObjects($this->db))->insertLegacy($requestId);
+        (new RequestObjects($this->db))->insert($requestId, $this->objectsFor($index, $fixture));
         return $requestId;
+    }
+
+    /**
+     * @param array<string, mixed> $fixture
+     * @return list<array{productName: string, sampleQuantity: string}>
+     */
+    private function objectsFor(int $index, array $fixture): array
+    {
+        // Coprime with the eight workflow fixtures: every object count occurs across statuses.
+        $count = [1, 2, 3, 5, 10][$index % 5];
+        $quantities = ['2 комплекта', '4 шт по 3 метра', '3 шт.', '1 образец'];
+        $objects = [];
+        for ($position = 1; $position <= $count; ++$position) {
+            $objects[] = [
+                'productName' => $position === 1
+                    ? sprintf('%s — демо-серия %03d', $fixture['product'], $index + 1)
+                    : sprintf('%s, исполнение %02d — демо-серия %03d', $fixture['product'], $position, $index + 1),
+                'sampleQuantity' => $position === 1 ? (string) $fixture['quantity'] : $quantities[($position - 2) % count($quantities)],
+            ];
+        }
+        return $objects;
     }
 
     /** @param array<string, int> $users */
@@ -251,13 +275,13 @@ final class DevelopmentRequestSeeder
     }
 
     /** @param array<string, int> $users */
-    private function insertWorkflow(int $requestId, int $index, string $status, int $age, array $users, ?int $reportVersionId): void
+    private function insertWorkflow(int $requestId, int $index, string $status, int $age, array $users, ?int $reportVersionId, ?string $route): void
     {
         $executor = $index % 2 === 0 ? $users['executor2'] : $users['executor'];
         if ($status !== 'registered') {
             $this->assignment($requestId, 'executor', $executor, $users['manager'], $age - 1);
         }
-        if (in_array($status, ['opinion_preparation', 'security_review', 'completed'], true)) {
+        if ($route === 'protocol' && in_array($status, ['opinion_preparation', 'security_review', 'completed'], true)) {
             $this->assignment($requestId, 'expert', $index % 2 === 0 ? $users['expert2'] : $users['expert'], $users['manager'], $age - 3);
         }
         $steps = match ($status) {
@@ -267,16 +291,30 @@ final class DevelopmentRequestSeeder
             'opinion_preparation' => [
                 ['registered', 'in_progress', 'start', null],
                 ['in_progress', 'opinion_preparation', 'upload_report', null],
-                ['opinion_preparation', 'security_review', 'publish_opinion', null],
-                ['security_review', 'opinion_preparation', 'security_return', 'Требуется уточнить вывод экспертного заключения.'],
             ],
             'security_review' => [['registered', 'in_progress', 'start', null], ['in_progress', 'opinion_preparation', 'upload_report', null], ['opinion_preparation', 'security_review', 'publish_opinion', null]],
-            'completed' => [['registered', 'in_progress', 'start', null], ['in_progress', 'opinion_preparation', 'upload_report', null], ['opinion_preparation', 'security_review', 'publish_opinion', null], ['security_review', 'completed', 'security_approve', null]],
+            'completed' => [['registered', 'in_progress', 'start', null], ['in_progress', 'opinion_preparation', 'upload_report', null], ['opinion_preparation', 'security_review', 'publish_opinion', null], ['security_review', 'completed', intdiv($index, count(self::REQUESTS)) % 3 === 1 ? 'security_approve' : 'security_decline', null]],
             'rejected' => [['registered', 'rejected', 'reject', 'Комплект образцов не соответствует условиям приёмки.']],
             default => [['registered', 'withdrawn', 'withdraw', 'Потребность в испытаниях снята инициатором.']],
         };
+        if ($route !== null) {
+            $this->db->createCommand()->update('{{%requests}}', [
+                'route_selected_by' => $users['manager'], 'route_selected_at' => $this->time($age),
+            ], ['id' => $requestId])->execute();
+            $this->db->createCommand()->insert('{{%audit_events}}', [
+                'event_type' => 'request.route_selected', 'entity_type' => 'request', 'entity_id' => $requestId,
+                'actor_id' => $users['manager'], 'rule_id' => 'WF-014', 'payload_json' => ['route' => $route],
+                'created_at' => $this->time($age),
+            ])->execute();
+        }
+        if ($route === 'act') {
+            $steps = [['registered', 'in_progress', 'start', null], ['in_progress', 'in_progress', 'upload_report', null]];
+            if ($status === 'completed') {
+                $steps[] = ['in_progress', 'completed', 'complete_act', null];
+            }
+        }
         foreach ($steps as $offset => [$from, $to, $action, $reason]) {
-            $actor = $action === 'reject'
+            $actor = in_array($action, ['reject', 'complete_act'], true)
                 ? $users['manager']
                 : (str_starts_with($action, 'security_')
                     ? $users['security']
@@ -387,12 +425,12 @@ final class DevelopmentRequestSeeder
 
         return (new OpinionPdfRenderer())->render([
             'number' => 1001 + $index,
-            'productName' => sprintf('%s — демо-серия %03d', $fixture['product'], $index + 1),
+            'productName' => RequestObjects::describe($this->objectsFor($index, $fixture)),
             'manufacturer' => (string) $fixture['manufacturer'],
             'supplier' => (string) $fixture['supplier'],
             'expertName' => (string) $expert['display_name'],
             'expertPosition' => (string) ($expert['position'] ?: 'Эксперт'),
-            'body' => 'По результатам демонстрационных испытаний образец соответствует требованиям программы.',
+            'body' => 'По результатам демонстрационных испытаний продукция соответствует требованиям программы.',
             'date' => gmdate('d.m.Y', time() - (max(0, $age) * 86400)),
         ]);
     }
@@ -480,7 +518,7 @@ final class DevelopmentRequestSeeder
     {
         $this->db->createCommand()->insert('{{%expert_opinions}}', [
             'request_id' => $requestId, 'revision' => 1, 'expert_id' => $expertId,
-            'body' => 'По результатам демонстрационных испытаний образец соответствует требованиям программы.',
+            'body' => 'По результатам демонстрационных испытаний продукция соответствует требованиям программы.',
             'document_version_id' => $versionId, 'created_at' => $this->time(max(0, $age)),
         ])->execute();
         return (int) $this->db->getLastInsertID();
@@ -490,7 +528,7 @@ final class DevelopmentRequestSeeder
     {
         $this->db->createCommand()->insert('{{%security_checks}}', [
             'request_id' => $requestId, 'expert_opinion_id' => $opinionId, 'officer_id' => $officerId,
-            'decision' => $decision, 'reason' => $decision === 'return' ? 'Требуется уточнить вывод экспертного заключения.' : null,
+            'decision' => $decision, 'reason' => $decision === 'decline' ? 'Заключение не согласовано по результатам проверки СБ.' : null,
             'created_at' => $this->time(max(0, $age)),
         ])->execute();
     }
