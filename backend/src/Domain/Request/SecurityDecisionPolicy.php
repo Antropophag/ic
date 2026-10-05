@@ -23,13 +23,10 @@ final class SecurityDecisionPolicy
         if (!in_array(Role::SecurityOfficer, $actorRoles, true)) {
             throw new SecurityDecisionDenied('SEC-001');
         }
-        if ($decision === 'return' && trim((string) $reason) === '') {
-            throw new SecurityDecisionDenied('SEC-003');
-        }
 
         return match ($decision) {
             'approve' => RequestStatus::Completed,
-            'return' => RequestStatus::InProgress,
+            'decline' => RequestStatus::Completed,
             default => throw new SecurityDecisionDenied('SEC-001'),
         };
     }

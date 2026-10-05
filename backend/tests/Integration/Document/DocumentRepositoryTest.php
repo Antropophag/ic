@@ -101,7 +101,7 @@ final class DocumentRepositoryTest extends IntegrationTestCase
         $requestId = (int) $request['id'];
         $now = Clock::now();
 
-        $this->db()->createCommand()->update('{{%requests}}', ['status' => 'in_progress'], ['id' => $requestId])->execute();
+        $this->db()->createCommand()->update('{{%requests}}', ['status' => 'in_progress', 'route' => 'protocol'], ['id' => $requestId])->execute();
         $this->db()->createCommand()->insert('{{%request_assignments}}', [
             'request_id' => $requestId,
             'assignment_type' => 'executor',

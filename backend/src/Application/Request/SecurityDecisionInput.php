@@ -16,10 +16,9 @@ final class SecurityDecisionInput extends Model
     {
         return [
             ['decision', 'required'],
-            ['decision', 'in', 'range' => ['approve', 'return']],
+            ['decision', 'in', 'range' => ['approve', 'decline']],
             ['reason', 'filter', 'filter' => static fn (mixed $value): mixed => is_string($value) ? trim($value) : $value],
             ['reason', 'string', 'max' => 5000],
-            ['reason', 'required', 'when' => fn (): bool => $this->decision === 'return'],
             ['lockVersion', 'required'],
             ['lockVersion', 'integer', 'min' => 1],
         ];

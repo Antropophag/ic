@@ -159,7 +159,7 @@ test('меню направления остаётся над процессом
   expect((await saved).postDataJSON()).toMatchObject({ color: 'green' })
 })
 
-test('кнопка соосна тексту, строки компактны, статус и инициатор не разбиты принудительно', async ({ page }) => {
+test('объект компактен, правая колонка поднята вверх, копирование соосно тексту', async ({ page }) => {
   await page.setViewportSize({ width: 1440, height: 1000 })
   await openCard(page, { initiator_name: 'Тестов Иван', initiator_position: 'Инженер', department: 'Лаборатория' })
   const row = page.locator('tbody .object-title-row').first()
@@ -170,11 +170,31 @@ test('кнопка соосна тексту, строки компактны, �
   expect((await page.locator('.request-objects-table tbody tr').boundingBox()).height).toBeLessThanOrEqual(56)
   const status = await page.locator('.request-objects-status .request-status').boundingBox()
   const direction = await page.locator('.request-direction-readonly').boundingBox()
-  expect(direction.x + direction.width).toBeLessThanOrEqual(status.x)
-  expect(Math.abs(status.y + status.height / 2 - direction.y - direction.height / 2)).toBeLessThan(2)
+  const objectBlock = await page.locator('.request-object-summary').boundingBox()
+  const sidebar = await page.locator('.side-column').boundingBox()
+  expect(Math.abs(sidebar.y - objectBlock.y)).toBeLessThan(2)
+  expect(objectBlock.x + objectBlock.width).toBeLessThanOrEqual(sidebar.x + 1)
+  expect(status.x).toBeGreaterThan(sidebar.x)
+  expect(direction.y).toBeGreaterThanOrEqual(status.y + status.height)
+  const heading = await page.locator('.request-objects-heading h2').boundingBox()
+  expect(name.y - heading.y - heading.height).toBeLessThan(28)
   const initiator = await page.locator('.request-heading-initiator > p').boundingBox()
   const department = await page.locator('.request-heading-department').boundingBox()
   expect(Math.abs(initiator.y - department.y)).toBeLessThan(2)
+})
+
+test('на узком экране статус остаётся сверху, маршрут отмечен в процессе, меню направления доступно', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 900 })
+  await openCard(page, { route: 'act', can_set_color: 1 })
+  await expect(page.locator('#process-title').getByLabel('Маршрут: Акт испытаний')).toHaveText('Акт')
+  const state = await page.locator('.request-sidebar-state').boundingBox()
+  const object = await page.locator('.request-object-summary').boundingBox()
+  expect(state.y + state.height).toBeLessThanOrEqual(object.y + 1)
+  await page.locator('.request-color-control > summary').click()
+  const menu = await page.locator('.request-color-menu').boundingBox()
+  expect(menu.x).toBeGreaterThanOrEqual(0)
+  expect(menu.x + menu.width).toBeLessThanOrEqual(390)
+  await expect(page.locator('.request-color-menu button').last()).toBeInViewport()
 })
 
 test('существующая подсказка содержит все десять наименований отдельными строками', async ({ page }) => {

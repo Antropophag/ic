@@ -549,11 +549,67 @@ paths:
         '422': {$ref: '#/components/responses/ValidationError'}
         '500': {$ref: '#/components/responses/ServerError'}
 
+  /api/v1/requests/{id}/route:
+    post:
+      tags: [Requests]
+      summary: Выбрать маршрут заявки
+      description: Руководитель ИЦ или лаборатории выбирает маршрут до начала работ и меняет до первой загрузки отчёта. Удаление отчёта не открывает смену маршрута. Сохраняются автор, время, аудит и новая lockVersion.
+      operationId: chooseRequestRoute
+      security: [{cookieSession: [], csrfToken: []}]
+      parameters:
+        - $ref: '#/components/parameters/RequestId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ChooseRouteInput'
+      responses:
+        '200': {$ref: '#/components/responses/RequestCommandSucceeded'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '415': {$ref: '#/components/responses/UnsupportedMediaType'}
+        '422': {$ref: '#/components/responses/ValidationError'}
+        '500': {$ref: '#/components/responses/ServerError'}
+
+
+  /api/v1/requests/{id}/complete-act:
+    post:
+      tags: [Requests]
+      summary: Завершить акт испытаний
+      description: Руководитель ИЦ или лаборатории явно завершает маршрут act из in_progress при наличии действующей версии отчёта. Эксперт и СБ не требуются. На маршруте protocol действие запрещено.
+      operationId: completeRequestAct
+      security: [{cookieSession: [], csrfToken: []}]
+      parameters:
+        - $ref: '#/components/parameters/RequestId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LockVersionInput'
+      responses:
+        '200': {$ref: '#/components/responses/RequestCommandSucceeded'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '415': {$ref: '#/components/responses/UnsupportedMediaType'}
+        '422': {$ref: '#/components/responses/ValidationError'}
+        '500': {$ref: '#/components/responses/ServerError'}
+
+
   /api/v1/requests/{id}/security-decision:
     post:
       tags: [Requests]
       summary: Принять решение контроля СБ
-      description: Причина обязательна для решения `return` и не требуется для `approve`.
+      description: Любое решение (approve — «Согласовано», decline — «Не согласовано») завершает полный маршрут. Автор, время, аудит и переход фиксируются атомарно. Повтор с тем же Idempotency-Key возвращает прежний результат; устаревшая версия получает 409.
       operationId: decideRequestSecurity
       security: [{cookieSession: [], csrfToken: []}]
       parameters:
@@ -1005,6 +1061,8 @@ components:
     AttentionQueueId:
       type: string
       enum:
+        - choose_route
+        - complete_act
         - assign_executor
         - start_or_resume_work
         - upload_report
@@ -1161,6 +1219,16 @@ components:
         lockVersion:
           type: integer
           minimum: 1
+        route:
+          type: string
+          nullable: true
+          enum: [act, protocol, null]
+          description: null — маршрут ещё не выбран; начало работы запрещено
+        route_selected_by: {type: integer, nullable: true}
+        route_selected_at: {type: string, nullable: true}
+        can_choose_route: {type: integer, enum: [0, 1]}
+        can_complete_act: {type: integer, enum: [0, 1]}
+        security_mark: {type: string, nullable: true, enum: [approve, decline, null]}
         department:
           type: string
       additionalProperties: true
@@ -1209,22 +1277,27 @@ components:
         lockVersion: {type: integer, minimum: 1}
         reason: {$ref: '#/components/schemas/RequiredReason'}
       additionalProperties: false
+    LockVersionInput:
+      type: object
+      required: [lockVersion]
+      properties:
+        lockVersion: {type: integer, minimum: 1}
+      additionalProperties: false
+    ChooseRouteInput:
+      type: object
+      required: [route, lockVersion]
+      properties:
+        route: {type: string, enum: [act, protocol]}
+        lockVersion: {type: integer, minimum: 1}
+      additionalProperties: false
     SecurityDecisionInput:
-      oneOf:
-        - type: object
-          required: [decision, lockVersion]
-          properties:
-            decision: {type: string, enum: [approve]}
-            lockVersion: {type: integer, minimum: 1}
-            reason: {type: string, maxLength: 5000}
-          additionalProperties: false
-        - type: object
-          required: [decision, lockVersion, reason]
-          properties:
-            decision: {type: string, enum: [return]}
-            lockVersion: {type: integer, minimum: 1}
-            reason: {$ref: '#/components/schemas/RequiredReason'}
-          additionalProperties: false
+      type: object
+      required: [decision, lockVersion]
+      properties:
+        decision: {type: string, enum: [approve, decline]}
+        lockVersion: {type: integer, minimum: 1}
+        reason: {type: string, nullable: true, maxLength: 5000}
+      additionalProperties: false
     RevokeRoleInput:
       type: object
       required: [reason]

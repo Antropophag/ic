@@ -79,7 +79,26 @@ final class DevelopmentRequestSeederTest extends IntegrationTestCase
         $seeder = new DevelopmentRequestSeeder($this->db(), new DocumentStorage($this->storageRoot));
 
         $first = $seeder->seed();
-        self::assertSame(['requests' => 100, 'comments' => 250, 'documents' => 174], $first);
+        self::assertSame(['requests' => 100, 'comments' => 250, 'documents' => 162], $first);
+        $objectCounts = $this->db()->createCommand(
+            'SELECT object_count, COUNT(*) AS request_count FROM '
+            . '(SELECT COUNT(*) AS object_count FROM {{%request_objects}} GROUP BY request_id) seeded '
+            . 'GROUP BY object_count ORDER BY object_count',
+        )->queryAll();
+        self::assertSame([1 => 20, 2 => 20, 3 => 20, 5 => 20, 10 => 20], array_combine(
+            array_map('intval', array_column($objectCounts, 'object_count')),
+            array_map('intval', array_column($objectCounts, 'request_count')),
+        ));
+        $multi = $this->db()->createCommand('SELECT id, initiator_id FROM {{%requests}} WHERE number = 1100')->queryOne();
+        $query = new RequestQuery($this->db());
+        $details = $query->findDetails((int) $multi['id'], (int) $multi['initiator_id']);
+        self::assertCount(10, $details['item']['objects']);
+        self::assertContains('4 шт по 3 метра', array_column($details['item']['objects'], 'sampleQuantity'));
+        $search = $query->findPage((int) $multi['initiator_id'], 1, 100, 'all', null, $details['item']['objects'][1]['productName'], 'desc');
+        self::assertSame(1, $search['total']);
+        self::assertSame((int) $multi['id'], (int) $search['items'][0]['id']);
+        self::assertSame(10, (int) $search['items'][0]['object_count']);
+
         self::assertSame(
             ['completed', 'in_progress', 'opinion_preparation', 'registered', 'rejected', 'security_review', 'suspended', 'withdrawn'],
             $this->db()->createCommand('SELECT DISTINCT status FROM {{%requests}} ORDER BY status')->queryColumn(),
@@ -131,18 +150,18 @@ final class DevelopmentRequestSeederTest extends IntegrationTestCase
             ),
         );
         self::assertSame(0, (int) $this->scalar('SELECT COUNT(*) FROM {{%requests}} WHERE legacy_id IS NOT NULL'));
-        self::assertSame(['approve', 'return'], $this->db()->createCommand('SELECT DISTINCT decision FROM {{%security_checks}} ORDER BY decision')->queryColumn());
-        self::assertSame(13, (int) $this->scalar("SELECT COUNT(*) FROM {{%request_transitions}} WHERE action = 'security_return'"));
+        self::assertSame(['approve', 'decline'], $this->db()->createCommand('SELECT DISTINCT decision FROM {{%security_checks}} ORDER BY decision')->queryColumn());
+        self::assertSame(4, (int) $this->scalar("SELECT COUNT(*) FROM {{%request_transitions}} WHERE action = 'security_decline'"));
         self::assertSame(
             'Демонстрационная заявка создана. Образцы готовы к передаче в ИЦ.',
             $this->scalar('SELECT body FROM {{%request_comments}} ORDER BY id LIMIT 1'),
         );
         self::assertSame(
-            'Требуется уточнить вывод экспертного заключения.',
-            $this->scalar("SELECT reason FROM {{%security_checks}} WHERE decision = 'return'"),
+            'Заключение не согласовано по результатам проверки СБ.',
+            $this->scalar("SELECT reason FROM {{%security_checks}} WHERE decision = 'decline'"),
         );
         self::assertSame(
-            'По результатам демонстрационных испытаний образец соответствует требованиям программы.',
+            'По результатам демонстрационных испытаний продукция соответствует требованиям программы.',
             $this->scalar('SELECT body FROM {{%expert_opinions}} ORDER BY id LIMIT 1'),
         );
         self::assertSame(
@@ -176,7 +195,7 @@ final class DevelopmentRequestSeederTest extends IntegrationTestCase
             (int) $this->scalar(
                 "SELECT COUNT(*) FROM {{%request_transitions}} transition_event "
                 . 'JOIN {{%security_checks}} security_check ON security_check.request_id = transition_event.request_id '
-                . "WHERE transition_event.action IN ('security_approve', 'security_return') "
+                . "WHERE transition_event.action IN ('security_approve', 'security_decline') "
                 . 'AND transition_event.created_at < security_check.created_at',
             ),
         );
@@ -218,6 +237,7 @@ final class DevelopmentRequestSeederTest extends IntegrationTestCase
         self::assertSame($first, $second);
         self::assertNotSame($requestIds, $this->db()->createCommand('SELECT id FROM {{%requests}} ORDER BY id')->queryColumn());
         self::assertSame(100, (int) $this->scalar('SELECT COUNT(*) FROM {{%requests}}'));
+        self::assertSame(420, (int) $this->scalar('SELECT COUNT(*) FROM {{%request_objects}}'));
         self::assertSame(1100, (int) $this->scalar('SELECT value FROM {{%request_number_sequence}} WHERE id = 1'));
     }
 

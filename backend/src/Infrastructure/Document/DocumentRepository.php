@@ -11,6 +11,7 @@ use App\Domain\Request\ReportDeletionPolicy;
 use App\Domain\Request\RequestNotFound;
 use App\Domain\Request\RequestStatus;
 use App\Domain\Request\ReportPolicy;
+use App\Domain\Request\ReportDenied;
 use App\Infrastructure\Clock;
 use App\Infrastructure\Notification\NotificationOutbox;
 use yii\db\Connection;
@@ -125,7 +126,7 @@ final class DocumentRepository
         $storageKey = null;
         try {
             $request = $this->db->createCommand(
-                'SELECT r.status, r.lock_version AS lockVersion, '
+                'SELECT r.status, r.route, r.lock_version AS lockVersion, '
                 . '(executor.user_id = :executor_actor) AS isExecutor, '
                 . "EXISTS(SELECT 1 FROM {{%user_roles}} ur JOIN {{%roles}} role ON role.id = ur.role_id "
                 . "WHERE ur.user_id = :manager_actor AND role.code IN ('ic_manager', 'laboratory_manager')) AS isManager, "
@@ -153,6 +154,9 @@ final class DocumentRepository
                 (bool) $request['hasActiveReport'],
             );
 
+            if ($request['route'] === null) {
+                throw new ReportDenied('WF-014');
+            }
             $report = $this->findOrCreateReport($requestId, $actorId);
             $documentId = $report['id'];
             $version = (int) $this->db->createCommand(
@@ -174,17 +178,13 @@ final class DocumentRepository
                 'created_at' => $now,
             ])->execute();
             $versionId = (int) $this->db->getLastInsertID();
-            // Загрузка отчёта в статусе "в работе" всегда переводит заявку на
-            // подготовку заключения (независимо от номера версии — так и
-            // возврат отчёта на доработку после ✕ СБ снова запускает цикл).
-            // ТЗ 7.8: то же самое происходит и при повторной загрузке после
-            // удаления отчёта (DOC-011), даже если заявка уже была выполнена.
+            // Every act revision invalidates pending completion commands. The act route stays
+            // in work until a manager explicitly completes it; it never enters expertise.
             $isFirstOrRevived = $version === 1 || $report['wasDeleted'];
-            $statusChanges = $status === RequestStatus::InProgress
-                || ($report['wasDeleted'] && $status !== RequestStatus::OpinionPreparation);
-            $requestChanges = $isFirstOrRevived || $statusChanges;
+            $targetStatus = $request['route'] === 'act' ? RequestStatus::InProgress : RequestStatus::OpinionPreparation;
+            $statusChanges = $targetStatus !== $status;
+            $requestChanges = $isFirstOrRevived || $statusChanges || $request['route'] === 'act';
             $nextLockVersion = (int) $request['lockVersion'] + ($requestChanges ? 1 : 0);
-            $targetStatus = $statusChanges ? RequestStatus::OpinionPreparation : $status;
             if ($requestChanges) {
                 $updated = $this->db->createCommand()->update('{{%requests}}', [
                     'status' => $targetStatus->value,
@@ -199,12 +199,12 @@ final class DocumentRepository
                     throw new \RuntimeException('Concurrent report upload detected.');
                 }
             }
-            if ($statusChanges) {
+            if ($statusChanges || $isFirstOrRevived) {
                 $this->db->createCommand()->insert('{{%request_transitions}}', [
                     'request_id' => $requestId,
                     'actor_id' => $actorId,
                     'from_status' => $status->value,
-                    'to_status' => RequestStatus::OpinionPreparation->value,
+                    'to_status' => $targetStatus->value,
                     'action' => 'upload_report',
                     'rule_id' => $report['wasDeleted'] ? 'DOC-012' : 'DOC-002',
                     'document_version_id' => $versionId,
@@ -229,6 +229,19 @@ final class DocumentRepository
                         'Загружен отчёт испытаний, для которого нужно подготовить экспертное заключение. '
                         . 'Откройте заявку в портале и возьмите её в работу.'
                         . $reportLink,
+                    );
+                }
+            }
+            if ($request['route'] === 'act') {
+                $outbox = new NotificationOutbox($this->db);
+                foreach ($this->activeUsersWithRoles(['ic_manager', 'laboratory_manager']) as $manager) {
+                    $outbox->enqueue(
+                        $requestId,
+                        'request.act_ready',
+                        $manager['email'],
+                        $manager['name'],
+                        'Акт испытаний готов к завершению',
+                        'Загружен отчёт по маршруту «Акт испытаний». Проверьте документ и завершите заявку в портале.',
                     );
                 }
             }

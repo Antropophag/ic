@@ -265,9 +265,9 @@ it('maps the security decision permission and history', () => {
   expect(fromApi({ ...registered, status: 'security_review', can_security_decide: 1 }))
     .toMatchObject({ canSecurityDecide: true, status: 'Контроль СБ' })
   expect(historyFromApi({
-    id: 13, kind: 'transition', action: 'security_return', actorName: 'Сотрудник СБ',
+    id: 13, kind: 'transition', action: 'security_decline', actorName: 'Сотрудник СБ',
     reason: 'Уточнить вывод', ruleId: 'SEC-003', occurredAt: '2026-07-28T10:03:00Z',
-  }).description).toBe('Заявка возвращена в работу: Уточнить вывод')
+  }).description).toBe('СБ: не согласовано, заявка выполнена: Уточнить вывод')
 })
 
 it('maps a safe history event without audit payload', () => {
@@ -472,7 +472,7 @@ it('builds initials for an arbitrary display name, not just the logged-in user',
 
 it('maps the raw security_mark code, not a display glyph (issue #148)', () => {
   expect(fromApi({ ...registered, security_mark: 'approve' }).securityMark).toBe('approve')
-  expect(fromApi({ ...registered, security_mark: 'return' }).securityMark).toBe('return')
+  expect(fromApi({ ...registered, security_mark: 'decline' }).securityMark).toBe('decline')
   expect(fromApi({ ...registered, security_mark: null }).securityMark).toBeNull()
 })
 
@@ -485,7 +485,7 @@ it('precomputes securityMarkDisplay once at mapping time, not per template read'
 
 it('resolves a security mark icon for each SEC-002/SEC-003 state', () => {
   expect(securityMarkIcon('approve')).toMatchObject({ className: 'security-mark--approve', label: 'Согласовано' })
-  expect(securityMarkIcon('return')).toMatchObject({ className: 'security-mark--return', label: 'Возвращено на доработку' })
+  expect(securityMarkIcon('decline')).toMatchObject({ className: 'security-mark--decline', label: 'Не согласовано' })
   expect(securityMarkIcon(null)).toMatchObject({ className: 'security-mark--pending', label: 'Контроль ещё не проводился' })
   expect(securityMarkIcon('unexpected')).toMatchObject({ className: 'security-mark--pending' })
 })

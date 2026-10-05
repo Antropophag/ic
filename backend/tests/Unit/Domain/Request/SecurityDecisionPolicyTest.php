@@ -13,7 +13,7 @@ use PHPUnit\Framework\TestCase;
 
 final class SecurityDecisionPolicyTest extends TestCase
 {
-    public function testApprovesAndReturnsRequest(): void
+    public function testBothDecisionsCompleteRequest(): void
     {
         $policy = new SecurityDecisionPolicy();
         self::assertSame(RequestStatus::Completed, $policy->targetStatus(
@@ -23,9 +23,9 @@ final class SecurityDecisionPolicyTest extends TestCase
             true,
             [Role::SecurityOfficer],
         ));
-        self::assertSame(RequestStatus::InProgress, $policy->targetStatus(
+        self::assertSame(RequestStatus::Completed, $policy->targetStatus(
             RequestStatus::SecurityReview,
-            'return',
+            'decline',
             'Нужны повторные испытания',
             true,
             [Role::SecurityOfficer],
@@ -57,7 +57,7 @@ final class SecurityDecisionPolicyTest extends TestCase
         yield 'inactive' => ['AUTH-003', RequestStatus::SecurityReview, 'approve', null, false, [Role::SecurityOfficer]];
         yield 'wrong status' => ['SEC-001', RequestStatus::InProgress, 'approve', null, true, [Role::SecurityOfficer]];
         yield 'wrong role' => ['SEC-001', RequestStatus::SecurityReview, 'approve', null, true, [Role::Employee]];
-        yield 'reason required' => ['SEC-003', RequestStatus::SecurityReview, 'return', ' ', true, [Role::SecurityOfficer]];
+        yield 'legacy return forbidden' => ['SEC-001', RequestStatus::SecurityReview, 'return', 'Причина', true, [Role::SecurityOfficer]];
         yield 'unknown decision' => ['SEC-001', RequestStatus::SecurityReview, 'skip', null, true, [Role::SecurityOfficer]];
     }
 }

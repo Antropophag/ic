@@ -344,11 +344,11 @@ it('sends a security decision with optimistic locking', async () => {
   const fetchMock = vi.fn().mockResolvedValue(new Response('{}', { status: 200 }))
   vi.stubGlobal('fetch', fetchMock)
 
-  await requestApi.decideSecurity(7, 'return', 'Нужно уточнить вывод.', 7)
+  await requestApi.decideSecurity(7, 'decline', 'Нужно уточнить вывод.', 7)
 
   expect(fetchMock).toHaveBeenCalledWith('/api/v1/requests/7/security-decision', expect.objectContaining({
     method: 'POST',
-    body: JSON.stringify({ decision: 'return', reason: 'Нужно уточнить вывод.', lockVersion: 7 }),
+    body: JSON.stringify({ decision: 'decline', reason: 'Нужно уточнить вывод.', lockVersion: 7 }),
   }))
 })
 

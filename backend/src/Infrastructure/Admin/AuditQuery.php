@@ -10,7 +10,7 @@ use yii\db\Connection;
 final class AuditQuery
 {
     private const DENIED = [
-        'request.security_decision_rejected', 'request.expert_assignment_denied',
+        'request.route_action_denied', 'request.security_decision_rejected', 'request.expert_assignment_denied',
         'request.executor_assignment_denied', 'request.color_mark_denied',
         'request.suspend_resume_denied', 'request.start_denied', 'request.create_denied',
         'request.reject_denied', 'request.withdraw_denied', 'request.document_download_rejected',
@@ -20,6 +20,9 @@ final class AuditQuery
     ];
 
     private const TITLES = [
+        'request.route_action_denied' => 'Действие с маршрутом отклонено',
+        'request.route_selected' => 'Выбран маршрут заявки',
+        'request.act_completed' => 'Акт испытаний завершён',
         'request.security_decided' => 'Решение службы безопасности',
         'request.security_decision_rejected' => 'Решение службы безопасности отклонено',
         'request.comment_added' => 'Добавлен комментарий',
@@ -50,6 +53,8 @@ final class AuditQuery
     ];
 
     private const SAFE_DETAILS = [
+        'request.route_selected' => ['from_route', 'route'],
+        'request.act_completed' => ['report_version_id'],
         'request.security_decided' => ['decision'], 'request.comment_added' => ['comment_id'],
         'request.expert_claimed' => ['expert_id', 'assignment_id'], 'request.expert_reassigned' => ['expert_id', 'assignment_id'],
         'request.expert_assignment_denied' => ['expert_id'], 'request.executor_assigned' => ['executor_id', 'assignment_id'],

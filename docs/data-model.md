@@ -78,6 +78,8 @@ erDiagram
         bigint(20)_unsigned id PK
         bigint(20)_unsigned number
         varchar(128) legacy_id
+        varchar(32) source
+        tinyint(1) is_archived
         bigint(20)_unsigned initiator_id FK "-> users.id"
         varchar(255) department_name
         varchar(128) department_external_id
@@ -86,14 +88,17 @@ erDiagram
         varchar(2000) product_name
         varchar(500) manufacturer
         varchar(500) supplier
-        int(11)_unsigned sample_quantity "NULL только для архивного импорта"
-        text legacy_sample_quantity_raw "NULL, исходное значение Б24"
+        int(11)_unsigned sample_quantity
+        text legacy_sample_quantity_raw
         text test_method
         int(11)_unsigned revision
         int(11)_unsigned lock_version
         varchar(16) color
         datetime(6) created_at
         datetime(6) updated_at
+        varchar(16) route
+        bigint(20)_unsigned route_selected_by FK "-> users.id"
+        datetime(6) route_selected_at
     }
     request_assignments {
         bigint(20)_unsigned id PK
@@ -106,6 +111,7 @@ erDiagram
     }
     request_comments {
         bigint(20)_unsigned id PK
+        varchar(191) legacy_id
         bigint(20)_unsigned request_id FK "-> requests.id"
         bigint(20)_unsigned author_id FK "-> users.id"
         text body
@@ -113,7 +119,11 @@ erDiagram
     }
     request_documents {
         bigint(20)_unsigned id PK
+        varchar(191) legacy_id
+        varchar(191) title_discriminator
+        bigint(20)_unsigned request_id FK "-> request_comments.request_id"
         bigint(20)_unsigned request_id FK "-> requests.id"
+        bigint(20)_unsigned comment_id FK "-> request_comments.id"
         varchar(32) document_type
         varchar(255) title
         bigint(20)_unsigned created_by FK "-> users.id"
@@ -138,6 +148,13 @@ erDiagram
         tinyint(3)_unsigned id PK
         bigint(20)_unsigned value
     }
+    request_objects {
+        bigint(20)_unsigned id PK
+        bigint(20)_unsigned request_id FK "-> requests.id"
+        smallint(6) position
+        varchar(2000) product_name
+        text sample_quantity
+    }
     request_transitions {
         bigint(20)_unsigned id PK
         bigint(20)_unsigned request_id FK "-> requests.id"
@@ -148,6 +165,13 @@ erDiagram
         text reason
         bigint(20)_unsigned document_version_id FK "-> request_document_versions.id"
         varchar(16) rule_id
+        datetime(6) created_at
+    }
+    review_feedback {
+        bigint(20)_unsigned id PK
+        bigint(20)_unsigned author_id FK "-> users.id"
+        text body
+        longtext checklist_json
         datetime(6) created_at
     }
     roles {
@@ -191,19 +215,24 @@ erDiagram
     users ||--o{ idempotency_requests : "actor_id"
     requests ||--o{ notification_outbox : "request_id"
     users ||--o{ requests : "initiator_id"
+    users |o--o{ requests : "route_selected_by"
     requests ||--o{ request_assignments : "request_id"
     users ||--o{ request_assignments : "user_id"
     users ||--o{ request_assignments : "assigned_by"
     requests ||--o{ request_comments : "request_id"
     users ||--o{ request_comments : "author_id"
+    request_comments ||--o{ request_documents : "request_id"
     requests ||--o{ request_documents : "request_id"
+    request_comments |o--o{ request_documents : "comment_id"
     users ||--o{ request_documents : "created_by"
     users |o--o{ request_documents : "deleted_by"
     request_documents ||--o{ request_document_versions : "document_id"
     users ||--o{ request_document_versions : "uploaded_by"
+    requests ||--o{ request_objects : "request_id"
     requests ||--o{ request_transitions : "request_id"
     users ||--o{ request_transitions : "actor_id"
     request_document_versions |o--o{ request_transitions : "document_version_id"
+    users ||--o{ review_feedback : "author_id"
     requests ||--o{ security_checks : "request_id"
     expert_opinions ||--o{ security_checks : "expert_opinion_id"
     users ||--o{ security_checks : "officer_id"
