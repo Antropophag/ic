@@ -96,6 +96,9 @@ final class TestActDocumentService
             (bool) $request['hasActiveReport'],
         );
 
+        $request['productName'] = \App\Infrastructure\Request\RequestObjects::describe(
+            (new \App\Infrastructure\Request\RequestObjects($this->db))->find($requestId),
+        );
         return $request;
     }
 

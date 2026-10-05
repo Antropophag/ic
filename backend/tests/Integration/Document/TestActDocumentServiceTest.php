@@ -52,6 +52,22 @@ final class TestActDocumentServiceTest extends IntegrationTestCase
         ));
     }
 
+    public function testActIncludesEveryObjectAndItsTextQuantity(): void
+    {
+        [$requestId, $requestNumber, $executor] = $this->inProgressRequest('multiple-objects');
+        $this->db()->createCommand()->insert('{{%request_objects}}', [
+            'request_id' => $requestId, 'position' => 2,
+            'product_name' => 'Второй образец', 'sample_quantity' => '4 шт по 3 метра',
+        ])->execute();
+        $service = $this->service();
+        $prepared = $service->prepare($requestId, $executor);
+        self::assertStringContainsString('1. Испытуемый образец Кириллица', $prepared['sampleName']);
+        self::assertStringContainsString('2. Второй образец — 4 шт по 3 метра', $prepared['sampleName']);
+        $xml = $this->documentXml($service->generate($requestId, $executor, $this->validInput($requestNumber))->content);
+        self::assertStringContainsString('Второй образец', $xml);
+        self::assertStringContainsString('4 шт по 3 метра', $xml);
+    }
+
     public function testManagerCanGenerateActForAssignedRequest(): void
     {
         [$requestId, $requestNumber, , $manager] = $this->inProgressRequest('manager');

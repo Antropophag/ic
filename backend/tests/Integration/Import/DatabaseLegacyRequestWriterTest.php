@@ -140,6 +140,8 @@ final class DatabaseLegacyRequestWriterTest extends IntegrationTestCase
         $apiItem = (new RequestQuery($this->db()))->findDetails($requestId, $actorId)['item'];
         self::assertNull($apiItem['sample_quantity']);
         self::assertSame('По 1 шт. каждого вида', $apiItem['legacy_sample_quantity_raw']);
+        self::assertCount(1, $apiItem['objects']);
+        self::assertSame('По 1 шт. каждого вида', $apiItem['objects'][0]['sampleQuantity']);
     }
 
     public function testImportedLongProductNameIsStoredAndReturnedInFull(): void

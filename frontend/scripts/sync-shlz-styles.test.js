@@ -34,9 +34,11 @@ it('writes resolved tokens and verbatim components only from the pinned Git obje
   expect(css).toContain('--shlz-source-spacing: 8;')
   expect(css).toContain('--shlz-semantic-nested: #0B1623;')
   expect(css).not.toMatch(/schema|uncommitted|do not use/)
-  for (const name of ['status-badge', 'table', 'popover', 'choice', 'button']) {
+  for (const name of ['status-badge', 'table', 'popover', 'choice', 'button', 'notification', 'file-row', 'file-upload']) {
     expect(await readFile(new URL(`${name}.css`, output), 'utf8')).toContain(readSource(`packages/styles/components/${name}.css`))
   }
+  expect(await readFile(new URL('file-upload.ts', output), 'utf8')).toBe(readSource('packages/behaviors/src/file-upload.ts'))
+  expect(await readFile(new URL('copy.svg', output), 'utf8')).toBe(readSource('packages/icons/normalized/interface/copy.svg'))
   for (const [binary, args, options] of execFileSync.mock.calls) {
     expect(binary).toBe('/usr/bin/git')
     expect(args.slice(0, 2)).toEqual(['--no-replace-objects', 'show'])

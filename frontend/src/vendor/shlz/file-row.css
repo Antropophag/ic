@@ -1,0 +1,154 @@
+/* Generated from shlz-ui 1864b3c0cb327485f08c48b14c88730ec852b03c. Run frontend/scripts/sync-shlz-styles.mjs to update. */
+.shlz-file-row {
+  position: relative;
+  box-sizing: border-box;
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  inline-size: 100%;
+  min-block-size: 55px; /* FACT: Document variants are 55px high. */
+  padding: 7px 9px; /* FACT: visual starts at x=10/y=8.5 in Document. */
+  color: var(--shlz-semantic-color-text-primary);
+  background: var(--shlz-semantic-color-surface-base);
+  border: 1px solid var(--shlz-source-color-gray-gray-75);
+  border-radius: 12px; /* FACT: Document default uses radius 12. */
+}
+
+.shlz-file-row:has(.shlz-file-row__primary):hover,
+.shlz-file-row--visual-hover {
+  background: var(--shlz-source-color-background-primary);
+}
+
+.shlz-file-row__visual {
+  display: grid;
+  flex: 0 0 38px;
+  place-items: center;
+  inline-size: 38px;
+  block-size: 38px; /* FACT: Document file-type visual is 38x38. */
+}
+
+.shlz-file-row__visual :is(img, .shlz-icon) {
+  display: block;
+  max-inline-size: 100%;
+  max-block-size: 100%;
+}
+
+.shlz-file-row__content {
+  flex: 1 1 auto;
+  min-inline-size: 0;
+}
+
+.shlz-file-row__primary,
+.shlz-file-row__title {
+  display: block;
+  overflow: hidden;
+  color: inherit;
+  font-size: 15px;
+  font-weight: 500; /* FACT: Document filename is Golos Text Medium. */
+  line-height: 19.5px;
+  letter-spacing: -0.01em;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.shlz-file-row__primary {
+  inline-size: fit-content;
+  max-inline-size: 100%;
+  border-radius: 2px;
+  text-decoration: none;
+}
+
+.shlz-file-row__primary:hover {
+  text-decoration: underline;
+}
+
+.shlz-file-row__primary:focus-visible,
+.shlz-file-row__action:focus-visible {
+  outline: 2px solid var(--shlz-semantic-color-action-primary);
+  outline-offset: 2px;
+}
+
+.shlz-file-row__meta {
+  display: block;
+  overflow: hidden;
+  color: var(--shlz-semantic-color-text-secondary);
+  font-size: 15px;
+  line-height: 19.5px;
+  letter-spacing: -0.01em;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.shlz-file-row__actions {
+  display: inline-flex;
+  flex: 0 0 auto;
+  gap: 4px;
+  align-items: center;
+}
+
+.shlz-file-row__action {
+  display: inline-grid;
+  place-items: center;
+  inline-size: 32px;
+  block-size: 32px;
+  padding: 0;
+  color: var(--shlz-semantic-color-text-secondary);
+  background: transparent;
+  border: 0;
+  border-radius: 50%;
+  cursor: pointer;
+}
+
+.shlz-file-row__action:hover {
+  color: var(--shlz-semantic-color-text-primary);
+  background: var(--shlz-semantic-color-surface-base);
+}
+
+.shlz-file-row__action:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.shlz-file-row__action :is(img, .shlz-icon) {
+  display: block;
+  inline-size: 20px;
+  block-size: 20px;
+}
+
+.shlz-file-row[aria-invalid="true"] {
+  block-size: 73px;
+  min-block-size: 73px; /* FACT: error variant is 230x73. */
+  align-items: flex-start;
+  padding-block: 7px 25px;
+  border-color: transparent;
+  background: transparent;
+}
+
+.shlz-file-row[aria-invalid="true"]::before {
+  position: absolute;
+  inset: 0 0 auto;
+  box-sizing: border-box;
+  block-size: 55px;
+  border: 1px solid var(--shlz-semantic-color-status-danger);
+  border-radius: 12px;
+  content: "";
+}
+
+.shlz-file-row[aria-invalid="true"] .shlz-file-row__action {
+  color: var(--shlz-semantic-color-status-danger);
+}
+
+.shlz-file-row__message {
+  position: absolute;
+  inset-block-start: 59px;
+  inset-inline-start: 0;
+  color: var(--shlz-semantic-color-status-danger);
+  font-size: 14px;
+  line-height: 14px;
+}
+
+@media (width <= 360px) {
+  .shlz-file-row {
+    padding-inline: 9px;
+  }
+}

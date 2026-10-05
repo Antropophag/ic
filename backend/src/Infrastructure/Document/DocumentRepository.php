@@ -401,7 +401,7 @@ final class DocumentRepository
             )->queryScalar();
             $pdf = $renderer->render([
                 'number' => (int) $request['number'],
-                'productName' => (string) $request['productName'],
+                'productName' => \App\Infrastructure\Request\RequestObjects::describe((new \App\Infrastructure\Request\RequestObjects($this->db))->find($requestId)),
                 'manufacturer' => (string) $request['manufacturer'],
                 'supplier' => (string) $request['supplier'],
                 'expertName' => (string) $request['expertName'],

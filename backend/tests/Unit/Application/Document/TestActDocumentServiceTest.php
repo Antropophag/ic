@@ -74,6 +74,8 @@ final class TestActDocumentServiceTest extends TestCase
                     ->getMock();
                 if (str_contains($sql, 'manager_role')) {
                     $command->method('queryOne')->willReturn($request);
+                } elseif (str_contains($sql, '{{%request_objects}}')) {
+                    $command->method('queryAll')->willReturn([['productName' => $request['productName'], 'sampleQuantity' => '1']]);
                 } else {
                     $command->method('queryAll')->willReturn([[
                         'name' => 'Иванов Иван Иванович',

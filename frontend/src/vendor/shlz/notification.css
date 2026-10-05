@@ -1,0 +1,173 @@
+/* Generated from shlz-ui 1864b3c0cb327485f08c48b14c88730ec852b03c. Run frontend/scripts/sync-shlz-styles.mjs to update. */
+.shlz-notification {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px; /* Notification.svg component geometry */
+  align-items: center;
+  inline-size: min(384px, 100%);
+  min-block-size: 58px; /* FACT: Notification.svg surfaces are 384x58. */
+  padding: 9px 12px; /* Notification.svg component geometry */
+  color: var(--shlz-semantic-color-text-inverse);
+  background: var(--shlz-source-color-dark-blue-dark-blue);
+  border-radius: 29px; /* FACT: Notification and Snackbar source radius. */
+  box-shadow: 0 4px 15px rgb(11 22 35 / 10%);
+  font-size: 14px;
+  line-height: 18px;
+}
+
+.shlz-notification--danger {
+  background: var(--shlz-semantic-color-status-danger);
+}
+
+.shlz-notification--light {
+  color: var(--shlz-semantic-color-text-primary);
+  background: var(--shlz-semantic-color-surface-base);
+}
+
+.shlz-notification__icon {
+  display: inline-grid;
+  flex: 0 0 16px;
+  place-items: center;
+  inline-size: 16px;
+  block-size: 16px;
+  border-radius: var(--shlz-source-radius-max);
+  background: transparent;
+}
+
+.shlz-notification__icon :is(img, .shlz-icon),
+.shlz-notification__close :is(img, .shlz-icon) {
+  inline-size: 16px;
+  block-size: 16px;
+}
+
+.shlz-notification:not(.shlz-notification--light)
+  :is(
+    .shlz-notification__icon .shlz-icon,
+    .shlz-notification__close .shlz-icon
+  ) {
+  color: inherit;
+}
+
+.shlz-notification__content {
+  flex: 1 1 min-content;
+  min-inline-size: 0;
+  overflow-wrap: break-word;
+}
+
+.shlz-notification__title {
+  margin: 0;
+  font-weight: 400;
+}
+
+.shlz-notification__message {
+  margin: 2px 0 0;
+  opacity: 0.8;
+}
+
+.shlz-notification__action {
+  flex: 0 0 auto;
+  min-inline-size: 79px;
+  max-inline-size: 100%;
+  min-block-size: var(--shlz-semantic-control-height-small);
+  padding-inline: var(--shlz-source-spacing-16);
+  color: var(--shlz-semantic-color-text-primary);
+  background: var(--shlz-semantic-color-surface-muted);
+  border: 0;
+  border-radius: var(--shlz-source-radius-max);
+  font: inherit;
+  overflow-wrap: anywhere;
+}
+
+.shlz-notification__close {
+  display: inline-grid;
+  flex: 0 0 20px;
+  place-items: center;
+  inline-size: 20px;
+  block-size: 20px;
+  padding: 0;
+  color: inherit;
+  background: transparent;
+  border: 0;
+  border-radius: var(--shlz-source-radius-max);
+  font: inherit;
+  cursor: pointer;
+}
+
+.shlz-notification__leading-progress {
+  display: inline-grid;
+  flex: 0 0 40px;
+  place-items: center;
+  inline-size: 40px;
+  block-size: 40px;
+  background:
+    radial-gradient(
+      circle,
+      var(--shlz-source-color-dark-blue-dark-blue) 58%,
+      transparent 60%
+    ),
+    conic-gradient(
+      currentcolor calc(var(--shlz-progress, 1) * 1turn),
+      rgb(255 255 255 / 30%) 0
+    );
+  border-radius: 50%;
+  font-variant-numeric: tabular-nums;
+}
+
+.shlz-notification__countdown {
+  display: inline-grid;
+  flex: 0 0 var(--shlz-semantic-control-height-small);
+  place-items: center;
+  inline-size: var(--shlz-semantic-control-height-small);
+  block-size: var(--shlz-semantic-control-height-small);
+  color: inherit;
+  background:
+    radial-gradient(
+      circle,
+      var(--shlz-source-color-dark-blue-dark-blue) 58%,
+      transparent 60%
+    ),
+    conic-gradient(
+      currentcolor calc(var(--shlz-progress, 1) * 1turn),
+      rgb(255 255 255 / 30%) 0
+    );
+  border-radius: 50%;
+  font-variant-numeric: tabular-nums;
+}
+
+.shlz-notification__countdown--loading {
+  --shlz-progress: 0.72;
+}
+
+.shlz-notification__source-countdown {
+  position: relative;
+  display: inline-grid;
+  flex: 0 0 40px;
+  place-items: center;
+  inline-size: 40px;
+  block-size: 40px;
+  font-variant-numeric: tabular-nums;
+}
+
+.shlz-notification__source-countdown svg {
+  position: absolute;
+  inset: -9px -12px;
+  inline-size: 64px;
+  block-size: 58px;
+  pointer-events: none;
+}
+
+.shlz-notification__source-countdown > span {
+  position: relative;
+}
+
+.shlz-notification__action:focus-visible,
+.shlz-notification__close:focus-visible {
+  outline: 2px solid currentcolor;
+  outline-offset: 2px;
+}
+
+@media (width <= 420px) {
+  .shlz-notification__action {
+    margin-inline-start: auto;
+  }
+}

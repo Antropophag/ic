@@ -97,6 +97,7 @@ final class RequestQuery
                 . 'OR LOCATE(:filter_query, r.product_name) > 0 OR LOCATE(:filter_query, u.display_name) > 0 '
                 . 'OR LOCATE(:filter_query, COALESCE(r.department_name, \'Подразделение не указано\')) > 0 '
                 . 'OR LOCATE(:filter_query, r.supplier) > 0 '
+                . 'OR EXISTS(SELECT 1 FROM {{%request_objects}} ro WHERE ro.request_id = r.id AND LOCATE(:filter_query, ro.product_name) > 0) '
                 . 'OR LOCATE(:filter_query, executor.display_name) > 0)';
             $filterParams[':filter_query'] = $query;
         }
@@ -123,6 +124,7 @@ final class RequestQuery
 
         $items = $this->db->createCommand(
             'SELECT r.id, r.number, r.status, r.color, r.source, r.is_archived, r.product_name, r.manufacturer, '
+            . '(SELECT GREATEST(COUNT(*), 1) FROM {{%request_objects}} ro WHERE ro.request_id = r.id) AS object_count, '
             . 'r.supplier, r.sample_quantity, r.legacy_sample_quantity_raw, r.test_method, '
             . 'r.lock_version AS lockVersion, r.created_at, '
             . "u.display_name AS initiator_name, COALESCE(r.department_name, 'Подразделение не указано') AS department, "
@@ -272,7 +274,17 @@ final class RequestQuery
                 ':offset' => ($safePage - 1) * $pageSize,
             ], $filterParams),
         )->queryAll();
+        $objectNames = [];
+        if ($items !== []) {
+            $rows = (new \yii\db\Query())->select(['request_id', 'product_name'])
+                ->from('{{%request_objects}}')->where(['request_id' => array_column($items, 'id')])
+                ->orderBy(['request_id' => SORT_ASC, 'position' => SORT_ASC])->all($this->db);
+            foreach ($rows as $row) {
+                $objectNames[(int) $row['request_id']][] = (string) $row['product_name'];
+            }
+        }
         foreach ($items as &$archiveItem) {
+            $archiveItem['object_names'] = $objectNames[(int) $archiveItem['id']] ?? [(string) $archiveItem['product_name']];
             if ((int) $archiveItem['is_archived'] !== 1) {
                 continue;
             }
@@ -341,9 +353,10 @@ final class RequestQuery
     {
         $item = $this->db->createCommand(
             'SELECT r.id, r.number, r.status, r.color, r.source, r.is_archived, r.product_name, r.manufacturer, '
+            . '(SELECT GREATEST(COUNT(*), 1) FROM {{%request_objects}} ro WHERE ro.request_id = r.id) AS object_count, '
             . 'r.supplier, r.sample_quantity, r.legacy_sample_quantity_raw, r.test_method, '
             . 'r.lock_version AS lockVersion, '
-            . "r.created_at, r.updated_at, u.display_name AS initiator_name, "
+            . "r.created_at, r.updated_at, u.display_name AS initiator_name, u.position AS initiator_position, "
             . "COALESCE(r.department_name, 'Подразделение не указано') AS department, "
             . "(EXISTS(SELECT 1 FROM {{%users}} department_actor JOIN {{%user_roles}} department_ur "
             . "ON department_ur.user_id = department_actor.id JOIN {{%roles}} department_role "
@@ -466,6 +479,7 @@ final class RequestQuery
         if ($item === false) {
             throw new RequestNotFound('Request not found');
         }
+        $item['objects'] = (new RequestObjects($this->db))->find($requestId);
         if ((int) $item['is_archived'] === 1) {
             foreach (array_keys($item) as $key) {
                 if (str_starts_with($key, 'can_')) {
