@@ -29,6 +29,9 @@ export function createApplicationDraftForm({ userId, draft, files, notify }) {
     const saved = loadApplicationDraft(userId)
     if (saved) {
       Object.assign(draft, saved.data)
+      if (Array.isArray(draft.objects) && !saved.data.objects) {
+        draft.objects = [{ productName: saved.data.productName, sampleQuantity: String(saved.data.sampleQuantity) }]
+      }
       lastValidQuantity = saved.data.sampleQuantity
       hadFiles = saved.hadFiles
       notify(saved.hadFiles

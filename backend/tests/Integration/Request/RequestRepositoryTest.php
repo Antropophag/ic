@@ -74,6 +74,49 @@ final class RequestRepositoryTest extends IntegrationTestCase
         self::assertSame('Подразделение B', $second['department']);
     }
 
+    public function testDetailsIncludeCurrentInitiatorPositionWithoutChangingDepartmentSnapshot(): void
+    {
+        $initiator = $this->createUser('dev.it.card.initiator', 'Тестовый Инициатор', null, true, 'Цех регистрации');
+        $request = $this->createRegisteredRequest($initiator, 'initiator-position');
+        $query = new RequestQuery($this->db());
+        self::assertNull($query->findDetails((int) $request['id'], $initiator)['item']['initiator_position']);
+        $this->db()->createCommand()->update('{{%users}}', [
+            'position' => 'Ведущий инженер',
+            'department' => 'Новое подразделение',
+        ], ['id' => $initiator])->execute();
+        $details = $query->findDetails((int) $request['id'], $initiator)['item'];
+        self::assertSame('Тестовый Инициатор', $details['initiator_name']);
+        self::assertSame('Ведущий инженер', $details['initiator_position']);
+        self::assertSame('Цех регистрации', $details['department']);
+        self::assertSame('Тестовый завод', $details['manufacturer']);
+    }
+
+    public function testMultipleObjectsPersistSearchAndKeepOneWorkflow(): void
+    {
+        $actor = $this->createUser('dev.it.objects.owner', 'Инициатор объектов');
+        $input = new CreateRequestInput();
+        $input->setAttributes([
+            'objects' => [
+                ['productName' => 'Первый объект', 'sampleQuantity' => '4 шт по 3 метра'],
+                ['productName' => 'Уникальная-вторая-позиция', 'sampleQuantity' => '2 комплекта'],
+            ],
+            'manufacturer' => 'Общий завод', 'supplier' => 'Общий поставщик', 'testMethod' => 'Общая программа',
+        ]);
+        self::assertTrue($input->validate());
+        $request = (new RequestRepository($this->db()))->create($input, $actor);
+        $query = new RequestQuery($this->db());
+        $detail = $query->findDetails((int) $request['id'], $actor);
+        self::assertSame($input->objects, $detail['item']['objects']);
+        self::assertNull($detail['item']['sample_quantity']);
+        self::assertSame('Общий завод', $detail['item']['manufacturer']);
+        self::assertCount(1, $detail['history']);
+        $page = $query->findPage($actor, 1, 10, 'mine', null, 'Уникальная-вторая-позиция', 'desc');
+        self::assertSame(1, $page['total']);
+        self::assertSame(2, (int) $page['items'][0]['object_count']);
+        self::assertSame(['Первый объект', 'Уникальная-вторая-позиция'], $page['items'][0]['object_names']);
+        self::assertSame('Первый объект', $page['items'][0]['product_name']);
+    }
+
     public function testCreationRequiresDepartment(): void
     {
         $initiator = $this->createUser('dev.it.department.missing', 'Без подразделения', null, true, null);

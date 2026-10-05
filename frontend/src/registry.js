@@ -57,8 +57,15 @@ export function fromApi(item) {
     id: String(item.number).padStart(6, '0'),
     date: new Date(item.created_at).toLocaleDateString('ru-RU'),
     initiator: item.initiator_name,
+    initiatorPosition: item.initiator_position,
     department: item.department,
     product: item.product_name,
+    objectTooltip: (item.object_names?.length ? item.object_names : [item.product_name]).join('\n'),
+    objectCount: Number(item.object_count || item.objects?.length || 1),
+    objects: Array.isArray(item.objects) ? item.objects.map(object => ({
+      name: object.productName,
+      sampleQuantityText: object.sampleQuantity || '',
+    })) : [{ name: item.product_name, sampleQuantityText: item.sample_quantity ? `${item.sample_quantity} шт.` : item.legacy_sample_quantity_raw || '' }],
     manufacturer: item.manufacturer,
     supplier: item.supplier,
     sampleQuantity: item.sample_quantity,
@@ -160,7 +167,7 @@ const ACTIONS_WITH_TARGET = new Set(['assign_executor', 'reassign_expert'])
 
 export function historyFromApi(item) {
   const description = HISTORY_LABELS[item.action] || item.action
-  // display_name хранится в именительном падеже и не склоняется программно
+  // В ленте display_name остаётся в исходном именительном падеже
   // без риска грамматической ошибки — имя добавляется через двоеточие, тем
   // же приёмом, что и причина возврата СБ, а не согласованием окончаний.
   const qualifier = item.reason || (ACTIONS_WITH_TARGET.has(item.action) || item.action === 'change_department' ? item.targetName : '')

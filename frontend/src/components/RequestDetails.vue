@@ -2,6 +2,8 @@
 import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue'
 import { requestApi } from '../api'
 import AppIcon from './AppIcon.vue'
+import RequestObjectSummary from './RequestObjectSummary.vue'
+import RequestObjectsTable from './RequestObjectsTable.vue'
 import AppModal from './AppModal.vue'
 import HelpArticle from './HelpArticle.vue'
 import RequestStatus from './RequestStatus.vue'
@@ -11,8 +13,8 @@ import { triggerBlobDownload } from '../download'
 import { createLatestRequestGuard } from '../latestRequestGuard'
 import { REQUEST_COLORS, testingDirectionLabel, avatarRoleClass, canStartNow, canSubmitComment, commentFromApi, documentFromApi, documentKind, fromApi, historyFromApi, initialsFor, newestFirstFeed, withoutStaleActions } from '../registry'
 
-const props = defineProps({ requestId: { type: Number, required: true }, currentInitials: { type: String, default: '' }, initialWarning: { type: String, default: '' } })
-const emit = defineEmits(['loaded', 'unavailable', 'updated', 'close'])
+const props = defineProps({ requestId: { type: Number, required: true }, currentUserRoles: { type: Array, default: () => [] }, currentInitials: { type: String, default: '' }, initialWarning: { type: String, default: '' } })
+const emit = defineEmits(['loading', 'loaded', 'unavailable', 'updated', 'close'])
 const selected = ref(null)
 const actionError = ref('')
 const actionLoading = ref(false)
@@ -88,6 +90,7 @@ const downloadRequestGuard = createLatestRequestGuard()
 const previewRequestGuard = createLatestRequestGuard()
 const departmentRequestGuard = createLatestRequestGuard()
 const confirmDialog = createConfirmDialog()
+const requestObjects = computed(() => selected.value?.objects || [])
 const hasRequestContent = computed(() => Boolean(selected.value?.product))
 const feed = computed(() => newestFirstFeed(selected.value?.history || [], selected.value?.comments || []))
 const documentGroups = computed(() => {
@@ -263,6 +266,7 @@ function fileTypeClassFor(document) {
   return documentKind(document.mimeType).className
 }
 async function loadRequestDetails(item) {
+  emit('loading')
   const requestToken = detailRequestGuard.begin(item.backendId)
   selected.value = item
   detailError.value = ''
@@ -299,6 +303,7 @@ async function loadRequestDetails(item) {
 }
 
 function openDepartmentModal() {
+  if (!selected.value?.canEditDepartment || detailLoading.value || detailError.value) return
   departmentDraft.value = selected.value.department === 'Подразделение не указано' ? '' : selected.value.department
   departmentError.value = ''
   showDepartmentModal.value = true
@@ -1063,21 +1068,23 @@ onBeforeUnmount(() => {
   invalidateRequests()
   confirmDialog.cancel()
 })
+defineExpose({ openDepartmentModal })
 </script>
 <template>
   <section class="page request-page screen-panel" :class="{ 'screen-panel--active': hasRequestContent }">
     <p v-if="detailLoading" class="detail-state">Загрузка данных заявки…</p>
     <p v-if="detailError" class="detail-state error">{{ detailError }}</p>
-    <article v-if="hasRequestContent && !detailError" class="card object-band request-entity-head">
-      <button type="button" class="request-corner-back" :class="`request-corner-${selected.color}`" aria-label="Вернуться к списку заявок" @click="emit('close')">
-        <svg class="request-corner-shape" viewBox="0 0 52 52" aria-hidden="true">
-          <path d="M15 1h31.5c4 0 5.9 4.8 3.1 7.6l-41 41C5.8 52.4 1 50.5 1 46.5V15C1 7.3 7.3 1 15 1Z" />
-          <path class="request-corner-edge" d="M49.6 8.6 8.6 49.6" />
-        </svg>
-        <AppIcon class="request-corner-arrow" name="arrow-left" :size="16" />
-      </button>
-      <div class="object-status-row">
-        <RequestStatus :label="selected.status" />
+    <RequestObjectSummary v-if="hasRequestContent && !detailError" :key="selected.backendId" :objects="requestObjects" :roles="currentUserRoles" :manufacturer="selected.manufacturer" :supplier="selected.supplier" :scope="selected.testMethod">
+      <template #corner>
+        <button type="button" class="request-corner-back" :class="`request-corner-${selected.color}`" aria-label="Вернуться к списку заявок" @click="emit('close')">
+          <svg class="request-corner-shape" viewBox="0 0 52 52" aria-hidden="true">
+            <path d="M15 1h31.5c4 0 5.9 4.8 3.1 7.6l-41 41C5.8 52.4 1 50.5 1 46.5V15C1 7.3 7.3 1 15 1Z" />
+            <path class="request-corner-edge" d="M49.6 8.6 8.6 49.6" />
+          </svg>
+          <AppIcon class="request-corner-arrow" name="arrow-left" :size="16" />
+        </button>
+      </template>
+      <template #status>
         <details v-if="selected.canSetColor" ref="colorMenu" class="request-color-control">
           <summary :aria-label="`Направление испытаний: ${selected.directionLabel}`"><span class="request-color-dot" :class="selected.color" aria-hidden="true"></span>{{ selected.directionLabel }}<AppIcon class="request-direction-chevron" name="chevron-right" :size="12" /></summary>
           <fieldset class="request-color-menu" aria-label="Направление испытаний">
@@ -1085,21 +1092,10 @@ onBeforeUnmount(() => {
           </fieldset>
         </details>
         <span v-else class="request-direction-readonly" :title="`Направление испытаний: ${selected.directionLabel}`"><span class="request-color-dot" :class="selected.color" aria-hidden="true"></span>{{ selected.directionLabel }}</span>
-      </div>
-      <p v-if="colorError" class="action-error">{{ colorError }}</p>
-      <h2 class="object-title">{{ selected.product }}</h2>
-      <p class="request-entity-context">{{ selected.manufacturer || 'Производитель не указан' }} · {{ selected.sampleQuantity || '—' }} шт.</p>
-      <section id="request-overview" class="request-overview" aria-labelledby="overview-title">
-        <h3 id="overview-title" class="visually-hidden">Ключевые сведения</h3>
-        <div class="facts-row">
-          <div class="fact"><span>Подразделение</span><b>{{ selected.department }}</b><button v-if="selected.canEditDepartment" type="button" class="secondary" @click="openDepartmentModal">Изменить</button></div>
-          <div class="fact"><span>Производитель</span><b>{{ selected.manufacturer || '—' }}</b></div>
-          <div class="fact"><span>Поставщик</span><b>{{ selected.supplier }}</b></div>
-          <div class="fact"><span>Количество образцов</span><b>{{ selected.sampleQuantity || '—' }} шт.</b></div>
-        </div>
-        <div class="method-row"><span>Метод испытаний</span><p>{{ selected.testMethod || '—' }}</p></div>
-      </section>
-    </article>
+        <RequestStatus :label="selected.status" />
+      </template>
+      <template #error><p v-if="colorError" class="action-error">{{ colorError }}</p></template>
+    </RequestObjectSummary>
     <div v-if="hasRequestContent && !detailError" class="request-grid">
       <div class="stack">
         <section class="card process-section request-process" aria-labelledby="process-title">
@@ -1244,11 +1240,10 @@ onBeforeUnmount(() => {
 
   <AppModal :open="showOpinionModal" as="form" title="Экспертное заключение" title-id="opinion-modal-title" size="large" :busy="opinionLoading" @close="showOpinionModal = false" @submit="publishOpinion">
     <div class="fact-list opinion-summary">
-      <div class="fact"><span>Объект испытаний</span><b>{{ selected.product }}</b></div>
+      <div class="request-opinion-objects"><RequestObjectsTable :objects="requestObjects" :supplier="selected.supplier" /></div>
       <div class="fact"><span>Производитель</span><b>{{ selected.manufacturer || '—' }}</b></div>
       <div class="fact"><span>Поставщик</span><b>{{ selected.supplier }}</b></div>
-      <div class="fact"><span>Количество образцов</span><b>{{ selected.sampleQuantity || '—' }} шт.</b></div>
-      <div class="fact wide"><span>Метод испытаний</span><b>{{ selected.testMethod || '—' }}</b></div>
+      <div class="fact wide"><span>Объём испытаний</span><b>{{ selected.testMethod || '—' }}</b></div>
     </div>
     <textarea v-model="opinionDraft" :disabled="opinionLoading" minlength="10" maxlength="20000" placeholder="Введите итоговое заключение по результатам испытаний"></textarea>
     <p v-if="opinionError" class="action-error">{{ opinionError }}</p>

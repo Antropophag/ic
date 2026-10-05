@@ -497,3 +497,8 @@ it('formats document upload time in Moscow and preserves unknown metadata', () =
   expect(documentFromApi({ id: 2, uploadedBy: null, createdAt: null }))
     .toMatchObject({ uploadedBy: null, createdAt: null })
 })
+
+it('uses every object name for the registry tooltip in the saved order', () => {
+  expect(fromApi({ ...registered, object_names: ['Первая позиция', 'Вторая позиция'] }).objectTooltip).toBe('Первая позиция\nВторая позиция')
+  expect(fromApi(registered).objectTooltip).toBe('Лебёдка')
+})

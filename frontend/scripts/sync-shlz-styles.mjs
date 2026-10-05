@@ -5,7 +5,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url'
 
 // Read immutable Git objects, never execute code from the supplied repository.
 export const revision = '1864b3c0cb327485f08c48b14c88730ec852b03c'
-const components = ['status-badge', 'table', 'popover', 'choice', 'button']
+const components = ['status-badge', 'table', 'popover', 'choice', 'button', 'notification', 'file-row', 'file-upload']
 const banner = `/* Generated from shlz-ui ${revision}. Run frontend/scripts/sync-shlz-styles.mjs to update. */\n`
 
 function flattenTokens(value, prefix = [], output = new Map()) {
@@ -33,6 +33,15 @@ export function buildStyles(readSource) {
     return `  --shlz-${name}: ${resolve(key)};`
   })
   return {
+    'file-upload.ts': readSource('packages/behaviors/src/file-upload.ts'),
+    'cloud-upload.svg': readSource('packages/icons/normalized/interface/cloud-upload.svg'),
+    ...Object.fromEntries(['pdf-default', 'docx', 'xlsx', 'png', 'img', 'generic'].map(type => [
+      `file-${type}.svg`, readSource(`packages/icons/normalized/files/file-${type}.svg`),
+    ])),
+    'close-remove.svg': readSource('packages/icons/normalized/interface/close-remove.svg'),
+    'trash.svg': readSource('packages/icons/normalized/interface/trash-interface-2.svg'),
+    'plus.svg': readSource('packages/icons/normalized/interface/plus-interface-1.svg'),
+    'copy.svg': readSource('packages/icons/normalized/interface/copy.svg'),
     'tokens.css': `${banner}:root {\n${declarations.join('\n')}\n}\n`,
     ...Object.fromEntries(components.map(name => [
       `${name}.css`, banner + readSource(`packages/styles/components/${name}.css`),

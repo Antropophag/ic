@@ -5,6 +5,7 @@ import AuthScreen from './components/AuthScreen.vue'
 import AppModal from './components/AppModal.vue'
 import AdminPanel from './components/AdminPanel.vue'
 import RequestDetails from './components/RequestDetails.vue'
+import RequestHeading from './components/RequestHeading.vue'
 import RequestRegistry from './components/RequestRegistry.vue'
 import { createLatestRequestGuard } from './latestRequestGuard'
 import { requestIdFromLocation, setRequestInUrl } from './requestDeepLink'
@@ -12,6 +13,8 @@ import { avatarRoleClass, initialsFor } from './registry'
 
 const authLoading = ref(true)
 const authUser = ref(null)
+const requestDetails = ref(null)
+const requestDetailsReady = ref(false)
 const selectedRequestId = ref(requestIdFromLocation())
 const selectedRequestTitle = ref(null)
 const showAdmin = ref(false)
@@ -107,6 +110,11 @@ function openAdminRequest(requestId) {
   setRequestInUrl(selectedRequestId.value, { push: true })
 }
 
+function onRequestLoaded(item) {
+  selectedRequestTitle.value = item
+  requestDetailsReady.value = true
+}
+
 function refreshRegistry() {
   registryRefreshTrigger.value += 1
 }
@@ -200,13 +208,14 @@ onBeforeUnmount(() => {
     <AuthScreen v-else-if="!authUser" @authenticated="authUser = $event" />
     <template v-else>
       <main>
-        <header class="topbar">
+        <header class="topbar" :class="{ 'topbar--request': selectedRequestId }">
           <div class="topbar-inner">
             <div class="brand-block">
               <button type="button" class="brand-mark-btn" title="На главную" :disabled="!selectedRequestId && !showAdmin && !showReviewGuide" @click="returnHome">
                 <svg class="brand-mark" width="48" height="48" viewBox="0 0 40 40" fill="none" aria-hidden="true"><rect x="2" y="2" width="36" height="36" rx="10" fill="currentColor" /><path d="M12 25a8 8 0 1 1 16 0" stroke="#fff" stroke-width="2" stroke-linecap="round" /><path d="M12 25h2M26 25h2M20 15v2" stroke="#fff" stroke-width="1.6" stroke-linecap="round" /><path d="M20 25l5-6.5" stroke="#fff" stroke-width="2" stroke-linecap="round" /><circle cx="20" cy="25" r="1.6" fill="#fff" /></svg>
               </button>
-              <div><p class="eyebrow">АО «ЩЛЗ» · Испытательный центр</p><h1>{{ showReviewGuide ? 'Обзор портала' : selectedRequestTitle ? `Заявка №${selectedRequestTitle.id} от ${selectedRequestTitle.date}` : selectedRequestId ? 'Заявка' : 'Заявки на проведение испытаний' }}</h1></div>
+              <RequestHeading v-if="selectedRequestTitle" :request="selectedRequestTitle" :actions-ready="requestDetailsReady" @edit-department="requestDetails?.openDepartmentModal()" />
+              <div v-else><p class="eyebrow">АО «ЩЛЗ» · Испытательный центр</p><h1>{{ showReviewGuide ? 'Обзор портала' : selectedRequestId ? 'Заявка' : 'Заявки на проведение испытаний' }}</h1></div>
             </div>
             <div class="header-account">
               <div class="header-account-actions">
@@ -223,7 +232,7 @@ onBeforeUnmount(() => {
         <ReviewGuide v-if="showReviewGuide && ReviewGuide" />
         <AdminPanel v-else-if="showAdmin" @close="showAdmin = false" @open-request="openAdminRequest" />
         <template v-else>
-          <RequestDetails v-if="selectedRequestId" :request-id="selectedRequestId" :current-initials="currentInitials" :initial-warning="requestWarning" @loaded="selectedRequestTitle = $event" @updated="refreshRegistry" @close="closeRequest()" />
+          <RequestDetails v-if="selectedRequestId" ref="requestDetails" :request-id="selectedRequestId" :current-initials="currentInitials" :current-user-roles="currentProfile.roles" :initial-warning="requestWarning" @loading="requestDetailsReady = false" @loaded="onRequestLoaded" @updated="refreshRegistry" @close="closeRequest()" />
           <RequestRegistry
             :active="!selectedRequestId"
             :current-user-id="authUser.id"
