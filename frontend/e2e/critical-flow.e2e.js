@@ -109,6 +109,51 @@ test(`заявка завершается после решения СБ «${lab
   await expect(page.locator('.request-objects-status').getByText('Заявка выполнена', { exact: true })).toBeVisible()
   await expect(page.getByRole('button', { name: label, exact: true })).toHaveCount(0)
 
+  await expect(page.getByRole('button', { name: 'Исправить решение СБ', exact: true })).toHaveCount(0)
+  await page.unroute('**/api/**')
+  await useTestIdentity(page, 6)
+  await page.reload()
+  await page.getByRole('button', { name: 'Исправить решение СБ', exact: true }).click()
+  const correction = page.getByRole('dialog', { name: 'Исправить решение СБ', exact: true })
+  await expect(correction.getByRole('button', { name: 'Сохранить исправление' })).toBeDisabled()
+  const corrected = label === 'Согласовано' ? 'decline' : 'approve'
+  await correction.getByLabel('Новое решение').selectOption(corrected)
+  await correction.getByLabel('Причина исправления').fill('Ошибочно выбран результат СБ')
+  await correction.getByLabel('Номер или ссылка на обращение в ИТ').fill('IT-360')
+  await correction.getByRole('button', { name: 'Сохранить исправление' }).click()
+  await expect(correction).toBeHidden()
+  await expect(page.locator('.request-security-status')).toContainText(corrected === 'approve' ? 'Согласовано' : 'Не согласовано')
+  await expect(page.locator('.request-objects-status')).toContainText('Заявка выполнена')
+  await expect(page.getByText(/Исправлено решение СБ:.*IT-360/)).toBeVisible()
+  await page.getByRole('button', { name: 'Подробная история' }).click()
+  const history = page.getByRole('dialog', { name: 'История процесса' })
+  await expect(history).toContainText(label === 'Согласовано' ? 'СБ: согласовано, заявка выполнена' : 'СБ: не согласовано, заявка выполнена')
+  await expect(history).toContainText('IT-360')
+  await page.getByRole('button', { name: 'Закрыть историю' }).click()
+
+  const administrator = await apiFor(baseURL, 6)
+  try {
+    const before = await expectOk(await administrator.get(`/api/v1/requests/${requestId}`))
+    const data = { decision: label === 'Согласовано' ? 'approve' : 'decline', reason: 'Повторная проверка', ticketReference: 'IT-361', lockVersion: before.item.lockVersion }
+    const keys = [crypto.randomUUID(), crypto.randomUUID()]
+    const results = await Promise.all([
+      administrator.post(`/api/v1/requests/${requestId}/correct-security-decision`, { data, headers: { 'Idempotency-Key': keys[0] } }),
+      administrator.post(`/api/v1/requests/${requestId}/correct-security-decision`, { data, headers: { 'Idempotency-Key': keys[1] } }),
+    ])
+    expect(results.map(response => response.status()).sort()).toEqual([200, 409])
+    {
+      const key = keys[results.findIndex(response => response.status() === 200)]
+      const replay = await administrator.post(`/api/v1/requests/${requestId}/correct-security-decision`, { data, headers: { 'Idempotency-Key': key } })
+      expect(replay.status()).toBe(200)
+      expect(replay.headers()['idempotency-replayed']).toBe('true')
+    }
+    const after = await expectOk(await administrator.get(`/api/v1/requests/${requestId}`))
+    expect(after.item.lockVersion).toBe(before.item.lockVersion + 1)
+    expect(after.history.filter(entry => entry.action === 'correct_security_decision')).toHaveLength(2)
+  } finally {
+    await administrator.dispose()
+  }
+
   await Promise.all([initiator.dispose(), manager.dispose(), executor.dispose(), expert.dispose()])
 })
 

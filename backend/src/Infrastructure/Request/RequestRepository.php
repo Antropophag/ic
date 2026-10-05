@@ -21,6 +21,7 @@ use App\Domain\Request\RequestStatus;
 use App\Domain\Request\RequestWorkflow;
 use App\Domain\Request\Role;
 use App\Domain\Request\SecurityDecisionPolicy;
+use App\Domain\Request\SecurityDecisionCorrectionPolicy;
 use App\Domain\Request\SecurityDecisionDenied;
 use App\Domain\Request\RequestRoute;
 use App\Domain\Request\StartDenied;
@@ -300,6 +301,96 @@ final class RequestRepository
             $transaction->commit();
 
             return ['requestId' => $requestId, 'decision' => $decision, 'status' => $targetStatus->value, 'lockVersion' => $nextLockVersion];
+        } catch (\Throwable $error) {
+            $transaction->rollBack();
+            throw $error;
+        }
+    }
+
+    /** @return array{requestId: int, decision: string, status: string, lockVersion: int} */
+    public function correctSecurityDecision(
+        int $requestId,
+        int $actorId,
+        string $decision,
+        string $reason,
+        string $ticketReference,
+        int $expectedLockVersion,
+    ): array {
+        $transaction = $this->db->beginTransaction();
+        try {
+            // Use current locking reads even inside the HTTP idempotency transaction's old snapshot.
+            // Hold membership and activity through commit so access cannot be revoked mid-correction.
+            $administratorRoleId = $this->db->createCommand(
+                'SELECT ur.role_id FROM {{%user_roles}} ur JOIN {{%roles}} role ON role.id = ur.role_id '
+                . "WHERE ur.user_id = :actor_id AND role.code = 'administrator' LOCK IN SHARE MODE",
+                [':actor_id' => $actorId],
+            )->queryScalar();
+            // Idempotency inserts already hold a shared FK lock on the actor. Upgrading it to
+            // exclusive would deadlock simultaneous commands from the same administrator.
+            $active = $this->db->createCommand(
+                'SELECT is_active FROM {{%users}} WHERE id = :id LOCK IN SHARE MODE',
+                [':id' => $actorId],
+            )->queryScalar();
+            $request = $this->db->createCommand(
+                'SELECT status, lock_version, is_archived FROM {{%requests}} WHERE id = :id FOR UPDATE',
+                [':id' => $requestId],
+            )->queryOne();
+            if ($request === false) {
+                throw new RequestNotFound('Request not found');
+            }
+            if ((int) $request['lock_version'] !== $expectedLockVersion) {
+                throw new ConcurrentRequestModification();
+            }
+            $check = $this->db->createCommand(
+                'SELECT sc.*, COALESCE((SELECT c.decision FROM {{%security_decision_corrections}} c '
+                . 'WHERE c.security_check_id = sc.id ORDER BY c.id DESC LIMIT 1), sc.decision) AS current_decision '
+                . 'FROM {{%security_checks}} sc WHERE sc.request_id = :id ORDER BY sc.id DESC LIMIT 1 FOR UPDATE',
+                [':id' => $requestId],
+            )->queryOne();
+            (new SecurityDecisionCorrectionPolicy())->assertAllowed(
+                (bool) $active,
+                $administratorRoleId === false ? [] : [Role::Administrator],
+                (bool) $request['is_archived'],
+                $check === false ? null : (string) $check['current_decision'],
+                $decision,
+            );
+            if ($check === false) {
+                throw new SecurityDecisionDenied('SEC-006');
+            }
+            $now = Clock::now();
+            $this->db->createCommand()->insert('{{%security_decision_corrections}}', [
+                'security_check_id' => (int) $check['id'],
+                'actor_id' => $actorId,
+                'previous_decision' => $check['current_decision'],
+                'decision' => $decision,
+                'reason' => $reason,
+                'ticket_reference' => $ticketReference,
+                'created_at' => $now,
+            ])->execute();
+            $correctionId = (int) $this->db->getLastInsertID();
+            $nextVersion = $expectedLockVersion + 1;
+            $updated = $this->db->createCommand()->update('{{%requests}}', [
+                'lock_version' => $nextVersion,
+                'updated_at' => $now,
+            ], ['id' => $requestId, 'lock_version' => $expectedLockVersion])->execute();
+            if ($updated !== 1) {
+                throw new ConcurrentRequestModification();
+            }
+            $this->db->createCommand()->insert('{{%audit_events}}', [
+                'event_type' => 'request.security_decision_corrected',
+                'entity_type' => 'request',
+                'entity_id' => $requestId,
+                'actor_id' => $actorId,
+                'rule_id' => 'SEC-006',
+                'payload_json' => [
+                    'security_check_id' => (int) $check['id'], 'correction_id' => $correctionId,
+                    'original_decision' => $check['decision'], 'previous_decision' => $check['current_decision'],
+                    'decision' => $decision, 'reason' => $reason, 'ticket_reference' => $ticketReference,
+                ],
+                'created_at' => $now,
+            ])->execute();
+            $transaction->commit();
+            return ['requestId' => $requestId, 'decision' => $decision, 'status' => (string) $request['status'], 'lockVersion' => $nextVersion];
         } catch (\Throwable $error) {
             $transaction->rollBack();
             throw $error;

@@ -609,3 +609,14 @@ it.each([
   await requestApi[method](...args)
   expect(fetchMock).toHaveBeenCalledWith(path, expect.objectContaining({ method: 'POST', body: JSON.stringify(body) }))
 })
+
+
+it('submits security corrections with required evidence and optimistic version', async () => {
+  const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({ lockVersion: 8 }), { status: 200 }))
+  vi.stubGlobal('fetch', fetchMock)
+  await requestApi.correctSecurityDecision(7, 'decline', 'Ошибка выбора', 'IT-360', 7)
+  expect(fetchMock).toHaveBeenCalledWith('/api/v1/requests/7/correct-security-decision', expect.objectContaining({
+    method: 'POST',
+    body: JSON.stringify({ decision: 'decline', reason: 'Ошибка выбора', ticketReference: 'IT-360', lockVersion: 7 }),
+  }))
+})

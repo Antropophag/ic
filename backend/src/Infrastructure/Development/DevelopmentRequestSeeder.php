@@ -209,6 +209,7 @@ final class DevelopmentRequestSeeder
     private function clearRequestData(): void
     {
         $this->db->createCommand("DELETE FROM {{%audit_events}} WHERE entity_type = 'request'")->execute();
+        $this->db->createCommand()->delete('{{%security_decision_corrections}}')->execute();
         $this->db->createCommand()->delete('{{%security_checks}}')->execute();
         $this->db->createCommand()->delete('{{%expert_opinions}}')->execute();
         $this->db->createCommand()->delete('{{%requests}}')->execute();

@@ -59,6 +59,57 @@ const routeError = ref('')
 const routeRequestGuard = createLatestRequestGuard()
 const securityLoading = ref(false)
 const securityError = ref('')
+const showCorrectionModal = ref(false)
+const correctionDraft = ref({ decision: '', reason: '', ticketReference: '', lockVersion: null })
+const correctionLoading = ref(false)
+const correctionError = ref('')
+const correctionRequestGuard = createLatestRequestGuard()
+const correctionValid = computed(() => ['approve', 'decline'].includes(correctionDraft.value.decision)
+  && correctionDraft.value.decision !== selected.value?.securityMark
+  && correctionDraft.value.reason.trim().length > 0 && correctionDraft.value.reason.length <= 5000
+  && correctionDraft.value.ticketReference.trim().length > 0 && correctionDraft.value.ticketReference.length <= 1000)
+
+function openCorrectionModal() {
+  correctionDraft.value = { decision: '', reason: '', ticketReference: '', lockVersion: selected.value.lockVersion }
+  correctionError.value = ''
+  showCorrectionModal.value = true
+}
+
+async function correctSecurityDecision() {
+  if (correctionLoading.value || !correctionValid.value || !selected.value?.canCorrectSecurityDecision) return
+  const requestId = selected.value.backendId
+  const { decision, reason, ticketReference, lockVersion } = correctionDraft.value
+  const token = correctionRequestGuard.begin(requestId)
+  correctionLoading.value = true
+  correctionError.value = ''
+  try {
+    await requestApi.correctSecurityDecision(requestId, decision, reason.trim(), ticketReference.trim(), lockVersion)
+    if (!correctionRequestGuard.isCurrent(token, selected.value?.backendId)) return
+    showCorrectionModal.value = false
+    selected.value = withoutStaleActions(selected.value)
+    try {
+      await refreshSelected(requestId)
+    } catch {
+      if (!correctionRequestGuard.isCurrent(token, selected.value?.backendId)) return
+      actionError.value = 'Исправление сохранено, но данные на экране не обновились. Обновите страницу перед следующим действием.'
+    }
+  } catch (error) {
+    if (!correctionRequestGuard.isCurrent(token, selected.value?.backendId)) return
+    if (error.status === 409) {
+      showCorrectionModal.value = false
+      await recoverConflict(requestId, 'Заявка уже изменена. Проверьте решение СБ перед исправлением.')
+    } else {
+      correctionError.value = error.status === 403
+        ? 'Исправление недоступно. Обновите карточку и проверьте права администратора.'
+        : error.status === 422
+          ? 'Укажите новое решение, причину и номер или ссылку на обращение в ИТ.'
+          : 'Не удалось исправить решение СБ. Повторите попытку.'
+    }
+  } finally {
+    if (correctionRequestGuard.isCurrent(token, selected.value?.backendId)) correctionLoading.value = false
+  }
+}
+
 const colorLoading = ref(false)
 const colorError = ref('')
 const rejectLoading = ref(false)
@@ -126,7 +177,7 @@ function eventIcon(action) {
   return {
     create: 'plus', import: 'download', assign_executor: 'user', claim_expert: 'user', reassign_expert: 'user',
     start: 'play', suspend: 'pause', resume: 'play', upload_report: 'upload', delete_report: 'trash',
-    publish_opinion: 'file-check', security_approve: 'shield-check', security_decline: 'shield-check', complete_act: 'file-check', choose_route: 'file-check',
+    correct_security_decision: 'shield-check', publish_opinion: 'file-check', security_approve: 'shield-check', security_decline: 'shield-check', complete_act: 'file-check', choose_route: 'file-check',
     reject: 'close', withdraw: 'close', change_department: 'building',
   }[action] || 'history'
 }
@@ -1064,13 +1115,15 @@ async function suspendOrResumeRequest(action) {
 
 
 function invalidateRequests() {
-  for (const guard of [routeRequestGuard, detailRequestGuard, commentRequestGuard, commentsPageRequestGuard, documentRequestGuard, reportRequestGuard, testActRequestGuard, opinionRequestGuard, securityRequestGuard, colorRequestGuard, rejectRequestGuard, withdrawRequestGuard, claimRequestGuard, reassignRequestGuard, deleteReportRequestGuard, suspendResumeRequestGuard, executorsRequestGuard, expertsRequestGuard, actionRequestGuard, downloadRequestGuard, previewRequestGuard, departmentRequestGuard]) guard.invalidate()
+  for (const guard of [correctionRequestGuard, routeRequestGuard, detailRequestGuard, commentRequestGuard, commentsPageRequestGuard, documentRequestGuard, reportRequestGuard, testActRequestGuard, opinionRequestGuard, securityRequestGuard, colorRequestGuard, rejectRequestGuard, withdrawRequestGuard, claimRequestGuard, reassignRequestGuard, deleteReportRequestGuard, suspendResumeRequestGuard, executorsRequestGuard, expertsRequestGuard, actionRequestGuard, downloadRequestGuard, previewRequestGuard, departmentRequestGuard]) guard.invalidate()
 }
 
 function resetRequestLocalState() {
   confirmDialog.cancel()
   commentDraft.value = ''
   opinionDraft.value = ''
+  showCorrectionModal.value = false
+  correctionDraft.value = { decision: '', reason: '', ticketReference: '', lockVersion: null }
   showOpinionModal.value = false
   showTestActModal.value = false
   showHelpDrawer.value = false
@@ -1084,12 +1137,12 @@ function resetRequestLocalState() {
 
   for (const error of [
     detailError, commentError, documentError, reportError, testActError, opinionError,
-    routeError, securityError, colorError, rejectError, withdrawError, claimError,
+    correctionError, routeError, securityError, colorError, rejectError, withdrawError, claimError,
     reassignError, deleteReportError, suspendResumeError, departmentError,
   ]) error.value = ''
 
   for (const loading of [
-    actionLoading, detailLoading, commentLoading, olderCommentsLoading,
+    correctionLoading, actionLoading, detailLoading, commentLoading, olderCommentsLoading,
     documentLoading, reportLoading, testActLoading, opinionLoading, securityLoading, routeLoading,
     colorLoading, rejectLoading, withdrawLoading, claimLoading,
     reassignLoading, deleteReportLoading, suspendResumeLoading, departmentLoading,
@@ -1242,7 +1295,7 @@ defineExpose({ openDepartmentModal })
         </section>
         <article class="card request-participants"><h3>Участники</h3>
           <div v-for="person in participants" :key="`${person.role}-${person.name}`" class="request-person-row"><span class="avatar small" :class="avatarRoleClass(person.roleCode)">{{ initialsFor(person.name) }}</span><span><b>{{ person.name }}</b><small>{{ person.role }}</small></span></div>
-          <section v-if="selected.route !== 'act'" class="request-security-section" aria-labelledby="security-control-title"><h3 id="security-control-title">Контроль СБ</h3><div class="request-security-status"><span class="security-mark-icon" :class="selected.securityMarkDisplay?.className" aria-hidden="true"><svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" focusable="false"><path :d="selected.securityMarkDisplay?.path" /></svg></span><span><b>{{ selected.securityMarkDisplay?.label }}</b><small>Статус проверки</small></span></div></section>
+          <section v-if="selected.route !== 'act'" class="request-security-section" aria-labelledby="security-control-title"><h3 id="security-control-title">Контроль СБ</h3><div class="request-security-status"><span class="security-mark-icon" :class="selected.securityMarkDisplay?.className" aria-hidden="true"><svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" focusable="false"><path :d="selected.securityMarkDisplay?.path" /></svg></span><span><b>{{ selected.securityMarkDisplay?.label }}</b><small>Статус проверки</small></span></div><button v-if="selected.canCorrectSecurityDecision" type="button" class="request-text-button" @click="openCorrectionModal">Исправить решение СБ</button></section>
         </article>
         <article id="request-documents" class="card documents request-documents"><div class="section-title request-documents-head"><h3>Документы <span class="request-document-count" :aria-label="`Документов: ${selected.documents?.length || 0}`">{{ selected.documents?.length || 0 }}</span></h3><label v-if="selected.canUploadDocument" class="request-document-upload"><AppIcon v-if="!documentLoading" name="plus" :size="14" />{{ documentLoading ? 'Загрузка…' : 'Добавить' }}<input type="file" :disabled="documentLoading" accept=".pdf,.png,.jpg,.jpeg,.docx,.xlsx" @change="uploadDocument" /></label></div>
           <section v-for="group in documentGroups" :key="group.key" class="request-document-group" :aria-labelledby="`document-group-${group.key}`"><h4 :id="`document-group-${group.key}`"><span class="request-document-group-label">{{ group.label }} <span>{{ group.items.length }}</span></span><button v-if="group.key === 'report' && selected.canUploadReport" type="button" class="request-document-group-action app-tooltip app-tooltip-left" data-tooltip="Сформировать шаблон отчётного документа" aria-label="Сформировать шаблон отчётного документа" :disabled="testActLoading" @click="openTestActModal"><AppIcon name="magic-wand" :size="17" /></button></h4><div v-for="document in group.items" :key="document.versionId" class="document-row request-file-card"><button type="button" class="request-file-open app-tooltip" data-tooltip="Открыть документ" :aria-label="`Открыть ${document.title}, версия ${document.version}`" @click="openDocument(document)"><span class="request-file-thumb" aria-hidden="true"><span class="request-file-lines"></span><span class="request-file-type" :class="fileTypeClassFor(document)">{{ fileExtensionFor(document) }}</span></span><span class="request-file-copy"><b :title="document.title">{{ document.title }}</b><small>Версия {{ document.version }} · {{ document.size }}</small><small>{{ document.uploadedBy || 'Автор неизвестен' }}</small><small>{{ document.createdAt ? `Загружен ${document.createdAt}` : 'Дата загрузки неизвестна' }}</small></span></button><button type="button" class="request-file-action app-tooltip" data-tooltip="Скачать документ" :aria-label="`Скачать ${document.title}`" @click.stop="downloadDocument(document)"><AppIcon name="download" :size="14" /></button></div></section>
@@ -1327,6 +1380,21 @@ defineExpose({ openDepartmentModal })
     <template #footer>
       <button type="button" class="secondary" :disabled="opinionLoading" @click="showOpinionModal = false">Отмена</button>
       <button class="primary" :disabled="opinionLoading">{{ opinionLoading ? 'Публикация…' : 'Опубликовать и передать в СБ' }}</button>
+    </template>
+  </AppModal>
+  <AppModal :open="showCorrectionModal" as="form" title="Исправить решение СБ" title-id="security-correction-title" description-id="security-correction-description" size="medium" :busy="correctionLoading" @close="showCorrectionModal = false" @submit="correctSecurityDecision">
+    <p id="security-correction-description">Исходное решение и история исправлений сохранятся. Статус заявки и документы не изменятся.</p>
+    <p>Текущее решение: <b>{{ selected.securityMarkDisplay?.label }}</b></p>
+    <div class="form-grid">
+      <label class="wide">Новое решение<select v-model="correctionDraft.decision" :disabled="correctionLoading" required><option disabled value="">Выберите решение</option><option v-if="selected.securityMark !== 'approve'" value="approve">Согласовано</option><option v-if="selected.securityMark !== 'decline'" value="decline">Не согласовано</option></select></label>
+      <label class="wide">Причина исправления<textarea v-model="correctionDraft.reason" :disabled="correctionLoading" maxlength="5000" required></textarea></label>
+      <label class="wide">Номер или ссылка на обращение в ИТ<input v-model="correctionDraft.ticketReference" :disabled="correctionLoading" maxlength="1000" required /></label>
+    </div>
+    <p><a href="/help/security-review.html" target="_blank" rel="noopener">Инструкция по исправлению решения СБ</a></p>
+    <p v-if="correctionError" class="action-error" role="alert">{{ correctionError }}</p>
+    <template #footer>
+      <button type="button" class="secondary" :disabled="correctionLoading" @click="showCorrectionModal = false">Отмена</button>
+      <button class="primary" :disabled="correctionLoading || !correctionValid">{{ correctionLoading ? 'Сохранение…' : 'Сохранить исправление' }}</button>
     </template>
   </AppModal>
   <AppModal :open="showDepartmentModal" as="form" title="Изменить подразделение" title-id="department-modal-title" size="medium" :busy="departmentLoading" @close="showDepartmentModal = false" @submit="changeDepartment">
