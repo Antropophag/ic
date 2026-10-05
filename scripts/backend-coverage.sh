@@ -30,3 +30,13 @@ $CONTAINER_ENGINE run --rm \
   shlz-test-registry-coverage \
   php vendor/bin/phpunit --configuration phpunit.coverage.xml \
   --coverage-clover build/coverage/clover.xml
+
+# Supplement the unchanged domain/application 90% gate with workflow coverage
+# for Sonar's 80% changed-code gate, including SQL and HTTP boundaries.
+$CONTAINER_ENGINE run --rm \
+  --network "${project}_default" \
+  --env-file "$env_file" \
+  --volume "$(pwd)/backend/build/coverage:/app/build/coverage" \
+  shlz-test-registry-coverage \
+  php vendor/bin/phpunit --configuration phpunit.workflow-coverage.xml \
+  --coverage-clover build/coverage/workflow-clover.xml

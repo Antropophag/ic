@@ -17,6 +17,11 @@ use App\Infrastructure\Request\RequestQuery;
 use App\Infrastructure\Request\RequestRepository;
 use PHPUnit\Framework\Attributes\DataProvider;
 use Tests\Integration\IntegrationTestCase;
+use App\Http\Controller\RequestController;
+use Yii;
+use yii\web\Application;
+use yii\web\Request;
+use yii\web\HttpException;
 
 final class RequestRoutesTest extends IntegrationTestCase
 {
@@ -41,6 +46,8 @@ final class RequestRoutesTest extends IntegrationTestCase
             }
             rmdir($this->storageRoot);
         } finally {
+            Yii::$app?->errorHandler->unregister();
+            Yii::$app = null;
             parent::tearDown();
         }
     }
@@ -89,6 +96,62 @@ final class RequestRoutesTest extends IntegrationTestCase
         $repository->assignExecutor($id, $executor, $this->version($id), $manager);
         self::assertSame('registered', $this->scalar('SELECT status FROM {{%requests}} WHERE id = :id', [':id' => $id]));
         $repository->startRequest($id, $this->version($id), $executor);
+    }
+
+    /** @param array<string, mixed> $body */
+    private function controller(int $actor, array $body): RequestController
+    {
+        Yii::$app?->errorHandler->unregister();
+        $application = new Application([
+            'id' => 'route-http-test',
+            'basePath' => dirname(__DIR__, 3),
+            'params' => ['identityHeader' => 'X-Test-User-ID'],
+            'components' => [
+                'db' => $this->db(),
+                'request' => ['class' => Request::class, 'cookieValidationKey' => 'route-http-test'],
+            ],
+        ]);
+        $application->request->headers->set('X-Test-User-ID', (string) $actor);
+        $application->request->headers->set('Content-Type', 'application/json');
+        $application->request->setRawBody(json_encode((object) $body, JSON_THROW_ON_ERROR));
+        return new RequestController('request', $application);
+    }
+
+    private function assertHttpFailure(int $status, callable $action): void
+    {
+        try {
+            $action();
+            self::fail('HTTP command must fail');
+        } catch (HttpException $error) {
+            self::assertSame($status, $error->statusCode);
+        }
+    }
+
+    public function testRouteHttpBoundaryMapsValidationPermissionsConflictsAndMissingRequests(): void
+    {
+        [$id, $manager, $executor, $expert] = $this->fixture();
+        self::assertArrayHasKey('errors', $this->controller($manager, ['route' => true, 'lockVersion' => 1])->actionChooseRoute($id));
+        self::assertSame(422, Yii::$app->response->statusCode);
+        self::assertArrayHasKey('errors', $this->controller($manager, [])->actionCompleteAct($id));
+        self::assertSame(422, Yii::$app->response->statusCode);
+        $input = ['route' => 'act', 'lockVersion' => 1];
+        $this->assertHttpFailure(403, fn () => $this->controller($expert, $input)->actionChooseRoute($id));
+        $this->assertHttpFailure(404, fn () => $this->controller($manager, $input)->actionChooseRoute($id + 1000000));
+        $chosen = $this->controller($manager, $input)->actionChooseRoute($id);
+        self::assertSame('act', $chosen['route']);
+        self::assertSame('registered', $chosen['status']);
+        $this->assertHttpFailure(409, fn () => $this->controller($manager, $input)->actionChooseRoute($id));
+        $repository = new RequestRepository($this->db());
+        $repository->assignExecutor($id, $executor, $this->version($id), $manager);
+        $repository->startRequest($id, $this->version($id), $executor);
+        $this->assertHttpFailure(403, fn () => $this->controller($manager, ['lockVersion' => $this->version($id)])->actionCompleteAct($id));
+        $this->report($id, $executor);
+        $version = $this->version($id);
+        $this->assertHttpFailure(409, fn () => $this->controller($manager, ['lockVersion' => $version - 1])->actionCompleteAct($id));
+        $this->assertHttpFailure(404, fn () => $this->controller($manager, ['lockVersion' => $version])->actionCompleteAct($id + 1000000));
+        $completed = $this->controller($manager, ['lockVersion' => $version])->actionCompleteAct($id);
+        self::assertSame('completed', $completed['status']);
+        self::assertSame(4, (int) $this->scalar("SELECT COUNT(*) FROM {{%audit_events}} WHERE entity_id = :id AND event_type = 'request.route_action_denied'", [':id' => $id]));
     }
 
     /** @return iterable<string, array{string}> */

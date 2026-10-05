@@ -599,3 +599,13 @@ it('assigns and revokes a role for a user', async () => {
     body: JSON.stringify({ reason: 'Смена обязанностей' }),
   }))
 })
+
+it.each([
+  ['chooseRoute', [7, 'act', 3], '/api/v1/requests/7/route', { route: 'act', lockVersion: 3 }],
+  ['completeAct', [7, 4], '/api/v1/requests/7/complete-act', { lockVersion: 4 }],
+])('sends %s to its versioned command endpoint', async (method, args, path, body) => {
+  const fetchMock = vi.fn().mockResolvedValue(new Response('{"status":"registered","lockVersion":4}', { status: 200 }))
+  vi.stubGlobal('fetch', fetchMock)
+  await requestApi[method](...args)
+  expect(fetchMock).toHaveBeenCalledWith(path, expect.objectContaining({ method: 'POST', body: JSON.stringify(body) }))
+})

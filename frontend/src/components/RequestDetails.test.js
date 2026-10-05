@@ -232,6 +232,55 @@ describe('RequestDetails route and security decisions', () => {
     app.unmount()
   })
 
+  it.each([403, 500])('shows a route failure (%i) without reporting success', async status => {
+    requestApi.get.mockResolvedValue(routed(1))
+    requestApi.chooseRoute.mockRejectedValue(Object.assign(new Error('Rejected'), { status }))
+    const { app, root } = mountDetails(ref(1))
+    await flushRequests()
+    await selectProtocol()
+    expect(root.textContent).toContain(status === 403 ? 'Действие недоступно' : 'Не удалось обновить заявку')
+    expect(button('Сохранить маршрут').disabled).toBe(false)
+    app.unmount()
+  })
+
+  it('refreshes the route after a version conflict', async () => {
+    requestApi.get.mockResolvedValueOnce(routed(1)).mockResolvedValueOnce(routed(1, { route: 'protocol', lockVersion: 2 }))
+    requestApi.chooseRoute.mockRejectedValue(Object.assign(new Error('Conflict'), { status: 409 }))
+    const { app, root } = mountDetails(ref(1))
+    await flushRequests()
+    await selectProtocol()
+    expect(requestApi.get).toHaveBeenCalledTimes(2)
+    expect(root.textContent).toContain('Заявка уже изменена')
+    expect(root.querySelector('#request-route').value).toBe('protocol')
+    app.unmount()
+  })
+
+  it('does not complete an act when its confirmation is cancelled', async () => {
+    requestApi.get.mockResolvedValue(routed(1, { can_choose_route: 0, can_complete_act: 1 }))
+    const { app } = mountDetails(ref(1))
+    await flushRequests()
+    button('Завершить заявку').click()
+    await nextTick()
+    button('Отмена').click()
+    await flushRequests()
+    expect(requestApi.completeAct).not.toHaveBeenCalled()
+    app.unmount()
+  })
+
+  it.each([403, 422, 500])('keeps the security decision available when saving fails (%i)', async status => {
+    requestApi.get.mockResolvedValue(routed(1, { route: 'protocol', status: 'security_review', can_choose_route: 0, can_security_decide: 1 }))
+    requestApi.decideSecurity.mockRejectedValue(Object.assign(new Error('Rejected'), { status }))
+    const { app, root } = mountDetails(ref(1))
+    await flushRequests()
+    button('Не согласовано').click()
+    await nextTick()
+    ;[...document.querySelector('[role="alertdialog"]').querySelectorAll('button')].find(item => item.textContent.trim() === 'Не согласовано').click()
+    await flushRequests()
+    expect(root.textContent).toContain(status === 422 ? 'Проверьте выбранное решение' : status === 403 ? 'Решение может принять только сотрудник СБ' : 'Не удалось сохранить решение СБ')
+    expect(button('Не согласовано').disabled).toBe(false)
+    app.unmount()
+  })
+
   it('ignores a route response after closing the card', async () => {
     const pending = deferred()
     requestApi.get.mockResolvedValue(routed(1))

@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<phpunit bootstrap="tests/bootstrap.php" colors="true" cacheDirectory=".phpunit.cache">
+    <php>
+        <env name="APP_PUBLIC_URL" value="http://frontend:8080"/>
+    </php>
+    <testsuites>
+        <testsuite name="workflow-integration">
+            <file>tests/Unit/Http/Controller/RequestControllerTest.php</file>
+            <file>tests/Integration/Request/RequestRepositoryTest.php</file>
+            <file>tests/Integration/Request/RequestRoutesTest.php</file>
+            <file>tests/Integration/Request/AttentionDashboardTest.php</file>
+            <file>tests/Integration/Document/DocumentRepositoryTest.php</file>
+            <file>tests/Integration/Development/DevelopmentRequestSeederTest.php</file>
+        </testsuite>
+    </testsuites>
+    <source>
+        <include>
+            <file>src/Infrastructure/Request/RequestRepository.php</file>
+            <file>src/Infrastructure/Request/AttentionQueueScope.php</file>
+            <file>src/Infrastructure/Document/DocumentRepository.php</file>
+            <file>src/Infrastructure/Development/DevelopmentRequestSeeder.php</file>
+            <file>src/Http/Controller/RequestController.php</file>
+            <file>migrations/m261005_000002_add_request_routes.php</file>
+        </include>
+    </source>
+</phpunit>
