@@ -1,5 +1,6 @@
 import { defineConfig, devices } from '@playwright/test'
 
+const guideTests = ['**/review-guide.e2e.js']
 const statefulTests = ['**/idempotency.e2e.js', '**/notifications.e2e.js']
 
 export default defineConfig({
@@ -14,10 +15,20 @@ export default defineConfig({
     screenshot: 'only-on-failure',
     video: 'retain-on-failure',
   },
+  webServer: {
+    command: 'npm run dev -- --host 127.0.0.1 --port 5175 --strictPort',
+    url: 'http://127.0.0.1:5175',
+    reuseExistingServer: false,
+  },
   projects: [
     {
+      name: 'review-guide',
+      testMatch: guideTests,
+      use: { ...devices['Desktop Chrome'], baseURL: 'http://127.0.0.1:5175' },
+    },
+    {
       name: 'chromium',
-      testIgnore: statefulTests,
+      testIgnore: [...statefulTests, ...guideTests],
       use: { ...devices['Desktop Chrome'] },
     },
     {
