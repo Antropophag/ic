@@ -24,6 +24,7 @@ final class AuditQuery
         'request.route_selected' => 'Выбран маршрут заявки',
         'request.act_completed' => 'Акт испытаний завершён',
         'request.security_decided' => 'Решение службы безопасности',
+        'request.security_decision_corrected' => 'Исправлено решение СБ',
         'request.security_decision_rejected' => 'Решение службы безопасности отклонено',
         'request.comment_added' => 'Добавлен комментарий',
         'request.expert_claimed' => 'Эксперт принял заявку',
@@ -54,6 +55,7 @@ final class AuditQuery
 
     private const SAFE_DETAILS = [
         'request.route_selected' => ['from_route', 'route'],
+        'request.security_decision_corrected' => ['security_check_id', 'correction_id', 'original_decision', 'previous_decision', 'decision'],
         'request.act_completed' => ['report_version_id'],
         'request.security_decided' => ['decision'], 'request.comment_added' => ['comment_id'],
         'request.expert_claimed' => ['expert_id', 'assignment_id'], 'request.expert_reassigned' => ['expert_id', 'assignment_id'],

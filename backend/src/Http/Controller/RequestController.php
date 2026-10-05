@@ -21,6 +21,7 @@ use App\Application\Request\LockVersionInput;
 use App\Application\Request\ReasonedLockVersionInput;
 use App\Application\Request\PublishOpinionInput;
 use App\Application\Request\SecurityDecisionInput;
+use App\Application\Request\CorrectSecurityDecisionInput;
 use App\Application\Request\SetColorInput;
 use App\Domain\Request\AssignmentDenied;
 use App\Domain\Request\AssignmentTargetNotFound;
@@ -95,7 +96,7 @@ final class RequestController extends ApiController
         $mutations = [
             'add-comment', 'upload-document', 'upload-report', 'delete-report', 'change-department',
             'set-color', 'assign-executor', 'claim-expert', 'reassign-expert', 'publish-opinion',
-            'choose-route', 'complete-act', 'security-decision', 'start', 'suspend', 'resume', 'reject', 'withdraw',
+            'choose-route', 'complete-act', 'security-decision', 'correct-security-decision', 'start', 'suspend', 'resume', 'reject', 'withdraw',
         ];
         $requestId = filter_var($params['id'] ?? null, FILTER_VALIDATE_INT, ['options' => ['min_range' => 1]]);
         if (in_array($action->id, $mutations, true) && $requestId !== false && $this->query()->isArchived($requestId)) {
@@ -609,6 +610,34 @@ final class RequestController extends ApiController
                 $actorId,
                 (string) $input->decision,
                 $input->reason === '' ? null : (string) $input->reason,
+                (int) $input->lockVersion,
+            );
+        } catch (RequestNotFound $error) {
+            throw new NotFoundHttpException($error->getMessage());
+        } catch (SecurityDecisionDenied $error) {
+            $this->recordRejectedSecurityDecisionSafely($id, $actorId, $error->ruleId);
+            throw new ForbiddenHttpException($error->getMessage());
+        } catch (ConcurrentRequestModification $error) {
+            $this->recordRejectedSecurityDecisionSafely($id, $actorId, $error->ruleId);
+            throw new ConflictHttpException($error->getMessage());
+        }
+    }
+
+    /** @return array<string, mixed> */
+    public function actionCorrectSecurityDecision(int $id): array
+    {
+        $input = new CorrectSecurityDecisionInput();
+        if (($errors = $this->bodyValidationErrors($input)) !== null) {
+            return $errors;
+        }
+        $actorId = $this->currentUserId();
+        try {
+            return $this->repository()->correctSecurityDecision(
+                $id,
+                $actorId,
+                (string) $input->decision,
+                (string) $input->reason,
+                (string) $input->ticketReference,
                 (int) $input->lockVersion,
             );
         } catch (RequestNotFound $error) {

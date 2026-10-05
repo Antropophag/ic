@@ -14,6 +14,7 @@ vi.mock('../api', () => ({
     chooseRoute: vi.fn(),
     completeAct: vi.fn(),
     decideSecurity: vi.fn(),
+    correctSecurityDecision: vi.fn(),
   },
 }))
 
@@ -350,5 +351,94 @@ describe('RequestDetails route and security decisions', () => {
     await flushRequests()
     expect(requestApi.decideSecurity).toHaveBeenCalledWith(1, decision, null, 1)
     app.unmount()
+  })
+})
+
+
+describe('Security decision correction', () => {
+  const details = (id, extra = {}) => {
+    const result = requestDetails(id, `Образец ${id}`)
+    Object.assign(result.item, { route: 'protocol', status: 'completed', security_mark: 'approve', can_correct_security_decision: 1, ...extra })
+    return result
+  }
+  const button = label => [...document.querySelectorAll('button')].find(item => item.textContent.trim() === label)
+  async function fillCorrection() {
+    button('Исправить решение СБ').click()
+    await nextTick()
+    const form = document.querySelector('[aria-labelledby="security-correction-title"]')
+    for (const [selector, value, event] of [['select', 'decline', 'change'], ['textarea', ' Ошибка выбора ', 'input'], ['input', ' IT-360 ', 'input']]) {
+      const field = form.querySelector(selector)
+      field.value = value
+      field.dispatchEvent(new Event(event, { bubbles: true }))
+    }
+    await nextTick()
+    return form
+  }
+
+  it('requires all fields, sends the original version and displays preserved history', async () => {
+    requestApi.get.mockResolvedValueOnce(details(1)).mockResolvedValueOnce({ ...details(1, { security_mark: 'decline', lockVersion: 2 }), history: [
+      { id: 1, kind: 'transition', action: 'security_approve', actorName: 'Сотрудник СБ', occurredAt: '2026-10-05T10:00:00Z' },
+      { id: 1, kind: 'security_correction', action: 'correct_security_decision', actorName: 'Администратор', reason: 'Согласовано → Не согласовано. Причина: Ошибка выбора. Обращение в ИТ: IT-360', occurredAt: '2026-10-05T11:00:00Z' },
+    ] })
+    requestApi.correctSecurityDecision.mockResolvedValue({ lockVersion: 2 })
+    const { app, root } = mountDetails(ref(1))
+    await flushRequests()
+    button('Исправить решение СБ').click()
+    await nextTick()
+    expect(button('Сохранить исправление').disabled).toBe(true)
+    button('Отмена').click()
+    await nextTick()
+    const form = await fillCorrection()
+    expect(form.textContent).toContain('Исходное решение и история исправлений сохранятся. Статус заявки и документы не изменятся.')
+    form.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }))
+    await flushRequests()
+    expect(requestApi.correctSecurityDecision).toHaveBeenCalledWith(1, 'decline', 'Ошибка выбора', 'IT-360', 1)
+    expect(root.textContent).toContain('Исправлено решение СБ')
+    expect(root.textContent).toContain('IT-360')
+    expect(root.textContent).toContain('СБ: согласовано, заявка выполнена')
+    app.unmount()
+  })
+
+  it('hides the action without permission', async () => {
+    requestApi.get.mockResolvedValue(details(1, { can_correct_security_decision: 0 }))
+    const { app } = mountDetails(ref(1))
+    await flushRequests()
+    expect(button('Исправить решение СБ')).toBeUndefined()
+    app.unmount()
+  })
+
+  it('ignores an old correction response after a new request finishes', async () => {
+    const pending = deferred()
+    requestApi.get.mockImplementation(id => Promise.resolve(details(id)))
+    requestApi.correctSecurityDecision.mockReturnValueOnce(pending.promise).mockResolvedValueOnce({ lockVersion: 2 })
+    const id = ref(1)
+    const { app, root } = mountDetails(id)
+    await flushRequests()
+    ;(await fillCorrection()).dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }))
+    await flushRequests()
+    id.value = 2
+    await flushRequests()
+    ;(await fillCorrection()).dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }))
+    await flushRequests()
+    const calls = requestApi.get.mock.calls.length
+    pending.resolve({ lockVersion: 2 })
+    await flushRequests()
+    expect(requestApi.get).toHaveBeenCalledTimes(calls)
+    expect(root.textContent).toContain('Образец 2')
+    app.unmount()
+  })
+
+  it('ignores a late correction response after closing the card', async () => {
+    const pending = deferred()
+    requestApi.get.mockResolvedValue(details(1))
+    requestApi.correctSecurityDecision.mockReturnValue(pending.promise)
+    const { app } = mountDetails(ref(1))
+    await flushRequests()
+    ;(await fillCorrection()).dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }))
+    await flushRequests()
+    app.unmount()
+    pending.resolve({ lockVersion: 2 })
+    await flushRequests()
+    expect(requestApi.get).toHaveBeenCalledTimes(1)
   })
 })

@@ -27,6 +27,8 @@ final class RequestRoutesTest extends IntegrationTestCase
 {
     private string $storageRoot;
     private string $pdf;
+    /** @var list<int> */
+    private array $externalActors = [];
 
     protected function setUp(): void
     {
@@ -49,6 +51,10 @@ final class RequestRoutesTest extends IntegrationTestCase
             Yii::$app?->errorHandler->unregister();
             Yii::$app = null;
             parent::tearDown();
+            foreach ($this->externalActors as $actor) {
+                $this->db()->createCommand()->delete('{{%user_roles}}', ['user_id' => $actor])->execute();
+                $this->db()->createCommand()->delete('{{%users}}', ['id' => $actor])->execute();
+            }
         }
     }
 
@@ -347,5 +353,146 @@ final class RequestRoutesTest extends IntegrationTestCase
         self::assertSame(1, (int) $this->scalar("SELECT COUNT(*) FROM {{%notification_outbox}} WHERE request_id = :id AND event_type = 'request.completed'", [':id' => $id]));
         $this->expectException(ConcurrentRequestModification::class);
         $repository->decideSecurity($id, $security, $decision, null, $version);
+    }
+    #[DataProvider('decisions')]
+    public function testAdministratorCorrectsCompletedDecisionWithPreservedHistory(string $original): void
+    {
+        [$id, $manager, $executor, $expert, $security] = $this->fixture();
+        $admin = $this->createUser('correction.admin', 'Администратор');
+        $this->grantRole($admin, 'administrator');
+        $repository = new RequestRepository($this->db());
+        $query = new RequestQuery($this->db());
+        self::assertSame(0, (int) $query->findDetails($id, $admin)['item']['can_correct_security_decision']);
+        $this->start($id, $manager, $executor, RequestRoute::Protocol);
+        $this->report($id, $executor);
+        $repository->claimExpert($id, $this->version($id), $expert);
+        $this->documents()->publishOpinion($id, $expert, 'Образец прошёл испытания.', $this->version($id), new OpinionPdfRenderer());
+        $repository->decideSecurity($id, $security, $original, 'Первоначальное решение', $this->version($id));
+        $version = $this->version($id);
+        $snapshot = [];
+        foreach (['security_checks', 'request_transitions', 'request_assignments', 'request_documents', 'notification_outbox'] as $table) {
+            $snapshot[$table] = $this->db()->createCommand("SELECT * FROM {{%$table}} WHERE request_id = :id ORDER BY id", [':id' => $id])->queryAll();
+        }
+        $new = $original === 'approve' ? 'decline' : 'approve';
+        $body = ['decision' => $new, 'reason' => ' Ошибка выбора ', 'ticketReference' => ' IT-360 ', 'lockVersion' => $version];
+        self::assertSame(1, (int) $query->findDetails($id, $admin)['item']['can_correct_security_decision']);
+        foreach ([$manager, $executor, $expert, $security] as $other) {
+            self::assertSame(0, (int) $query->findDetails($id, $other)['item']['can_correct_security_decision']);
+            $this->assertHttpFailure(403, fn () => $this->controller($other, $body)->actionCorrectSecurityDecision($id));
+        }
+        self::assertArrayHasKey('errors', $this->controller($admin, array_replace($body, ['reason' => ' ']))->actionCorrectSecurityDecision($id));
+        self::assertSame(422, Yii::$app->response->statusCode);
+        self::assertArrayHasKey('errors', $this->controller($admin, array_replace($body, ['ticketReference' => null]))->actionCorrectSecurityDecision($id));
+        self::assertSame(422, Yii::$app->response->statusCode);
+        $this->assertHttpFailure(404, fn () => $this->controller($admin, $body)->actionCorrectSecurityDecision($id + 1000000));
+        $commandClass = $this->db()->commandClass;
+        $this->db()->commandClass = CorrectionAuditFailureCommand::class;
+        try {
+            $repository->correctSecurityDecision($id, $admin, $new, 'Ошибка', 'IT-360', $version);
+            self::fail('Audit failure must roll back the correction');
+        } catch (\RuntimeException $error) {
+            self::assertSame('controlled correction audit failure', $error->getMessage());
+        } finally {
+            $this->db()->commandClass = $commandClass;
+        }
+        self::assertSame($version, $this->version($id));
+        self::assertSame($original, $query->findDetails($id, $admin)['item']['security_mark']);
+        self::assertSame(0, (int) $this->scalar('SELECT COUNT(*) FROM {{%security_decision_corrections}} WHERE security_check_id = :id', [':id' => $snapshot['security_checks'][0]['id']]));
+        $result = $this->controller($admin, $body)->actionCorrectSecurityDecision($id);
+        self::assertSame('completed', $result['status']);
+        self::assertSame($version + 1, $result['lockVersion']);
+        $this->assertHttpFailure(409, fn () => $this->controller($admin, $body)->actionCorrectSecurityDecision($id));
+        $this->assertHttpFailure(403, fn () => $this->controller($admin, array_replace($body, ['lockVersion' => $version + 1]))->actionCorrectSecurityDecision($id));
+        $details = $query->findDetails($id, $admin);
+        self::assertSame($new, $details['item']['security_mark']);
+        $corrections = array_values(array_filter($details['history'], static fn (array $entry): bool => $entry['action'] === 'correct_security_decision'));
+        self::assertCount(1, $corrections);
+        self::assertSame('Администратор', $corrections[0]['actorName']);
+        self::assertNotEmpty($corrections[0]['occurredAt']);
+        self::assertStringContainsString('Ошибка выбора', $corrections[0]['reason']);
+        self::assertStringContainsString('IT-360', $corrections[0]['reason']);
+        $audit = json_decode((string) $this->scalar("SELECT payload_json FROM {{%audit_events}} WHERE entity_id = :id AND event_type = 'request.security_decision_corrected'", [':id' => $id]), true, 512, JSON_THROW_ON_ERROR);
+        self::assertSame($original, $audit['original_decision']);
+        self::assertSame($original, $audit['previous_decision']);
+        self::assertSame($new, $audit['decision']);
+        self::assertSame('Ошибка выбора', $audit['reason']);
+        self::assertSame('IT-360', $audit['ticket_reference']);
+        $repository->correctSecurityDecision($id, $admin, $original, 'Повторная проверка', 'IT-361', $version + 1);
+        self::assertSame($original, $query->findDetails($id, $admin)['item']['security_mark']);
+        self::assertSame(2, (int) $this->scalar('SELECT COUNT(*) FROM {{%security_decision_corrections}} WHERE security_check_id = :id', [':id' => $snapshot['security_checks'][0]['id']]));
+        foreach ($snapshot as $table => $rows) {
+            self::assertSame($rows, $this->db()->createCommand("SELECT * FROM {{%$table}} WHERE request_id = :id ORDER BY id", [':id' => $id])->queryAll(), $table);
+        }
+        require_once dirname(__DIR__, 3) . '/migrations/m261005_000003_create_security_decision_corrections.php';
+        $cache = $this->db()->schemaCache;
+        $this->db()->schemaCache = new \yii\caching\ArrayCache();
+        try {
+            $migration = new \m261005_000003_create_security_decision_corrections(['db' => $this->db()]);
+        } finally {
+            $this->db()->schemaCache = $cache;
+        }
+        try {
+            $migration->safeDown();
+            self::fail('Used correction history must survive rollback attempts');
+        } catch (\RuntimeException $error) {
+            self::assertStringContainsString('restore the pre-migration backup', $error->getMessage());
+        }
+        $this->db()->createCommand()->update('{{%requests}}', ['is_archived' => 1], ['id' => $id])->execute();
+        self::assertSame(0, (int) $query->findDetails($id, $admin)['item']['can_correct_security_decision']);
+        $this->expectException(SecurityDecisionDenied::class);
+        $repository->correctSecurityDecision($id, $admin, $new, 'Архив', 'IT-362', $version + 2);
+    }
+
+    /** @return iterable<string, array{bool}> */
+    public static function revokedAccess(): iterable
+    {
+        yield 'role revoked' => [false];
+        yield 'user disabled' => [true];
+    }
+
+    #[DataProvider('revokedAccess')]
+    public function testCorrectionChecksCurrentAccessInsteadOfTransactionSnapshot(bool $disable): void
+    {
+        $other = new \yii\db\Connection([
+            'dsn' => $this->db()->dsn, 'username' => $this->db()->username,
+            'password' => $this->db()->password, 'charset' => 'utf8mb4',
+        ]);
+        $now = gmdate('Y-m-d H:i:s');
+        $other->createCommand()->insert('{{%users}}', [
+            'ad_login' => 'correction-race-' . bin2hex(random_bytes(6)), 'display_name' => 'Администратор',
+            'is_active' => 1, 'created_at' => $now, 'updated_at' => $now,
+        ])->execute();
+        $admin = (int) $other->getLastInsertID();
+        $this->externalActors[] = $admin;
+        $roleId = (int) $other->createCommand("SELECT id FROM {{%roles}} WHERE code = 'administrator'")->queryScalar();
+        $other->createCommand()->insert('{{%user_roles}}', ['user_id' => $admin, 'role_id' => $roleId, 'created_at' => $now])->execute();
+        try {
+            [$id, $manager, $executor, $expert, $security] = $this->fixture();
+            $repository = new RequestRepository($this->db());
+            $this->start($id, $manager, $executor, RequestRoute::Protocol);
+            $this->report($id, $executor);
+            $repository->claimExpert($id, $this->version($id), $expert);
+            $this->documents()->publishOpinion($id, $expert, 'Образец прошёл испытания.', $this->version($id), new OpinionPdfRenderer());
+            $repository->decideSecurity($id, $security, 'approve', null, $this->version($id));
+            $version = $this->version($id);
+            // The HTTP idempotency transaction can already have a consistent-read snapshot.
+            self::assertSame(1, (int) $this->scalar('SELECT is_active FROM {{%users}} WHERE id = :id', [':id' => $admin]));
+            self::assertSame(1, (int) $this->scalar('SELECT COUNT(*) FROM {{%user_roles}} WHERE user_id = :id', [':id' => $admin]));
+            if ($disable) {
+                $other->createCommand()->update('{{%users}}', ['is_active' => 0], ['id' => $admin])->execute();
+            } else {
+                $other->createCommand()->delete('{{%user_roles}}', ['user_id' => $admin])->execute();
+            }
+            try {
+                $repository->correctSecurityDecision($id, $admin, 'decline', 'Ошибка', 'IT-360', $version);
+                self::fail('Revoked access must not be read from the old snapshot');
+            } catch (SecurityDecisionDenied $error) {
+                self::assertSame('SEC-006', $error->ruleId);
+            }
+            self::assertSame($version, $this->version($id));
+            self::assertSame('approve', (new RequestQuery($this->db()))->findDetails($id, $manager)['item']['security_mark']);
+        } finally {
+            $other->close();
+        }
     }
 }

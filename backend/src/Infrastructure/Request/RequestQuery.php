@@ -133,7 +133,9 @@ final class RequestQuery
             . "u.display_name AS initiator_name, COALESCE(r.department_name, 'Подразделение не указано') AS department, "
             . 'executor.id AS executor_id, executor.display_name AS executor_name, '
             . 'expert.id AS expert_id, expert.display_name AS expert_name, '
-            . '(SELECT sc.decision FROM {{%security_checks}} sc WHERE sc.request_id = r.id '
+            . '(SELECT COALESCE((SELECT c.decision FROM {{%security_decision_corrections}} c '
+            . 'WHERE c.security_check_id = sc.id ORDER BY c.id DESC LIMIT 1), sc.decision) '
+            . 'FROM {{%security_checks}} sc WHERE sc.request_id = r.id '
             . 'ORDER BY sc.id DESC LIMIT 1) AS security_mark, '
             . "(EXISTS(SELECT 1 FROM {{%users}} clu WHERE clu.id = :color_actor AND clu.is_active = 1) "
             . 'AND EXISTS(SELECT 1 FROM {{%user_roles}} clr JOIN {{%roles}} clrole ON clrole.id = clr.role_id '
@@ -372,7 +374,9 @@ final class RequestQuery
             . "AND department_actor.is_active = 1 AND department_role.code = 'administrator')) AS can_edit_department, "
             . 'executor.id AS executor_id, executor.display_name AS executor_name, '
             . 'expert.id AS expert_id, expert.display_name AS expert_name, '
-            . '(SELECT sc.decision FROM {{%security_checks}} sc WHERE sc.request_id = r.id '
+            . '(SELECT COALESCE((SELECT c.decision FROM {{%security_decision_corrections}} c '
+            . 'WHERE c.security_check_id = sc.id ORDER BY c.id DESC LIMIT 1), sc.decision) '
+            . 'FROM {{%security_checks}} sc WHERE sc.request_id = r.id '
             . 'ORDER BY sc.id DESC LIMIT 1) AS security_mark, '
             . 'EXISTS(SELECT 1 FROM {{%user_roles}} clr JOIN {{%roles}} clrole ON clrole.id = clr.role_id '
             . "WHERE clr.user_id = :color_actor AND clrole.code IN ('ic_manager', 'laboratory_manager')) "
@@ -435,6 +439,9 @@ final class RequestQuery
             . 'JOIN {{%roles}} security_role ON security_role.id = security_ur.role_id '
             . "WHERE security_ur.user_id = :security_actor AND security_role.code = 'security_officer')) "
             . 'AS can_security_decide, '
+            . '(EXISTS(SELECT 1 FROM {{%security_checks}} csc WHERE csc.request_id = r.id) '
+            . 'AND EXISTS(SELECT 1 FROM {{%user_roles}} cur JOIN {{%roles}} cr ON cr.id = cur.role_id '
+            . "WHERE cur.user_id = :correction_actor AND cr.code = 'administrator')) AS can_correct_security_decision, "
             . "(r.status IN ('registered', 'in_progress') AND EXISTS(SELECT 1 FROM {{%user_roles}} rjur "
             . 'JOIN {{%roles}} rjr ON rjr.id = rjur.role_id '
             . "WHERE rjur.user_id = :reject_actor AND rjr.code IN ('ic_manager', 'laboratory_manager'))) "
@@ -482,6 +489,7 @@ final class RequestQuery
                 ':delete_report_manager' => $actorId,
                 ':opinion_actor' => $actorId,
                 ':security_actor' => $actorId,
+                ':correction_actor' => $actorId,
                 ':reject_actor' => $actorId,
                 ':withdraw_actor' => $actorId,
             ],
@@ -554,9 +562,18 @@ final class RequestQuery
             . "AND (a.event_type <> 'request.report_deleted' OR NOT EXISTS (SELECT 1 FROM {{%request_transitions}} deletion_transition "
             . "WHERE deletion_transition.request_id = a.entity_id AND deletion_transition.action = 'delete_report' "
             . 'AND deletion_transition.created_at = a.created_at)) '
+            . 'UNION ALL '
+            . "SELECT c.id, 'security_correction', 'correct_security_decision', NULL, NULL, 'SEC-006', "
+            . "CONCAT(CASE c.previous_decision WHEN 'approve' THEN 'Согласовано' ELSE 'Не согласовано' END, ' → ', "
+            . "CASE c.decision WHEN 'approve' THEN 'Согласовано' ELSE 'Не согласовано' END, "
+            . "'. Причина: ', c.reason, '. Обращение в ИТ: ', c.ticket_reference), "
+            . "DATE_FORMAT(c.created_at, '%Y-%m-%dT%H:%i:%s.%fZ'), u.display_name, NULL, NULL, NULL "
+            . 'FROM {{%security_decision_corrections}} c JOIN {{%security_checks}} sc ON sc.id = c.security_check_id '
+            . 'JOIN {{%users}} u ON u.id = c.actor_id WHERE sc.request_id = :correction_request_id '
             . 'ORDER BY occurredAt DESC, kind DESC, id DESC',
             [
                 ':transition_request_id' => $requestId,
+                ':correction_request_id' => $requestId,
                 ':audit_request_id' => $requestId,
                 ':history_report_viewer' => $actorId,
                 ':history_report_privileged_viewer' => $actorId,

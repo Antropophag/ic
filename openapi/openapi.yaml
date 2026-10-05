@@ -632,6 +632,33 @@ paths:
         '422': {$ref: '#/components/responses/ValidationError'}
         '500': {$ref: '#/components/responses/ServerError'}
 
+  /api/v1/requests/{id}/correct-security-decision:
+    post:
+      tags: [Requests]
+      summary: Исправить решение СБ по обращению в ИТ
+      description: Только активный администратор. Обязательны причина и номер или ссылка на обращение в ИТ. Исправляется последнее решение, в том числе в завершённой заявке; одинаковое значение запрещено (403), импортный архив доступен только для чтения (409). Исходная запись и все исправления сохраняются в истории и аудите; статус, документы и уведомления о завершении не меняются. lockVersion увеличивается; конкурирующее изменение возвращает 409. Повтор с тем же Idempotency-Key воспроизводит результат.
+      operationId: correctRequestSecurityDecision
+      security: [{cookieSession: [], csrfToken: []}]
+      parameters:
+        - $ref: '#/components/parameters/RequestId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CorrectSecurityDecisionInput'
+      responses:
+        '200': {$ref: '#/components/responses/RequestCommandSucceeded'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '415': {$ref: '#/components/responses/UnsupportedMediaType'}
+        '422': {$ref: '#/components/responses/ValidationError'}
+        '500': {$ref: '#/components/responses/ServerError'}
+
   /api/v1/admin/users:
     get:
       tags: [Administration]
@@ -1227,6 +1254,7 @@ components:
         route_selected_by: {type: integer, nullable: true}
         route_selected_at: {type: string, nullable: true}
         can_choose_route: {type: integer, enum: [0, 1]}
+        can_correct_security_decision: {type: integer, enum: [0, 1]}
         can_complete_act: {type: integer, enum: [0, 1]}
         security_mark: {type: string, nullable: true, enum: [approve, decline, null]}
         department:
@@ -1297,6 +1325,15 @@ components:
         decision: {type: string, enum: [approve, decline]}
         lockVersion: {type: integer, minimum: 1}
         reason: {type: string, nullable: true, maxLength: 5000}
+      additionalProperties: false
+    CorrectSecurityDecisionInput:
+      type: object
+      required: [decision, reason, ticketReference, lockVersion]
+      properties:
+        decision: {type: string, enum: [approve, decline]}
+        reason: {$ref: '#/components/schemas/RequiredReason'}
+        ticketReference: {type: string, minLength: 1, maxLength: 1000, pattern: '\S', description: Номер или ссылка на обращение в ИТ}
+        lockVersion: {type: integer, minimum: 1}
       additionalProperties: false
     RevokeRoleInput:
       type: object

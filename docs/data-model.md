@@ -188,6 +188,16 @@ erDiagram
         text reason
         datetime(6) created_at
     }
+    security_decision_corrections {
+        bigint(20)_unsigned id PK
+        bigint(20)_unsigned security_check_id FK "-> security_checks.id"
+        bigint(20)_unsigned actor_id FK "-> users.id"
+        varchar(16) previous_decision
+        varchar(16) decision
+        text reason
+        varchar(1000) ticket_reference
+        datetime(6) created_at
+    }
     users {
         bigint(20)_unsigned id PK
         varchar(128) ad_login
@@ -236,6 +246,8 @@ erDiagram
     requests ||--o{ security_checks : "request_id"
     expert_opinions ||--o{ security_checks : "expert_opinion_id"
     users ||--o{ security_checks : "officer_id"
+    security_checks ||--o{ security_decision_corrections : "security_check_id"
+    users ||--o{ security_decision_corrections : "actor_id"
     users ||--o{ user_roles : "user_id"
     roles ||--o{ user_roles : "role_id"
     users |o--o{ user_roles : "assigned_by"

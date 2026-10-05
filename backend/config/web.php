@@ -41,6 +41,7 @@ $application = [
                 'POST api/v1/requests/<id:\\d+>/expert/reassign' => 'request/reassign-expert',
                 'POST api/v1/requests/<id:\\d+>/opinion' => 'request/publish-opinion',
                 'POST api/v1/requests/<id:\\d+>/security-decision' => 'request/security-decision',
+                'POST api/v1/requests/<id:\\d+>/correct-security-decision' => 'request/correct-security-decision',
                 'POST api/v1/requests/<id:\\d+>/route' => 'request/choose-route',
                 'POST api/v1/requests/<id:\\d+>/complete-act' => 'request/complete-act',
                 'POST api/v1/requests/<id:\\d+>/start' => 'request/start',

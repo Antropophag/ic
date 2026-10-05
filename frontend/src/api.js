@@ -203,6 +203,11 @@ export const requestApi = {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ lockVersion }),
   }),
+  correctSecurityDecision: (requestId, decision, reason, ticketReference, lockVersion) => request(`/api/v1/requests/${requestId}/correct-security-decision`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ decision, reason, ticketReference, lockVersion }),
+  }),
   decideSecurity: (requestId, decision, reason, lockVersion) => request(`/api/v1/requests/${requestId}/security-decision`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
