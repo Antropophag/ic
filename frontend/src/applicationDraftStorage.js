@@ -37,11 +37,18 @@ function sanitizedData(data) {
   const validQuantity = Number.isSafeInteger(data.sampleQuantity) && data.sampleQuantity >= 1
   if (!validQuantity) return null
   result.sampleQuantity = data.sampleQuantity
+  if (data.objects !== undefined) {
+    if (!Array.isArray(data.objects) || data.objects.length < 1 || data.objects.length > 10) return null
+    if (data.objects.some(object => !object || typeof object.productName !== 'string' || object.productName.length > 500
+      || typeof object.sampleQuantity !== 'string' || object.sampleQuantity.length > 15)) return null
+    result.objects = data.objects.map(({ productName, sampleQuantity }) => ({ productName, sampleQuantity }))
+  }
   return result
 }
 
 function isEmptyDraft(data, hadFiles) {
-  return !hadFiles
+  return (!data.objects || (data.objects.length === 1 && data.objects[0].productName === '' && data.objects[0].sampleQuantity === '1'))
+    && !hadFiles
     && data.sampleQuantity === 1
     && Object.keys(STRING_FIELDS).every(field => data[field] === '')
 }

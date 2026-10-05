@@ -25,7 +25,7 @@ function contrastRatio(foreground, background) {
 
 describe('default interface scale', () => {
   it('matches 110% browser zoom and advances responsive thresholds accordingly', () => {
-    expect(compactStyles).toContain(':root{zoom:1.1;')
+    expect(compactStyles).toContain(':root{--portal-zoom:1.1;zoom:var(--portal-zoom);')
     expect(compactStyles).toContain('@media(max-width:1298px)')
     expect(compactStyles).toContain('@media(max-width:1078px)')
     expect(compactStyles).toContain('@media(max-width:990px)')

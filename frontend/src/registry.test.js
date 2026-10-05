@@ -489,3 +489,8 @@ it('resolves a security mark icon for each SEC-002/SEC-003 state', () => {
   expect(securityMarkIcon(null)).toMatchObject({ className: 'security-mark--pending', label: 'Контроль ещё не проводился' })
   expect(securityMarkIcon('unexpected')).toMatchObject({ className: 'security-mark--pending' })
 })
+
+it('uses every object name for the registry tooltip in the saved order', () => {
+  expect(fromApi({ ...registered, object_names: ['Первая позиция', 'Вторая позиция'] }).objectTooltip).toBe('Первая позиция\nВторая позиция')
+  expect(fromApi(registered).objectTooltip).toBe('Лебёдка')
+})

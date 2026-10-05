@@ -1,9 +1,11 @@
 import { expect, request as playwrightRequest, test } from '@playwright/test'
 
+const identityHeader = process.env.E2E_IDENTITY_HEADER || 'X-Test-User-ID'
+
 async function apiFor(baseURL, userId) {
   const bootstrap = await playwrightRequest.newContext({
     baseURL,
-    extraHTTPHeaders: { 'X-Test-User-ID': String(userId) },
+    extraHTTPHeaders: { [identityHeader]: String(userId) },
   })
   const me = await bootstrap.get('/api/v1/auth/me')
   expect(me.ok(), await me.text()).toBe(true)
@@ -15,7 +17,7 @@ async function apiFor(baseURL, userId) {
     baseURL,
     storageState,
     extraHTTPHeaders: {
-      'X-Test-User-ID': String(userId),
+      [identityHeader]: String(userId),
       'X-CSRF-Token': csrfToken,
     },
   })
@@ -36,7 +38,7 @@ async function expectOk(response) {
 
 async function useTestIdentity(page, userId) {
   await page.route('**/api/**', async route => {
-    await route.continue({ headers: { ...route.request().headers(), 'X-Test-User-ID': String(userId) } })
+    await route.continue({ headers: { ...route.request().headers(), [identityHeader]: String(userId) } })
   })
 }
 
@@ -88,11 +90,11 @@ test('заявка проходит критический путь до сог�
   }))
 
   await page.route('**/api/**', async route => {
-    await route.continue({ headers: { ...route.request().headers(), 'X-Test-User-ID': '5' } })
+    await route.continue({ headers: { ...route.request().headers(), [identityHeader]: '5' } })
   })
   await page.goto('/')
   await page.getByRole('row').filter({ hasText: marker }).click()
-  await expect(page.locator('.object-status-row').getByText('Контроль СБ', { exact: true })).toBeVisible()
+  await expect(page.locator('.request-objects-status').getByText('Контроль СБ', { exact: true })).toBeVisible()
   await expect(page.getByRole('heading', { name: 'Лента', exact: true })).toBeVisible()
   await expect(page.getByText('Экспертное заключение опубликовано', { exact: false })).toBeVisible()
   const securityMarkIcon = page.locator('.side-column .security-mark-icon')
@@ -102,7 +104,7 @@ test('заявка проходит критический путь до сог�
   await expect(securityMarkIcon).toHaveCSS('margin-bottom', '0px')
   await page.getByRole('button', { name: 'Согласовать', exact: true }).click()
   await page.getByRole('alertdialog').getByRole('button', { name: 'Согласовать', exact: true }).click()
-  await expect(page.locator('.object-status-row').getByText('Заявка выполнена', { exact: true })).toBeVisible()
+  await expect(page.locator('.request-objects-status').getByText('Заявка выполнена', { exact: true })).toBeVisible()
   await expect(page.getByRole('button', { name: 'Согласовать', exact: true })).toHaveCount(0)
 
   await Promise.all([initiator.dispose(), manager.dispose(), executor.dispose(), expert.dispose()])
@@ -226,7 +228,7 @@ test('комментарий, оставленный при создании з�
   await page.getByPlaceholder('Укажите наименование и тип продукции').fill(marker)
   await page.getByPlaceholder('Наименование производителя').fill('Тестовый производитель')
   await page.getByPlaceholder('Наименование поставщика').fill('Тестовый поставщик')
-  await page.getByPlaceholder('Опишите метод или программу испытаний').fill('Комментарий при создании — E2E')
+  await page.getByPlaceholder('Обозначьте объём и метод испытаний: укажите пункты документов, содержащих требования к образцу, а также метод или методику испытаний.').fill('Комментарий при создании — E2E')
   await page.getByPlaceholder('Добавьте пояснение к заявке').fill(comment)
   await page.getByRole('button', { name: 'Создать заявку' }).click()
 
@@ -242,7 +244,7 @@ test('черновик новой заявки восстанавливаетс�
   await page.getByPlaceholder('Укажите наименование и тип продукции').fill(marker)
   await page.getByPlaceholder('Наименование производителя').fill('Черновой производитель')
   await page.getByPlaceholder('Наименование поставщика').fill('Черновой поставщик')
-  await page.getByPlaceholder('Опишите метод или программу испытаний').fill('Проверка восстановления')
+  await page.getByPlaceholder('Обозначьте объём и метод испытаний: укажите пункты документов, содержащих требования к образцу, а также метод или методику испытаний.').fill('Проверка восстановления')
 
   await expect.poll(() => page.evaluate(key => localStorage.getItem(key), 'ic.application-create-draft.v1.3'))
     .toContain(marker)
@@ -292,7 +294,7 @@ test('реестр показывает индикаторы последнег�
   }))
 
   await page.route('**/api/**', async route => {
-    await route.continue({ headers: { ...route.request().headers(), 'X-Test-User-ID': '2' } })
+    await route.continue({ headers: { ...route.request().headers(), [identityHeader]: '2' } })
   })
   await page.goto('/')
   const row = page.getByRole('row').filter({ hasText: marker })
@@ -325,7 +327,7 @@ test('кнопка «назад» браузера возвращает из к�
   await page.getByPlaceholder('Укажите наименование и тип продукции').fill(marker)
   await page.getByPlaceholder('Наименование производителя').fill('Тестовый производитель')
   await page.getByPlaceholder('Наименование поставщика').fill('Тестовый поставщик')
-  await page.getByPlaceholder('Опишите метод или программу испытаний').fill('Кнопка назад браузера — E2E')
+  await page.getByPlaceholder('Обозначьте объём и метод испытаний: укажите пункты документов, содержащих требования к образцу, а также метод или методику испытаний.').fill('Кнопка назад браузера — E2E')
   await page.getByRole('button', { name: 'Создать заявку' }).click()
 
   const heading = page.getByRole('heading', { name: /^Заявка №\d+ от \d{1,2}\.\d{1,2}\.\d{4}$/ })
@@ -391,12 +393,12 @@ test('администратор исправляет историческое �
 
     await useTestIdentity(page, 6)
     await page.goto(`/?request=${first.id}`)
-    const departmentFact = page.locator('.object-band .fact').filter({ hasText: 'Подразделение' })
-    await expect(departmentFact.locator('b')).toHaveText('Тестовое подразделение')
-    await page.getByRole('button', { name: 'Изменить', exact: true }).click()
+    const departmentFact = page.locator('.request-heading-department')
+    await expect(departmentFact.locator('p')).toHaveText('Тестовое подразделение')
+    await page.getByRole('button', { name: 'Изменить подразделение заявки', exact: true }).click()
     await page.getByLabel('Подразделение', { exact: true }).fill('Подразделение C')
     await page.getByRole('button', { name: 'Сохранить', exact: true }).click()
-    await expect(departmentFact.locator('b')).toHaveText('Подразделение C')
+    await expect(departmentFact.locator('p')).toHaveText('Подразделение C')
     await expect(page.getByText('Подразделение заявки изменено: Подразделение C', { exact: false })).toBeVisible()
 
     const unchanged = await expectOk(await initiator.get(`/api/v1/requests/${second.id}`))
@@ -420,7 +422,7 @@ test('конфликт изменения подразделения обнов�
 
     await useTestIdentity(page, 6)
     await page.goto(`/?request=${created.id}`)
-    await page.getByRole('button', { name: 'Изменить', exact: true }).click()
+    await page.getByRole('button', { name: 'Изменить подразделение заявки', exact: true }).click()
     await page.getByLabel('Подразделение', { exact: true }).fill('Устаревшее изменение')
 
     await expectOk(await administrator.post(`/api/v1/requests/${created.id}/department`, {
@@ -436,16 +438,16 @@ test('конфликт изменения подразделения обнов�
         refreshStarted()
         await refreshReleased
       }
-      await route.continue({ headers: { ...route.request().headers(), 'X-Test-User-ID': '6' } })
+      await route.continue({ headers: { ...route.request().headers(), [identityHeader]: '6' } })
     })
 
     await page.getByRole('button', { name: 'Сохранить', exact: true }).click()
     await refreshObserved
-    await expect(page.getByRole('button', { name: 'Изменить', exact: true })).toHaveCount(0)
+    await expect(page.getByRole('button', { name: 'Изменить подразделение заявки', exact: true })).toHaveCount(0)
     releaseRefresh()
 
     await expect(page.getByText('Заявка уже изменена. Данные обновлены', { exact: false })).toBeVisible()
-    await expect(page.locator('.object-band .fact').filter({ hasText: 'Подразделение' }).locator('b'))
+    await expect(page.locator('.request-heading-department').locator('p'))
       .toHaveText('Параллельное изменение')
   } finally {
     await Promise.all([initiator.dispose(), administrator.dispose()])
@@ -489,7 +491,7 @@ test('администратор читает журналы действий и
   await expect(page.getByText('request.executor_assigned')).toBeVisible()
   await page.getByRole('button', { name: 'Закрыть' }).click()
   await page.getByRole('button', { name: new RegExp(`Заявка №`) }).first().press('Enter')
-  await expect(page.locator('.object-title', { hasText: marker })).toBeVisible()
+  await expect(page.getByRole('rowheader', { name: marker, exact: false })).toBeVisible()
   await page.getByRole('button', { name: 'Администрирование' }).click()
   await page.getByRole('tab', { name: 'Уведомления' }).click()
   await page.getByRole('spinbutton', { name: 'Заявка' }).fill(String(created.id))
@@ -498,7 +500,7 @@ test('администратор читает журналы действий и
   await expect(page.locator('.admin-log-table .badge', { hasText: statusLabel }).first()).toBeVisible()
   await expect(page.getByText('SECRET BODY')).toHaveCount(0)
   await page.getByRole('button', { name: new RegExp(`Заявка №`) }).first().press('Enter')
-  await expect(page.locator('.object-title', { hasText: marker })).toBeVisible()
+  await expect(page.getByRole('rowheader', { name: marker, exact: false })).toBeVisible()
   } finally {
     await Promise.allSettled(contexts.map(context => context.dispose()))
   }

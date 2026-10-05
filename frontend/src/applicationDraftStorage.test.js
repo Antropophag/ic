@@ -188,4 +188,11 @@ describe('application draft storage', () => {
     removeApplicationDraft(7)
     expect(loadApplicationDraft(7)).toBeNull()
   })
+// Multi-object drafts keep text quantities and object order intact.
+it('preserves several objects with textual quantities', () => {
+  const objects = [{ productName: 'Первый', sampleQuantity: '4 шт по 3 метра' }, { productName: 'Второй', sampleQuantity: '2 комплекта' }]
+  saveApplicationDraft(7, { ...data, objects }, false)
+  expect(loadApplicationDraft(7).data.objects).toEqual(objects)
+})
+
 })

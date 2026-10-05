@@ -9,6 +9,9 @@ import {
   watch,
 } from "vue";
 import { requestApi } from "../api";
+import trashIcon from "../vendor/shlz/trash.svg";
+import plusIcon from "../vendor/shlz/plus.svg";
+import RequestAttachments from "./RequestAttachments.vue";
 import { createApplicationDraftForm } from "../applicationDraftForm";
 import { createConfirmDialog } from "../confirmDialog";
 import { triggerBlobDownload } from "../download";
@@ -34,6 +37,22 @@ import {
   fromApi,
   initialsFor,
 } from "../registry";
+
+const objectFields = ref(null);
+const objectIconStyle = (icon) => ({ "--object-action-icon": `url("${icon}")` });
+async function addDraftObject() {
+  if (createLoading.value || draft.objects.length >= 10) return;
+  draft.objects.push({ productName: "", sampleQuantity: "1" });
+  await nextTick();
+  objectFields.value?.querySelector(".request-create-object:last-of-type input")?.focus();
+}
+async function removeDraftObject(index) {
+  if (createLoading.value || draft.objects.length <= 1) return;
+  draft.objects.splice(index, 1);
+  await nextTick();
+  const rows = objectFields.value?.querySelectorAll(".request-create-object");
+  rows?.[Math.min(index, rows.length - 1)]?.querySelector("input")?.focus();
+}
 
 const props = defineProps({
   active: { type: Boolean, default: true },
@@ -90,9 +109,9 @@ const createLoading = ref(false);
 const createError = ref("");
 const createNotice = ref("");
 const draftFiles = ref([]);
-const draftFileInput = ref(null);
 const lastCommentModal = ref(null);
 const draft = reactive({
+  objects: [{ productName: "", sampleQuantity: "1" }],
   productName: "",
   manufacturer: "",
   supplier: "",
@@ -119,6 +138,7 @@ const draftForm = createApplicationDraftForm({
 function resetCreateForm({ removeStored = false } = {}) {
   if (removeStored) draftForm.remove();
   Object.assign(draft, {
+    objects: [{ productName: "", sampleQuantity: "1" }],
     productName: "",
     manufacturer: "",
     supplier: "",
@@ -127,14 +147,15 @@ function resetCreateForm({ removeStored = false } = {}) {
     comment: "",
   });
   draftFiles.value = [];
-  if (draftFileInput.value) draftFileInput.value.value = "";
   createError.value = "";
   createNotice.value = "";
   draftForm.enableSaving();
 }
 
 function hasCreateFormData() {
-  return draft.productName !== ""
+  return draft.objects.length > 1
+    || draft.objects.some(object => object.productName !== "" || object.sampleQuantity !== "1")
+    || draft.productName !== ""
     || draft.manufacturer !== ""
     || draft.supplier !== ""
     || draft.sampleQuantity !== 1
@@ -415,7 +436,7 @@ async function performCreateRequest() {
   const isCurrent = () => createRequestGuard.isCurrent(token, true);
   let created;
   try {
-    created = await requestApi.create(draft);
+    created = await requestApi.create({ objects: draft.objects, manufacturer: draft.manufacturer, supplier: draft.supplier, testMethod: draft.testMethod });
   } catch (error) {
     if (!isCurrent()) return;
     createError.value =
@@ -481,6 +502,23 @@ async function performCreateRequest() {
   }
 }
 
+function positionObjectTooltip(target) {
+  if (!props.active || !target) return;
+  const box = target.getBoundingClientRect();
+  const scale = box.width / target.offsetWidth || 1;
+  const style = getComputedStyle(target, "::after");
+  const height = [style.height, style.paddingTop, style.paddingBottom].reduce((sum, value) => sum + (parseFloat(value) || 0), 0);
+  // Flip below the row when the full tooltip cannot fit above the viewport edge.
+  const above = box.top / scale - height - 8;
+  const below = above < 8;
+  target.style.setProperty("--object-tooltip-x", `${(box.left + box.width / 2) / scale}px`);
+  target.style.setProperty("--object-tooltip-y", `${below ? box.bottom / scale + 8 : above}px`);
+  target.style.setProperty("--object-tooltip-arrow-y", `${below ? box.bottom / scale + 3 : box.top / scale - 13}px`);
+}
+function positionVisibleObjectTooltips() {
+  for (const target of tableScroll.value?.querySelectorAll(".registry-object-tooltip:hover, .registry-object-tooltip:focus-visible") || []) positionObjectTooltip(target);
+}
+
 defineExpose({
   openCreate: () => {
     if (canUsePersonalRequests.value) showCreate.value = true;
@@ -488,6 +526,8 @@ defineExpose({
 });
 onMounted(() => {
   draftForm.restore();
+  window.addEventListener("scroll", positionVisibleObjectTooltips, true);
+  window.addEventListener("resize", positionVisibleObjectTooltips);
   window.addEventListener("pagehide", draftForm.flushSave);
   if (props.active) {
     loadRequests();
@@ -496,6 +536,8 @@ onMounted(() => {
   }
 });
 onBeforeUnmount(() => {
+  window.removeEventListener("scroll", positionVisibleObjectTooltips, true);
+  window.removeEventListener("resize", positionVisibleObjectTooltips);
   window.removeEventListener("pagehide", draftForm.flushSave);
   draftForm.dispose();
   registryLoadLifecycle.deactivate();
@@ -627,7 +669,7 @@ onBeforeUnmount(() => {
               <td class="number">{{ item.id }}</td>
               <td>{{ item.date }}</td>
               <td class="registry-object-cell">
-                <span class="registry-object-tooltip app-tooltip" :data-tooltip="item.product" tabindex="0"><span class="registry-object">{{ item.product }}</span></span><small :title="item.supplier">{{ item.supplier }}</small>
+                <span class="registry-object-tooltip app-tooltip" :data-tooltip="item.objectTooltip" tabindex="0" @mouseenter="positionObjectTooltip($event.currentTarget)" @focus="positionObjectTooltip($event.currentTarget)"><span class="registry-object">{{ item.product }}</span></span><small v-if="item.objectCount > 1">Объектов: {{ item.objectCount }}</small><small :title="item.supplier">{{ item.supplier }}</small>
               </td>
               <td>
                 {{ item.initiator
@@ -757,19 +799,16 @@ onBeforeUnmount(() => {
   >
     <template #eyebrow><p class="eyebrow">Новая заявка</p></template>
     <div class="form-grid">
-      <label>Объект испытаний *<input
-        v-model="draft.productName"
-        :disabled="createLoading"
-        required
-        maxlength="500"
-        placeholder="Укажите наименование и тип продукции"
-      /></label><label>Количество образцов *<input
-        v-model.number="draft.sampleQuantity"
-        :disabled="createLoading"
-        required
-        type="number"
-        min="1"
-      /></label><label>Производитель *<input
+      <fieldset ref="objectFields" class="wide request-create-objects">
+        <legend>Объекты испытаний · {{ draft.objects.length }} из 10</legend>
+        <div v-for="(object, index) in draft.objects" :key="index" class="request-create-object">
+          <label>Объект испытаний {{ index + 1 }} *<input v-model="object.productName" :disabled="createLoading" required maxlength="500" placeholder="Укажите наименование и тип продукции" /></label>
+          <label>Количество образцов {{ index + 1 }} *<input v-model="object.sampleQuantity" :disabled="createLoading" required maxlength="15" placeholder="Например, 4 шт по 3 метра" /></label>
+          <button v-if="draft.objects.length > 1" type="button" class="shlz-button shlz-button--icon request-remove-object" :disabled="createLoading" :aria-label="`Удалить объект ${index + 1}`" :title="`Удалить объект ${index + 1}`" @click="removeDraftObject(index)"><span class="shlz-button__icon request-object-action-icon" :style="objectIconStyle(trashIcon)" aria-hidden="true"></span></button>
+        </div>
+        <button type="button" class="shlz-button shlz-button--primary shlz-button--sm" :disabled="createLoading || draft.objects.length >= 10" @click="addDraftObject"><span class="shlz-button__icon request-object-action-icon" :style="objectIconStyle(plusIcon)" aria-hidden="true"></span>Добавить объект</button>
+      </fieldset>
+      <label>Производитель *<input
         v-model="draft.manufacturer"
         :disabled="createLoading"
         required
@@ -781,24 +820,15 @@ onBeforeUnmount(() => {
         required
         maxlength="500"
         placeholder="Наименование поставщика"
-      /></label><label class="wide">Метод испытаний *<textarea
+      /></label><label class="wide">Объём испытаний *<textarea
         v-model="draft.testMethod"
         :disabled="createLoading"
         required
         maxlength="10000"
-        placeholder="Опишите метод или программу испытаний"
-      ></textarea></label><label class="wide">Сопроводительные документы
-        <div class="dropzone">
-          <input
-            ref="draftFileInput"
-            type="file"
-            multiple
-            accept=".pdf,.png,.jpg,.jpeg,.docx,.xlsx"
-            :disabled="createLoading"
-            @change="draftFiles = Array.from($event.target.files || [])"
-          /><span>Перетащите файлы сюда или <b>выберите на компьютере</b></span><small v-if="draftFiles.length">Выбрано:
-            {{ draftFiles.map((file) => file.name).join(", ") }}</small>
-        </div></label><label class="wide">Комментарий<textarea
+        placeholder="Обозначьте объём и метод испытаний: укажите пункты документов, содержащих требования к образцу, а также метод или методику испытаний."
+      ></textarea></label>
+      <RequestAttachments v-model="draftFiles" class="wide" :disabled="createLoading" />
+      <label class="wide">Комментарий<textarea
         v-model="draft.comment"
         :disabled="createLoading"
         maxlength="10000"

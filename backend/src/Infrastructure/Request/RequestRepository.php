@@ -44,8 +44,10 @@ final class RequestRepository
                 $this->rolesFor($initiatorId),
                 $this->isActiveUser($initiatorId),
             );
+            // Keep the department stable without upgrading the shared user lock already
+            // held by the idempotency FK: concurrent creations would deadlock on upgrade.
             $department = $this->db->createCommand(
-                'SELECT NULLIF(TRIM(department), \'\') FROM {{%users}} WHERE id = :id FOR UPDATE',
+                'SELECT NULLIF(TRIM(department), \'\') FROM {{%users}} WHERE id = :id LOCK IN SHARE MODE',
                 [':id' => $initiatorId],
             )->queryScalar();
             if ($department === false || $department === null) {
@@ -66,15 +68,16 @@ final class RequestRepository
                 'department_name' => (string) $department,
                 'department_source' => 'current_profile',
                 'status' => RequestStatus::Registered->value,
-                'product_name' => $input->productName,
+                'product_name' => $input->objectValues()[0]['productName'],
                 'manufacturer' => $input->manufacturer,
                 'supplier' => $input->supplier,
-                'sample_quantity' => $input->sampleQuantity,
+                'sample_quantity' => $input->numericQuantity(),
                 'test_method' => $input->testMethod,
                 'created_at' => $now,
                 'updated_at' => $now,
             ])->execute();
             $id = (int) $this->db->getLastInsertID();
+            (new RequestObjects($this->db))->insert($id, $input->objectValues());
             $this->db->createCommand()->insert('{{%request_transitions}}', [
                 'request_id' => $id,
                 'actor_id' => $initiatorId,
@@ -98,7 +101,7 @@ final class RequestRepository
                         . "Объект испытаний: %s.\n\n"
                         . 'Откройте реестр заявок в портале, чтобы назначить исполнителя.',
                         $number,
-                        $input->productName,
+                        RequestObjects::describe($input->objectValues()),
                     ),
                 );
             }
@@ -118,7 +121,7 @@ final class RequestRepository
                         . "Объект испытаний: %s.\n\n"
                         . 'Мы сообщим, когда испытательный центр назначит исполнителя.',
                         $number,
-                        $input->productName,
+                        RequestObjects::describe($input->objectValues()),
                     ),
                 );
             }

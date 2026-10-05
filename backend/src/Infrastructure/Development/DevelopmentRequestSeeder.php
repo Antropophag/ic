@@ -226,7 +226,9 @@ final class DevelopmentRequestSeeder
             'revision' => 1, 'lock_version' => 1, 'color' => $fixture['color'],
             'created_at' => $created, 'updated_at' => $this->time(max(0, $fixture['age'] - 1)),
         ])->execute();
-        return (int) $this->db->getLastInsertID();
+        $requestId = (int) $this->db->getLastInsertID();
+        (new \App\Infrastructure\Request\RequestObjects($this->db))->insertLegacy($requestId);
+        return $requestId;
     }
 
     /** @param array<string, int> $users */
