@@ -155,3 +155,22 @@ describe('RequestDetails testing direction', () => {
     app.unmount()
   })
 })
+
+describe('RequestDetails document metadata', () => {
+  it('shows the uploader and Moscow upload time, and labels unknown legacy metadata', async () => {
+    const details = requestDetails(1, 'Образец')
+    details.documents = [
+      { id: 1, versionId: 1, version: 2, title: 'Новый.pdf', sizeBytes: 1024, uploadedBy: 'Автор загрузки', createdAt: '2026-07-28T23:30:00Z' },
+      { id: 2, versionId: 2, version: 1, title: 'Архив.pdf', sizeBytes: 1024, uploadedBy: null, createdAt: null },
+    ]
+    requestApi.get.mockResolvedValue(details)
+    const { app, root } = mountDetails(ref(1))
+    await flushRequests()
+    const cards = root.querySelectorAll('.request-file-copy')
+    expect(cards[0].textContent).toContain('Автор загрузки')
+    expect(cards[0].textContent).toContain('29.07.2026, 02:30:00')
+    expect(cards[1].textContent).toContain('Автор неизвестен')
+    expect(cards[1].textContent).toContain('Дата загрузки неизвестна')
+    app.unmount()
+  })
+})
