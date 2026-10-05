@@ -56,6 +56,13 @@ for (const width of [320, 390, 1440, 2560, 3840]) {
       expect(image.pixels).toBeGreaterThanOrEqual(4800)
       expect(image.pixels).toBeGreaterThanOrEqual(Math.floor(image.requiredPixels))
     }
+    const crops = await guide.locator('img').evaluateAll(images => Object.fromEntries(images.map(image => [
+      image.src.split('/').pop(), image.naturalHeight / image.naturalWidth,
+    ])))
+    expect(crops['registry-list-crop-hires.png']).toBeLessThan(0.5)
+    expect(crops['request-overview-crop-hires.png']).toBeCloseTo(1796 / 2694, 2)
+    expect(crops['notifications-context-crop-hires.png']).toBeCloseTo(900 / 1440, 2)
+    expect(crops['help-open-crop-hires.png']).toBeCloseTo(1000 / 1440, 2)
     const originals = await guide.locator('.screenshot-link').evaluateAll(links => links.every(link => link.href === link.querySelector('img').src && link.target === '_blank'))
     expect(originals).toBe(true)
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true)
