@@ -1,5 +1,7 @@
 .DEFAULT_GOAL := help
 
+-include Makefile.local
+
 COMPOSE ?= $(shell if docker compose version >/dev/null 2>&1; then printf 'docker compose'; elif command -v podman-compose >/dev/null 2>&1; then printf 'podman-compose'; elif podman compose version >/dev/null 2>&1; then printf 'podman compose'; fi)
 CONTAINER_ENGINE ?= $(if $(findstring podman,$(COMPOSE)),podman,docker)
 PROD_PROJECT := ic-prod

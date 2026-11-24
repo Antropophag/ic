@@ -1,0 +1,5 @@
+# Copy to Makefile.local once on the corporate development machine.
+# These settings apply only to development startup/restart/reset.
+dev-up dev-restart dev-reset: export BUILD_TLS_COMPAT := 1
+dev-up dev-restart dev-reset: export GODEBUG := netedns0=0,tlsmlkem=0
+dev-up dev-restart dev-reset: export FRONTEND_PORT := 8080
