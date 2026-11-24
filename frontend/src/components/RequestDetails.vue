@@ -339,8 +339,8 @@ async function loadRequestDetails(item) {
   detailLoading.value = true
   executorChoice.value = item.executorId || ''
   expertChoice.value = ''
-  if (item.canAssignExecutor && !executors.value.length) loadExecutors()
-  if (item.canReassignExpert && !experts.value.length) loadExperts()
+  if (item.canAssignExecutor && !executors.value.length) void loadExecutors()
+  if (item.canReassignExpert && !experts.value.length) void loadExperts()
   try {
     const result = await requestApi.get(item.backendId)
     if (!detailRequestGuard.isCurrent(requestToken, selected.value?.backendId)) return
@@ -355,8 +355,8 @@ async function loadRequestDetails(item) {
     emit('loaded', selected.value)
     executorChoice.value = selected.value.executorId || ''
     expertChoice.value = ''
-    if (selected.value.canAssignExecutor && !executors.value.length) loadExecutors()
-    if (selected.value.canReassignExpert && !experts.value.length) loadExperts()
+    if (selected.value.canAssignExecutor && !executors.value.length) void loadExecutors()
+    if (selected.value.canReassignExpert && !experts.value.length) void loadExperts()
   } catch (error) {
     if (!detailRequestGuard.isCurrent(requestToken, selected.value?.backendId)) return
     detailError.value = error.status === 404
@@ -1108,7 +1108,7 @@ function handleStartClick() {
     startHintRevealed.value = true
     return
   }
-  startRequest()
+  void startRequest()
 }
 
 async function suspendOrResumeRequest(action) {
@@ -1200,7 +1200,7 @@ watch(() => props.requestId, requestId => {
   resetRequestLocalState()
   selected.value = { backendId: requestId }
   actionError.value = props.initialWarning
-  loadRequestDetails(selected.value)
+  void loadRequestDetails(selected.value)
 }, { immediate: true })
 
 onBeforeUnmount(() => {

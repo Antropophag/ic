@@ -87,7 +87,11 @@ const statusFilter = ref("");
 const sortDirection = ref("desc");
 const sortBy = ref("number");
 function changeSort(field) {
-  sortDirection.value = sortBy.value === field ? (sortDirection.value === "desc" ? "asc" : "desc") : (field === "number" ? "desc" : "asc");
+  if (sortBy.value === field) {
+    sortDirection.value = sortDirection.value === "desc" ? "asc" : "desc";
+  } else {
+    sortDirection.value = field === "number" ? "desc" : "asc";
+  }
   sortBy.value = field;
 }
 const colorFilters = ref([]);
@@ -365,7 +369,7 @@ function commentAvatarClass(item) {
 function reloadFirstPage() {
   currentPage.value = 1;
   if (tableScroll.value) tableScroll.value.scrollTop = 0;
-  loadRequests();
+  void loadRequests();
 }
 
 watch([activeTab, activeAttention, statusFilter, sortDirection, sortBy, colorFilters], reloadFirstPage);
@@ -385,10 +389,10 @@ watch(
   ([refreshTrigger, active], [previousRefreshTrigger, wasActive]) => {
     if (active) {
       if (!wasActive || refreshTrigger !== previousRefreshTrigger) {
-        loadRequests();
-        loadDashboard();
+        void loadRequests();
+        void loadDashboard();
       }
-      if (!wasActive) loadNotifications();
+      if (!wasActive) void loadNotifications();
     }
     else if (wasActive) {
       registryLoadLifecycle.deactivate();
@@ -403,7 +407,7 @@ function goToPage(page) {
   if (page === currentPage.value) return;
   currentPage.value = page;
   if (tableScroll.value) tableScroll.value.scrollTop = 0;
-  loadRequests();
+  void loadRequests();
 }
 
 function selectPageSize(size) {
@@ -538,9 +542,9 @@ onMounted(() => {
   window.addEventListener("resize", positionVisibleObjectTooltips);
   window.addEventListener("pagehide", draftForm.flushSave);
   if (props.active) {
-    loadRequests();
-    loadDashboard();
-    loadNotifications();
+    void loadRequests();
+    void loadDashboard();
+    void loadNotifications();
   }
 });
 onBeforeUnmount(() => {

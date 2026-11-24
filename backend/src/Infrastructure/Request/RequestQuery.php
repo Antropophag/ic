@@ -73,6 +73,12 @@ final class RequestQuery
         array $colors = [],
         string $sortBy = 'number',
     ): array {
+        $sortDirection = $sort === 'asc' ? 'ASC' : 'DESC';
+        $orderBy = 'r.number ' . $sortDirection;
+        if ($sortBy === 'direction') {
+            $orderBy = "CASE r.color WHEN 'orange' THEN 1 WHEN 'blue' THEN 2 WHEN 'violet' THEN 3 WHEN 'red' THEN 4 WHEN 'green' THEN 5 ELSE 6 END "
+                . $sortDirection . ', r.number DESC';
+        }
         $where = [];
         $filterParams = [];
         if ($tab === 'active') {
@@ -244,10 +250,7 @@ final class RequestQuery
             . 'AND report_version.version = (SELECT MAX(rv2.version) FROM {{%request_document_versions}} rv2 '
             . 'WHERE rv2.document_id = report_doc.id AND rv2.deleted_at IS NULL) '
             . $whereSql
-            . ' ORDER BY ' . ($sortBy === 'direction'
-                ? "CASE r.color WHEN 'orange' THEN 1 WHEN 'blue' THEN 2 WHEN 'violet' THEN 3 WHEN 'red' THEN 4 WHEN 'green' THEN 5 ELSE 6 END "
-                    . ($sort === 'asc' ? 'ASC' : 'DESC') . ', r.number DESC'
-                : 'r.number ' . ($sort === 'asc' ? 'ASC' : 'DESC')) . ' LIMIT :limit OFFSET :offset',
+            . ' ORDER BY ' . $orderBy . ' LIMIT :limit OFFSET :offset',
             array_merge([
                 ':route_actor' => $actorId,
                 ':complete_actor' => $actorId,

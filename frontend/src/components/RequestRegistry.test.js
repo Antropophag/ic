@@ -161,3 +161,14 @@ it('sorts the entire registry by direction and returns to number sorting', async
   expect(requestApi.list).toHaveBeenLastCalledWith(expect.objectContaining({ sortBy: 'number', sort: 'desc' }))
   mounted.app.unmount()
 })
+
+
+it('keeps background loader failures visible when sorting reloads the registry', async () => {
+  const mounted = mountRegistry(['employee'])
+  await flushRequests()
+  requestApi.list.mockRejectedValueOnce(new Error('offline'))
+  document.querySelector('[aria-label="Сортировать по направлению испытаний"]').click()
+  await flushRequests()
+  expect(document.body.textContent).toContain('Не удалось загрузить реестр заявок. Повторите попытку.')
+  mounted.app.unmount()
+})
