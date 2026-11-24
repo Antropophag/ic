@@ -4,6 +4,8 @@ services:
       context: .
       dockerfile: docker/frontend.Dockerfile
       target: production
+      args:
+        BUILD_TLS_COMPAT: ${BUILD_TLS_COMPAT:-0}
     ports:
       - "${FRONTEND_PORT:-8080}:8080"
     depends_on:
@@ -23,6 +25,8 @@ services:
       context: .
       dockerfile: docker/backend.Dockerfile
       target: production
+      args:
+        BUILD_TLS_COMPAT: ${BUILD_TLS_COMPAT:-0}
     env_file: ${COMPOSE_ENV_FILE:?COMPOSE_ENV_FILE must select .env.dev or .env.prod}
     environment:
       APP_VERSION: ${APP_VERSION:-}
@@ -44,6 +48,8 @@ services:
       context: .
       dockerfile: docker/backend.Dockerfile
       target: production
+      args:
+        BUILD_TLS_COMPAT: ${BUILD_TLS_COMPAT:-0}
     env_file: ${COMPOSE_ENV_FILE:?COMPOSE_ENV_FILE must select .env.dev or .env.prod}
     environment:
       APP_VERSION: ${APP_VERSION:-}

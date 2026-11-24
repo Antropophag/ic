@@ -147,6 +147,10 @@ project name.
 
 ## Жизненный цикл данных
 
+Если сеть прерывает TLS с гибридным обменом ключами, для dev/prod-сборки
+доступен явный режим `BUILD_TLS_COMPAT=1`. Диагностика, ограничения и откат
+описаны в [DevOps-контракте](docs/devops-contract.md#совместимость-tls-при-сборке).
+
 | Команда | Containers | Named volumes | Build/migrations/seed |
 |---|---|---|---|
 | `make dev-up` | создаёт/пересоздаёт | сохраняет | build, migrate, dev seed |

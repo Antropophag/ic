@@ -83,7 +83,7 @@ branch. Historical findings остаются baseline debt и не должны 
 в SonarQube Cloud.
 
 Sonar дополняет, но не заменяет PHPStan, PHPCS, ESLint, Semgrep, Gitleaks,
-dependency audit, тесты, historical guards, Codex review, Qodo и CodeRabbit.
+dependency audit, тесты, historical guards, Codex review и CodeRabbit.
 Статический анализ не подтверждает бизнес-контракты, runtime concurrency,
 устаревшие async responses, browser lifecycle, viewport/zoom и reduced-motion;
 эти риски остаются за тестами, guards и semantic review.

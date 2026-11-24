@@ -1,7 +1,9 @@
 FROM docker.io/library/node:22.23.0-alpine3.23 AS frontend-source
+ARG BUILD_TLS_COMPAT=0
 WORKDIR /build
 COPY frontend/package*.json frontend/.npmrc ./
-RUN npm ci --no-audit --no-fund
+RUN --mount=type=bind,source=scripts/build-with-tls-compat.sh,target=/tmp/build-with-tls-compat.sh \
+    sh /tmp/build-with-tls-compat.sh npm ci --no-audit --no-fund
 COPY frontend/ ./
 
 FROM frontend-source AS frontend-production-build
