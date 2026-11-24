@@ -16,7 +16,7 @@ copy_contract() {
     "$destination/.agents/skills/pr-review/references/repository-invariants.md"
   cp .agents/skills/pr-review/agents/openai.yaml \
     "$destination/.agents/skills/pr-review/agents/openai.yaml"
-  cp .pr_agent.toml AGENTS.md CLAUDE.md "$destination/"
+  cp AGENTS.md CLAUDE.md "$destination/"
   cp docs/ai-review.md docs/engineering-standards.md docs/ci.md "$destination/docs/"
   cp .github/pull_request_template.md "$destination/.github/"
 }
@@ -33,12 +33,12 @@ if REVIEW_CONTRACT_ROOT="$missing_skill" sh scripts/check-review-contracts.sh >/
   exit 1
 fi
 
-disabled_qodo="$fixture_root/disabled-qodo"
-copy_contract "$disabled_qodo"
-sed 's/handle_push_trigger = true/handle_push_trigger = false/' "$disabled_qodo/.pr_agent.toml" >"$disabled_qodo/.pr_agent.toml.tmp"
-mv "$disabled_qodo/.pr_agent.toml.tmp" "$disabled_qodo/.pr_agent.toml"
-if REVIEW_CONTRACT_ROOT="$disabled_qodo" sh scripts/check-review-contracts.sh >/dev/null 2>&1; then
-  echo 'Review contract accepted disabled Qodo push review.' >&2
+missing_merge_policy="$fixture_root/missing-merge-policy"
+copy_contract "$missing_merge_policy"
+sed '/review-contract:merge-without-qodo/d' "$missing_merge_policy/docs/engineering-standards.md" >"$missing_merge_policy/docs/engineering-standards.md.tmp"
+mv "$missing_merge_policy/docs/engineering-standards.md.tmp" "$missing_merge_policy/docs/engineering-standards.md"
+if REVIEW_CONTRACT_ROOT="$missing_merge_policy" sh scripts/check-review-contracts.sh >/dev/null 2>&1; then
+  echo 'Review contract accepted a missing current merge policy.' >&2
   exit 1
 fi
 

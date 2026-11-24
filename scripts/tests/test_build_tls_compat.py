@@ -79,6 +79,9 @@ request.on('error', error => {{ console.error(error.code || error.message); proc
                         )
                         expected_success = trusted and (mode == "0" or group == "X25519")
                         self.assertEqual(result.returncode == 0, expected_success, result.stderr)
+                        if not expected_success:
+                            expected_error = "EPROTO" if group == "P-521" else "DEPTH_ZERO_SELF_SIGNED_CERT"
+                            self.assertEqual(result.stderr.strip(), expected_error)
             finally:
                 server.terminate()
                 server.wait(timeout=5)

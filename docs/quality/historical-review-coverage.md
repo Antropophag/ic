@@ -26,7 +26,7 @@ comments, включая 442 substantive findings. Raw corpus хранится �
 | per-frame gradient allocation | PR #230, Qodo | `frontend/src/components/AetherRibbonMesh.test.js` | historical allocation RED; current GREEN | COVERED |
 | reduced-motion transition snap | PR #233, Qodo | `frontend/src/components/AetherRibbonMesh.test.js` | transition snap removal RED; current GREEN | COVERED |
 | tracked runtime environment files | PR #172, Qodo/CodeRabbit | `scripts/check-deployment-contracts.sh` | exact `b2368a1` RED; fixed `a6160d2` GREEN | COVERED |
-| review-process contract drift | KEEP QODO reconciliation | `scripts/check-review-contracts.sh` and `scripts/test-review-contracts.sh` | disabled Qodo/missing skill fixtures RED; current repository GREEN | COVERED |
+| review-process contract drift | historical review workflow reconciliation | `scripts/check-review-contracts.sh` and `scripts/test-review-contracts.sh` | missing merge policy/skill fixtures RED; current repository GREEN | COVERED |
 | exact login 503 schema | PR #232, Qodo | `frontend/scripts/check-openapi.mjs` | wrong but valid `HttpError` reference RED; current GREEN | COVERED |
 | whitespace-only critical-action reason | PR #236, Qodo | `frontend/scripts/check-openapi.mjs` | permissive `.*` mutation RED; current GREEN | COVERED |
 | non-regular migration workspace object | PR #225, Qodo/CodeRabbit | `frontend/scripts/bitrix-files.test.js` | historical `stat()` behavior RED; current `lstat()` GREEN | COVERED |
