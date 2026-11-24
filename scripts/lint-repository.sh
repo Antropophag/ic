@@ -16,6 +16,7 @@ hadolint docker/*.Dockerfile
 shellcheck scripts/*.sh
 shfmt -d scripts/*.sh
 python3 -m unittest discover -s scripts/tests -p 'test_build_tls_compat.py'
+python3 -m unittest discover -s scripts/tests -p 'test_local_make_settings.py'
 sh scripts/check-deployment-contracts.sh
 sh scripts/check-review-contracts.sh
 sh scripts/test-review-contracts.sh

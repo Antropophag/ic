@@ -1,6 +1,7 @@
 /.idea/
 /.vscode/
 /.env
+/Makefile.local
 /.env.*
 !/.env.example
 !/.env.dev.example

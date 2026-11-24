@@ -33,7 +33,32 @@ BUILD_TLS_COMPAT=1 make dev-up
 ```
 
 Параметр можно сохранить в существующем `.env.dev` или `.env.prod`.
-Compose передаёт его в сборку frontend, backend и scheduler. Только команды
+Для корпоративного development-стенда с портом 8080 все параметры клиента
+и сборки можно сохранить одной локальной настройкой. Один раз, если
+`Makefile.local` ещё не существует:
+
+```sh
+cp -n Makefile.local.example Makefile.local
+```
+
+После этого обычное обновление:
+
+```sh
+git pull
+make dev-up
+```
+
+`Makefile.local` подхватывается Make автоматически и остаётся на машине при
+`git pull`. Это доверенная локальная конфигурация в синтаксисе Make; секреты
+следует хранить в env-файле окружения. Пример задаёт `BUILD_TLS_COMPAT=1`,
+`GODEBUG=netedns0=0,tlsmlkem=0` и `FRONTEND_PORT=8080` только для `dev-up`,
+`dev-restart` и `dev-reset`. Production и остальные команды не меняются.
+Для разового переопределения используйте аргумент Make, например
+`make dev-up FRONTEND_PORT=8081`. Без локального файла поведение прежнее;
+для отката удалите только созданный локальный файл. В репозиторий и Docker build
+context он не попадает.
+
+Compose передаёт `BUILD_TLS_COMPAT` в сборку frontend, backend и scheduler. Только команды
 установки зависимостей (`npm ci`, `composer install`, стадия установки PHP-пакетов
 и расширений с вложенными вызовами `apk add`) запускаются
 с временной конфигурацией OpenSSL с группами `X25519:P-256:P-384`.
