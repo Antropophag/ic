@@ -78,7 +78,6 @@ services:
     build:
       context: .
       dockerfile: docker/test-ad.Dockerfile
-      network: host
     hostname: ad
     cap_add: [SYS_ADMIN]
     volumes:
