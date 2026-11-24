@@ -12,6 +12,7 @@ frontend/playwright-report
 frontend/test-results
 docs
 scripts
+!scripts/build-with-tls-compat.sh
 prototype
 *.bundle
 *.tar
