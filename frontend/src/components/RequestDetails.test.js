@@ -15,6 +15,7 @@ vi.mock('../api', () => ({
     completeAct: vi.fn(),
     decideSecurity: vi.fn(),
     correctSecurityDecision: vi.fn(),
+    deleteOpinion: vi.fn(),
   },
 }))
 
@@ -134,14 +135,14 @@ describe('RequestDetails testing direction', () => {
     expect(menu).not.toBeNull()
     const options = [...menu.querySelectorAll('button')]
     expect(options.map(button => button.textContent)).toEqual([
-      'Без направления', 'Метрологические испытания', 'Механические испытания',
+      'Без направления', 'Геометрические измерения', 'Механические испытания',
       'Электротехнические испытания', 'Резерв 1', 'Резерв 2',
     ])
     expect(root.querySelector('.request-color-control summary').textContent).toContain('Механические испытания')
     options[1].click()
     await flushRequests()
     expect(requestApi.setColor).toHaveBeenCalledWith(1, 'orange', 1)
-    expect(root.querySelector('.request-color-control summary').textContent).toContain('Метрологические испытания')
+    expect(root.querySelector('.request-color-control summary').textContent).toContain('Геометрические измерения')
     app.unmount()
   })
 
@@ -440,5 +441,85 @@ describe('Security decision correction', () => {
     pending.resolve({ lockVersion: 2 })
     await flushRequests()
     expect(requestApi.get).toHaveBeenCalledTimes(1)
+  })
+})
+
+
+describe('opinion deletion', () => {
+  function deletable(id = 1) {
+    const response = requestDetails(id, `Образец ${id}`)
+    Object.assign(response.item, { can_delete_opinion: 1, can_upload_report: 0, status: 'completed', route: 'protocol' })
+    return response
+  }
+  async function confirmDeletion() {
+    const button = [...document.querySelectorAll('button')].find(item => item.textContent.trim() === 'Удалить заключение')
+    button.click()
+    await nextTick()
+    const dialog = document.querySelector('[role="alertdialog"]')
+    expect(dialog.textContent).toContain('Прежнее решение СБ перестанет действовать')
+    expect(dialog.textContent).toContain('Отчёт испытаний сохранится')
+    const reason = dialog.querySelector('textarea')
+    reason.value = 'Неверное заключение'
+    reason.dispatchEvent(new Event('input', { bubbles: true }))
+    await nextTick()
+    ;[...dialog.querySelectorAll('button')].find(item => item.textContent.trim() === 'Удалить').click()
+    await flushRequests()
+  }
+  it('deletes with reason and refreshes the reopened request', async () => {
+    requestApi.get.mockResolvedValue(deletable())
+    requestApi.deleteOpinion.mockResolvedValue({ status: 'opinion_preparation', lockVersion: 2 })
+    const { app } = mountDetails(ref(1))
+    await flushRequests()
+    expect(requestApi.deleteOpinion).not.toHaveBeenCalled()
+    await confirmDeletion()
+    expect(requestApi.deleteOpinion).toHaveBeenCalledWith(1, 1, 'Неверное заключение')
+    expect(requestApi.get).toHaveBeenCalledTimes(2)
+    app.unmount()
+  })
+  it.each(['switch', 'close'])('ignores late deletion after %s', async action => {
+    requestApi.get.mockImplementation(id => Promise.resolve(deletable(id)))
+    const pending = deferred()
+    requestApi.deleteOpinion.mockReturnValue(pending.promise)
+    const id = ref(1)
+    const { app, root } = mountDetails(id)
+    await flushRequests()
+    await confirmDeletion()
+    if (action === 'close') app.unmount()
+    else { id.value = 2; await flushRequests() }
+    const calls = requestApi.get.mock.calls.length
+    pending.resolve({ status: 'opinion_preparation', lockVersion: 2 })
+    await flushRequests()
+    expect(requestApi.get).toHaveBeenCalledTimes(calls)
+    if (action === 'switch') {
+      expect(root.textContent).toContain('Образец 2')
+      app.unmount()
+    }
+  })
+  it.each(['switch', 'close'])('ignores a late conflict refresh after %s', async action => {
+    const refresh = deferred()
+    requestApi.get.mockResolvedValueOnce(deletable(1)).mockReturnValueOnce(refresh.promise).mockResolvedValue(deletable(2))
+    requestApi.deleteOpinion.mockRejectedValue({ status: 409 })
+    const id = ref(1)
+    const { app, root } = mountDetails(id)
+    await flushRequests()
+    await confirmDeletion()
+    expect(requestApi.get).toHaveBeenCalledTimes(2)
+    if (action === 'close') app.unmount()
+    else { id.value = 2; await flushRequests() }
+    refresh.resolve(deletable(1))
+    await flushRequests()
+    expect(root.textContent).not.toContain('Заявка уже изменена')
+    expect(root.textContent).not.toContain('Данные обновлены')
+    if (action === 'switch') {
+      expect(root.textContent).toContain('Образец 2')
+      app.unmount()
+    }
+  })
+  it('shows no deletion action without permission', async () => {
+    requestApi.get.mockResolvedValue(requestDetails(1, 'Образец'))
+    const { app, root } = mountDetails(ref(1))
+    await flushRequests()
+    expect(root.textContent).not.toContain('Удалить заключение')
+    app.unmount()
   })
 })

@@ -486,7 +486,7 @@ it('precomputes securityMarkDisplay once at mapping time, not per template read'
 it('resolves a security mark icon for each SEC-002/SEC-003 state', () => {
   expect(securityMarkIcon('approve')).toMatchObject({ className: 'security-mark--approve', label: 'Согласовано' })
   expect(securityMarkIcon('decline')).toMatchObject({ className: 'security-mark--decline', label: 'Не согласовано' })
-  expect(securityMarkIcon(null)).toMatchObject({ className: 'security-mark--pending', label: 'Контроль ещё не проводился' })
+  expect(securityMarkIcon(null)).toMatchObject({ className: 'security-mark--pending', label: 'Нет действующего решения' })
   expect(securityMarkIcon('unexpected')).toMatchObject({ className: 'security-mark--pending' })
 })
 

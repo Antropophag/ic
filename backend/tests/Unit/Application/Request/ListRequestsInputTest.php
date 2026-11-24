@@ -26,6 +26,16 @@ final class ListRequestsInputTest extends TestCase
         }
     }
 
+    public function testValidatesSortField(): void
+    {
+        foreach (['number', 'direction'] as $field) {
+            self::assertTrue((new ListRequestsInput(['sortBy' => $field]))->validate());
+        }
+        foreach (['color', 'number DESC; DROP TABLE requests', ['direction']] as $field) {
+            self::assertFalse((new ListRequestsInput(['sortBy' => $field]))->validate());
+        }
+    }
+
     public function testAcceptsKnownAttentionQueue(): void
     {
         $input = new ListRequestsInput(['attention' => 'assign_executor']);

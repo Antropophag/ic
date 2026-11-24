@@ -85,6 +85,11 @@ const dashboardHelpDrawer = ref(null);
 const query = ref("");
 const statusFilter = ref("");
 const sortDirection = ref("desc");
+const sortBy = ref("number");
+function changeSort(field) {
+  sortDirection.value = sortBy.value === field ? (sortDirection.value === "desc" ? "asc" : "desc") : (field === "number" ? "desc" : "asc");
+  sortBy.value = field;
+}
 const colorFilters = ref([]);
 const tableScroll = ref(null);
 
@@ -210,6 +215,7 @@ async function loadRequests({ rethrow = false } = {}) {
       status: statusFilter.value,
       query: query.value.trim(),
       sort: sortDirection.value,
+      sortBy: sortBy.value,
       colors: colorFilters.value.join(","),
       attention: activeAttention.value,
     });
@@ -362,7 +368,7 @@ function reloadFirstPage() {
   loadRequests();
 }
 
-watch([activeTab, activeAttention, statusFilter, sortDirection, colorFilters], reloadFirstPage);
+watch([activeTab, activeAttention, statusFilter, sortDirection, sortBy, colorFilters], reloadFirstPage);
 watch(query, () => {
   registryLoadLifecycle.scheduleReload(reloadFirstPage);
 });
@@ -623,6 +629,7 @@ onBeforeUnmount(() => {
         <button v-if="query || statusFilter || colorFilters.length" type="button" class="toolbar-clear" @click="clearRegistryFilters">
           Сбросить
         </button>
+        <button type="button" class="secondary registry-direction-sort" aria-label="Сортировать по направлению испытаний" :aria-pressed="sortBy === 'direction'" @click="changeSort('direction')">По направлению<span v-if="sortBy === 'direction'"> · {{ sortDirection === 'asc' ? 'по возрастанию' : 'по убыванию' }}</span></button>
         <button type="button" class="registry-notifications" :aria-label="newNotifications.length ? 'Есть новые события в заявках' : 'Новых событий в заявках нет'" @click="openNotifications">
           <AppIcon name="bell" :size="18" /><span v-if="newNotifications.length" class="notification-dot" aria-hidden="true"></span>
         </button>
@@ -631,16 +638,16 @@ onBeforeUnmount(() => {
         <table>
           <thead>
             <tr>
-              <th class="registry-direction-heading" scope="col">
+              <th class="registry-direction-heading" scope="col" :aria-sort="sortBy === 'direction' ? (sortDirection === 'asc' ? 'ascending' : 'descending') : 'none'">
                 <span class="visually-hidden">Направление испытаний</span>
                 <DirectionFilter v-model="colorFilters" :active="active" />
               </th>
               <th
                 class="sortable"
                 scope="col"
-                :aria-sort="sortDirection === 'asc' ? 'ascending' : 'descending'"
+                :aria-sort="sortBy === 'number' ? (sortDirection === 'asc' ? 'ascending' : 'descending') : 'none'"
               >
-                <TableSorter class="registry-number-heading" label="Сортировать по номеру заявки" @click="sortDirection = sortDirection === 'desc' ? 'asc' : 'desc'"><span>№ заявки</span></TableSorter>
+                <TableSorter class="registry-number-heading" label="Сортировать по номеру заявки" @click="changeSort('number')"><span>№ заявки</span></TableSorter>
               </th>
               <th>Дата</th>
               <th>Объект испытаний</th>

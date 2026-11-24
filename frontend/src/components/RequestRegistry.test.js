@@ -72,7 +72,7 @@ it('keeps number sorting and resets the scroll position', async () => {
   await flushRequests()
   expect(scroll.scrollTop).toBe(0)
   expect(requestApi.list).toHaveBeenLastCalledWith(expect.objectContaining({ sort: 'asc', page: 1, colors: '' }))
-  expect(document.querySelector('[aria-label="Сортировать по направлению испытаний"]')).toBeNull()
+  expect(document.querySelector('[aria-label="Сортировать по направлению испытаний"]')).not.toBeNull()
   mounted.app.unmount()
 })
 
@@ -138,4 +138,26 @@ describe('RequestRegistry request creation permissions', () => {
     expect(mounted.selectedRequests).toEqual([])
     mounted.app.unmount()
   })
+})
+
+
+it('sorts the entire registry by direction and returns to number sorting', async () => {
+  const mounted = mountRegistry(['employee'])
+  await flushRequests()
+  const sort = document.querySelector('[aria-label="Сортировать по направлению испытаний"]')
+  const scroll = document.querySelector('.table-wrap')
+  scroll.scrollTop = 300
+  sort.click()
+  await flushRequests()
+  expect(requestApi.list).toHaveBeenLastCalledWith(expect.objectContaining({ sortBy: 'direction', sort: 'asc', page: 1 }))
+  expect(scroll.scrollTop).toBe(0)
+  expect(document.querySelector('.registry-direction-heading').getAttribute('aria-sort')).toBe('ascending')
+  expect(document.querySelector('th.sortable').getAttribute('aria-sort')).toBe('none')
+  sort.click()
+  await flushRequests()
+  expect(requestApi.list).toHaveBeenLastCalledWith(expect.objectContaining({ sortBy: 'direction', sort: 'desc' }))
+  document.querySelector('[aria-label="Сортировать по номеру заявки"]').click()
+  await flushRequests()
+  expect(requestApi.list).toHaveBeenLastCalledWith(expect.objectContaining({ sortBy: 'number', sort: 'desc' }))
+  mounted.app.unmount()
 })

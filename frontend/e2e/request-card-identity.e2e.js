@@ -37,7 +37,7 @@ test('копируются только выбранные реквизиты; �
   await expect(page.locator('.request-heading')).toContainText(sample.department)
   await page.getByRole('button', { name: 'Копировать заявку с датой и инициатором', exact: true }).click()
   await expect(page.getByRole('status')).toHaveText(/Заявка с датой и инициатором скопирована/)
-  expect(await page.evaluate(() => navigator.clipboard.readText())).toBe('Заявка №000042 от 04.10.2026 от ведущего инженера Тестова Александра Александровича')
+  expect(await page.evaluate(() => navigator.clipboard.readText())).toBe('Заявка №000042 от 04.10.2026\nот ведущего инженера Тестова Александра Александровича')
   const copyProduct = page.getByRole('button', { name: 'Копировать наименование объекта', exact: true })
   await copyProduct.focus()
   await page.keyboard.press('Enter')
@@ -50,7 +50,10 @@ test('копируются только выбранные реквизиты; �
 })
 
 test('ошибка копирования объясняет ручное действие; пустые значения читаемы', async ({ page }) => {
-  await page.addInitScript(() => Object.defineProperty(navigator, 'clipboard', { value: { writeText: () => Promise.reject(new Error('denied')) } }))
+  await page.addInitScript(() => {
+    Object.defineProperty(navigator, 'clipboard', { value: { writeText: () => Promise.reject(new Error('denied')) } })
+    document.execCommand = () => false
+  })
   await openCard(page, { initiator_name: '  ', initiator_position: null, department: null })
   const heading = page.locator('.request-heading')
   await expect(heading).toContainText('Инициатор не указан')
@@ -289,7 +292,7 @@ for (const [name, expected, review] of [
     await context.grantPermissions(['clipboard-read', 'clipboard-write'])
     await openCard(page, { initiator_name: name })
     await page.getByRole('button', { name: 'Копировать заявку с датой и инициатором', exact: true }).click()
-    expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(`Заявка №000042 от 04.10.2026 от ведущего инженера ${expected}`)
+    expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(`Заявка №000042 от 04.10.2026\nот ведущего инженера ${expected}`)
     await expect(page.locator('.request-heading-initiator')).toContainText(name)
     await expect(page.locator('.request-heading-initiator')).toContainText('Ведущий инженер')
     await expect(page.getByRole('status')).toContainText(review ? 'Проверьте склонение ФИО и должности' : 'Заявка с датой и инициатором скопирована')
@@ -307,4 +310,17 @@ test('светлое подтверждение копирования исче�
   await page.clock.runFor(3000)
   await expect(result).toHaveCount(0)
   await expect(copy).toBeFocused()
+})
+
+
+test('резервное копирование переносит текст в настоящий буфер без Clipboard API', async ({ page, context }) => {
+  await context.grantPermissions(['clipboard-read', 'clipboard-write'])
+  await page.addInitScript(() => {
+    const readText = navigator.clipboard.readText.bind(navigator.clipboard)
+    Object.defineProperty(navigator, 'clipboard', { value: { readText } })
+  })
+  await openCard(page)
+  await page.getByRole('button', { name: 'Копировать заявку с датой и инициатором', exact: true }).click()
+  await expect(page.getByRole('status')).toContainText('Заявка с датой и инициатором скопирована')
+  expect(await page.evaluate(() => navigator.clipboard.readText())).toBe('Заявка №000042 от 04.10.2026\nот ведущего инженера Тестова Александра Александровича')
 })

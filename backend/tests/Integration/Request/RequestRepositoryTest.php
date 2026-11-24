@@ -45,6 +45,12 @@ final class RequestRepositoryTest extends IntegrationTestCase
         self::assertSame(0, $empty['total']);
         $all = $query->findPage($actor, 1, 100, 'mine', null, 'direction-filter', 'desc');
         self::assertSame(7, $all['total']);
+        $directionFirst = $query->findPage($actor, 1, 2, 'mine', 'registered', 'direction-filter', 'asc', null, ['blue', 'orange'], 'direction');
+        $directionLast = $query->findPage($actor, 2, 2, 'mine', 'registered', 'direction-filter', 'asc', null, ['blue', 'orange'], 'direction');
+        self::assertSame([$matching[0], $matching[2]], array_map('intval', array_column($directionFirst['items'], 'id')));
+        self::assertSame([$matching[1]], array_map('intval', array_column($directionLast['items'], 'id')));
+        $reverse = $query->findPage($actor, 1, 100, 'mine', 'registered', 'direction-filter', 'desc', null, ['blue', 'orange'], 'direction');
+        self::assertSame([$matching[2], $matching[1], $matching[0]], array_map('intval', array_column($reverse['items'], 'id')));
     }
 
     /** @return array<string, mixed> */

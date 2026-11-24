@@ -139,6 +139,11 @@ export const requestApi = {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ lockVersion, reason }),
   }),
+  deleteOpinion: (requestId, lockVersion, reason) => request(`/api/v1/requests/${requestId}/opinion/delete`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ lockVersion, reason }),
+  }),
   prepareTestAct: requestId => request(`/api/v1/requests/${requestId}/report-document-drafts/test-act`),
   generateTestAct: async (requestId, data) => {
     const response = await fetch(`/api/v1/requests/${requestId}/report-document-drafts/test-act`, {

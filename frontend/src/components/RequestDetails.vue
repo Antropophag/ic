@@ -122,6 +122,8 @@ const reassignLoading = ref(false)
 const reassignError = ref('')
 const deleteReportLoading = ref(false)
 const deleteReportError = ref('')
+const deleteOpinionLoading = ref(false)
+const deleteOpinionError = ref('')
 const suspendResumeLoading = ref(false)
 const suspendResumeError = ref('')
 const startHintRevealed = ref(false)
@@ -139,6 +141,7 @@ const withdrawRequestGuard = createLatestRequestGuard()
 const claimRequestGuard = createLatestRequestGuard()
 const reassignRequestGuard = createLatestRequestGuard()
 const deleteReportRequestGuard = createLatestRequestGuard()
+const deleteOpinionRequestGuard = createLatestRequestGuard()
 const suspendResumeRequestGuard = createLatestRequestGuard()
 const executorsRequestGuard = createLatestRequestGuard()
 const expertsRequestGuard = createLatestRequestGuard()
@@ -176,7 +179,7 @@ function avatarClassForAuthor(author) {
 function eventIcon(action) {
   return {
     create: 'plus', import: 'download', assign_executor: 'user', claim_expert: 'user', reassign_expert: 'user',
-    start: 'play', suspend: 'pause', resume: 'play', upload_report: 'upload', delete_report: 'trash',
+    start: 'play', suspend: 'pause', resume: 'play', upload_report: 'upload', delete_report: 'trash', delete_opinion: 'trash',
     correct_security_decision: 'shield-check', publish_opinion: 'file-check', security_approve: 'shield-check', security_decline: 'shield-check', complete_act: 'file-check', choose_route: 'file-check',
     reject: 'close', withdraw: 'close', change_department: 'building',
   }[action] || 'history'
@@ -184,7 +187,7 @@ function eventIcon(action) {
 
 function eventIconTone(action) {
   if (['security_approve', 'start', 'resume'].includes(action)) return 'positive'
-  if (['delete_report', 'reject', 'withdraw'].includes(action)) return 'critical'
+  if (['delete_report', 'delete_opinion', 'reject', 'withdraw'].includes(action)) return 'critical'
   if (['suspend', 'security_decline'].includes(action)) return 'warning'
   if (['upload_report', 'publish_opinion'].includes(action)) return 'document'
   return 'neutral'
@@ -218,7 +221,7 @@ const startHint = computed(() => {
 const hasHeroAction = computed(() => Boolean(selected.value && (
   selected.value.canAssignExecutor || selected.value.canStart || selected.value.canUploadReport
   || selected.value.canClaimExpert || selected.value.canReassignExpert || selected.value.canPublishOpinion
-  || selected.value.canSecurityDecide || selected.value.canReject || selected.value.canWithdraw || selected.value.canDeleteReport
+  || selected.value.canSecurityDecide || selected.value.canReject || selected.value.canWithdraw || selected.value.canDeleteReport || selected.value.canDeleteOpinion
   || selected.value.canSuspend || selected.value.canResume || selected.value.canCompleteAct || selected.value.canChooseRoute
 )))
 const actionPrompt = computed(() => {
@@ -230,6 +233,7 @@ const actionPrompt = computed(() => {
   if (selected.value.canReassignExpert) return 'Подготовьте заключение или передайте заявку эксперту'
   if (selected.value.canClaimExpert) return 'Возьмите заявку на экспертизу'
   if (selected.value.canUploadReport) return 'Завершите испытания и загрузите отчёт'
+  if (selected.value.canDeleteOpinion) return 'При необходимости верните заявку на подготовку заключения'
   if (selected.value.canDeleteReport) return 'Проверьте загруженный отчёт'
   if (selected.value.canResume) return 'Возобновите работы по заявке'
   if (selected.value.canStart) return selected.value.executorId
@@ -245,7 +249,7 @@ const actionHelp = computed(() => {
   if (!selected.value) return null
   if (selected.value.canChooseRoute || selected.value.canCompleteAct) return { href: '/help/assignment.html', label: 'Инструкция по маршрутам заявки' }
   if (selected.value.canSecurityDecide) return { href: '/help/security-review.html', label: 'Инструкция по контролю СБ' }
-  if (selected.value.canPublishOpinion || selected.value.canClaimExpert || selected.value.canReassignExpert) return { href: '/help/expert-opinion.html', label: 'Инструкция по формированию заключения' }
+  if (selected.value.canPublishOpinion || selected.value.canClaimExpert || selected.value.canReassignExpert || selected.value.canDeleteOpinion) return { href: '/help/expert-opinion.html', label: 'Инструкция по формированию заключения' }
   if (selected.value.canUploadReport) return { href: '/help/report.html', label: 'Инструкция по загрузке отчёта испытаний' }
   if (selected.value.canAssignExecutor || selected.value.canStart || selected.value.canSuspend || selected.value.canResume) return { href: '/help/assignment.html', label: 'Инструкция по назначению и началу работы' }
   return null
@@ -639,11 +643,13 @@ async function refreshSelected(requestId) {
   await loadRequestDetails(selected.value)
 }
 
-async function recoverConflict(requestId, message) {
+async function recoverConflict(requestId, message, isCurrent = () => true) {
   try {
     await refreshSelected(requestId)
+    if (!isCurrent()) return
     actionError.value = `${message} Данные обновлены — проверьте актуальный статус.`
   } catch {
+    if (!isCurrent()) return
     actionError.value = `${message} Не удалось обновить данные. Обновите страницу перед следующим действием.`
   }
 }
@@ -902,6 +908,46 @@ async function deleteReport() {
   }
 }
 
+async function deleteOpinion() {
+  if (deleteOpinionLoading.value) return
+  const context = await confirmRequestAction(
+    () => selected.value,
+    () => confirmDialog.ask('Удалить экспертное заключение? Заявка вернётся на подготовку заключения. Прежнее решение СБ перестанет действовать, а заключение и его старые версии станут недоступны. Отчёт испытаний сохранится.', {
+      confirmLabel: 'Удалить',
+      danger: true,
+      reasonField: { required: true, placeholder: 'Опишите причину удаления заключения' },
+    }),
+  )
+  if (!context) return
+  const { requestId, lockVersion, confirmed } = context
+  const requestToken = deleteOpinionRequestGuard.begin(requestId)
+  deleteOpinionLoading.value = true
+  deleteOpinionError.value = ''
+  try {
+    await requestApi.deleteOpinion(requestId, lockVersion, confirmed.reason)
+    if (!deleteOpinionRequestGuard.isCurrent(requestToken, selected.value?.backendId)) return
+    try {
+      await refreshSelected(requestId)
+    } catch {
+      if (!deleteOpinionRequestGuard.isCurrent(requestToken, selected.value?.backendId)) return
+      deleteOpinionError.value = 'Заключение удалено, но данные на экране не обновились. Обновите страницу перед следующим действием.'
+    }
+  } catch (error) {
+    if (!deleteOpinionRequestGuard.isCurrent(requestToken, selected.value?.backendId)) return
+    if (error.status === 409) {
+      await recoverConflict(requestId, 'Заявка уже изменена.', () => deleteOpinionRequestGuard.isCurrent(requestToken, selected.value?.backendId))
+    } else {
+      deleteOpinionError.value = error.status === 403
+        ? 'Удалить заключение может только руководитель ИЦ или эксперт при наличии действующего отчёта.'
+        : 'Не удалось удалить заключение. Обновите страницу и повторите попытку.'
+    }
+  } finally {
+    if (deleteOpinionRequestGuard.isCurrent(requestToken, selected.value?.backendId)) {
+      deleteOpinionLoading.value = false
+    }
+  }
+}
+
 function openOpinionModal() {
   opinionError.value = ''
   showOpinionModal.value = true
@@ -1115,7 +1161,7 @@ async function suspendOrResumeRequest(action) {
 
 
 function invalidateRequests() {
-  for (const guard of [correctionRequestGuard, routeRequestGuard, detailRequestGuard, commentRequestGuard, commentsPageRequestGuard, documentRequestGuard, reportRequestGuard, testActRequestGuard, opinionRequestGuard, securityRequestGuard, colorRequestGuard, rejectRequestGuard, withdrawRequestGuard, claimRequestGuard, reassignRequestGuard, deleteReportRequestGuard, suspendResumeRequestGuard, executorsRequestGuard, expertsRequestGuard, actionRequestGuard, downloadRequestGuard, previewRequestGuard, departmentRequestGuard]) guard.invalidate()
+  for (const guard of [correctionRequestGuard, routeRequestGuard, detailRequestGuard, commentRequestGuard, commentsPageRequestGuard, documentRequestGuard, reportRequestGuard, testActRequestGuard, opinionRequestGuard, securityRequestGuard, colorRequestGuard, rejectRequestGuard, withdrawRequestGuard, claimRequestGuard, reassignRequestGuard, deleteReportRequestGuard, deleteOpinionRequestGuard, suspendResumeRequestGuard, executorsRequestGuard, expertsRequestGuard, actionRequestGuard, downloadRequestGuard, previewRequestGuard, departmentRequestGuard]) guard.invalidate()
 }
 
 function resetRequestLocalState() {
@@ -1138,14 +1184,14 @@ function resetRequestLocalState() {
   for (const error of [
     detailError, commentError, documentError, reportError, testActError, opinionError,
     correctionError, routeError, securityError, colorError, rejectError, withdrawError, claimError,
-    reassignError, deleteReportError, suspendResumeError, departmentError,
+    reassignError, deleteReportError, deleteOpinionError, suspendResumeError, departmentError,
   ]) error.value = ''
 
   for (const loading of [
     correctionLoading, actionLoading, detailLoading, commentLoading, olderCommentsLoading,
     documentLoading, reportLoading, testActLoading, opinionLoading, securityLoading, routeLoading,
     colorLoading, rejectLoading, withdrawLoading, claimLoading,
-    reassignLoading, deleteReportLoading, suspendResumeLoading, departmentLoading,
+    reassignLoading, deleteReportLoading, deleteOpinionLoading, suspendResumeLoading, departmentLoading,
   ]) loading.value = false
 }
 
@@ -1229,11 +1275,12 @@ defineExpose({ openDepartmentModal })
                       <button v-if="selected.canDeleteReport" type="button" class="secondary danger" :disabled="deleteReportLoading" @click="deleteReport">{{ deleteReportLoading ? 'Удаление…' : 'Удалить отчёт' }}</button>
                     </div>
                   </div>
-                  <div v-if="selected.canClaimExpert || selected.canPublishOpinion || selected.canReassignExpert" class="request-action-row" role="group" aria-label="Действия эксперта">
+                  <div v-if="selected.canClaimExpert || selected.canPublishOpinion || selected.canReassignExpert || selected.canDeleteOpinion" class="request-action-row" role="group" aria-label="Действия эксперта">
                     <span class="request-action-label">Экспертиза</span>
                     <div class="request-action-group">
                       <button v-if="selected.canClaimExpert" type="button" class="primary" :disabled="claimLoading" @click="claimExpert">{{ claimLoading ? 'Сохранение…' : 'Взять в работу' }}</button>
                       <button v-if="selected.canPublishOpinion" type="button" class="primary" :disabled="opinionLoading" @click="openOpinionModal">Написать заключение</button>
+                      <button v-if="selected.canDeleteOpinion" type="button" class="secondary danger" :disabled="deleteOpinionLoading" @click="deleteOpinion">{{ deleteOpinionLoading ? 'Удаление…' : 'Удалить заключение' }}</button>
                       <select v-if="selected.canReassignExpert" v-model="expertChoice" :disabled="reassignLoading" aria-label="Новый эксперт"><option value="">Выберите эксперта</option><option v-for="expert in experts.filter(candidate => candidate.id !== selected.expertId)" :key="expert.id" :value="expert.id">{{ expert.displayName }}</option></select>
                       <button v-if="selected.canReassignExpert" type="button" class="secondary" :disabled="reassignLoading || !expertChoice" @click="reassignExpert">{{ reassignLoading ? 'Передача…' : 'Передать' }}</button>
                     </div>
@@ -1252,7 +1299,7 @@ defineExpose({ openDepartmentModal })
             </div>
             <p v-if="isChoosingRoute" id="request-route-hint" class="hero-hint">Маршрут можно изменить до первой загрузки отчёта.</p>
             <p v-if="selected.canStart && startHintRevealed && startHint" class="hero-hint">{{ startHint }}</p>
-            <p v-for="(error, index) in [routeError, suspendResumeError, rejectError, reportError, deleteReportError, claimError, reassignError, securityError, withdrawError, actionError].filter(Boolean)" :key="`${index}-${error}`" class="action-error">{{ error }}</p>
+            <p v-for="(error, index) in [routeError, suspendResumeError, rejectError, reportError, deleteReportError, deleteOpinionError, claimError, reassignError, securityError, withdrawError, actionError].filter(Boolean)" :key="`${index}-${error}`" class="action-error">{{ error }}</p>
           </div>
         </section>
 

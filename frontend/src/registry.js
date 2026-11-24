@@ -26,7 +26,7 @@ export const REQUEST_STATUS_OPTIONS = Object.entries(STATUS_LABELS).map(([value,
 export const REQUEST_COLORS = ['white', 'orange', 'blue', 'violet', 'red', 'green']
 
 const TESTING_DIRECTIONS = {
-  white: 'Без направления', red: 'Резерв 1', orange: 'Метрологические испытания',
+  white: 'Без направления', red: 'Резерв 1', orange: 'Геометрические измерения',
   blue: 'Механические испытания', violet: 'Электротехнические испытания', green: 'Резерв 2',
 }
 
@@ -90,6 +90,7 @@ export function fromApi(item) {
     canUploadDocument: Boolean(Number(item.can_upload_document)),
     canUploadReport: Boolean(Number(item.can_upload_report)),
     canDeleteReport: Boolean(Number(item.can_delete_report)),
+    canDeleteOpinion: Boolean(Number(item.can_delete_opinion)),
     canPublishOpinion: Boolean(Number(item.can_publish_opinion)),
     canSecurityDecide: Boolean(Number(item.can_security_decide)),
     canCorrectSecurityDecision: Boolean(Number(item.can_correct_security_decision)),
@@ -145,6 +146,7 @@ export function withoutStaleActions(item) {
     canReject: false,
     canWithdraw: false,
     canDeleteReport: false,
+    canDeleteOpinion: false,
     canEditDepartment: false,
   }
 }
@@ -160,6 +162,7 @@ const HISTORY_LABELS = {
   resume: 'Работа по заявке возобновлена',
   upload_report: 'Отчёт испытаний загружен',
   delete_report: 'Отчёт испытаний удалён',
+  delete_opinion: 'Заключение удалено, заявка возвращена на экспертизу; прежнее решение СБ не действует',
   publish_opinion: 'Экспертное заключение опубликовано',
   choose_route: 'Маршрут выбран',
   complete_act: 'Акт испытаний завершён',
@@ -259,7 +262,7 @@ const SECURITY_MARK_ICONS = {
   approve: { className: 'security-mark--approve', label: 'Согласовано', path: 'M3 8.5L6.5 12L13 4' },
   decline: { className: 'security-mark--decline', label: 'Не согласовано', path: 'M4 4L12 12M12 4L4 12' },
 }
-const DEFAULT_SECURITY_MARK_ICON = { className: 'security-mark--pending', label: 'Контроль ещё не проводился', path: 'M4 8H12' }
+const DEFAULT_SECURITY_MARK_ICON = { className: 'security-mark--pending', label: 'Нет действующего решения', path: 'M4 8H12' }
 
 export function securityMarkIcon(securityMark) {
   return SECURITY_MARK_ICONS[securityMark] || DEFAULT_SECURITY_MARK_ICON

@@ -7,6 +7,8 @@ namespace App\Infrastructure\Document;
 use App\Domain\Request\AttachmentPolicy;
 use App\Domain\Request\ConcurrentRequestModification;
 use App\Domain\Request\OpinionPolicy;
+use App\Domain\Request\OpinionDeletionPolicy;
+use App\Domain\Request\Role;
 use App\Domain\Request\ReportDeletionPolicy;
 use App\Domain\Request\RequestNotFound;
 use App\Domain\Request\RequestStatus;
@@ -374,6 +376,90 @@ final class DocumentRepository
         }
     }
 
+    /** @return array{status: string, lockVersion: int} */
+    public function deleteOpinion(int $requestId, int $expectedLockVersion, int $actorId, string $reason): array
+    {
+        $transaction = $this->db->beginTransaction();
+        try {
+            // Current locking reads also work inside an idempotency transaction with an older snapshot.
+            $roles = $this->db->createCommand(
+                'SELECT role.code FROM {{%user_roles}} ur JOIN {{%roles}} role ON role.id = ur.role_id '
+                . 'WHERE ur.user_id = :actor LOCK IN SHARE MODE',
+                [':actor' => $actorId],
+            )->queryColumn();
+            $active = $this->db->createCommand(
+                'SELECT is_active FROM {{%users}} WHERE id = :actor LOCK IN SHARE MODE',
+                [':actor' => $actorId],
+            )->queryScalar();
+            $request = $this->db->createCommand(
+                'SELECT status, route, is_archived, lock_version FROM {{%requests}} WHERE id = :id FOR UPDATE',
+                [':id' => $requestId],
+            )->queryOne();
+            if ($request === false) {
+                throw new RequestNotFound('Request not found');
+            }
+            $documents = $this->db->createCommand(
+                "SELECT d.id, d.document_type FROM {{%request_documents}} d "
+                . "WHERE d.request_id = :id AND d.document_type IN ('report', 'opinion') AND d.deleted_at IS NULL "
+                . 'AND EXISTS(SELECT 1 FROM {{%request_document_versions}} v WHERE v.document_id = d.id AND v.deleted_at IS NULL) FOR UPDATE',
+                [':id' => $requestId],
+            )->queryAll();
+            $documentIds = array_column($documents, 'id', 'document_type');
+            (new OpinionDeletionPolicy())->assertCanDelete(
+                (bool) $active,
+                array_map(static fn (string $role): Role => Role::from($role), $roles),
+                (bool) $request['is_archived'],
+                RequestStatus::from((string) $request['status']),
+                $request['route'],
+                isset($documentIds['report']),
+                isset($documentIds['opinion']),
+            );
+            if ((int) $request['lock_version'] !== $expectedLockVersion) {
+                throw new ConcurrentRequestModification();
+            }
+            $documentId = (int) $documentIds['opinion'];
+            $now = Clock::now();
+            // Keep bytes and immutable decisions for history; never revive old versions or email links.
+            $this->db->createCommand()->update('{{%request_document_versions}}', ['deleted_at' => $now], [
+                'document_id' => $documentId, 'deleted_at' => null,
+            ])->execute();
+            $this->db->createCommand()->update('{{%request_documents}}', [
+                'deleted_at' => $now, 'deleted_by' => $actorId,
+            ], ['id' => $documentId])->execute();
+            $nextVersion = $expectedLockVersion + 1;
+            $this->db->createCommand()->update('{{%requests}}', [
+                'status' => RequestStatus::OpinionPreparation->value, 'lock_version' => $nextVersion, 'updated_at' => $now,
+            ], ['id' => $requestId])->execute();
+            $this->db->createCommand()->insert('{{%request_transitions}}', [
+                'request_id' => $requestId, 'actor_id' => $actorId, 'from_status' => $request['status'],
+                'to_status' => RequestStatus::OpinionPreparation->value, 'action' => 'delete_opinion',
+                'rule_id' => 'DOC-014', 'reason' => $reason, 'created_at' => $now,
+            ])->execute();
+            $this->db->createCommand()->insert('{{%audit_events}}', [
+                'event_type' => 'request.opinion_deleted', 'entity_type' => 'request', 'entity_id' => $requestId,
+                'actor_id' => $actorId, 'rule_id' => 'DOC-014',
+                'payload_json' => ['document_id' => $documentId, 'reason' => $reason], 'created_at' => $now,
+            ])->execute();
+            $outbox = new NotificationOutbox($this->db);
+            foreach ($this->activeUsersWithRoles(['expert', 'ic_manager', 'security_officer']) as $recipient) {
+                $outbox->enqueue(
+                    $requestId,
+                    'request.opinion_deleted',
+                    $recipient['email'],
+                    $recipient['name'],
+                    'Заявка возвращена на подготовку заключения',
+                    'Экспертное заключение удалено. Прежнее решение СБ, если оно было, больше не действует. '
+                    . 'Заявка возвращена на подготовку заключения. Подробности доступны в ленте заявки.',
+                );
+            }
+            $transaction->commit();
+            return ['status' => RequestStatus::OpinionPreparation->value, 'lockVersion' => $nextVersion];
+        } catch (\Throwable $error) {
+            $transaction->rollBack();
+            throw $error;
+        }
+    }
+
     /** @return array<string, mixed> */
     public function publishOpinion(
         int $requestId,
@@ -665,6 +751,27 @@ final class DocumentRepository
         ])->execute();
     }
 
+    public function recordRejectedOpinionDeletion(int $requestId, int $actorId, string $ruleId): void
+    {
+        $allowedReferences = $this->db->createCommand(
+            'SELECT 1 FROM {{%requests}} r JOIN {{%users}} actor ON actor.id = :actor_id '
+            . 'WHERE r.id = :request_id',
+            [':request_id' => $requestId, ':actor_id' => $actorId],
+        )->queryScalar();
+        if ($allowedReferences === false) {
+            return;
+        }
+        $this->db->createCommand()->insert('{{%audit_events}}', [
+            'event_type' => 'request.opinion_deletion_rejected',
+            'entity_type' => 'request',
+            'entity_id' => $requestId,
+            'actor_id' => $actorId,
+            'rule_id' => $ruleId,
+            'payload_json' => ['outcome' => 'rejected'],
+            'created_at' => Clock::now(),
+        ])->execute();
+    }
+
     public function recordRejectedOpinion(int $requestId, int $actorId, string $ruleId): void
     {
         $allowedReferences = $this->db->createCommand(
@@ -742,6 +849,9 @@ final class DocumentRepository
             [':request_id' => $requestId],
         )->queryScalar();
         if ($documentId !== false) {
+            $this->db->createCommand()->update('{{%request_documents}}', [
+                'deleted_at' => null, 'deleted_by' => null,
+            ], ['id' => (int) $documentId])->execute();
             return (int) $documentId;
         }
         $this->db->createCommand()->insert('{{%request_documents}}', [

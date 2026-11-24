@@ -620,3 +620,12 @@ it('submits security corrections with required evidence and optimistic version',
     body: JSON.stringify({ decision: 'decline', reason: 'Ошибка выбора', ticketReference: 'IT-360', lockVersion: 7 }),
   }))
 })
+
+
+it('sends opinion deletion with the expected version and reason', async () => {
+  vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(JSON.stringify({ status: 'opinion_preparation', lockVersion: 3 }), { status: 200 })))
+  await requestApi.deleteOpinion(7, 2, 'Неверное заключение')
+  expect(fetch).toHaveBeenLastCalledWith('/api/v1/requests/7/opinion/delete', expect.objectContaining({
+    method: 'POST', body: JSON.stringify({ lockVersion: 2, reason: 'Неверное заключение' }),
+  }))
+})

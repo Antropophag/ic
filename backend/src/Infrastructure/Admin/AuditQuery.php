@@ -15,7 +15,7 @@ final class AuditQuery
         'request.suspend_resume_denied', 'request.start_denied', 'request.create_denied',
         'request.reject_denied', 'request.withdraw_denied', 'request.document_download_rejected',
         'request.report_upload_rejected', 'request.report_deletion_rejected',
-        'request.opinion_publish_rejected',
+        'request.opinion_publish_rejected', 'request.opinion_deletion_rejected',
         'authentication.break_glass_denied', 'authentication.break_glass_configuration_error',
     ];
 
@@ -40,6 +40,8 @@ final class AuditQuery
         'request.rejected' => 'В испытаниях отказано', 'request.reject_denied' => 'Отказ по заявке отклонён',
         'request.withdrawn' => 'Заявка отозвана', 'request.withdraw_denied' => 'Отзыв заявки отклонён',
         'request.document_uploaded' => 'Документ загружен', 'request.report_uploaded' => 'Отчёт загружен',
+        'request.opinion_deleted' => 'Заключение удалено',
+        'request.opinion_deletion_rejected' => 'Удаление заключения отклонено',
         'request.report_deleted' => 'Отчёт удалён', 'request.opinion_published' => 'Заключение опубликовано',
         'request.document_downloaded' => 'Документ скачан', 'request.document_download_rejected' => 'Скачивание отклонено',
         'request.report_upload_rejected' => 'Загрузка отчёта отклонена',
@@ -66,6 +68,8 @@ final class AuditQuery
         'request.withdrawn' => ['from_status', 'to_status'], 'request.document_uploaded' => ['document_id', 'version_id'],
         'request.report_uploaded' => ['document_id', 'version_id', 'version'], 'request.report_deleted' => ['document_id'],
         'request.opinion_published' => ['revision', 'document_version_id'],
+        'request.opinion_deleted' => ['document_id'],
+        'request.opinion_deletion_rejected' => ['outcome'],
         'request.document_downloaded' => ['version_id'], 'request.document_download_rejected' => ['version_id', 'outcome'],
         'request.imported' => ['legacyId'], 'user.pre_provisioned' => ['ad_login', 'display_name'],
         'request.department_changed' => ['old_department_name', 'new_department_name', 'old_department_external_id', 'new_department_external_id', 'source'],

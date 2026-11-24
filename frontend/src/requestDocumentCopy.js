@@ -7,7 +7,7 @@ export function requestReference(request) {
   const author = [position.text, name.text].filter(Boolean).join(' ')
   const needsReview = name.needsReview || position.needsReview
   return {
-    text: `Заявка №${request.id} от ${request.date}${author ? ` от ${author}` : ''}`,
+    text: `Заявка №${request.id} от ${request.date}${author ? `\nот ${author}` : ''}`,
     success: needsReview
       ? 'Заявка скопирована. Проверьте склонение ФИО и должности: неоднозначные значения оставлены в исходном написании.'
       : 'Заявка с датой и инициатором скопирована',

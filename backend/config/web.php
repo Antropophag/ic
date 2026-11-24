@@ -29,6 +29,7 @@ $application = [
                 'POST api/v1/requests/<id:\\d+>/documents' => 'request/upload-document',
                 'POST api/v1/requests/<id:\\d+>/report' => 'request/upload-report',
                 'POST api/v1/requests/<id:\\d+>/report/delete' => 'request/delete-report',
+                'POST api/v1/requests/<id:\\d+>/opinion/delete' => 'request/delete-opinion',
                 'GET api/v1/requests/<id:\\d+>/report-document-drafts/test-act' => 'request/prepare-test-act',
                 'POST api/v1/requests/<id:\\d+>/report-document-drafts/test-act' => 'request/generate-test-act',
                 'GET api/v1/document-versions/<id:\\d+>/download' => 'request/download-document',
