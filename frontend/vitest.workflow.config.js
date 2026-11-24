@@ -6,10 +6,10 @@ import vue from '@vitejs/plugin-vue'
 export default defineConfig({
   plugins: [vue()],
   test: {
-    include: ['src/components/RequestDetails.test.js'],
+    include: ['src/components/RequestDetails.test.js', 'src/components/RequestRegistry.test.js'],
     coverage: {
       provider: 'v8',
-      include: ['src/components/RequestDetails.vue'],
+      include: ['src/components/RequestDetails.vue', 'src/components/RequestRegistry.vue'],
       reportsDirectory: 'coverage/workflow',
       reporter: ['text', 'json-summary', 'lcov'],
     },

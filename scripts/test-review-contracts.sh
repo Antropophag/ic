@@ -35,7 +35,8 @@ fi
 
 disabled_qodo="$fixture_root/disabled-qodo"
 copy_contract "$disabled_qodo"
-sed -i 's/handle_push_trigger = true/handle_push_trigger = false/' "$disabled_qodo/.pr_agent.toml"
+sed 's/handle_push_trigger = true/handle_push_trigger = false/' "$disabled_qodo/.pr_agent.toml" >"$disabled_qodo/.pr_agent.toml.tmp"
+mv "$disabled_qodo/.pr_agent.toml.tmp" "$disabled_qodo/.pr_agent.toml"
 if REVIEW_CONTRACT_ROOT="$disabled_qodo" sh scripts/check-review-contracts.sh >/dev/null 2>&1; then
   echo 'Review contract accepted disabled Qodo push review.' >&2
   exit 1
@@ -43,8 +44,8 @@ fi
 
 missing_sensitive_policy="$fixture_root/missing-sensitive-policy"
 copy_contract "$missing_sensitive_policy"
-sed -i '/review-contract:sensitive-untracked/d' \
-  "$missing_sensitive_policy/.agents/skills/pr-review/SKILL.md"
+sed '/review-contract:sensitive-untracked/d' "$missing_sensitive_policy/.agents/skills/pr-review/SKILL.md" >"$missing_sensitive_policy/.agents/skills/pr-review/SKILL.md.tmp"
+mv "$missing_sensitive_policy/.agents/skills/pr-review/SKILL.md.tmp" "$missing_sensitive_policy/.agents/skills/pr-review/SKILL.md"
 if REVIEW_CONTRACT_ROOT="$missing_sensitive_policy" sh scripts/check-review-contracts.sh >/dev/null 2>&1; then
   echo 'Review contract accepted a skill without sensitive-untracked protection.' >&2
   exit 1
@@ -52,8 +53,8 @@ fi
 
 wrong_final_review_layer="$fixture_root/wrong-final-review-layer"
 copy_contract "$wrong_final_review_layer"
-sed -i '/review-contract:final-change-set/d' \
-  "$wrong_final_review_layer/.github/pull_request_template.md"
+sed '/review-contract:final-change-set/d' "$wrong_final_review_layer/.github/pull_request_template.md" >"$wrong_final_review_layer/.github/pull_request_template.md.tmp"
+mv "$wrong_final_review_layer/.github/pull_request_template.md.tmp" "$wrong_final_review_layer/.github/pull_request_template.md"
 printf '%s\n' '<!-- review-contract:final-change-set -->' \
   >>"$wrong_final_review_layer/CLAUDE.md"
 if REVIEW_CONTRACT_ROOT="$wrong_final_review_layer" sh scripts/check-review-contracts.sh >/dev/null 2>&1; then

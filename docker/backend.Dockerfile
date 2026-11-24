@@ -37,7 +37,7 @@ COPY docker/php/www-logging.conf /usr/local/etc/php-fpm.d/zz-logging.conf
 RUN chmod +x yii \
     && mkdir -p runtime storage/documents storage/test-documents \
     && chown -R app:app runtime storage
-USER app
+USER 10001:10001
 EXPOSE 9000
 CMD ["php-fpm", "-F"]
 

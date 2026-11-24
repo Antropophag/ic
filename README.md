@@ -29,7 +29,7 @@ read-only журнал действий и журнал доставки уве�
 миграция переносит старые заявки в одну позицию, без сброса данных. Ограничения
 отката описаны в [ADR 0008](docs/adr/0008-request-objects.md).
 
-Нужны Git, Node.js 22 и Docker Compose либо Podman Compose. При использовании
+Нужны Git, Node.js 22.13+ в ветке 22 и Docker Compose либо Podman Compose. При использовании
 Docker требуются Compose 2.20.2+ и Engine 25.0+ (API 1.44+): frontend healthcheck
 использует `start_interval`.
 
