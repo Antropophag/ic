@@ -85,6 +85,15 @@ const dashboardHelpDrawer = ref(null);
 const query = ref("");
 const statusFilter = ref("");
 const sortDirection = ref("desc");
+const sortBy = ref("number");
+function changeSort(field) {
+  if (sortBy.value === field) {
+    sortDirection.value = sortDirection.value === "desc" ? "asc" : "desc";
+  } else {
+    sortDirection.value = field === "number" ? "desc" : "asc";
+  }
+  sortBy.value = field;
+}
 const colorFilters = ref([]);
 const tableScroll = ref(null);
 
@@ -210,6 +219,7 @@ async function loadRequests({ rethrow = false } = {}) {
       status: statusFilter.value,
       query: query.value.trim(),
       sort: sortDirection.value,
+      sortBy: sortBy.value,
       colors: colorFilters.value.join(","),
       attention: activeAttention.value,
     });
@@ -359,10 +369,10 @@ function commentAvatarClass(item) {
 function reloadFirstPage() {
   currentPage.value = 1;
   if (tableScroll.value) tableScroll.value.scrollTop = 0;
-  loadRequests();
+  void loadRequests();
 }
 
-watch([activeTab, activeAttention, statusFilter, sortDirection, colorFilters], reloadFirstPage);
+watch([activeTab, activeAttention, statusFilter, sortDirection, sortBy, colorFilters], reloadFirstPage);
 watch(query, () => {
   registryLoadLifecycle.scheduleReload(reloadFirstPage);
 });
@@ -379,10 +389,10 @@ watch(
   ([refreshTrigger, active], [previousRefreshTrigger, wasActive]) => {
     if (active) {
       if (!wasActive || refreshTrigger !== previousRefreshTrigger) {
-        loadRequests();
-        loadDashboard();
+        void loadRequests();
+        void loadDashboard();
       }
-      if (!wasActive) loadNotifications();
+      if (!wasActive) void loadNotifications();
     }
     else if (wasActive) {
       registryLoadLifecycle.deactivate();
@@ -397,7 +407,7 @@ function goToPage(page) {
   if (page === currentPage.value) return;
   currentPage.value = page;
   if (tableScroll.value) tableScroll.value.scrollTop = 0;
-  loadRequests();
+  void loadRequests();
 }
 
 function selectPageSize(size) {
@@ -532,9 +542,9 @@ onMounted(() => {
   window.addEventListener("resize", positionVisibleObjectTooltips);
   window.addEventListener("pagehide", draftForm.flushSave);
   if (props.active) {
-    loadRequests();
-    loadDashboard();
-    loadNotifications();
+    void loadRequests();
+    void loadDashboard();
+    void loadNotifications();
   }
 });
 onBeforeUnmount(() => {
@@ -623,6 +633,7 @@ onBeforeUnmount(() => {
         <button v-if="query || statusFilter || colorFilters.length" type="button" class="toolbar-clear" @click="clearRegistryFilters">
           Сбросить
         </button>
+        <button type="button" class="secondary registry-direction-sort" aria-label="Сортировать по направлению испытаний" :aria-pressed="sortBy === 'direction'" @click="changeSort('direction')">По направлению<span v-if="sortBy === 'direction'"> · {{ sortDirection === 'asc' ? 'по возрастанию' : 'по убыванию' }}</span></button>
         <button type="button" class="registry-notifications" :aria-label="newNotifications.length ? 'Есть новые события в заявках' : 'Новых событий в заявках нет'" @click="openNotifications">
           <AppIcon name="bell" :size="18" /><span v-if="newNotifications.length" class="notification-dot" aria-hidden="true"></span>
         </button>
@@ -631,16 +642,16 @@ onBeforeUnmount(() => {
         <table>
           <thead>
             <tr>
-              <th class="registry-direction-heading" scope="col">
+              <th class="registry-direction-heading" scope="col" :aria-sort="sortBy === 'direction' ? (sortDirection === 'asc' ? 'ascending' : 'descending') : 'none'">
                 <span class="visually-hidden">Направление испытаний</span>
                 <DirectionFilter v-model="colorFilters" :active="active" />
               </th>
               <th
                 class="sortable"
                 scope="col"
-                :aria-sort="sortDirection === 'asc' ? 'ascending' : 'descending'"
+                :aria-sort="sortBy === 'number' ? (sortDirection === 'asc' ? 'ascending' : 'descending') : 'none'"
               >
-                <TableSorter class="registry-number-heading" label="Сортировать по номеру заявки" @click="sortDirection = sortDirection === 'desc' ? 'asc' : 'desc'"><span>№ заявки</span></TableSorter>
+                <TableSorter class="registry-number-heading" label="Сортировать по номеру заявки" @click="changeSort('number')"><span>№ заявки</span></TableSorter>
               </th>
               <th>Дата</th>
               <th>Объект испытаний</th>

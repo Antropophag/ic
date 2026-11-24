@@ -91,3 +91,25 @@ test('фильтр направлений применяет черновой в
   expect((await cleared).status()).toBe(200)
   await expect(trigger).toHaveAttribute('data-filter-active', 'false')
 })
+
+
+for (const width of [390, 1440]) {
+  test(`сортировка направлений и чёрная жирная шапка доступны при ширине ${width}`, async ({ page }) => {
+    await page.setViewportSize({ width, height: 900 })
+    await page.route('**/api/**', route => route.continue({ headers: { ...route.request().headers(), 'X-Test-User-ID': '1' } }))
+    await page.goto('/')
+    const sort = page.getByRole('button', { name: 'Сортировать по направлению испытаний', exact: true })
+    await expect(sort).toBeVisible()
+    const sorted = page.waitForResponse(response => {
+      const url = new URL(response.url())
+      return url.pathname === '/api/v1/requests' && url.searchParams.get('sortBy') === 'direction' && url.searchParams.get('sort') === 'asc'
+    })
+    await sort.click()
+    expect((await sorted).status()).toBe(200)
+    await expect(page.locator('.registry-direction-heading')).toHaveAttribute('aria-sort', 'ascending')
+    await expect(page.getByRole('columnheader', { name: 'Дата', exact: true })).toHaveCSS('color', 'rgb(0, 0, 0)')
+    await expect(page.getByRole('columnheader', { name: 'Дата', exact: true })).toHaveCSS('font-weight', '700')
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true)
+    await page.screenshot({ path: `/tmp/ic-kashin-registry-${width}.png`, fullPage: true })
+  })
+}

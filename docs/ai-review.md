@@ -19,6 +19,10 @@ Codex review дополняет deterministic checks и hosted review, но не
 
 ## Hosted review
 
+Метка `dependencies` не отключает Qodo: обновления пакетов могут входить в PR
+с изменениями процесса и прав. Сгенерированные lock-файлы исключены из текстового
+ревью, но проверяются dependency audit.
+
 Qodo запускается автоматически при открытии PR и повторно при каждом push через
 `.pr_agent.toml`. Не вызывайте `/agentic_review` вручную. Итоговый `Code Review by
 Qodo` должен относиться к текущему head; `PR Summary` и состояние

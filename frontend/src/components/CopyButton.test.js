@@ -7,6 +7,7 @@ let app
 afterEach(() => {
   app?.unmount()
   document.body.replaceChildren()
+  vi.restoreAllMocks()
   vi.unstubAllGlobals()
   vi.useRealTimers()
 })
@@ -97,23 +98,61 @@ it('keeps the result while hovered or focused, then dismisses automatically', as
   expect(document.querySelector('[role="status"]')).toBeNull()
 })
 
-it('allows longer reading for errors and clears their timer on unmount', async () => {
+it('keeps exact manual copy text available until dismissed', async () => {
   vi.useFakeTimers()
-  vi.stubGlobal('navigator', { clipboard: { writeText: vi.fn().mockRejectedValue(new Error('denied')) } })
-  const root = await mount()
+  vi.stubGlobal('navigator', { clipboard: undefined })
+  const root = await mount(ref('Заявка №123\nот инженера Иванова'))
   root.querySelector('button').click()
   await nextTick()
+  await vi.advanceTimersByTimeAsync(60000)
+  const field = document.querySelector('[aria-label="Текст для ручного копирования"]')
+  expect(field.value).toBe('Заявка №123\nот инженера Иванова')
+  field.focus()
+  expect(field.selectionStart).toBe(0)
+  expect(field.selectionEnd).toBe(field.value.length)
+  document.querySelector('[aria-label="Закрыть уведомление о копировании"]').click()
   await nextTick()
-  await vi.advanceTimersByTimeAsync(3000)
-  expect(document.querySelector('[role="alert"]')).not.toBeNull()
-  await vi.advanceTimersByTimeAsync(7000)
   expect(document.querySelector('[role="alert"]')).toBeNull()
-  root.querySelector('button').click()
-  await nextTick()
-  expect(vi.getTimerCount()).toBe(1)
-  app.unmount()
-  app = null
-  expect(vi.getTimerCount()).toBe(0)
+})
+
+it.each([undefined, { writeText: vi.fn().mockRejectedValue(new Error('denied')) }])('copies with selection when Clipboard API is unavailable or denied', async clipboard => {
+  vi.stubGlobal('navigator', { clipboard })
+  const exec = vi.fn(() => {
+    expect(document.activeElement.value).toBe('Объект испытаний')
+    expect(document.activeElement.selectionEnd).toBe('Объект испытаний'.length)
+    return true
+  })
+  const original = document.execCommand
+  document.execCommand = exec
+  try {
+    const root = await mount()
+    root.querySelector('button').focus()
+    root.querySelector('button').click()
+    await vi.waitFor(() => expect(document.body.textContent).toContain('Наименование скопировано'))
+    expect(exec).toHaveBeenCalledExactlyOnceWith('copy')
+    expect(document.querySelector('textarea')).toBeNull()
+    expect(document.activeElement).toBe(root.querySelector('button'))
+  } finally {
+    document.execCommand = original
+  }
+})
+
+it('does not copy old text through fallback after a late denial', async () => {
+  let reject
+  vi.stubGlobal('navigator', { clipboard: { writeText: () => new Promise((_, fail) => { reject = fail }) } })
+  const original = document.execCommand
+  document.execCommand = vi.fn(() => true)
+  try {
+    const text = ref('Первый объект')
+    const root = await mount(text)
+    root.querySelector('button').click()
+    text.value = 'Другой объект'
+    await nextTick()
+    reject(new Error('denied'))
+    await nextTick()
+    expect(document.execCommand).not.toHaveBeenCalled()
+    expect(document.querySelector('[role="alert"]')).toBeNull()
+  } finally { document.execCommand = original }
 })
 
 it('does not let an earlier timer hide a newer copy result', async () => {

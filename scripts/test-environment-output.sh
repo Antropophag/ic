@@ -61,6 +61,8 @@ fi
 MOCK
 chmod +x "$mock"
 
+# Subshells around direct fixture calls prevent POSIX-shell function assignments
+# from leaking into subsequent scenarios (notably SERVICE_READY_TIMEOUT).
 run_environment() {
   COMPOSE=$mock CONTAINER_ENGINE=$mock DEV_PROJECT=ic-dev \
     DEV_ENV_FILE=.env.dev.example MOCK_RECORD=$test_dir/record \
@@ -103,7 +105,7 @@ printf '%s' "$unhealthy_output" | grep -q 'frontend.*unhealthy'
 printf '%s' "$unhealthy_output" | grep -q 'relevant service log'
 
 set +e
-MOCK_FRONTEND_STATE=unhealthy NO_COLOR=1 run_environment status >/dev/null 2>&1
+(MOCK_FRONTEND_STATE=unhealthy NO_COLOR=1 run_environment status >/dev/null 2>&1)
 unhealthy_status=$?
 set -e
 [ "$unhealthy_status" -ne 0 ]
@@ -116,7 +118,7 @@ set -e
 printf '%s' "$timeout_output" | grep -q 'frontend.*starting.*ожидалось: healthy'
 
 set +e
-SERVICE_READY_TIMEOUT=invalid NO_COLOR=1 run_environment up >/dev/null 2>&1
+(SERVICE_READY_TIMEOUT=invalid NO_COLOR=1 run_environment up >/dev/null 2>&1)
 invalid_timeout_status=$?
 replica_output=$(MOCK_FRONTEND_REPLICAS=2 MOCK_FRONTEND_REPLICA_STATE=unhealthy \
   NO_COLOR=1 run_environment status 2>&1)
@@ -136,32 +138,32 @@ color_output=$(FORCE_COLOR=1 run_environment status)
 printf '%s' "$color_output" | LC_ALL=C grep -q "$(printf '\033')"
 
 : >"$test_dir/record"
-NO_COLOR=1 SERVICE=backend run_environment logs >/dev/null
+(NO_COLOR=1 SERVICE=backend run_environment logs >/dev/null)
 grep -q 'logs --follow --tail=100 backend' "$test_dir/record"
-NO_COLOR=1 SERVICE=frontend LOG_TAIL=all run_environment logs >/dev/null
+(NO_COLOR=1 SERVICE=frontend LOG_TAIL=all run_environment logs >/dev/null)
 grep -q 'logs --follow --tail=all frontend' "$test_dir/record"
 
 set +e
-NO_COLOR=1 SERVICE=unknown run_environment logs >/dev/null 2>&1
+(NO_COLOR=1 SERVICE=unknown run_environment logs >/dev/null 2>&1)
 invalid_service_status=$?
-NO_COLOR=1 LOG_TAIL=invalid run_environment logs >/dev/null 2>&1
+(NO_COLOR=1 LOG_TAIL=invalid run_environment logs >/dev/null 2>&1)
 invalid_tail_status=$?
 set -e
 [ "$invalid_service_status" -eq 2 ]
 [ "$invalid_tail_status" -eq 2 ]
 
 set +e
-MOCK_FAIL_PATTERN='down --remove-orphans' MOCK_FAIL_STATUS=43 NO_COLOR=1 \
-  run_environment down >/dev/null 2>&1
+(MOCK_FAIL_PATTERN='down --remove-orphans' MOCK_FAIL_STATUS=43 NO_COLOR=1 \
+  run_environment down >/dev/null 2>&1)
 down_failure_status=$?
-MOCK_FAIL_PATTERN='ps -q mariadb' MOCK_FAIL_STATUS=44 NO_COLOR=1 \
-  run_environment status >/dev/null 2>&1
+(MOCK_FAIL_PATTERN='ps -q mariadb' MOCK_FAIL_STATUS=44 NO_COLOR=1 \
+  run_environment status >/dev/null 2>&1)
 status_failure_status=$?
-MOCK_FAIL_PATTERN='logs --follow' MOCK_FAIL_STATUS=45 NO_COLOR=1 \
-  run_environment logs >/dev/null 2>&1
+(MOCK_FAIL_PATTERN='logs --follow' MOCK_FAIL_STATUS=45 NO_COLOR=1 \
+  run_environment logs >/dev/null 2>&1)
 logs_failure_status=$?
-MOCK_FAIL_PATTERN='down --remove-orphans' MOCK_FAIL_STATUS=46 NO_COLOR=1 \
-  run_environment restart >/dev/null 2>&1
+(MOCK_FAIL_PATTERN='down --remove-orphans' MOCK_FAIL_STATUS=46 NO_COLOR=1 \
+  run_environment restart >/dev/null 2>&1)
 restart_failure_status=$?
 set -e
 [ "$down_failure_status" -eq 43 ]
@@ -180,11 +182,11 @@ grep -q 'up -d --build --force-recreate' "$test_dir/record"
 
 temporary_output_dir=$test_dir/output
 mkdir "$temporary_output_dir"
-TMPDIR=$temporary_output_dir NO_COLOR=1 run_environment status >/dev/null
+(TMPDIR=$temporary_output_dir NO_COLOR=1 run_environment status >/dev/null)
 [ -z "$(find "$temporary_output_dir" -mindepth 1 -print -quit)" ]
 set +e
-TMPDIR=$temporary_output_dir MOCK_FAIL=config NO_COLOR=1 \
-  run_environment up >/dev/null 2>&1
+(TMPDIR=$temporary_output_dir MOCK_FAIL=config NO_COLOR=1 \
+  run_environment up >/dev/null 2>&1)
 temporary_failure_status=$?
 set -e
 [ "$temporary_failure_status" -eq 42 ]

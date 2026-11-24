@@ -94,7 +94,7 @@ final class RequestController extends ApiController
     {
         $arguments = parent::bindActionParams($action, $params);
         $mutations = [
-            'add-comment', 'upload-document', 'upload-report', 'delete-report', 'change-department',
+            'add-comment', 'upload-document', 'upload-report', 'delete-report', 'delete-opinion', 'change-department',
             'set-color', 'assign-executor', 'claim-expert', 'reassign-expert', 'publish-opinion',
             'choose-route', 'complete-act', 'security-decision', 'correct-security-decision', 'start', 'suspend', 'resume', 'reject', 'withdraw',
         ];
@@ -125,6 +125,7 @@ final class RequestController extends ApiController
             (string) $input->sort,
             $input->attention === null || $input->attention === '' ? null : (string) $input->attention,
             $input->colorValues(),
+            (string) $input->sortBy,
         );
     }
 
@@ -289,6 +290,28 @@ final class RequestController extends ApiController
             throw new ForbiddenHttpException($error->getMessage());
         } catch (ConcurrentRequestModification $error) {
             $this->recordRejectedReportDeletionSafely($id, $actorId, $error->ruleId);
+            throw new ConflictHttpException($error->getMessage());
+        }
+    }
+
+    /** @return array<string, mixed> */
+    public function actionDeleteOpinion(int $id): array
+    {
+        $input = new ReasonedLockVersionInput();
+        if (($errors = $this->bodyValidationErrors($input)) !== null) {
+            return $errors;
+        }
+
+        $actorId = $this->currentUserId();
+        try {
+            return $this->documents()->deleteOpinion($id, (int) $input->lockVersion, $actorId, (string) $input->reason);
+        } catch (RequestNotFound $error) {
+            throw new NotFoundHttpException($error->getMessage());
+        } catch (OpinionDenied $error) {
+            $this->recordRejectedOpinionDeletionSafely($id, $actorId, $error->ruleId);
+            throw new ForbiddenHttpException($error->getMessage());
+        } catch (ConcurrentRequestModification $error) {
+            $this->recordRejectedOpinionDeletionSafely($id, $actorId, $error->ruleId);
             throw new ConflictHttpException($error->getMessage());
         }
     }
@@ -898,6 +921,16 @@ final class RequestController extends ApiController
         $this->recordRejectedSafely(
             fn () => $this->documents()->recordRejectedReportDeletion($requestId, $actorId, $ruleId),
             'Не удалось записать аудит отклонённого удаления отчёта.',
+            ['requestId' => $requestId, 'actorId' => $actorId, 'ruleId' => $ruleId],
+            __METHOD__,
+        );
+    }
+
+    private function recordRejectedOpinionDeletionSafely(int $requestId, int $actorId, string $ruleId): void
+    {
+        $this->recordRejectedSafely(
+            fn () => $this->documents()->recordRejectedOpinionDeletion($requestId, $actorId, $ruleId),
+            'Не удалось записать аудит отклонённого удаления заключения.',
             ['requestId' => $requestId, 'actorId' => $actorId, 'ruleId' => $ruleId],
             __METHOD__,
         );

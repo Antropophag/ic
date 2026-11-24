@@ -212,6 +212,16 @@ paths:
             type: string
             enum: [asc, desc]
             default: desc
+        - name: sortBy
+          in: query
+          description: |
+            number — по номеру; direction — по направлению (геометрические,
+            механические, электротехнические, резервы 1 и 2, без направления).
+            sort задаёт порядок групп; внутри направления новые номера идут первыми.
+          schema:
+            type: string
+            enum: [number, direction]
+            default: number
         - name: colors
           in: query
           description: |
@@ -481,6 +491,33 @@ paths:
       tags: [Requests]
       summary: Удалить отчёт с обязательной причиной
       operationId: deleteRequestReport
+      security: [{cookieSession: [], csrfToken: []}]
+      parameters:
+        - $ref: '#/components/parameters/RequestId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        $ref: '#/components/requestBodies/ReasonedRequestCommand'
+      responses:
+        '200': {$ref: '#/components/responses/RequestCommandSucceeded'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '415': {$ref: '#/components/responses/UnsupportedMediaType'}
+        '422': {$ref: '#/components/responses/ValidationError'}
+        '500': {$ref: '#/components/responses/ServerError'}
+
+  /api/v1/requests/{id}/opinion/delete:
+    post:
+      tags: [Requests]
+      summary: Удалить заключение и вернуть заявку на экспертизу
+      description: |
+        DOC-014. Доступно активному руководителю ИЦ или любому эксперту при наличии
+        действующего отчёта и заключения в маршруте Протокол на этапе экспертизы,
+        контроля СБ или после завершения. Причина обязательна.
+        Прежние решения СБ перестают действовать; история сохраняется.
+      operationId: deleteRequestOpinion
       security: [{cookieSession: [], csrfToken: []}]
       parameters:
         - $ref: '#/components/parameters/RequestId'

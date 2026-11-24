@@ -45,6 +45,7 @@ final class RequestQuery
             . "WHEN 'start' THEN 'Заявка переведена в работу' WHEN 'suspend' THEN 'Работа приостановлена' "
             . "WHEN 'resume' THEN 'Работа возобновлена' WHEN 'upload_report' THEN 'Загружен отчёт испытаний' "
             . "WHEN 'publish_opinion' THEN 'Опубликовано экспертное заключение' "
+            . "WHEN 'delete_opinion' THEN 'Заключение удалено, заявка возвращена на экспертизу' "
             . "WHEN 'complete_act' THEN 'Акт испытаний завершён' WHEN 'security_decline' THEN 'СБ: не согласовано, заявка выполнена' WHEN 'security_approve' THEN 'СБ: согласовано, заявка выполнена' "
             . "WHEN 'reject' THEN 'В испытаниях отказано' WHEN 'withdraw' THEN 'Заявка отозвана' ELSE 'Событие в заявке' END AS title, "
             . 'u.display_name AS authorName, t.created_at AS occurredAtRaw, t.id AS sourceId '
@@ -70,7 +71,14 @@ final class RequestQuery
         string $sort,
         ?string $attention = null,
         array $colors = [],
+        string $sortBy = 'number',
     ): array {
+        $sortDirection = $sort === 'asc' ? 'ASC' : 'DESC';
+        $orderBy = 'r.number ' . $sortDirection;
+        if ($sortBy === 'direction') {
+            $orderBy = "CASE r.color WHEN 'orange' THEN 1 WHEN 'blue' THEN 2 WHEN 'violet' THEN 3 WHEN 'red' THEN 4 WHEN 'green' THEN 5 ELSE 6 END "
+                . $sortDirection . ', r.number DESC';
+        }
         $where = [];
         $filterParams = [];
         if ($tab === 'active') {
@@ -135,7 +143,7 @@ final class RequestQuery
             . 'expert.id AS expert_id, expert.display_name AS expert_name, '
             . '(SELECT COALESCE((SELECT c.decision FROM {{%security_decision_corrections}} c '
             . 'WHERE c.security_check_id = sc.id ORDER BY c.id DESC LIMIT 1), sc.decision) '
-            . 'FROM {{%security_checks}} sc WHERE sc.request_id = r.id '
+            . 'FROM {{%security_checks}} sc WHERE sc.request_id = r.id AND ' . SecurityDecisionValidity::condition('sc') . ' '
             . 'ORDER BY sc.id DESC LIMIT 1) AS security_mark, '
             . "(EXISTS(SELECT 1 FROM {{%users}} clu WHERE clu.id = :color_actor AND clu.is_active = 1) "
             . 'AND EXISTS(SELECT 1 FROM {{%user_roles}} clr JOIN {{%roles}} clrole ON clrole.id = clr.role_id '
@@ -242,7 +250,7 @@ final class RequestQuery
             . 'AND report_version.version = (SELECT MAX(rv2.version) FROM {{%request_document_versions}} rv2 '
             . 'WHERE rv2.document_id = report_doc.id AND rv2.deleted_at IS NULL) '
             . $whereSql
-            . ' ORDER BY r.number ' . ($sort === 'asc' ? 'ASC' : 'DESC') . ' LIMIT :limit OFFSET :offset',
+            . ' ORDER BY ' . $orderBy . ' LIMIT :limit OFFSET :offset',
             array_merge([
                 ':route_actor' => $actorId,
                 ':complete_actor' => $actorId,
@@ -376,7 +384,7 @@ final class RequestQuery
             . 'expert.id AS expert_id, expert.display_name AS expert_name, '
             . '(SELECT COALESCE((SELECT c.decision FROM {{%security_decision_corrections}} c '
             . 'WHERE c.security_check_id = sc.id ORDER BY c.id DESC LIMIT 1), sc.decision) '
-            . 'FROM {{%security_checks}} sc WHERE sc.request_id = r.id '
+            . 'FROM {{%security_checks}} sc WHERE sc.request_id = r.id AND ' . SecurityDecisionValidity::condition('sc') . ' '
             . 'ORDER BY sc.id DESC LIMIT 1) AS security_mark, '
             . 'EXISTS(SELECT 1 FROM {{%user_roles}} clr JOIN {{%roles}} clrole ON clrole.id = clr.role_id '
             . "WHERE clr.user_id = :color_actor AND clrole.code IN ('ic_manager', 'laboratory_manager')) "
@@ -433,13 +441,20 @@ final class RequestQuery
             . '(current_executor.user_id = :delete_report_actor OR EXISTS(SELECT 1 FROM {{%user_roles}} drur '
             . 'JOIN {{%roles}} drr ON drr.id = drur.role_id WHERE drur.user_id = :delete_report_manager '
             . "AND drr.code IN ('ic_manager', 'laboratory_manager')))) AS can_delete_report "
+            . ", (r.route = 'protocol' AND r.status IN ('opinion_preparation', 'security_review', 'completed') "
+            . "AND EXISTS(SELECT 1 FROM {{%user_roles}} dour JOIN {{%roles}} dor ON dor.id = dour.role_id "
+            . "WHERE dour.user_id = :delete_opinion_actor AND dor.code IN ('ic_manager', 'expert')) "
+            . "AND EXISTS(SELECT 1 FROM {{%request_documents}} od JOIN {{%request_document_versions}} ov ON ov.document_id = od.id "
+            . "WHERE od.request_id = r.id AND od.document_type = 'opinion' AND od.deleted_at IS NULL AND ov.deleted_at IS NULL) "
+            . "AND EXISTS(SELECT 1 FROM {{%request_documents}} rd JOIN {{%request_document_versions}} rv ON rv.document_id = rd.id "
+            . "WHERE rd.request_id = r.id AND rd.document_type = 'report' AND rd.deleted_at IS NULL AND rv.deleted_at IS NULL)) AS can_delete_opinion "
             . ", (r.status = 'opinion_preparation' AND current_expert.user_id = :opinion_actor) "
             . 'AS can_publish_opinion '
             . ", (r.status = 'security_review' AND EXISTS(SELECT 1 FROM {{%user_roles}} security_ur "
             . 'JOIN {{%roles}} security_role ON security_role.id = security_ur.role_id '
             . "WHERE security_ur.user_id = :security_actor AND security_role.code = 'security_officer')) "
             . 'AS can_security_decide, '
-            . '(EXISTS(SELECT 1 FROM {{%security_checks}} csc WHERE csc.request_id = r.id) '
+            . '(EXISTS(SELECT 1 FROM {{%security_checks}} csc WHERE csc.request_id = r.id AND ' . SecurityDecisionValidity::condition('csc') . ') '
             . 'AND EXISTS(SELECT 1 FROM {{%user_roles}} cur JOIN {{%roles}} cr ON cr.id = cur.role_id '
             . "WHERE cur.user_id = :correction_actor AND cr.code = 'administrator')) AS can_correct_security_decision, "
             . "(r.status IN ('registered', 'in_progress') AND EXISTS(SELECT 1 FROM {{%user_roles}} rjur "
@@ -485,6 +500,7 @@ final class RequestQuery
                 ':resume_executor_role' => $actorId,
                 ':report_actor' => $actorId,
                 ':report_manager' => $actorId,
+                ':delete_opinion_actor' => $actorId,
                 ':delete_report_actor' => $actorId,
                 ':delete_report_manager' => $actorId,
                 ':opinion_actor' => $actorId,

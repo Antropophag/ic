@@ -12,6 +12,7 @@ final class NotificationQuery
     private const TITLES = [
         'request.created' => 'Создание заявки', 'request.executor_assigned' => 'Назначение исполнителя',
         'request.report_uploaded' => 'Загрузка отчёта', 'request.expert_claimed' => 'Назначение эксперта',
+        'request.opinion_deleted' => 'Возврат на подготовку заключения',
         'request.expert_reassigned' => 'Переназначение эксперта', 'request.opinion_published' => 'Публикация заключения',
         'request.completed' => 'Завершение испытаний', 'request.returned' => 'Возврат на доработку',
         'request.commented' => 'Новый комментарий', 'request.rejected' => 'Отказ в испытаниях',

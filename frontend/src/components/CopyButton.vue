@@ -2,6 +2,7 @@
 import { onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import copyIcon from '../vendor/shlz/copy.svg'
 import closeIcon from '../vendor/shlz/close-remove.svg'
+import { copyTextSelection } from '../copyTextSelection'
 
 const copySymbolStyle = { '--copy-symbol': `url("${copyIcon}")` }
 
@@ -22,7 +23,7 @@ let focused = false
 
 function scheduleDismissal() {
   clearTimeout(hideTimer)
-  if (!result.value || hovered || focused) return
+  if (!result.value || failed.value || hovered || focused) return
   const delay = failed.value || result.value.length > 80 ? 10000 : 3000
   hideTimer = setTimeout(() => { result.value = '' }, delay)
 }
@@ -67,7 +68,18 @@ async function copy() {
   pending.value = true
   result.value = ''
   try {
-    await navigator.clipboard.writeText(props.text)
+    let copied = false
+    if (typeof navigator.clipboard?.writeText === 'function') {
+      try {
+        await navigator.clipboard.writeText(props.text)
+        copied = true
+      } catch {
+        // HTTP intranet pages and browser permissions may require a selection-based copy.
+      }
+    }
+    if (token !== generation) return
+    if (!copied) copied = copyTextSelection(props.text, control.value.closest('[role="dialog"], [role="alertdialog"], dialog') || document.body)
+    if (!copied) throw new Error('Copy unavailable')
     if (token !== generation) return
     failed.value = false
     result.value = props.success
@@ -88,7 +100,7 @@ async function copy() {
     </button>
     <Teleport :to="resultTarget">
       <span v-if="result" class="shlz-notification shlz-notification--light copy-result" :role="failed ? 'alert' : 'status'" @mouseenter="setHovered(true)" @mouseleave="setHovered(false)" @focusin="setFocused(true)" @focusout="setFocused($event.currentTarget.contains($event.relatedTarget))">
-        <span class="shlz-notification__content">{{ result }}</span>
+        <span class="shlz-notification__content">{{ result }}<textarea v-if="failed" class="copy-manual" readonly :value="text" aria-label="Текст для ручного копирования" @focus="$event.target.select()" @click="$event.target.select()"></textarea></span>
         <button type="button" class="shlz-notification__close" aria-label="Закрыть уведомление о копировании" @click="dismiss"><img :src="closeIcon" alt="" /></button>
       </span>
     </Teleport>
@@ -96,6 +108,7 @@ async function copy() {
 </template>
 
 <style scoped>
+.copy-manual { display: block; width: 100%; min-height: 72px; margin-top: 8px; padding: 8px; resize: vertical; font: inherit; color: inherit; background: #fff; border: 1px solid var(--line); border-radius: 6px; }
 .copy-control { display: inline-flex; align-items: center; flex: none; }
 .copy-symbol { background: currentColor; mask: var(--copy-symbol) center / contain no-repeat; }
 .copy-result { position: fixed; z-index: 100; inset-inline: 16px; bottom: 24px; margin-inline: auto; max-inline-size: calc(100% - 32px); }

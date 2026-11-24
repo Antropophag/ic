@@ -17,6 +17,7 @@
         <include>
             <file>src/Infrastructure/Request/RequestRepository.php</file>
             <file>src/Infrastructure/Request/AttentionQueueScope.php</file>
+            <file>src/Infrastructure/Request/SecurityDecisionValidity.php</file>
             <file>src/Infrastructure/Document/DocumentRepository.php</file>
             <file>src/Infrastructure/Development/DevelopmentRequestSeeder.php</file>
             <file>src/Http/Controller/RequestController.php</file>

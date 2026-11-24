@@ -17,6 +17,7 @@ final class ListRequestsInput extends Model
     public mixed $status = null;
     public mixed $query = '';
     public mixed $sort = 'desc';
+    public mixed $sortBy = 'number';
     public mixed $colors = '';
     public mixed $attention = null;
 
@@ -29,6 +30,7 @@ final class ListRequestsInput extends Model
             ['status', 'in', 'range' => array_column(RequestStatus::cases(), 'value'), 'skipOnEmpty' => true],
             ['query', 'string', 'max' => 200],
             ['sort', 'in', 'range' => ['asc', 'desc']],
+            ['sortBy', 'in', 'range' => ['number', 'direction']],
             ['colors', 'string', 'max' => 64, 'skipOnEmpty' => false],
             ['colors', 'validateColors'],
             ['attention', 'in', 'range' => array_column(AttentionQueue::cases(), 'value'), 'skipOnEmpty' => true],

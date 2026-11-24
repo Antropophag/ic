@@ -635,3 +635,45 @@ test('выбор маршрута защищён от гонки, заверше
     await Promise.all([initiator.dispose(), manager.dispose(), laboratory.dispose()])
   }
 })
+
+
+test('удаление заключения после СБ возвращает заявку на экспертизу и защищено от повторов', async ({ page, baseURL }) => {
+  const initiator = await apiFor(baseURL, 3)
+  const manager = await apiFor(baseURL, 1)
+  const executor = await apiFor(baseURL, 2)
+  const expert = await apiFor(baseURL, 4)
+  const security = await apiFor(baseURL, 5)
+  try {
+    const created = await expectOk(await initiator.post('/api/v1/requests', { data: {
+      productName: `Возврат заключения ${Date.now()}`, manufacturer: 'Завод', supplier: 'Поставщик', sampleQuantity: 1, testMethod: 'Программа',
+    } }))
+    const id = created.id
+    await expectOk(await manager.post(`/api/v1/requests/${id}/route`, { data: { route: 'protocol', lockVersion: 1 } }))
+    await expectOk(await manager.post(`/api/v1/requests/${id}/executor`, { data: { executorId: 2, lockVersion: 2 } }))
+    await expectOk(await executor.post(`/api/v1/requests/${id}/start`, { data: { lockVersion: 3 } }))
+    await expectOk(await executor.post(`/api/v1/requests/${id}/report`, { multipart: { file: { name: 'report.pdf', mimeType: 'application/pdf', buffer: Buffer.from('%PDF-1.4\n%%EOF') } } }))
+    await expectOk(await expert.post(`/api/v1/requests/${id}/expert/claim`, { data: { lockVersion: 5 } }))
+    await expectOk(await expert.post(`/api/v1/requests/${id}/opinion`, { data: { body: 'Заключение для проверки возврата.', lockVersion: 6 } }))
+    await expectOk(await security.post(`/api/v1/requests/${id}/security-decision`, { data: { decision: 'approve', lockVersion: 7 } }))
+    await useTestIdentity(page, 4)
+    await page.goto(`/?request=${id}`)
+    await page.getByRole('button', { name: 'Удалить заключение', exact: true }).click()
+    const confirmation = page.getByRole('alertdialog')
+    await expect(confirmation).toContainText('Прежнее решение СБ перестанет действовать')
+    await confirmation.locator('textarea').fill('Неверный вывод эксперта')
+    const outgoing = page.waitForRequest(request => request.method() === 'POST' && request.url().endsWith('/opinion/delete'))
+    await confirmation.getByRole('button', { name: 'Удалить', exact: true }).click()
+    const command = await outgoing
+    await expect(page.locator('.request-objects-status')).toContainText('Подготовка заключения')
+    await expect(page.getByRole('button', { name: 'Написать заключение', exact: true })).toBeVisible()
+    await expect(page.locator('.stream')).toContainText('Неверный вывод эксперта')
+    const replay = await expert.post(`/api/v1/requests/${id}/opinion/delete`, { data: command.postDataJSON(), headers: { 'Idempotency-Key': command.headers()['idempotency-key'] } })
+    expect(replay.ok(), await replay.text()).toBe(true)
+    const details = await expectOk(await expert.get(`/api/v1/requests/${id}`))
+    expect(details.item).toMatchObject({ status: 'opinion_preparation', security_mark: null, lockVersion: 9 })
+    expect(details.history.filter(event => event.action === 'delete_opinion')).toHaveLength(1)
+    await page.screenshot({ path: '/tmp/ic-kashin-opinion-reopened.png', fullPage: true })
+  } finally {
+    await Promise.allSettled([initiator, manager, executor, expert, security].map(context => context.dispose()))
+  }
+})

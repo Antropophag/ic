@@ -344,7 +344,8 @@ final class RequestRepository
             $check = $this->db->createCommand(
                 'SELECT sc.*, COALESCE((SELECT c.decision FROM {{%security_decision_corrections}} c '
                 . 'WHERE c.security_check_id = sc.id ORDER BY c.id DESC LIMIT 1), sc.decision) AS current_decision '
-                . 'FROM {{%security_checks}} sc WHERE sc.request_id = :id ORDER BY sc.id DESC LIMIT 1 FOR UPDATE',
+                . 'FROM {{%security_checks}} sc WHERE sc.request_id = :id AND ' . SecurityDecisionValidity::condition('sc')
+                . ' ORDER BY sc.id DESC LIMIT 1 FOR UPDATE',
                 [':id' => $requestId],
             )->queryOne();
             (new SecurityDecisionCorrectionPolicy())->assertAllowed(

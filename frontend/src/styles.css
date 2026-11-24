@@ -100,7 +100,7 @@
 .direction-filter-actions .shlz-button{font-size:12px}
 @media(max-height:620px){.registry-page .registry{position:static;height:auto}.registry-page .table-wrap{max-height:60vh;flex:auto}}
 .registry table{min-width:1120px}
-.registry th{height:40px;padding:0 14px;border-bottom:1px solid var(--line);background:var(--surface-subtle);color:#6f7b8e;font-size:10px;line-height:14px;letter-spacing:.035em;font-weight:600;vertical-align:middle}
+.registry th{height:40px;padding:0 14px;border-bottom:1px solid var(--line);background:var(--surface-subtle);color:#000;font-size:10px;line-height:14px;letter-spacing:.035em;font-weight:700;vertical-align:middle}
 .registry td{height:52px;padding:0 14px;border-top:0;border-bottom:1px solid var(--line-soft);line-height:17px;vertical-align:middle}.registry td:nth-child(2){padding-right:6px}.registry td:nth-child(3){padding-left:6px}.registry td:nth-child(7){padding-right:6px}.registry td:nth-child(8){padding-left:6px}
 .registry th:nth-child(2) .sort-control{padding-right:6px}
 .registry td{overflow:hidden;text-overflow:ellipsis}
@@ -435,3 +435,5 @@
 .modal[aria-labelledby="create-request-title"] .modal-actions { flex-wrap: wrap; }
 
 @media(max-width:550px){.request-action-row{grid-template-columns:minmax(0,1fr);gap:6px}.request-action-group{gap:6px}.request-action-bar select{min-width:0;width:100%;max-width:100%}}
+
+.registry .toolbar .registry-direction-sort{display:inline-flex;align-items:center;gap:4px;margin-left:0;min-height:36px;font-size:12px;flex-wrap:wrap}.registry-direction-sort[aria-pressed="true"]{border-color:var(--blue);color:var(--blue)}

@@ -3,7 +3,7 @@ inline_comments_severity_threshold = 2
 comments_location_policy = "both"
 
 [config]
-ignore_pr_labels = ["dependencies", "skip-ai-review"]
+ignore_pr_labels = ["skip-ai-review"]
 ignore_language_framework = ["lock"]
 
 [review_agent_ux]

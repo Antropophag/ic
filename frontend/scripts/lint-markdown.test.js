@@ -3,6 +3,8 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { lintMarkdown } from './lint-markdown.mjs'
+import { micromark } from 'micromark'
+import { math, mathHtml } from 'micromark-extension-math'
 
 let root
 beforeEach(async () => {
@@ -34,4 +36,16 @@ it('reports the file, line and rule for invalid Markdown', async () => {
 
 it('does not silently pass when no configured files are found', async () => {
   await expect(lintMarkdown(root)).rejects.toThrow('found no files')
+})
+
+
+it('keeps inline and block math compatible with the patched KaTeX dependency', async () => {
+  const markdown = '# Math\n\nInline $x^2$ and block:\n\n$$\nx^2 + y^2 = z^2\n$$\n'
+  await writeFile(join(root, 'README.md'), markdown)
+  const html = micromark(markdown, { extensions: [math()], htmlExtensions: [mathHtml()] })
+  expect(html).toContain('class="katex"')
+  expect(html).toContain('class="katex-display"')
+  expect(html).not.toContain('katex-error')
+  expect(await lintMarkdown(root)).toBe(0)
+  expect(console.error).not.toHaveBeenCalled()
 })

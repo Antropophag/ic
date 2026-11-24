@@ -495,4 +495,94 @@ final class RequestRoutesTest extends IntegrationTestCase
             $other->close();
         }
     }
+
+    /** @return iterable<string, array{string, bool}> */
+    public static function opinionDeleters(): iterable
+    {
+        yield 'manager before security' => ['ic_manager', false];
+        yield 'other expert after security' => ['expert', true];
+    }
+
+    #[DataProvider('opinionDeleters')]
+    public function testOpinionDeletionReopensAndRepublishesWithoutRevivingOldDecisions(string $role, bool $completed): void
+    {
+        [$id, $manager, $executor, $expert, $security] = $this->fixture();
+        $actor = $this->createUser('opinion.deleter', 'Автор удаления');
+        $this->grantRole($actor, $role);
+        $admin = $this->createUser('opinion.admin', 'Администратор');
+        $this->grantRole($admin, 'administrator');
+        $repository = new RequestRepository($this->db());
+        $query = new RequestQuery($this->db());
+        $this->start($id, $manager, $executor, RequestRoute::Protocol);
+        $report = $this->report($id, $executor);
+        $repository->claimExpert($id, $this->version($id), $expert);
+        $opinion = $this->documents()->publishOpinion($id, $expert, 'Образец прошёл испытания.', $this->version($id), new OpinionPdfRenderer());
+        $token = str_repeat('a', 64);
+        $this->db()->createCommand()->insert('{{%document_download_links}}', [
+            'document_version_id' => $opinion['documentVersionId'], 'token_hash' => hash('sha256', $token), 'created_at' => gmdate('Y-m-d H:i:s'),
+        ])->execute();
+        if ($completed) {
+            $repository->decideSecurity($id, $security, 'approve', null, $this->version($id));
+            $repository->correctSecurityDecision($id, $admin, 'decline', 'Ошибочное решение', 'IT-1', $this->version($id));
+        }
+        $checks = $this->db()->createCommand('SELECT * FROM {{%security_checks}} WHERE request_id = :id', [':id' => $id])->queryAll();
+        self::assertSame(1, (int) $query->findDetails($id, $actor)['item']['can_delete_opinion']);
+        $before = $this->version($id);
+        $response = $this->controller($actor, ['lockVersion' => $before, 'reason' => 'Ошибочное заключение'])->actionDeleteOpinion($id);
+        self::assertSame(['status' => 'opinion_preparation', 'lockVersion' => $before + 1], $response);
+        $details = $query->findDetails($id, $manager);
+        self::assertNull($details['item']['security_mark']);
+        self::assertSame(0, (int) $details['item']['can_delete_opinion']);
+        self::assertSame(0, (int) $query->findDetails($id, $admin)['item']['can_correct_security_decision']);
+        self::assertSame($checks, $this->db()->createCommand('SELECT * FROM {{%security_checks}} WHERE request_id = :id', [':id' => $id])->queryAll());
+        $events = array_values(array_filter($details['history'], static fn (array $event): bool => $event['action'] === 'delete_opinion'));
+        self::assertCount(1, $events);
+        self::assertSame('Ошибочное заключение', $events[0]['reason']);
+        self::assertSame('Автор удаления', $events[0]['actorName']);
+        self::assertFalse($this->documents()->findVersionByToken($token));
+        self::assertSame((int) $report['versionId'], (int) $this->documents()->findVersionForDownload((int) $report['versionId'], $manager)['id']);
+        $this->assertHttpFailure(403, fn () => $this->controller($admin, [
+            'lockVersion' => $this->version($id), 'decision' => 'approve', 'reason' => 'Нельзя восстановить решение', 'ticketReference' => 'IT-2',
+        ])->actionCorrectSecurityDecision($id));
+        $next = $this->documents()->publishOpinion($id, $expert, 'Исправленное заключение эксперта.', $this->version($id), new OpinionPdfRenderer());
+        self::assertSame(2, $next['revision']);
+        self::assertSame('security_review', $next['status']);
+        self::assertNull($query->findDetails($id, $manager)['item']['security_mark']);
+        self::assertFalse($this->documents()->findVersionByToken($token));
+        try {
+            $this->documents()->findVersionForDownload((int) $opinion['documentVersionId'], $manager);
+            self::fail('Deleted version must stay inaccessible');
+        } catch (\App\Domain\Request\RequestNotFound) {
+            self::assertNotEmpty($this->documents()->findVersionForDownload((int) $next['documentVersionId'], $manager));
+        }
+        $repository->decideSecurity($id, $security, 'approve', null, $this->version($id));
+        self::assertSame('approve', $query->findDetails($id, $manager)['item']['security_mark']);
+        $page = $query->findPage($manager, 1, 100, 'all', null, '', 'desc');
+        $row = array_values(array_filter($page['items'], static fn (array $row): bool => (int) $row['id'] === $id))[0];
+        self::assertSame('approve', $row['security_mark']);
+        self::assertGreaterThan(0, (int) $this->scalar("SELECT COUNT(*) FROM {{%notification_outbox}} WHERE request_id = :id AND event_type = 'request.opinion_deleted'", [':id' => $id]));
+    }
+
+    public function testOpinionDeletionRejectsWrongRoleStaleVersionMissingReasonAndArchive(): void
+    {
+        [$id, $manager, $executor, $expert] = $this->fixture();
+        $repository = new RequestRepository($this->db());
+        $this->start($id, $manager, $executor, RequestRoute::Protocol);
+        $this->report($id, $executor);
+        $repository->claimExpert($id, $this->version($id), $expert);
+        $this->documents()->publishOpinion($id, $expert, 'Образец прошёл испытания.', $this->version($id), new OpinionPdfRenderer());
+        $version = $this->version($id);
+        $lab = $this->createUser('delete.lab', 'Руководитель лаборатории');
+        $this->grantRole($lab, 'laboratory_manager');
+        foreach ([$executor, $lab] as $actor) {
+            self::assertSame(0, (int) (new RequestQuery($this->db()))->findDetails($id, $actor)['item']['can_delete_opinion']);
+            $this->assertHttpFailure(403, fn () => $this->controller($actor, ['lockVersion' => $version, 'reason' => 'Ошибка'])->actionDeleteOpinion($id));
+        }
+        $this->assertHttpFailure(409, fn () => $this->controller($manager, ['lockVersion' => $version - 1, 'reason' => 'Ошибка'])->actionDeleteOpinion($id));
+        self::assertArrayHasKey('errors', $this->controller($manager, ['lockVersion' => $version, 'reason' => '  '])->actionDeleteOpinion($id));
+        self::assertSame(422, Yii::$app->response->statusCode);
+        self::assertSame($version, $this->version($id));
+        $this->db()->createCommand()->update('{{%requests}}', ['is_archived' => 1], ['id' => $id])->execute();
+        $this->assertHttpFailure(403, fn () => $this->controller($manager, ['lockVersion' => $version, 'reason' => 'Ошибка'])->actionDeleteOpinion($id));
+    }
 }
