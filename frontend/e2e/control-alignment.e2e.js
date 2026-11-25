@@ -189,3 +189,22 @@ test('текст нативных полей визуально центриро
     expect(Math.abs(ink.top - ink.bottom), name).toBeLessThanOrEqual(4)
   }
 })
+
+test('кнопка шаблона документа учитывает уменьшение движения', async ({ page }) => {
+  await openManagerCard(page)
+  await page.evaluate(() => {
+    document.querySelector('#app').innerHTML = '<button class="request-document-group-action" aria-label="Шаблон"><svg width="16" height="16"><path class="magic-wand-spark magic-wand-spark--large" d="M1 1L8 8" /></svg></button>'
+  })
+  const button = page.getByRole('button', { name: 'Шаблон' })
+  await page.emulateMedia({ reducedMotion: 'reduce' })
+  await button.hover()
+  await expect(button).toHaveCSS('transform', 'none')
+  await expect(button).toHaveCSS('transition-duration', '0s')
+  await expect(button.locator('path')).toHaveCSS('animation-name', 'none')
+  await page.mouse.down()
+  await expect(button).toHaveCSS('transform', 'none')
+  await page.mouse.up()
+  await page.emulateMedia({ reducedMotion: 'no-preference' })
+  await expect(button.locator('path')).toHaveCSS('animation-name', 'request-document-twinkle')
+  await expect(button).not.toHaveCSS('transform', 'none')
+})
