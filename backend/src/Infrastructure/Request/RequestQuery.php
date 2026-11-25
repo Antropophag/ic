@@ -132,7 +132,7 @@ final class RequestQuery
 
         $items = $this->db->createCommand(
             'SELECT r.id, r.number, r.status, r.color, r.source, r.is_archived, r.product_name, r.manufacturer, '
-            . 'r.route, r.route_selected_by, r.route_selected_at, '
+            . 'r.route, r.security_review_required, r.route_selected_by, r.route_selected_at, '
             . (new AttentionQueueScope())->canChooseRoute(':route_actor') . ' AS can_choose_route, '
             . (new AttentionQueueScope())->condition(AttentionQueue::CompleteAct, ':complete_actor') . ' AS can_complete_act, '
             . '(SELECT GREATEST(COUNT(*), 1) FROM {{%request_objects}} ro WHERE ro.request_id = r.id) AS object_count, '
@@ -368,7 +368,7 @@ final class RequestQuery
     {
         $item = $this->db->createCommand(
             'SELECT r.id, r.number, r.status, r.color, r.source, r.is_archived, r.product_name, r.manufacturer, '
-            . 'r.route, r.route_selected_by, r.route_selected_at, '
+            . 'r.route, r.security_review_required, r.route_selected_by, r.route_selected_at, '
             . (new AttentionQueueScope())->canChooseRoute(':route_actor') . ' AS can_choose_route, '
             . (new AttentionQueueScope())->condition(AttentionQueue::CompleteAct, ':complete_actor') . ' AS can_complete_act, '
             . '(SELECT GREATEST(COUNT(*), 1) FROM {{%request_objects}} ro WHERE ro.request_id = r.id) AS object_count, '
@@ -450,7 +450,7 @@ final class RequestQuery
             . "WHERE rd.request_id = r.id AND rd.document_type = 'report' AND rd.deleted_at IS NULL AND rv.deleted_at IS NULL)) AS can_delete_opinion "
             . ", (r.status = 'opinion_preparation' AND current_expert.user_id = :opinion_actor) "
             . 'AS can_publish_opinion '
-            . ", (r.status = 'security_review' AND EXISTS(SELECT 1 FROM {{%user_roles}} security_ur "
+            . ", (r.status = 'security_review' AND r.security_review_required = 1 AND EXISTS(SELECT 1 FROM {{%user_roles}} security_ur "
             . 'JOIN {{%roles}} security_role ON security_role.id = security_ur.role_id '
             . "WHERE security_ur.user_id = :security_actor AND security_role.code = 'security_officer')) "
             . 'AS can_security_decide, '
@@ -554,7 +554,7 @@ final class RequestQuery
             . "WHEN 'request.department_changed' THEN 'change_department' WHEN 'request.route_selected' THEN 'choose_route' ELSE 'delete_report' END AS action, NULL, NULL, "
             . "a.rule_id, CASE WHEN a.event_type = 'request.report_deleted' THEN JSON_UNQUOTE(JSON_EXTRACT(a.payload_json, '$.reason')) ELSE NULL END, DATE_FORMAT(a.created_at, '%Y-%m-%dT%H:%i:%s.%fZ'), u.display_name, "
             . "CASE WHEN a.event_type = 'request.department_changed' THEN JSON_UNQUOTE(JSON_EXTRACT(a.payload_json, '$.new_department_name')) "
-            . "WHEN a.event_type = 'request.route_selected' THEN CASE JSON_UNQUOTE(JSON_EXTRACT(a.payload_json, '$.route')) WHEN 'act' THEN 'Акт испытаний' ELSE 'Протокол испытаний' END ELSE target_user.display_name END, NULL, NULL "
+            . "WHEN a.event_type = 'request.route_selected' THEN CASE JSON_UNQUOTE(JSON_EXTRACT(a.payload_json, '$.route')) WHEN 'act' THEN 'Акт испытаний' ELSE CASE JSON_UNQUOTE(JSON_EXTRACT(a.payload_json, '$.security_review_required')) WHEN 'false' THEN 'Протокол испытаний, без контроля СБ' WHEN 'true' THEN 'Протокол испытаний, с контролем СБ' ELSE 'Протокол испытаний' END END ELSE target_user.display_name END, NULL, NULL "
             . 'FROM {{%audit_events}} a '
             . 'JOIN {{%users}} u ON u.id = a.actor_id '
             // assign_executor/claim_expert/reassign_expert пишут одинаковое

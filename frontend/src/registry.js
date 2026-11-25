@@ -77,6 +77,7 @@ export function fromApi(item) {
     expertId: item.expert_id ? Number(item.expert_id) : null,
     lockVersion: Number(item.lockVersion),
     route: item.route || null,
+    securityReviewRequired: item.route !== 'act' && (item.security_review_required == null || Boolean(Number(item.security_review_required))),
     routeLabel: item.route === 'act' ? 'Акт испытаний' : item.route === 'protocol' ? 'Протокол испытаний' : 'Не выбран',
     canChooseRoute: Boolean(Number(item.can_choose_route)),
     canCompleteAct: Boolean(Number(item.can_complete_act)),
@@ -108,7 +109,8 @@ export function fromApi(item) {
     // className/label/path в шаблоне (реестр рендерит это на каждую
     // строку) — тот же {className,label,path}, что вернул бы прямой
     // вызов securityMarkIcon(securityMark) (Qodo).
-    securityMarkDisplay: securityMarkIcon(securityMark),
+    securityMarkDisplay: item.route === 'protocol' && item.security_review_required != null && !Number(item.security_review_required)
+      ? { ...securityMarkIcon(null), label: 'Проверка СБ не требуется' } : securityMarkIcon(securityMark),
     lastCommentAuthor: item.last_comment_author || null,
     lastCommentBody: item.last_comment_body || null,
     lastCommentAt: item.last_comment_created_at ? new Date(item.last_comment_created_at).toLocaleString('ru-RU') : null,

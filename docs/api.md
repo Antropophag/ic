@@ -246,14 +246,18 @@ GET карточки возвращает `item.objects` в порядке вв�
 
 ## Маршруты и решения СБ (#358, #359)
 
-`POST /api/v1/requests/{id}/route` принимает `route: act|protocol` и `lockVersion`.
-Выбирают руководители ИЦ и лаборатории до начала работ, меняют до первой загрузки
-отчёта. Новая заявка без маршрута не запускается. Команда возвращает маршрут,
-`selectedBy`, `selectedAt`, `status`, `lockVersion`.
+`POST /api/v1/requests/{id}/route` принимает `route: act|protocol`, `lockVersion`
+и `securityReviewRequired` (JSON boolean, default true). Руководители выбирают
+маршрут до назначения исполнителя; меняют его и настройку СБ до первой публикации
+заключения или завершения. Удаление документов не снимает блокировку.
+Новая заявка без маршрута не запускается. Команда возвращает маршрут,
+`securityReviewRequired`, `selectedBy`, `selectedAt`, `status`, `lockVersion`.
+Карточка и реестр возвращают `security_review_required` как 0 или 1.
 
 `POST /api/v1/requests/{id}/complete-act` принимает `lockVersion`. Завершает
 работающую заявку маршрута `act` с действующим отчётом, только для руководителей.
-Для `protocol` обход экспертного заключения и СБ запрещён.
+Для `protocol` команда недоступна. При отключённом СБ публикация заключения
+сама возвращает `completed` вместо `security_review`.
 
 `POST /api/v1/requests/{id}/security-decision` принимает `approve` или `decline`,
 необязательный `reason` и `lockVersion`. Оба решения завершают `protocol`;

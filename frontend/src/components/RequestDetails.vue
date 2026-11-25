@@ -52,6 +52,11 @@ const departmentDraft = ref('')
 const departmentLoading = ref(false)
 const departmentError = ref('')
 const routeChoice = ref('')
+const securityReviewChoice = ref(true)
+const routeSettingsChanged = computed(() => routeChoice.value !== selected.value?.route
+  || (routeChoice.value === 'protocol' && securityReviewChoice.value !== selected.value?.securityReviewRequired))
+const opinionPublishLabel = computed(() => selected.value?.securityReviewRequired
+  ? 'Опубликовать и передать в СБ' : 'Опубликовать и завершить')
 const routeEditing = ref(false)
 const isChoosingRoute = computed(() => selected.value?.canChooseRoute && (!selected.value.route || routeEditing.value))
 const routeLoading = ref(false)
@@ -97,7 +102,8 @@ async function correctSecurityDecision() {
     if (!correctionRequestGuard.isCurrent(token, selected.value?.backendId)) return
     if (error.status === 409) {
       showCorrectionModal.value = false
-      await recoverConflict(requestId, 'Заявка уже изменена. Проверьте решение СБ перед исправлением.')
+      await recoverConflict(requestId, 'Заявка уже изменена. Проверьте решение СБ перед исправлением.',
+        () => correctionRequestGuard.isCurrent(token, selected.value?.backendId))
     } else {
       correctionError.value = error.status === 403
         ? 'Исправление недоступно. Обновите карточку и проверьте права администратора.'
@@ -196,7 +202,7 @@ function eventIconTone(action) {
 const processSteps = computed(() => {
   const labels = selected.value?.route === 'act'
     ? ['Зарегистрирована', 'В работе', 'Завершена']
-    : ['Зарегистрирована', 'В работе', 'Экспертиза', 'Контроль СБ', 'Завершена']
+    : ['Зарегистрирована', 'В работе', 'Экспертиза', ...(selected.value?.securityReviewRequired ? ['Контроль СБ'] : []), 'Завершена']
   const statusIndex = {
     'Заявка зарегистрирована': 0,
     'Заявка в работе': 1,
@@ -232,7 +238,7 @@ const actionPrompt = computed(() => {
   if (selected.value.canPublishOpinion) return 'Подготовьте экспертное заключение'
   if (selected.value.canReassignExpert) return 'Подготовьте заключение или передайте заявку эксперту'
   if (selected.value.canClaimExpert) return 'Возьмите заявку на экспертизу'
-  if (selected.value.canUploadReport) return 'Завершите испытания и загрузите отчёт'
+  if (selected.value.canUploadReport) return selected.value.canDeleteReport ? 'При необходимости обновите отчёт испытаний' : 'Завершите испытания и загрузите отчёт'
   if (selected.value.canDeleteOpinion) return 'При необходимости верните заявку на подготовку заключения'
   if (selected.value.canDeleteReport) return 'Проверьте загруженный отчёт'
   if (selected.value.canResume) return 'Возобновите работы по заявке'
@@ -352,6 +358,7 @@ async function loadRequestDetails(item) {
       documents: result.documents.map(documentFromApi),
     }
     routeChoice.value = selected.value.route || ''
+    securityReviewChoice.value = selected.value.route === 'act' ? true : selected.value.securityReviewRequired
     emit('loaded', selected.value)
     executorChoice.value = selected.value.executorId || ''
     expertChoice.value = ''
@@ -1013,14 +1020,14 @@ async function saveRouteOrComplete(complete = false) {
   routeError.value = ''
   try {
     if (complete) await requestApi.completeAct(requestId, lockVersion)
-    else await requestApi.chooseRoute(requestId, routeChoice.value, lockVersion)
+    else await requestApi.chooseRoute(requestId, routeChoice.value, lockVersion, routeChoice.value === 'protocol' && securityReviewChoice.value)
     if (!routeRequestGuard.isCurrent(token, selected.value?.backendId)) return
     routeEditing.value = false
     selected.value = withoutStaleActions(selected.value)
     await refreshSelected(requestId)
   } catch (error) {
     if (!routeRequestGuard.isCurrent(token, selected.value?.backendId)) return
-    if (error.status === 409) await recoverConflict(requestId, 'Заявка уже изменена. Проверьте маршрут и отчёт.')
+    if (error.status === 409) await recoverConflict(requestId, 'Заявка уже изменена. Проверьте маршрут и отчёт.', () => routeRequestGuard.isCurrent(token, selected.value?.backendId))
     else routeError.value = error.status === 403
       ? 'Действие недоступно. Выбор маршрута и завершение акта разрешены руководителям ИЦ и лаборатории.'
       : 'Не удалось обновить заявку. Обновите карточку и проверьте результат перед повторной попыткой.'
@@ -1179,6 +1186,7 @@ function resetRequestLocalState() {
   executorChoice.value = ''
   expertChoice.value = ''
   routeChoice.value = ''
+  securityReviewChoice.value = true
   routeEditing.value = false
 
   for (const error of [
@@ -1228,7 +1236,7 @@ defineExpose({ openDepartmentModal })
         </RequestObjectSummary>
         <section class="card process-section request-process" aria-labelledby="process-title">
           <div class="section-title"><h3 id="process-title">Процесс заявки<span v-if="selected.route" class="request-route-badge" :aria-label="`Маршрут: ${selected.routeLabel}`">{{ selected.route === 'act' ? 'Акт' : 'Протокол' }}</span></h3><button ref="auditTrigger" type="button" class="request-text-button" @click="openAuditDrawer">Подробная история</button></div>
-          <ol class="process-timeline" :class="{ 'process-timeline--act': selected.route === 'act' }">
+          <ol class="process-timeline" :class="{ 'process-timeline--act': selected.route === 'act', 'process-timeline--without-security': selected.route === 'protocol' && !selected.securityReviewRequired }">
             <li v-for="step in processSteps" :key="step.label" :class="step.state"><span class="process-node" aria-hidden="true"></span><b>{{ step.label }}</b><small>{{ step.state === 'current' ? 'Текущий этап' : step.state === 'done' ? 'Завершено' : 'Ожидается' }}</small></li>
           </ol>
           <div v-if="hasHeroAction || actionError || routeError" class="request-process-action">
@@ -1238,13 +1246,20 @@ defineExpose({ openDepartmentModal })
                 <div v-if="isChoosingRoute" class="request-action-row" role="group" aria-label="Выбор маршрута">
                   <span class="request-action-label">Маршрут</span>
                   <div class="request-action-group">
-                    <select id="request-route" v-model="routeChoice" :disabled="routeLoading || detailLoading" aria-label="Маршрут" aria-describedby="request-route-hint">
-                      <option disabled value="">Выберите маршрут</option>
-                      <option value="act">Акт испытаний</option>
-                      <option value="protocol">Протокол испытаний</option>
-                    </select>
-                    <button type="button" :class="selected.route ? 'secondary' : 'primary'" :disabled="routeLoading || detailLoading || !routeChoice || routeChoice === selected.route" @click="saveRouteOrComplete()">{{ routeLoading ? 'Сохранение…' : 'Сохранить маршрут' }}</button>
-                    <button v-if="selected.route" type="button" class="secondary" :disabled="routeLoading" @click="routeEditing = false; routeChoice = selected.route">Отмена</button>
+                    <div class="request-route-settings">
+                      <select id="request-route" v-model="routeChoice" :disabled="routeLoading || detailLoading" aria-label="Маршрут" aria-describedby="request-route-hint">
+                        <option disabled value="">Выберите маршрут</option>
+                        <option value="act">Акт испытаний</option>
+                        <option value="protocol">Протокол испытаний</option>
+                      </select>
+                      <label v-if="routeChoice === 'protocol'" class="shlz-choice request-route-security">
+                        <input v-model="securityReviewChoice" class="shlz-checkbox shlz-checkbox--sm" type="checkbox" :disabled="routeLoading || detailLoading" aria-describedby="request-route-security-hint" />
+                        <span>Требуется контроль СБ</span>
+                      </label>
+                      <small v-if="routeChoice === 'protocol'" id="request-route-security-hint">{{ securityReviewChoice ? 'После заключения заявка поступит в СБ.' : 'Публикация заключения завершит заявку.' }}</small>
+                    </div>
+                    <button type="button" :class="selected.route ? 'secondary' : 'primary'" :disabled="routeLoading || detailLoading || !routeChoice || !routeSettingsChanged" @click="saveRouteOrComplete()">{{ routeLoading ? 'Сохранение…' : 'Сохранить маршрут' }}</button>
+                    <button v-if="selected.route" type="button" class="secondary" :disabled="routeLoading" @click="routeEditing = false; routeChoice = selected.route; securityReviewChoice = selected.route === 'act' ? true : selected.securityReviewRequired">Отмена</button>
                   </div>
                 </div>
                 <div v-if="(!isChoosingRoute && (selected.canCompleteAct || selected.canStart || selected.canSuspend || selected.canResume)) || selected.canReject || selected.canWithdraw" class="request-action-row" role="group" aria-label="Действия с заявкой">
@@ -1297,7 +1312,7 @@ defineExpose({ openDepartmentModal })
               </div>
               <button v-if="actionHelp" ref="helpTrigger" type="button" class="request-action-help" :aria-label="actionHelp.label" :title="actionHelp.label" @click="openHelpDrawer"><AppIcon name="help" :size="16" /></button>
             </div>
-            <p v-if="isChoosingRoute" id="request-route-hint" class="hero-hint">Маршрут можно изменить до первой загрузки отчёта.</p>
+            <p v-if="isChoosingRoute" id="request-route-hint" class="hero-hint">Маршрут и контроль СБ можно изменить до первой публикации заключения или завершения заявки. Удаление документов не снимает ограничение.</p>
             <p v-if="selected.canStart && startHintRevealed && startHint" class="hero-hint">{{ startHint }}</p>
             <p v-for="(error, index) in [routeError, suspendResumeError, rejectError, reportError, deleteReportError, deleteOpinionError, claimError, reassignError, securityError, withdrawError, actionError].filter(Boolean)" :key="`${index}-${error}`" class="action-error">{{ error }}</p>
           </div>
@@ -1424,9 +1439,10 @@ defineExpose({ openDepartmentModal })
     </div>
     <textarea v-model="opinionDraft" :disabled="opinionLoading" minlength="10" maxlength="20000" placeholder="Введите итоговое заключение по результатам испытаний"></textarea>
     <p v-if="opinionError" class="action-error">{{ opinionError }}</p>
+    <p class="hero-hint">{{ selected.securityReviewRequired ? 'После публикации заключения заявка поступит на контроль СБ.' : 'После публикации заключения заявка будет выполнена. Проверка СБ не требуется.' }}</p>
     <template #footer>
       <button type="button" class="secondary" :disabled="opinionLoading" @click="showOpinionModal = false">Отмена</button>
-      <button class="primary" :disabled="opinionLoading">{{ opinionLoading ? 'Публикация…' : 'Опубликовать и передать в СБ' }}</button>
+      <button class="primary" :disabled="opinionLoading">{{ opinionLoading ? 'Публикация…' : opinionPublishLabel }}</button>
     </template>
   </AppModal>
   <AppModal :open="showCorrectionModal" as="form" title="Исправить решение СБ" title-id="security-correction-title" description-id="security-correction-description" size="medium" :busy="correctionLoading" @close="showCorrectionModal = false" @submit="correctSecurityDecision">

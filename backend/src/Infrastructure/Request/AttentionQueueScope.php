@@ -29,7 +29,7 @@ final class AttentionQueueScope
             AttentionQueue::UploadReport => "r.status IN ('in_progress', 'opinion_preparation', 'completed') AND NOT ({$hasReport}) AND ({$manager} OR ({$executor} AND {$currentExecutor}))",
             AttentionQueue::ClaimExpert => "r.status = 'opinion_preparation' AND {$expert} AND NOT ({$currentExpert})",
             AttentionQueue::PublishOpinion => "r.status = 'opinion_preparation' AND {$currentExpert}",
-            AttentionQueue::SecurityDecision => "r.status = 'security_review' AND {$security}",
+            AttentionQueue::SecurityDecision => "r.status = 'security_review' AND r.security_review_required = 1 AND {$security}",
         };
 
         return "({$active} AND {$action})";
@@ -39,8 +39,9 @@ final class AttentionQueueScope
     {
         $manager = $this->hasRole($actorParameter, "'ic_manager', 'laboratory_manager'");
         return "(EXISTS(SELECT 1 FROM {{%users}} route_actor WHERE route_actor.id = {$actorParameter} AND route_actor.is_active = 1) "
-            . "AND r.status IN ('registered', 'in_progress', 'suspended') AND (r.route IS NOT NULL OR r.status = 'registered') "
-            . "AND NOT EXISTS(SELECT 1 FROM {{%request_documents}} route_report WHERE route_report.request_id = r.id AND route_report.document_type = 'report') AND {$manager})";
+            . "AND r.is_archived = 0 AND r.status IN ('registered', 'in_progress', 'suspended', 'opinion_preparation') AND (r.route IS NOT NULL OR r.status = 'registered') "
+            . "AND NOT EXISTS(SELECT 1 FROM {{%expert_opinions}} route_opinion WHERE route_opinion.request_id = r.id) "
+            . "AND NOT EXISTS(SELECT 1 FROM {{%request_transitions}} route_completion WHERE route_completion.request_id = r.id AND route_completion.to_status = 'completed') AND {$manager})";
     }
 
     private function hasRole(string $actorParameter, string $roleCodes): string

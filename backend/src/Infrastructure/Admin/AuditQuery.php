@@ -56,7 +56,7 @@ final class AuditQuery
     ];
 
     private const SAFE_DETAILS = [
-        'request.route_selected' => ['from_route', 'route'],
+        'request.route_selected' => ['from_route', 'route', 'from_security_review_required', 'security_review_required', 'from_status', 'to_status'],
         'request.security_decision_corrected' => ['security_check_id', 'correction_id', 'original_decision', 'previous_decision', 'decision'],
         'request.act_completed' => ['report_version_id'],
         'request.security_decided' => ['decision'], 'request.comment_added' => ['comment_id'],

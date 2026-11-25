@@ -200,7 +200,7 @@ final class RequestRoutesTest extends IntegrationTestCase
         $details = $query->findDetails($id, $manager);
         self::assertSame('in_progress', $details['item']['status']);
         self::assertSame(1, (int) $details['item']['can_complete_act']);
-        self::assertSame(0, (int) $details['item']['can_choose_route']);
+        self::assertSame(1, (int) $details['item']['can_choose_route']);
         self::assertSame($manager, (int) $details['item']['route_selected_by']);
         self::assertNotNull($details['item']['route_selected_at']);
         foreach ([$executor, $expert, $security] as $other) {
@@ -231,7 +231,7 @@ final class RequestRoutesTest extends IntegrationTestCase
         $repository->completeAct($id, $result['lockVersion'] - 1, $manager);
     }
 
-    public function testRouteChangesFreezeAtFirstReportEvenAfterDeletion(): void
+    public function testReportDeletionDoesNotPreventRouteChangeBeforePublication(): void
     {
         [$id, $manager, $executor] = $this->fixture();
         $repository = new RequestRepository($this->db());
@@ -246,9 +246,8 @@ final class RequestRoutesTest extends IntegrationTestCase
         }
         $this->report($id, $executor);
         $this->documents()->deleteReport($id, $this->version($id), $executor, 'Исправить отчёт');
-        self::assertSame(0, (int) (new RequestQuery($this->db()))->findDetails($id, $manager)['item']['can_choose_route']);
-        $this->expectException(RequestRouteDenied::class);
-        $repository->chooseRoute($id, RequestRoute::Protocol, $this->version($id), $manager);
+        self::assertSame(1, (int) (new RequestQuery($this->db()))->findDetails($id, $manager)['item']['can_choose_route']);
+        self::assertSame('in_progress', $repository->chooseRoute($id, RequestRoute::Protocol, $this->version($id), $manager)['status']);
     }
 
     public function testMissingOrDeletedReportCannotCompleteAndSelectionCannotBeMadeByExpert(): void
@@ -290,6 +289,119 @@ final class RequestRoutesTest extends IntegrationTestCase
             self::assertSame(0, (int) $this->scalar('SELECT COUNT(*) FROM {{%security_checks}} WHERE request_id = :id', [':id' => $id]));
             self::assertSame('security_review', $this->scalar('SELECT status FROM {{%requests}} WHERE id = :id', [':id' => $id]));
         }
+    }
+
+    #[DataProvider('managers')]
+    public function testSwitchingWithExistingReportKeepsDocumentsAndAssignments(string $role): void
+    {
+        [$id, $manager, $executor, $expert] = $this->fixture($role);
+        $repository = new RequestRepository($this->db());
+        $this->start($id, $manager, $executor, RequestRoute::Act);
+        $report = $this->report($id, $executor);
+        self::assertSame('opinion_preparation', $repository->chooseRoute($id, RequestRoute::Protocol, $this->version($id), $manager, false)['status']);
+        $repository->claimExpert($id, $this->version($id), $expert);
+        $before = $this->db()->createCommand('SELECT * FROM {{%request_assignments}} WHERE request_id = :id ORDER BY id', [':id' => $id])->queryAll();
+        self::assertSame('in_progress', $repository->chooseRoute($id, RequestRoute::Act, $this->version($id), $manager)['status']);
+        self::assertSame($before, $this->db()->createCommand('SELECT * FROM {{%request_assignments}} WHERE request_id = :id ORDER BY id', [':id' => $id])->queryAll());
+        self::assertSame((int) $report['versionId'], (int) $this->documents()->findVersionForDownload((int) $report['versionId'], $executor)['id']);
+        $repository->chooseRoute($id, RequestRoute::Protocol, $this->version($id), $manager, false);
+        $details = (new RequestQuery($this->db()))->findDetails($id, $expert);
+        self::assertSame(1, (int) $details['item']['can_publish_opinion']);
+        self::assertSame(0, (int) $details['item']['security_review_required']);
+        self::assertContains('Протокол испытаний, без контроля СБ', array_column($details['history'], 'targetName'));
+    }
+
+    public function testChangingSuspendedActToProtocolWaitsForResume(): void
+    {
+        [$id, $manager, $executor] = $this->fixture();
+        $repository = new RequestRepository($this->db());
+        $this->start($id, $manager, $executor, RequestRoute::Act);
+        $this->report($id, $executor);
+        $repository->suspendRequest($id, $this->version($id), $manager, 'Ожидание');
+        self::assertSame('suspended', $repository->chooseRoute($id, RequestRoute::Protocol, $this->version($id), $manager)['status']);
+        self::assertSame('opinion_preparation', $repository->resumeRequest($id, $this->version($id), $executor)['status']);
+        self::assertGreaterThan(0, (int) $this->scalar("SELECT COUNT(*) FROM {{%notification_outbox}} WHERE request_id = :id AND event_type = 'request.report_uploaded'", [':id' => $id]));
+    }
+
+    public function testProtocolWithoutSecurityCompletesAndDeletionDoesNotReopenSettings(): void
+    {
+        [$id, $manager, $executor, $expert, $security] = $this->fixture();
+        $repository = new RequestRepository($this->db());
+        $this->start($id, $manager, $executor, RequestRoute::Protocol);
+        $this->report($id, $executor);
+        $repository->claimExpert($id, $this->version($id), $expert);
+        $oldVersion = $this->version($id);
+        $repository->chooseRoute($id, RequestRoute::Protocol, $oldVersion, $manager, false);
+        try {
+            $this->documents()->publishOpinion($id, $expert, 'Заключение по испытаниям', $oldVersion, new OpinionPdfRenderer());
+            self::fail('Old publication must not use a changed security setting');
+        } catch (ConcurrentRequestModification) {
+            self::assertSame(0, (int) $this->scalar('SELECT COUNT(*) FROM {{%expert_opinions}} WHERE request_id = :id', [':id' => $id]));
+        }
+        $result = $this->documents()->publishOpinion($id, $expert, 'Заключение по испытаниям', $this->version($id), new OpinionPdfRenderer());
+        self::assertSame('completed', $result['status']);
+        self::assertSame(0, (int) $this->scalar('SELECT COUNT(*) FROM {{%security_checks}} WHERE request_id = :id', [':id' => $id]));
+        self::assertSame(0, (int) $this->scalar("SELECT COUNT(*) FROM {{%notification_outbox}} WHERE request_id = :id AND event_type = 'request.opinion_published'", [':id' => $id]));
+        $mail = (string) $this->scalar("SELECT body FROM {{%notification_outbox}} WHERE request_id = :id AND event_type = 'request.completed'", [':id' => $id]);
+        self::assertStringContainsString('Проверка СБ не требуется', $mail);
+        self::assertStringContainsString('Ссылка на отчёт:', $mail);
+        self::assertStringContainsString('Ссылка на заключение:', $mail);
+        $this->documents()->deleteOpinion($id, $this->version($id), $expert, 'Уточнить вывод');
+        self::assertSame(0, (int) (new RequestQuery($this->db()))->findDetails($id, $manager)['item']['can_choose_route']);
+        try {
+            $repository->chooseRoute($id, RequestRoute::Protocol, $this->version($id), $manager, true);
+            self::fail('Deleting an opinion must not unlock security settings');
+        } catch (RequestRouteDenied) {
+            $this->addToAssertionCount(1);
+        }
+        self::assertSame('completed', $this->documents()->publishOpinion($id, $expert, 'Исправленное заключение', $this->version($id), new OpinionPdfRenderer())['status']);
+        self::assertSame(0, (int) (new RequestQuery($this->db()))->findDetails($id, $security)['item']['can_security_decide']);
+    }
+
+    public function testSecurityOfficerAndExpertCannotChangeSecurityRequirement(): void
+    {
+        [$id, $manager, $executor, $expert, $security] = $this->fixture();
+        $this->start($id, $manager, $executor, RequestRoute::Protocol);
+        foreach ([$expert, $security, $executor] as $actor) {
+            try {
+                (new RequestRepository($this->db()))->chooseRoute($id, RequestRoute::Protocol, $this->version($id), $actor, false);
+                self::fail('Only managers can change security requirements');
+            } catch (RequestRouteDenied) {
+                self::assertSame(1, (int) $this->scalar('SELECT security_review_required FROM {{%requests}} WHERE id = :id', [':id' => $id]));
+            }
+        }
+        $invalid = $this->controller($manager, ['route' => 'protocol', 'lockVersion' => $this->version($id), 'securityReviewRequired' => 'false'])->actionChooseRoute($id);
+        self::assertArrayHasKey('securityReviewRequired', $invalid['errors']);
+    }
+
+    public function testCompletedActCannotChangeRouteAfterReportDeletion(): void
+    {
+        [$id, $manager, $executor] = $this->fixture();
+        $repository = new RequestRepository($this->db());
+        $this->start($id, $manager, $executor, RequestRoute::Act);
+        $this->report($id, $executor);
+        $repository->completeAct($id, $this->version($id), $manager);
+        $this->documents()->deleteReport($id, $this->version($id), $executor, 'Исправить отчёт');
+        self::assertSame(0, (int) (new RequestQuery($this->db()))->findDetails($id, $manager)['item']['can_choose_route']);
+        $this->expectException(RequestRouteDenied::class);
+        $repository->chooseRoute($id, RequestRoute::Protocol, $this->version($id), $manager);
+    }
+
+    public function testOptionalSecurityMigrationRefusesRollbackAfterSettingsAreUsed(): void
+    {
+        [$id, $manager] = $this->fixture();
+        (new RequestRepository($this->db()))->chooseRoute($id, RequestRoute::Protocol, $this->version($id), $manager, false);
+        require_once dirname(__DIR__, 3) . '/migrations/m261125_000001_add_optional_security_review.php';
+        $cache = $this->db()->schemaCache;
+        $this->db()->schemaCache = new \yii\caching\ArrayCache();
+        try {
+            $migration = new \m261125_000001_add_optional_security_review(['db' => $this->db()]);
+        } finally {
+            $this->db()->schemaCache = $cache;
+        }
+        $this->expectException(\RuntimeException::class);
+        $this->expectExceptionMessage('restore the pre-migration backup');
+        $migration->safeDown();
     }
 
     public function testRollbackRefusesToDiscardChosenRoutes(): void

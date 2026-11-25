@@ -14,6 +14,15 @@ use PHPUnit\Framework\TestCase;
 
 final class RequestRoutePolicyTest extends TestCase
 {
+    public function testManagersCanChangeRouteDuringExpertPreparationAndToggleSecurityReview(): void
+    {
+        foreach ([Role::IcManager, Role::LaboratoryManager] as $role) {
+            $policy = new RequestRoutePolicy();
+            $policy->assertCanChoose(RequestStatus::OpinionPreparation, RequestRoute::Protocol, RequestRoute::Act, false, true, [$role]);
+            $policy->assertCanChoose(RequestStatus::OpinionPreparation, RequestRoute::Protocol, RequestRoute::Protocol, false, true, [$role], true, false);
+        }
+        $this->addToAssertionCount(4);
+    }
     public function testBothManagersChooseChangeAndCompleteAct(): void
     {
         foreach ([Role::IcManager, Role::LaboratoryManager] as $role) {
@@ -36,7 +45,7 @@ final class RequestRoutePolicyTest extends TestCase
     public static function deniedSelections(): iterable
     {
         yield 'already chosen' => [RequestStatus::Registered, RequestRoute::Act, false, true, Role::IcManager];
-        yield 'first report freezes route' => [RequestStatus::InProgress, RequestRoute::Protocol, true, true, Role::IcManager];
+        yield 'published opinion or prior completion freezes route' => [RequestStatus::InProgress, RequestRoute::Protocol, true, true, Role::IcManager];
         yield 'first choice before work only' => [RequestStatus::InProgress, null, false, true, Role::IcManager];
         yield 'completed' => [RequestStatus::Completed, RequestRoute::Protocol, false, true, Role::IcManager];
         yield 'expert' => [RequestStatus::Registered, null, false, true, Role::Expert];
