@@ -301,7 +301,14 @@ final class RequestRoutesTest extends IntegrationTestCase
         self::assertSame('opinion_preparation', $repository->chooseRoute($id, RequestRoute::Protocol, $this->version($id), $manager, false)['status']);
         $repository->claimExpert($id, $this->version($id), $expert);
         $before = $this->db()->createCommand('SELECT * FROM {{%request_assignments}} WHERE request_id = :id ORDER BY id', [':id' => $id])->queryAll();
-        self::assertSame('in_progress', $repository->chooseRoute($id, RequestRoute::Act, $this->version($id), $manager)['status']);
+        $openOpinionVersion = $this->version($id);
+        self::assertSame('in_progress', $repository->chooseRoute($id, RequestRoute::Act, $openOpinionVersion, $manager)['status']);
+        try {
+            $this->documents()->publishOpinion($id, $expert, 'Заключение из открытой ранее формы', $openOpinionVersion, new OpinionPdfRenderer());
+            self::fail('A route change must report a version conflict to an open opinion form');
+        } catch (ConcurrentRequestModification) {
+            self::assertSame(0, (int) $this->scalar('SELECT COUNT(*) FROM {{%expert_opinions}} WHERE request_id = :id', [':id' => $id]));
+        }
         self::assertSame($before, $this->db()->createCommand('SELECT * FROM {{%request_assignments}} WHERE request_id = :id ORDER BY id', [':id' => $id])->queryAll());
         self::assertSame((int) $report['versionId'], (int) $this->documents()->findVersionForDownload((int) $report['versionId'], $executor)['id']);
         $repository->chooseRoute($id, RequestRoute::Protocol, $this->version($id), $manager, false);

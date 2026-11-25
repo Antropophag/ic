@@ -259,6 +259,31 @@ describe('RequestDetails route and security decisions', () => {
     }
   })
 
+  it('closes a stale opinion form and refreshes the route after a conflict', async () => {
+    requestApi.get.mockResolvedValueOnce(routed(1, {
+      route: 'protocol', status: 'opinion_preparation', can_choose_route: 0, can_publish_opinion: 1,
+    })).mockResolvedValueOnce(routed(1, { route: 'act', can_choose_route: 0, can_publish_opinion: 0, lockVersion: 2 }))
+    requestApi.publishOpinion.mockRejectedValue({ status: 409 })
+    const { app, root } = mountDetails(ref(1))
+    try {
+      await flushRequests()
+      button('Написать заключение').click()
+      await nextTick()
+      const form = document.querySelector('[aria-labelledby="opinion-modal-title"]')
+      const input = form.querySelector('textarea')
+      input.value = 'Заключение из открытой ранее формы'
+      input.dispatchEvent(new Event('input', { bubbles: true }))
+      await nextTick()
+      form.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }))
+      await flushRequests()
+      expect(document.querySelector('[aria-labelledby="opinion-modal-title"]')).toBeNull()
+      expect(root.textContent).toContain('Проверьте маршрут и необходимость контроля СБ')
+      expect(root.querySelector('.process-timeline').textContent).not.toContain('Экспертиза')
+    } finally {
+      app.unmount()
+    }
+  })
+
   it('saves the selected route with the current version and refreshes its timeline', async () => {
     requestApi.get.mockResolvedValueOnce(routed(1)).mockResolvedValueOnce(routed(1, { route: 'protocol', lockVersion: 2 }))
     requestApi.chooseRoute.mockResolvedValue({ lockVersion: 2 })

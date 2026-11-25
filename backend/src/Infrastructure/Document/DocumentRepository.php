@@ -487,14 +487,14 @@ final class DocumentRepository
             if ($request === false) {
                 throw new RequestNotFound('Request not found');
             }
+            if ((int) $request['lockVersion'] !== $expectedLockVersion) {
+                throw new ConcurrentRequestModification();
+            }
             (new OpinionPolicy())->assertCanPublish(
                 RequestStatus::from((string) $request['status']),
                 (bool) $request['actorIsActive'],
                 (bool) $request['isCurrentExpert'],
             );
-            if ((int) $request['lockVersion'] !== $expectedLockVersion) {
-                throw new ConcurrentRequestModification();
-            }
 
             if ($request['route'] !== 'protocol') {
                 throw new \App\Domain\Request\OpinionDenied('DOC-007');

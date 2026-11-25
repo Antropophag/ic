@@ -990,7 +990,9 @@ async function publishOpinion() {
   } catch (error) {
     if (!opinionRequestGuard.isCurrent(requestToken, selected.value?.backendId)) return
     if (error.status === 409) {
-      await recoverConflict(requestId, 'Заявка уже изменена.')
+      showOpinionModal.value = false
+      await recoverConflict(requestId, 'Заявка уже изменена. Проверьте маршрут и необходимость контроля СБ.',
+        () => opinionRequestGuard.isCurrent(requestToken, selected.value?.backendId))
     } else {
       opinionError.value = error.status === 422
         ? 'Заключение должно содержать от 10 до 20 000 символов.'
