@@ -188,7 +188,7 @@ test('заявка перемещается между персональным�
     await expect(dashboardHelp).toHaveCSS('position', 'static')
     await dashboardHelp.click()
     const dashboardHelpDialog = page.getByRole('dialog', { name: 'Справка' })
-    await expect(dashboardHelpDialog).toContainText('Заявки, требующие внимания')
+    await expect(dashboardHelpDialog).toContainText('Реестр и заявки, требующие внимания')
     await page.getByRole('button', { name: 'Закрыть справку' }).click()
     await expect(dashboardHelpDialog).toBeHidden()
     const managerQueue = page.getByRole('button', { name: /Назначить исполнителя/ })
@@ -250,7 +250,12 @@ test('заявка перемещается между персональным�
     await expect(securityPage.getByRole('row').filter({ hasText: marker })).toBeVisible()
     await securityPage.getByRole('row').filter({ hasText: marker }).click()
     await securityPage.getByRole('button', { name: 'Согласовано', exact: true }).click()
+    const decisionSaved = securityPage.waitForResponse(response => response.request().method() === 'POST'
+      && new URL(response.url()).pathname === `/api/v1/requests/${requestId}/security-decision`)
     await securityPage.getByRole('alertdialog').getByRole('button', { name: 'Согласовано', exact: true }).click()
+    expect((await decisionSaved).status()).toBe(200)
+    // The button temporarily changes to «Сохранение…» before the mutation commits.
+    await expect(securityPage.locator('.request-page.screen-panel--active .request-status')).toHaveText('Заявка выполнена')
     await expect(securityPage.getByRole('button', { name: 'Согласовано', exact: true })).toHaveCount(0)
     await Promise.all([
       securityPage.waitForResponse(response => response.url().includes('/api/v1/requests/dashboard') && response.ok()),
@@ -675,5 +680,87 @@ test('удаление заключения после СБ возвращает
     await page.screenshot({ path: '/tmp/ic-kashin-opinion-reopened.png', fullPage: true })
   } finally {
     await Promise.allSettled([initiator, manager, executor, expert, security].map(context => context.dispose()))
+  }
+})
+
+for (const managerId of [1, 7]) {
+  test(`руководитель ${managerId} отключает СБ после отчёта, эксперт завершает протокол`, async ({ page, baseURL }) => {
+    if (managerId === 7) await page.setViewportSize({ width: 390, height: 844 })
+    const initiator = await apiFor(baseURL, 3)
+    const manager = await apiFor(baseURL, managerId)
+    const executor = await apiFor(baseURL, 2)
+    const expert = await apiFor(baseURL, 4)
+    try {
+      const { id } = await expectOk(await initiator.post('/api/v1/requests', { data: {
+        productName: `Протокол без СБ ${managerId}`, manufacturer: 'Учебный завод', supplier: 'Учебный поставщик', sampleQuantity: 1, testMethod: 'Учебная программа',
+      } }))
+      await expectOk(await manager.post(`/api/v1/requests/${id}/route`, { data: { route: 'act', lockVersion: 1 } }))
+      await expectOk(await manager.post(`/api/v1/requests/${id}/executor`, { data: { executorId: 2, lockVersion: 2 } }))
+      await expectOk(await executor.post(`/api/v1/requests/${id}/start`, { data: { lockVersion: 3 } }))
+      await expectOk(await executor.post(`/api/v1/requests/${id}/report`, { multipart: { file: { name: 'report.pdf', mimeType: 'application/pdf', buffer: Buffer.from('%PDF-1.4\n%%EOF') } } }))
+      await useTestIdentity(page, managerId)
+      await page.goto(`/?request=${id}`)
+      await page.getByRole('button', { name: 'Изменить маршрут', exact: true }).click()
+      await page.getByLabel('Маршрут', { exact: true }).selectOption('protocol')
+      await page.getByRole('checkbox', { name: 'Требуется контроль СБ', exact: true }).uncheck()
+      await expect(page.getByText('Публикация заключения завершит заявку.', { exact: true })).toBeVisible()
+      await page.screenshot({ path: `/tmp/ic-route-settings-${managerId}.png`, fullPage: true })
+      await page.getByRole('button', { name: 'Сохранить маршрут', exact: true }).click()
+      await expect(page.locator('.process-timeline')).toContainText('Экспертиза')
+      await expect(page.locator('.process-timeline')).not.toContainText('Контроль СБ')
+      const details = await expectOk(await manager.get(`/api/v1/requests/${id}`))
+      expect(Number(details.item.security_review_required)).toBe(0)
+      await expectOk(await expert.post(`/api/v1/requests/${id}/expert/claim`, { data: { lockVersion: details.item.lockVersion } }))
+      await page.unroute('**/api/**')
+      await useTestIdentity(page, 4)
+      await page.reload()
+      await expect(page.getByRole('button', { name: 'Изменить маршрут', exact: true })).toHaveCount(0)
+      await page.getByRole('button', { name: 'Написать заключение', exact: true }).click()
+      await page.getByPlaceholder('Введите итоговое заключение по результатам испытаний').fill('Учебные образцы соответствуют требованиям программы испытаний.')
+      await page.getByRole('button', { name: 'Опубликовать и завершить', exact: true }).click()
+      await expect(page.locator('.request-status')).toHaveText('Заявка выполнена')
+      await expect(page.getByText('Проверка СБ не требуется', { exact: true })).toBeVisible()
+      const completed = await expectOk(await manager.get(`/api/v1/requests/${id}`))
+      expect(completed.item.security_mark).toBeNull()
+      expect(Number(completed.item.can_choose_route)).toBe(0)
+      expect(completed.history.filter(event => event.action === 'publish_opinion').at(-1).toStatus).toBe('completed')
+      expect((await manager.post(`/api/v1/requests/${id}/route`, { data: { route: 'act', lockVersion: completed.item.lockVersion } })).status()).toBe(403)
+    } finally {
+      await Promise.all([initiator, manager, executor, expert].map(api => api.dispose()))
+    }
+  })
+}
+
+test('публикация и изменение необходимости СБ сериализуются по версии заявки', async ({ baseURL }) => {
+  const initiator = await apiFor(baseURL, 3)
+  const manager = await apiFor(baseURL, 1)
+  const executor = await apiFor(baseURL, 2)
+  const expert = await apiFor(baseURL, 4)
+  try {
+    const { id } = await expectOk(await initiator.post('/api/v1/requests', { data: {
+      productName: 'Конкурирующая настройка СБ', manufacturer: 'Учебный завод', supplier: 'Учебный поставщик', sampleQuantity: 1, testMethod: 'Учебная программа',
+    } }))
+    await expectOk(await manager.post(`/api/v1/requests/${id}/route`, { data: { route: 'protocol', lockVersion: 1 } }))
+    await expectOk(await manager.post(`/api/v1/requests/${id}/executor`, { data: { executorId: 2, lockVersion: 2 } }))
+    await expectOk(await executor.post(`/api/v1/requests/${id}/start`, { data: { lockVersion: 3 } }))
+    await expectOk(await executor.post(`/api/v1/requests/${id}/report`, { multipart: { file: { name: 'report.pdf', mimeType: 'application/pdf', buffer: Buffer.from('%PDF-1.4\n%%EOF') } } }))
+    await expectOk(await expert.post(`/api/v1/requests/${id}/expert/claim`, { data: { lockVersion: 5 } }))
+    const responses = await Promise.all([
+      expert.post(`/api/v1/requests/${id}/opinion`, { data: { body: 'Конкурирующее заключение по испытаниям', lockVersion: 6 } }),
+      manager.post(`/api/v1/requests/${id}/route`, { data: { route: 'protocol', securityReviewRequired: false, lockVersion: 6 } }),
+    ])
+    expect(responses.map(response => response.status()).sort()).toEqual([200, 409])
+    const details = await expectOk(await manager.get(`/api/v1/requests/${id}`))
+    if (responses[0].ok()) {
+      expect(details.item.status).toBe('security_review')
+      expect(Number(details.item.security_review_required)).toBe(1)
+      expect(Number(details.item.can_choose_route)).toBe(0)
+    } else {
+      expect(details.item.status).toBe('opinion_preparation')
+      expect(Number(details.item.security_review_required)).toBe(0)
+      expect(details.history.filter(event => event.action === 'publish_opinion')).toHaveLength(0)
+    }
+  } finally {
+    await Promise.all([initiator, manager, executor, expert].map(api => api.dispose()))
   }
 })

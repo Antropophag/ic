@@ -590,7 +590,7 @@ paths:
     post:
       tags: [Requests]
       summary: Выбрать маршрут заявки
-      description: Руководитель ИЦ или лаборатории выбирает маршрут до начала работ и меняет до первой загрузки отчёта. Удаление отчёта не открывает смену маршрута. Сохраняются автор, время, аудит и новая lockVersion.
+      description: Руководитель ИЦ или лаборатории выбирает маршрут до начала работ; маршрут и необходимость СБ меняются до первой публикации заключения или завершения. Удаление документов не снимает блокировку. С загруженным отчётом новый маршрут открывает экспертизу либо завершение акта; приостановка сохраняется. Автор, время, прежние и новые настройки сохраняются в аудите; lockVersion увеличивается.
       operationId: chooseRequestRoute
       security: [{cookieSession: [], csrfToken: []}]
       parameters:
@@ -1288,6 +1288,7 @@ components:
           nullable: true
           enum: [act, protocol, null]
           description: null — маршрут ещё не выбран; начало работы запрещено
+        security_review_required: {type: integer, enum: [0, 1], description: Контроль СБ для Протокола; для Акта не применяется}
         route_selected_by: {type: integer, nullable: true}
         route_selected_at: {type: string, nullable: true}
         can_choose_route: {type: integer, enum: [0, 1]}
@@ -1353,6 +1354,7 @@ components:
       required: [route, lockVersion]
       properties:
         route: {type: string, enum: [act, protocol]}
+        securityReviewRequired: {type: boolean, default: true, description: Для Протокола задаёт необходимость СБ; для Акта игнорируется. При false публикация заключения завершает заявку.}
         lockVersion: {type: integer, minimum: 1}
       additionalProperties: false
     SecurityDecisionInput:

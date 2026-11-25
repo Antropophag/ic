@@ -16,6 +16,7 @@ vi.mock('../api', () => ({
     decideSecurity: vi.fn(),
     correctSecurityDecision: vi.fn(),
     deleteOpinion: vi.fn(),
+    publishOpinion: vi.fn(),
   },
 }))
 
@@ -202,6 +203,87 @@ describe('RequestDetails route and security decisions', () => {
     await flushRequests()
   }
 
+  it('changes only the security requirement and shows the shorter protocol', async () => {
+    requestApi.get.mockResolvedValueOnce(routed(1, { route: 'protocol', security_review_required: 1 }))
+      .mockResolvedValueOnce(routed(1, { route: 'protocol', security_review_required: 0, lockVersion: 2 }))
+    requestApi.chooseRoute.mockResolvedValue({ lockVersion: 2 })
+    const { app, root } = mountDetails(ref(1))
+    try {
+      await flushRequests()
+      button('Изменить маршрут').click()
+      await nextTick()
+      expect(button('Сохранить маршрут').disabled).toBe(true)
+      const checkbox = root.querySelector('.request-route-security input')
+      checkbox.checked = false
+      checkbox.dispatchEvent(new Event('change', { bubbles: true }))
+      await nextTick()
+      expect(button('Сохранить маршрут').disabled).toBe(false)
+      expect(root.textContent).toContain('Публикация заключения завершит заявку')
+      button('Сохранить маршрут').click()
+      await flushRequests()
+      expect(requestApi.chooseRoute).toHaveBeenCalledWith(1, 'protocol', 1, false)
+      expect(root.querySelectorAll('.process-timeline li')).toHaveLength(4)
+      expect(root.querySelector('.process-timeline').textContent).not.toContain('Контроль СБ')
+      expect(root.textContent).toContain('Проверка СБ не требуется')
+    } finally {
+      app.unmount()
+    }
+  })
+
+  it('makes publication completion explicit for the expert and hides route settings', async () => {
+    requestApi.get.mockResolvedValueOnce(routed(1, {
+      route: 'protocol', security_review_required: 0, status: 'opinion_preparation',
+      can_choose_route: 0, can_publish_opinion: 1,
+    })).mockResolvedValueOnce(routed(1, { route: 'protocol', security_review_required: 0, status: 'completed', can_choose_route: 0 }))
+    requestApi.publishOpinion.mockResolvedValue({ status: 'completed', lockVersion: 2 })
+    const { app, root } = mountDetails(ref(1))
+    try {
+      await flushRequests()
+      expect(button('Изменить маршрут')).toBeUndefined()
+      button('Написать заключение').click()
+      await nextTick()
+      const form = document.querySelector('[aria-labelledby="opinion-modal-title"]')
+      expect(form.textContent).toContain('После публикации заключения заявка будет выполнена')
+      const input = form.querySelector('textarea')
+      input.value = 'Образцы соответствуют требованиям'
+      input.dispatchEvent(new Event('input', { bubbles: true }))
+      await nextTick()
+      expect(button('Опубликовать и передать в СБ')).toBeUndefined()
+      expect(button('Опубликовать и завершить')).toBeDefined()
+      form.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }))
+      await flushRequests()
+      expect(requestApi.publishOpinion).toHaveBeenCalledWith(1, 'Образцы соответствуют требованиям', 1)
+      expect(root.textContent).toContain('Заявка выполнена')
+    } finally {
+      app.unmount()
+    }
+  })
+
+  it('closes a stale opinion form and refreshes the route after a conflict', async () => {
+    requestApi.get.mockResolvedValueOnce(routed(1, {
+      route: 'protocol', status: 'opinion_preparation', can_choose_route: 0, can_publish_opinion: 1,
+    })).mockResolvedValueOnce(routed(1, { route: 'act', can_choose_route: 0, can_publish_opinion: 0, lockVersion: 2 }))
+    requestApi.publishOpinion.mockRejectedValue({ status: 409 })
+    const { app, root } = mountDetails(ref(1))
+    try {
+      await flushRequests()
+      button('Написать заключение').click()
+      await nextTick()
+      const form = document.querySelector('[aria-labelledby="opinion-modal-title"]')
+      const input = form.querySelector('textarea')
+      input.value = 'Заключение из открытой ранее формы'
+      input.dispatchEvent(new Event('input', { bubbles: true }))
+      await nextTick()
+      form.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }))
+      await flushRequests()
+      expect(document.querySelector('[aria-labelledby="opinion-modal-title"]')).toBeNull()
+      expect(root.textContent).toContain('Проверьте маршрут и необходимость контроля СБ')
+      expect(root.querySelector('.process-timeline').textContent).not.toContain('Экспертиза')
+    } finally {
+      app.unmount()
+    }
+  })
+
   it('saves the selected route with the current version and refreshes its timeline', async () => {
     requestApi.get.mockResolvedValueOnce(routed(1)).mockResolvedValueOnce(routed(1, { route: 'protocol', lockVersion: 2 }))
     requestApi.chooseRoute.mockResolvedValue({ lockVersion: 2 })
@@ -211,7 +293,7 @@ describe('RequestDetails route and security decisions', () => {
     expect(root.querySelector('.request-route')).toBeNull()
     expect(root.querySelectorAll('.process-timeline li')).toHaveLength(3)
     await selectProtocol()
-    expect(requestApi.chooseRoute).toHaveBeenCalledWith(1, 'protocol', 1)
+    expect(requestApi.chooseRoute).toHaveBeenCalledWith(1, 'protocol', 1, true)
     expect(root.querySelectorAll('.process-timeline li')).toHaveLength(5)
     app.unmount()
   })
@@ -441,6 +523,54 @@ describe('Security decision correction', () => {
     pending.resolve({ lockVersion: 2 })
     await flushRequests()
     expect(requestApi.get).toHaveBeenCalledTimes(1)
+  })
+
+  it('ignores a late conflict refresh after another card has been corrected', async () => {
+    const refresh = deferred()
+    requestApi.get.mockResolvedValueOnce(details(1))
+      .mockReturnValueOnce(refresh.promise)
+      .mockResolvedValueOnce(details(2))
+      .mockResolvedValueOnce(details(2, { security_mark: 'decline', lockVersion: 2 }))
+    requestApi.correctSecurityDecision.mockRejectedValueOnce({ status: 409 })
+      .mockResolvedValueOnce({ lockVersion: 2 })
+    const id = ref(1)
+    const { app, root } = mountDetails(id)
+    try {
+      await flushRequests()
+      ;(await fillCorrection()).dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }))
+      await flushRequests()
+      expect(requestApi.get).toHaveBeenCalledTimes(2)
+      id.value = 2
+      await flushRequests()
+      ;(await fillCorrection()).dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }))
+      await flushRequests()
+      expect(requestApi.correctSecurityDecision).toHaveBeenLastCalledWith(2, 'decline', 'Ошибка выбора', 'IT-360', 1)
+      expect(requestApi.get).toHaveBeenCalledTimes(4)
+      refresh.resolve(details(1, { lockVersion: 2 }))
+      await flushRequests()
+      expect(root.textContent).toContain('Образец 2')
+      expect(root.textContent).not.toContain('Заявка уже изменена')
+    } finally {
+      app.unmount()
+    }
+  })
+
+  it('refreshes the current decision and explains a correction conflict in the same card', async () => {
+    requestApi.get.mockResolvedValueOnce(details(1))
+      .mockResolvedValueOnce(details(1, { security_mark: 'decline', lockVersion: 2 }))
+    requestApi.correctSecurityDecision.mockRejectedValueOnce({ status: 409 })
+    const { app, root } = mountDetails(ref(1))
+    try {
+      await flushRequests()
+      ;(await fillCorrection()).dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }))
+      await flushRequests()
+      expect(requestApi.get).toHaveBeenCalledTimes(2)
+      expect(root.textContent).toContain('Проверьте решение СБ перед исправлением. Данные обновлены')
+      expect(root.textContent).toContain('Не согласовано')
+      expect(document.querySelector('[aria-labelledby="security-correction-title"]')).toBeNull()
+    } finally {
+      app.unmount()
+    }
   })
 })
 

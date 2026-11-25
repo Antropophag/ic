@@ -12,6 +12,8 @@ use App\Domain\Request\Role;
 use App\Domain\Request\ReportDeletionPolicy;
 use App\Domain\Request\RequestNotFound;
 use App\Domain\Request\RequestStatus;
+use App\Domain\Request\RequestAction;
+use App\Domain\Request\RequestWorkflow;
 use App\Domain\Request\ReportPolicy;
 use App\Domain\Request\ReportDenied;
 use App\Infrastructure\Clock;
@@ -392,7 +394,7 @@ final class DocumentRepository
                 [':actor' => $actorId],
             )->queryScalar();
             $request = $this->db->createCommand(
-                'SELECT status, route, is_archived, lock_version FROM {{%requests}} WHERE id = :id FOR UPDATE',
+                'SELECT status, route, security_review_required, is_archived, lock_version FROM {{%requests}} WHERE id = :id FOR UPDATE',
                 [':id' => $requestId],
             )->queryOne();
             if ($request === false) {
@@ -441,7 +443,7 @@ final class DocumentRepository
                 'payload_json' => ['document_id' => $documentId, 'reason' => $reason], 'created_at' => $now,
             ])->execute();
             $outbox = new NotificationOutbox($this->db);
-            foreach ($this->activeUsersWithRoles(['expert', 'ic_manager', 'security_officer']) as $recipient) {
+            foreach ($this->activeUsersWithRoles((bool) $request['security_review_required'] ? ['expert', 'ic_manager', 'security_officer'] : ['expert', 'ic_manager']) as $recipient) {
                 $outbox->enqueue(
                     $requestId,
                     'request.opinion_deleted',
@@ -473,7 +475,7 @@ final class DocumentRepository
         $temporaryPath = null;
         try {
             $request = $this->db->createCommand(
-                'SELECT r.number, r.status, r.lock_version AS lockVersion, r.product_name AS productName, '
+                'SELECT r.number, r.status, r.route, r.security_review_required, r.lock_version AS lockVersion, r.product_name AS productName, '
                 . 'r.manufacturer, r.supplier, actor.display_name AS expertName, actor.position AS expertPosition, '
                 . 'actor.is_active AS actorIsActive, (expert.user_id = :expert_actor) AS isCurrentExpert '
                 . 'FROM {{%requests}} r JOIN {{%users}} actor ON actor.id = :actor_id '
@@ -485,15 +487,25 @@ final class DocumentRepository
             if ($request === false) {
                 throw new RequestNotFound('Request not found');
             }
+            if ((int) $request['lockVersion'] !== $expectedLockVersion) {
+                throw new ConcurrentRequestModification();
+            }
             (new OpinionPolicy())->assertCanPublish(
                 RequestStatus::from((string) $request['status']),
                 (bool) $request['actorIsActive'],
                 (bool) $request['isCurrentExpert'],
             );
-            if ((int) $request['lockVersion'] !== $expectedLockVersion) {
-                throw new ConcurrentRequestModification();
-            }
 
+            if ($request['route'] !== 'protocol') {
+                throw new \App\Domain\Request\OpinionDenied('DOC-007');
+            }
+            $securityReviewRequired = (bool) $request['security_review_required'];
+            $targetStatus = (new RequestWorkflow())->transition(
+                RequestStatus::OpinionPreparation,
+                RequestAction::PublishOpinion,
+                [Role::Expert],
+                $securityReviewRequired,
+            );
             $revision = (int) $this->db->createCommand(
                 'SELECT COALESCE(MAX(revision), 0) + 1 FROM {{%expert_opinions}} WHERE request_id = :request_id',
                 [':request_id' => $requestId],
@@ -539,7 +551,7 @@ final class DocumentRepository
             ])->execute();
             $nextLockVersion = $expectedLockVersion + 1;
             $updated = $this->db->createCommand()->update('{{%requests}}', [
-                'status' => RequestStatus::SecurityReview->value,
+                'status' => $targetStatus->value,
                 'lock_version' => $nextLockVersion,
                 'updated_at' => $now,
             ], [
@@ -554,7 +566,7 @@ final class DocumentRepository
                 'request_id' => $requestId,
                 'actor_id' => $actorId,
                 'from_status' => RequestStatus::OpinionPreparation->value,
-                'to_status' => RequestStatus::SecurityReview->value,
+                'to_status' => $targetStatus->value,
                 'action' => 'publish_opinion',
                 'rule_id' => 'DOC-007',
                 'created_at' => $now,
@@ -565,29 +577,46 @@ final class DocumentRepository
                 'entity_id' => $requestId,
                 'actor_id' => $actorId,
                 'rule_id' => 'DOC-007',
-                'payload_json' => ['revision' => $revision, 'document_version_id' => $versionId],
+                'payload_json' => ['revision' => $revision, 'document_version_id' => $versionId,
+                    'security_review_required' => $securityReviewRequired, 'to_status' => $targetStatus->value],
                 'created_at' => $now,
             ])->execute();
-            // ТЗ 4.9: сотрудники СБ уведомляются о поступлении отчёта и
-            // заключения на контроль, письмо содержит активные ссылки на
-            // скачивание обоих документов без входа в портал.
             $links = "\nСсылка на заключение: " . DocumentDownloadUrl::build($this->issueDocumentLink($versionId));
             $reportVersionId = $this->latestDocumentVersionId($requestId, 'report');
             if ($reportVersionId !== null) {
                 $links .= "\nСсылка на отчёт: " . DocumentDownloadUrl::build($this->issueDocumentLink($reportVersionId));
             }
             $outbox = new NotificationOutbox($this->db);
-            foreach ($this->activeUsersWithRoles(['security_officer']) as $officer) {
-                $outbox->enqueue(
-                    $requestId,
-                    'request.opinion_published',
-                    $officer['email'],
-                    $officer['name'],
-                    'Заключение поступило на контроль СБ',
-                    'Экспертное заключение опубликовано и ожидает проверки службы безопасности. '
-                    . 'Откройте заявку в портале.'
-                    . $links,
-                );
+            if ($securityReviewRequired) {
+                foreach ($this->activeUsersWithRoles(['security_officer']) as $officer) {
+                    $outbox->enqueue(
+                        $requestId,
+                        'request.opinion_published',
+                        $officer['email'],
+                        $officer['name'],
+                        'Заключение поступило на контроль СБ',
+                        'Экспертное заключение опубликовано и ожидает проверки службы безопасности. '
+                        . 'Откройте заявку в портале.' . $links,
+                    );
+                }
+            } else {
+                $initiator = $this->db->createCommand(
+                    'SELECT TRIM(u.email) AS email, u.display_name AS name FROM {{%requests}} r '
+                    . 'JOIN {{%users}} u ON u.id = r.initiator_id WHERE r.id = :id '
+                    . "AND u.is_active = 1 AND u.email IS NOT NULL AND TRIM(u.email) <> ''",
+                    [':id' => $requestId],
+                )->queryOne();
+                if ($initiator !== false) {
+                    $outbox->enqueue(
+                        $requestId,
+                        'request.completed',
+                        (string) $initiator['email'],
+                        (string) $initiator['name'],
+                        'Испытания завершены',
+                        'Экспертное заключение опубликовано, испытания по вашей заявке завершены. '
+                        . 'Проверка СБ не требуется. Отчёт и заключение доступны в портале.' . $links,
+                    );
+                }
             }
             $transaction->commit();
 
@@ -595,7 +624,7 @@ final class DocumentRepository
                 'requestId' => $requestId,
                 'revision' => $revision,
                 'documentVersionId' => $versionId,
-                'status' => RequestStatus::SecurityReview->value,
+                'status' => $targetStatus->value,
                 'lockVersion' => $nextLockVersion,
             ];
         } catch (\Throwable $error) {

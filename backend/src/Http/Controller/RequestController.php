@@ -585,7 +585,7 @@ final class RequestController extends ApiController
         }
         $actorId = $this->currentUserId();
         try {
-            return $this->repository()->chooseRoute($id, RequestRoute::from((string) $input->route), (int) $input->lockVersion, $actorId);
+            return $this->repository()->chooseRoute($id, RequestRoute::from((string) $input->route), (int) $input->lockVersion, $actorId, (bool) $input->securityReviewRequired);
         } catch (RequestNotFound $error) {
             throw new NotFoundHttpException($error->getMessage());
         } catch (RequestRouteDenied $error) {

@@ -14,7 +14,7 @@ namespace App\Domain\Request;
 final class RequestWorkflow
 {
     /** @param list<Role> $roles */
-    public function transition(RequestStatus $from, RequestAction $action, array $roles): RequestStatus
+    public function transition(RequestStatus $from, RequestAction $action, array $roles, bool $securityReviewRequired = true): RequestStatus
     {
         $target = match ([$from, $action]) {
             [RequestStatus::Registered, RequestAction::Start] => $this->forRoles(
@@ -52,7 +52,7 @@ final class RequestWorkflow
             [RequestStatus::OpinionPreparation, RequestAction::PublishOpinion] => $this->forRoles(
                 $roles,
                 [Role::Expert],
-                RequestStatus::SecurityReview,
+                $securityReviewRequired ? RequestStatus::SecurityReview : RequestStatus::Completed,
                 'DOC-005',
                 $from,
                 $action,

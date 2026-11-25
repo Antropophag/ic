@@ -14,6 +14,23 @@ use PHPUnit\Framework\TestCase;
 
 final class RequestWorkflowTest extends TestCase
 {
+    public function testPublicationWithoutSecurityReviewCompletesTheRequest(): void
+    {
+        self::assertSame(RequestStatus::Completed, (new RequestWorkflow())->transition(
+            RequestStatus::OpinionPreparation,
+            RequestAction::PublishOpinion,
+            [Role::Expert],
+            false,
+        ));
+        $this->expectException(TransitionDenied::class);
+        (new RequestWorkflow())->transition(
+            RequestStatus::OpinionPreparation,
+            RequestAction::PublishOpinion,
+            [Role::IcManager],
+            false,
+        );
+    }
+
     #[DataProvider('allowedTransitions')]
     public function testAllowedTransition(
         RequestStatus $from,

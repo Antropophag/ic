@@ -4,6 +4,7 @@ parameters:
         - src
         - tests
     scanFiles:
+        - migrations/m261125_000001_add_optional_security_review.php
         - migrations/m261005_000002_add_request_routes.php
         - migrations/m261005_000003_create_security_decision_corrections.php
     bootstrapFiles:

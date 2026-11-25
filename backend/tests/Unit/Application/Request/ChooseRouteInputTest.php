@@ -10,6 +10,22 @@ use PHPUnit\Framework\TestCase;
 
 final class ChooseRouteInputTest extends TestCase
 {
+    public function testSecurityReviewChoiceRequiresJsonBoolean(): void
+    {
+        foreach ([true, false] as $required) {
+            $input = new ChooseRouteInput();
+            $input->load(['route' => 'protocol', 'lockVersion' => 1, 'securityReviewRequired' => $required], '');
+            self::assertTrue($input->validate());
+            self::assertSame($required, $input->securityReviewRequired);
+        }
+        foreach ([null, 0, 1, '', 'false', 'true', [], new \stdClass()] as $invalid) {
+            $input = new ChooseRouteInput();
+            $input->load(['route' => 'protocol', 'lockVersion' => 1, 'securityReviewRequired' => $invalid], '');
+            self::assertFalse($input->validate());
+            self::assertArrayHasKey('securityReviewRequired', $input->errors);
+        }
+    }
+
     public function testAcceptsOnlyNamedRoutes(): void
     {
         foreach (['act', 'protocol'] as $route) {
