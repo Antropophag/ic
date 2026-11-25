@@ -18,6 +18,7 @@ it('preserves ambiguous names and explains the review needed after copying', () 
   const request = { id: '000123', date: '05.10.2026', initiator: 'Саша Ким', initiatorPosition: 'Инженер' }
   expect(requestReference(request)).toEqual({
     text: 'Заявка №000123 от 05.10.2026\nот инженера Саша Ким',
+    authorLine: 'от инженера Саша Ким',
     success: 'Заявка скопирована. Проверьте склонение ФИО и должности: неоднозначные значения оставлены в исходном написании.',
   })
   expect(request.initiator).toBe('Саша Ким')
