@@ -277,8 +277,9 @@ for (const width of [390, 1440]) {
       product_name: 'ДлинноеНаименованиеБезПробелов'.repeat(12),
     })
     expect((await page.locator('.request-heading').boundingBox()).width).toBeGreaterThan(Math.min(280, width * 0.65))
+    // WebKit rounds scrollWidth up and clientWidth down at fractional CSS zoom.
     for (const selector of ['.request-heading', 'tbody .object-title-row']) {
-      expect(await page.locator(selector).evaluate(element => element.scrollWidth <= element.clientWidth)).toBe(true)
+      expect(await page.locator(selector).evaluate(element => element.scrollWidth <= element.clientWidth + 1)).toBe(true)
     }
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true)
   })
@@ -326,7 +327,7 @@ test('резервное копирование переносит текст в
 })
 
 for (const width of [320, 390, 1024, 1440]) {
-  test(`шапка разделяет ссылку на заявку и подразделение при ширине ${width}`, async ({ page }) => {
+  test(`шапка разделяет ссылку на заявку и подразделение при ширине ${width}`, async ({ page, browserName }) => {
     await page.setViewportSize({ width, height: 1000 })
     await openCard(page, { can_edit_department: 1 })
     await page.evaluate(() => document.fonts.ready)
@@ -345,11 +346,14 @@ for (const width of [320, 390, 1024, 1440]) {
       expect(departmentBox.y).toBeGreaterThan(authorBox.y + authorBox.height)
       expect(Math.abs(titleBox.x - authorBox.x)).toBeLessThan(1)
       expect(copyBox.x).toBeGreaterThanOrEqual(titleBox.x + titleBox.width)
-      expect(await heading.evaluate(node => node.scrollWidth <= node.clientWidth)).toBe(true)
+      // Allow only the one-pixel difference from integer CSSOM rounding.
+      expect(await heading.evaluate(node => node.scrollWidth <= node.clientWidth + 1)).toBe(true)
       expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true)
     }
     await copy.focus()
-    await page.keyboard.press('Tab')
+    // Safari on macOS uses Option+Tab to include buttons in keyboard navigation.
+    const tab = browserName === 'webkit' && process.platform === 'darwin' ? 'Alt+Tab' : 'Tab'
+    await page.keyboard.press(tab)
     await expect(heading.getByRole('button', { name: 'Изменить подразделение заявки' })).toBeFocused()
   })
 }
