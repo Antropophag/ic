@@ -39,10 +39,34 @@ it('withdraws the edit action while details are stale and restores it only when 
   ready.value = false
   await nextTick()
   expect(root.querySelector(selector)).toBeNull()
-  expect(root.textContent).toContain('Тестов Иван Иванович')
-  expect(root.textContent).toContain('Инженер')
+  expect(root.textContent).toContain('Тестова Ивана Ивановича')
+  expect(root.textContent).toContain('инженера')
   expect(root.textContent).toContain('Тестовое подразделение')
   ready.value = true
   await nextTick()
   expect(root.querySelector(selector)).not.toBeNull()
+})
+
+it('shows the same two-line reference as copying and keeps department separate', () => {
+  const request = {
+    id: '000123', date: '05.10.2026', backendId: 123,
+    initiator: 'Тестов Иван Иванович', initiatorPosition: 'Инженер', department: 'Испытательный центр',
+  }
+  const root = mount(request)
+  expect(root.querySelector('.request-heading-initiator').textContent.trim()).toBe('от инженера Тестова Ивана Ивановича')
+  expect(root.querySelector('.request-heading-department').textContent).toContain('Подразделение:')
+  expect(root.querySelector('.request-heading-department p').textContent).toBe('Испытательный центр')
+  expect(root.querySelector('.request-heading-initiator').contains(root.querySelector('.request-heading-department'))).toBe(false)
+  expect(request.initiator).toBe('Тестов Иван Иванович')
+  expect(request.initiatorPosition).toBe('Инженер')
+})
+
+it.each([
+  ['Саша Ким', 'Инженер', 'от инженера Саша Ким', null],
+  ['', 'Инженер', 'от инженера', 'Инициатор не указан'],
+  ['Тестов Иван Иванович', '', 'от Тестова Ивана Ивановича', 'Должность не указана'],
+])('preserves ambiguous and incomplete identity: %s / %s', (initiator, initiatorPosition, expected, missing) => {
+  const root = mount({ id: '000123', date: '05.10.2026', initiator, initiatorPosition })
+  expect(root.querySelector('.request-heading-initiator > p').textContent).toBe(expected)
+  if (missing) expect(root.querySelector('.request-heading-initiator').textContent).toContain(missing)
 })

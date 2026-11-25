@@ -33,7 +33,7 @@ async function openCard(page, overrides = {}) {
 test('копируются только выбранные реквизиты; результат относится к последнему действию', async ({ page, context }) => {
   await context.grantPermissions(['clipboard-read', 'clipboard-write'])
   await openCard(page)
-  await expect(page.locator('.request-heading')).toContainText(sample.initiator_position)
+  await expect(page.locator('.request-heading-initiator > p')).toHaveText('от ведущего инженера Тестова Александра Александровича')
   await expect(page.locator('.request-heading')).toContainText(sample.department)
   await page.getByRole('button', { name: 'Копировать заявку с датой и инициатором', exact: true }).click()
   await expect(page.getByRole('status')).toHaveText(/Заявка с датой и инициатором скопирована/)
@@ -183,7 +183,7 @@ test('объект компактен, правая колонка поднят�
   expect(name.y - heading.y - heading.height).toBeLessThan(28)
   const initiator = await page.locator('.request-heading-initiator > p').boundingBox()
   const department = await page.locator('.request-heading-department').boundingBox()
-  expect(Math.abs(initiator.y - department.y)).toBeLessThan(2)
+  expect(department.y).toBeGreaterThan(initiator.y + initiator.height)
 })
 
 test('на узком экране статус остаётся сверху, маршрут отмечен в процессе, меню направления доступно', async ({ page }) => {
@@ -277,8 +277,9 @@ for (const width of [390, 1440]) {
       product_name: 'ДлинноеНаименованиеБезПробелов'.repeat(12),
     })
     expect((await page.locator('.request-heading').boundingBox()).width).toBeGreaterThan(Math.min(280, width * 0.65))
+    // WebKit rounds scrollWidth up and clientWidth down at fractional CSS zoom.
     for (const selector of ['.request-heading', 'tbody .object-title-row']) {
-      expect(await page.locator(selector).evaluate(element => element.scrollWidth <= element.clientWidth)).toBe(true)
+      expect(await page.locator(selector).evaluate(element => element.scrollWidth <= element.clientWidth + 1)).toBe(true)
     }
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true)
   })
@@ -293,8 +294,8 @@ for (const [name, expected, review] of [
     await openCard(page, { initiator_name: name })
     await page.getByRole('button', { name: 'Копировать заявку с датой и инициатором', exact: true }).click()
     expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(`Заявка №000042 от 04.10.2026\nот ведущего инженера ${expected}`)
-    await expect(page.locator('.request-heading-initiator')).toContainText(name)
-    await expect(page.locator('.request-heading-initiator')).toContainText('Ведущий инженер')
+    await expect(page.locator('.request-heading-initiator')).toContainText(expected)
+    await expect(page.locator('.request-heading-initiator')).toContainText('от ведущего инженера')
     await expect(page.getByRole('status')).toContainText(review ? 'Проверьте склонение ФИО и должности' : 'Заявка с датой и инициатором скопирована')
   })
 }
@@ -324,3 +325,35 @@ test('резервное копирование переносит текст в
   await expect(page.getByRole('status')).toContainText('Заявка с датой и инициатором скопирована')
   expect(await page.evaluate(() => navigator.clipboard.readText())).toBe('Заявка №000042 от 04.10.2026\nот ведущего инженера Тестова Александра Александровича')
 })
+
+for (const width of [320, 390, 1024, 1440]) {
+  test(`шапка разделяет ссылку на заявку и подразделение при ширине ${width}`, async ({ page, browserName }) => {
+    await page.setViewportSize({ width, height: 1000 })
+    await openCard(page, { can_edit_department: 1 })
+    await page.evaluate(() => document.fonts.ready)
+    const heading = page.locator('.request-heading')
+    const author = heading.locator('.request-heading-initiator > p')
+    await expect(author).toHaveText('от ведущего инженера Тестова Александра Александровича')
+    await expect(heading.locator('.request-heading-department')).toContainText('Подразделение:')
+    const copy = heading.getByRole('button', { name: 'Копировать заявку с датой и инициатором' })
+    for (const zoom of [1.1, 1.25]) {
+      await page.evaluate(value => document.documentElement.style.setProperty('--portal-zoom', value), String(zoom))
+      const titleBox = await heading.getByRole('heading').boundingBox()
+      const authorBox = await author.boundingBox()
+      const departmentBox = await heading.locator('.request-heading-department').boundingBox()
+      const copyBox = await copy.boundingBox()
+      expect(authorBox.y).toBeGreaterThanOrEqual(titleBox.y + titleBox.height)
+      expect(departmentBox.y).toBeGreaterThan(authorBox.y + authorBox.height)
+      expect(Math.abs(titleBox.x - authorBox.x)).toBeLessThan(1)
+      expect(copyBox.x).toBeGreaterThanOrEqual(titleBox.x + titleBox.width)
+      // Allow only the one-pixel difference from integer CSSOM rounding.
+      expect(await heading.evaluate(node => node.scrollWidth <= node.clientWidth + 1)).toBe(true)
+      expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true)
+    }
+    await copy.focus()
+    // Safari on macOS uses Option+Tab to include buttons in keyboard navigation.
+    const tab = browserName === 'webkit' && process.platform === 'darwin' ? 'Alt+Tab' : 'Tab'
+    await page.keyboard.press(tab)
+    await expect(heading.getByRole('button', { name: 'Изменить подразделение заявки' })).toBeFocused()
+  })
+}
