@@ -44,8 +44,16 @@ final class RequestWorkflow
             [RequestStatus::InProgress, RequestAction::UploadReport] => $this->forRoles(
                 $roles,
                 [Role::IcExecutor, Role::IcManager, Role::LaboratoryManager],
-                RequestStatus::OpinionPreparation,
+                RequestStatus::InProgress,
                 'DOC-001',
+                $from,
+                $action,
+            ),
+            [RequestStatus::InProgress, RequestAction::SubmitForExpertise] => $this->forRoles(
+                $roles,
+                [Role::IcManager, Role::LaboratoryManager],
+                RequestStatus::OpinionPreparation,
+                'WF-015',
                 $from,
                 $action,
             ),
@@ -73,7 +81,7 @@ final class RequestWorkflow
                 $from,
                 $action,
             ),
-            [RequestStatus::InProgress, RequestAction::CompleteAct] => $this->forRoles(
+            [RequestStatus::InProgress, RequestAction::CloseRequest] => $this->forRoles(
                 $roles,
                 [Role::IcManager, Role::LaboratoryManager],
                 RequestStatus::Completed,

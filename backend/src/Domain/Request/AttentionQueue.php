@@ -6,8 +6,7 @@ namespace App\Domain\Request;
 
 enum AttentionQueue: string
 {
-    case ChooseRoute = 'choose_route';
-    case CompleteAct = 'complete_act';
+    case CloseRequest = 'close_request';
     case AssignExecutor = 'assign_executor';
     case StartOrResumeWork = 'start_or_resume_work';
     case UploadReport = 'upload_report';
@@ -18,22 +17,20 @@ enum AttentionQueue: string
     public function title(): string
     {
         return match ($this) {
-            self::ChooseRoute => 'Выбрать маршрут',
-            self::CompleteAct => 'Завершить акт испытаний',
+            self::CloseRequest => 'Закрыть заявку',
             self::AssignExecutor => 'Назначить исполнителя',
             self::StartOrResumeWork => 'Начать или возобновить работы',
             self::UploadReport => 'Загрузить отчёт',
             self::ClaimExpert => 'Взять заявку на экспертизу',
             self::PublishOpinion => 'Подготовить заключение',
-            self::SecurityDecision => 'Согласовать протокол испытаний',
+            self::SecurityDecision => 'Принять решение СБ',
         };
     }
 
     public function description(): string
     {
         return match ($this) {
-            self::ChooseRoute => 'Выберите маршрут испытаний.',
-            self::CompleteAct => 'Проверьте загруженный отчёт и завершите заявку.',
+            self::CloseRequest => 'Проверьте отчёт и выберите необходимые проверки при закрытии заявки.',
             self::AssignExecutor => 'Назначьте ответственного за проведение испытаний.',
             self::StartOrResumeWork => 'Начните или возобновите работу по заявке.',
             self::UploadReport => 'Загрузите отчёт о результатах испытаний в формате PDF.',
@@ -47,7 +44,7 @@ enum AttentionQueue: string
     public function roles(): array
     {
         return match ($this) {
-            self::ChooseRoute, self::CompleteAct, self::AssignExecutor => [Role::IcManager, Role::LaboratoryManager],
+            self::CloseRequest, self::AssignExecutor => [Role::IcManager, Role::LaboratoryManager],
             self::StartOrResumeWork, self::UploadReport => [
                 Role::IcExecutor,
                 Role::IcManager,

@@ -1128,16 +1128,16 @@
         },
         {
             "name": "symfony/mailer",
-            "version": "v7.4.14",
+            "version": "v7.4.24",
             "source": {
                 "type": "git",
                 "url": "https://github.com/symfony/mailer.git",
-                "reference": "f88ce03ae73e3edb5c176ce1f337709996e88495"
+                "reference": "19470de2526c9d5cdb136c5574e504024f523882"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/symfony/mailer/zipball/f88ce03ae73e3edb5c176ce1f337709996e88495",
-                "reference": "f88ce03ae73e3edb5c176ce1f337709996e88495",
+                "url": "https://api.github.com/repos/symfony/mailer/zipball/19470de2526c9d5cdb136c5574e504024f523882",
+                "reference": "19470de2526c9d5cdb136c5574e504024f523882",
                 "shasum": ""
             },
             "require": {
@@ -1188,7 +1188,7 @@
             "description": "Helps sending emails",
             "homepage": "https://symfony.com",
             "support": {
-                "source": "https://github.com/symfony/mailer/tree/v7.4.14"
+                "source": "https://github.com/symfony/mailer/tree/v7.4.24"
             },
             "funding": [
                 {
@@ -1208,7 +1208,7 @@
                     "type": "tidelift"
                 }
             ],
-            "time": "2026-06-13T08:51:35+00:00"
+            "time": "2026-11-24T17:14:14+00:00"
         },
         {
             "name": "symfony/mime",

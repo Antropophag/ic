@@ -71,19 +71,19 @@ test(`заявка завершается после решения СБ «${lab
     lockVersion: 1,
   })
 
-  await expectOk(await manager.post(`/api/v1/requests/${requestId}/route`, { data: { route: 'protocol', lockVersion: 1 } }))
   const assigned = await expectOk(await manager.post(`/api/v1/requests/${requestId}/executor`, {
-    data: { executorId: 2, lockVersion: 2 },
+    data: { executorId: 2, lockVersion: 1 },
   }))
-  expect(assigned).toMatchObject({ executorId: 2, lockVersion: 3 })
+  expect(assigned).toMatchObject({ executorId: 2, lockVersion: 2 })
 
   const started = await expectOk(await manager.post(`/api/v1/requests/${requestId}/start`, {
-    data: { lockVersion: 3 },
+    data: { lockVersion: 2 },
   }))
-  expect(started).toMatchObject({ status: 'in_progress', lockVersion: 4 })
+  expect(started).toMatchObject({ status: 'in_progress', lockVersion: 3 })
   await expectOk(await executor.post(`/api/v1/requests/${requestId}/report`, {
     multipart: { file: { name: 'e2e-report.pdf', mimeType: 'application/pdf', buffer: Buffer.from('%PDF-1.4\n%%EOF') } },
   }))
+    await expectOk(await manager.post(`/api/v1/requests/${requestId}/close`, { data: { lockVersion: 4 } }))
   await expectOk(await expert.post(`/api/v1/requests/${requestId}/expert/claim`, {
     data: { lockVersion: 5 },
   }))
@@ -179,7 +179,6 @@ test('заявка перемещается между персональным�
       testMethod: 'Перемещение между очередями — E2E',
     } }))
     const requestId = created.id
-  await expectOk(await manager.post(`/api/v1/requests/${requestId}/route`, { data: { route: 'protocol', lockVersion: 1 } }))
 
     await useTestIdentity(page, 1)
     await page.goto('/')
@@ -196,7 +195,7 @@ test('заявка перемещается между персональным�
     await page.getByRole('row').filter({ hasText: marker }).click()
 
     await expectOk(await manager.post(`/api/v1/requests/${requestId}/executor`, {
-      data: { executorId: 2, lockVersion: 2 },
+      data: { executorId: 2, lockVersion: 1 },
     }))
     await Promise.all([
       page.waitForResponse(response => response.url().includes('/api/v1/requests/dashboard') && response.ok()),
@@ -217,7 +216,7 @@ test('заявка перемещается между персональным�
     await executorPage.getByRole('button', { name: /Начать или возобновить работы/ }).click()
     await expect(executorPage.getByRole('row').filter({ hasText: marker })).toBeVisible()
     await expectOk(await executor.post(`/api/v1/requests/${requestId}/start`, {
-      data: { lockVersion: 3 },
+      data: { lockVersion: 2 },
     }))
     await executorPage.reload()
     await executorPage.getByRole('button', { name: /Загрузить отчёт/ }).click()
@@ -225,6 +224,7 @@ test('заявка перемещается между персональным�
     await expectOk(await executor.post(`/api/v1/requests/${requestId}/report`, {
       multipart: { file: { name: 'queue-report.pdf', mimeType: 'application/pdf', buffer: Buffer.from('%PDF-1.4\n%%EOF') } },
     }))
+    await expectOk(await manager.post(`/api/v1/requests/${requestId}/close`, { data: { lockVersion: 4 } }))
 
     const expertPage = await context.newPage()
     await useTestIdentity(expertPage, 4)
@@ -244,7 +244,7 @@ test('заявка перемещается между персональным�
     const securityPage = await context.newPage()
     await useTestIdentity(securityPage, 5)
     await securityPage.goto('/')
-    const securityQueue = securityPage.getByRole('button', { name: /Согласовать протокол испытаний/ })
+    const securityQueue = securityPage.getByRole('button', { name: /Принять решение СБ/ })
     const securityCountBefore = Number(await securityQueue.locator('.attention-count').innerText())
     await securityQueue.click()
     await expect(securityPage.getByRole('row').filter({ hasText: marker })).toBeVisible()
@@ -334,16 +334,16 @@ test('реестр показывает индикаторы последнег�
     testMethod: 'Индикаторы реестра — E2E',
   } }))
   const requestId = created.id
-  await expectOk(await manager.post(`/api/v1/requests/${requestId}/route`, { data: { route: 'protocol', lockVersion: 1 } }))
   await expectOk(await manager.post(`/api/v1/requests/${requestId}/executor`, {
-    data: { executorId: 2, lockVersion: 2 },
+    data: { executorId: 2, lockVersion: 1 },
   }))
   await expectOk(await manager.post(`/api/v1/requests/${requestId}/start`, {
-    data: { lockVersion: 3 },
+    data: { lockVersion: 2 },
   }))
   await expectOk(await executor.post(`/api/v1/requests/${requestId}/report`, {
     multipart: { file: { name: 'e2e-report.pdf', mimeType: 'application/pdf', buffer: Buffer.from('%PDF-1.4\n%%EOF') } },
   }))
+    await expectOk(await manager.post(`/api/v1/requests/${requestId}/close`, { data: { lockVersion: 4 } }))
   const commentText = 'Отчёт направлен на согласование'
   await expectOk(await executor.post(`/api/v1/requests/${requestId}/comments`, {
     data: { body: commentText },
@@ -527,9 +527,8 @@ test('администратор читает журналы действий и
     sampleQuantity: 1,
     testMethod: 'Read-only admin logs E2E',
   } }))
-  await expectOk(await manager.post(`/api/v1/requests/${created.id}/route`, { data: { route: 'protocol', lockVersion: 1 } }))
   await expectOk(await manager.post(`/api/v1/requests/${created.id}/executor`, {
-    data: { executorId: 2, lockVersion: 2 },
+    data: { executorId: 2, lockVersion: 1 },
   }))
   await expect.poll(async () => {
     const notifications = await expectOk(await admin.get(`/api/v1/admin/notifications?requestId=${created.id}`))
@@ -564,83 +563,94 @@ test('администратор читает журналы действий и
 })
 
 for (const managerId of [1, 7]) {
-  test(`маршрут Акт выбирает и завершает руководитель ${managerId}`, async ({ page, baseURL }) => {
-    const initiator = await apiFor(baseURL, 3)
-    const manager = await apiFor(baseURL, managerId)
-    const executor = await apiFor(baseURL, 2)
-    try {
-      const created = await expectOk(await initiator.post('/api/v1/requests', { data: {
-        productName: `Акт E2E ${managerId} ${Date.now()}`, manufacturer: 'Завод', supplier: 'Поставщик', sampleQuantity: 1, testMethod: 'Программа испытаний',
-      } }))
-      const requestId = created.id
-      expect((await manager.post(`/api/v1/requests/${requestId}/route`, { data: { route: true, lockVersion: 1 } })).status()).toBe(422)
-      await useTestIdentity(page, managerId)
-      await page.goto(`/?request=${requestId}`)
-      await expect(page.getByLabel('Исполнитель ИЦ', { exact: true })).toHaveCount(0)
-      await page.getByLabel('Маршрут', { exact: true }).selectOption('act')
-      await page.getByRole('button', { name: 'Сохранить маршрут', exact: true }).click()
-      await expect(page.getByRole('button', { name: 'Сохранить маршрут', exact: true })).toHaveCount(0)
-      await expect(page.getByLabel('Исполнитель ИЦ', { exact: true })).toBeVisible()
-      await expect(page.locator('.request-objects-status').getByText('Заявка зарегистрирована', { exact: true })).toBeVisible()
-      let details = await expectOk(await manager.get(`/api/v1/requests/${requestId}`))
-      expect(details.item.route).toBe('act')
-      await expectOk(await manager.post(`/api/v1/requests/${requestId}/executor`, { data: { executorId: 2, lockVersion: details.item.lockVersion } }))
-      details = await expectOk(await manager.get(`/api/v1/requests/${requestId}`))
-      await expectOk(await executor.post(`/api/v1/requests/${requestId}/start`, { data: { lockVersion: details.item.lockVersion } }))
-      details = await expectOk(await manager.get(`/api/v1/requests/${requestId}`))
-      expect((await manager.post(`/api/v1/requests/${requestId}/complete-act`, { data: { lockVersion: details.item.lockVersion } })).status()).toBe(403)
-      await expectOk(await executor.post(`/api/v1/requests/${requestId}/report`, {
-        multipart: { file: { name: 'act.pdf', mimeType: 'application/pdf', buffer: Buffer.from('%PDF-1.4\n%%EOF') } },
-      }))
-      await page.reload()
-      await expect(page.locator('.process-timeline li')).toHaveCount(3)
-      await expect(page.getByRole('heading', { name: 'Контроль СБ', exact: true })).toHaveCount(0)
-      await page.getByRole('button', { name: 'Завершить заявку', exact: true }).click()
-      await page.getByRole('alertdialog').getByRole('button', { name: 'Завершить заявку', exact: true }).click()
-      await expect(page.locator('.request-objects-status').getByText('Заявка выполнена', { exact: true })).toBeVisible()
-      details = await expectOk(await initiator.get(`/api/v1/requests/${requestId}`))
-      expect(details.item.route).toBe('act')
-      expect(details.documents.some(document => document.documentType === 'report')).toBe(true)
-      expect(details.history.filter(event => event.action === 'complete_act')).toHaveLength(1)
-    } finally {
-      await Promise.all([initiator.dispose(), manager.dispose(), executor.dispose()])
-    }
-  })
+  for (const [expertise, security] of [[false, false], [true, false], [true, true]]) {
+    test(`руководитель ${managerId} закрывает заявку: экспертиза ${expertise}, СБ ${security}`, async ({ page, baseURL }) => {
+      const initiator = await apiFor(baseURL, 3)
+      const manager = await apiFor(baseURL, managerId)
+      const laboratory = await apiFor(baseURL, 7)
+      const expert = await apiFor(baseURL, 4)
+      try {
+        const created = await expectOk(await initiator.post('/api/v1/requests', { data: {
+          productName: `Закрытие E2E ${managerId} ${expertise} ${security} ${Date.now()}`, manufacturer: 'Завод', supplier: 'Поставщик', sampleQuantity: 1, testMethod: 'Программа испытаний',
+        } }))
+        const id = created.id
+        await useTestIdentity(page, managerId)
+        if (managerId === 7) await page.setViewportSize({ width: 390, height: 900 })
+        await page.goto(`/?request=${id}`)
+        await expect(page.getByLabel('Маршрут', { exact: true })).toHaveCount(0)
+        const candidates = await expectOk(await manager.get('/api/v1/executors'))
+        expect(candidates.items.some(user => Number(user.id) === 7)).toBe(true)
+        await page.getByLabel('Исполнитель ИЦ', { exact: true }).selectOption('7')
+        await page.getByRole('button', { name: 'Назначить', exact: true }).click()
+        await page.getByRole('alertdialog').getByRole('button', { name: 'Назначить', exact: true }).click()
+        await expect.poll(async () => (await expectOk(await manager.get(`/api/v1/requests/${id}`))).item.executor_id).toBe(7)
+        let details = await expectOk(await manager.get(`/api/v1/requests/${id}`))
+        await expectOk(await laboratory.post(`/api/v1/requests/${id}/start`, { data: { lockVersion: details.item.lockVersion } }))
+        details = await expectOk(await manager.get(`/api/v1/requests/${id}`))
+        expect((await manager.post(`/api/v1/requests/${id}/close`, { data: { lockVersion: details.item.lockVersion } })).status()).toBe(403)
+        await expectOk(await laboratory.post(`/api/v1/requests/${id}/report`, {
+          multipart: { file: { name: 'report.pdf', mimeType: 'application/pdf', buffer: Buffer.from('%PDF-1.4\n%%EOF') } },
+        }))
+        await page.reload()
+        await expect(page.locator('.request-objects-status')).toContainText('Заявка в работе')
+        await expect(page.getByRole('checkbox', { name: 'Экспертиза', exact: true })).toBeChecked()
+        await expect(page.getByRole('checkbox', { name: 'Контроль СБ', exact: true })).toBeChecked()
+        if (!expertise) {
+          await page.getByRole('checkbox', { name: 'Экспертиза', exact: true }).uncheck()
+          await expect(page.getByRole('checkbox', { name: 'Контроль СБ', exact: true })).not.toBeChecked()
+          await expect(page.getByRole('checkbox', { name: 'Контроль СБ', exact: true })).toBeDisabled()
+        } else if (!security) await page.getByRole('checkbox', { name: 'Контроль СБ', exact: true }).uncheck()
+        if (expertise && security) await page.screenshot({ path: `/tmp/ic-closure-${managerId === 7 ? 'mobile' : 'desktop'}.png`, fullPage: true })
+        await page.getByRole('button', { name: 'Закрыть заявку', exact: true }).click()
+        await page.getByRole('alertdialog').getByRole('button', { name: 'Закрыть заявку', exact: true }).click()
+        await expect(page.locator('.request-objects-status')).toContainText(expertise ? 'Подготовка заключения' : 'Заявка выполнена')
+        details = await expectOk(await manager.get(`/api/v1/requests/${id}`))
+        expect(details.item.route).toBe(expertise ? 'protocol' : 'act')
+        expect(Boolean(Number(details.item.security_review_required))).toBe(security)
+        if (expertise) {
+          await expectOk(await expert.post(`/api/v1/requests/${id}/expert/claim`, { data: { lockVersion: details.item.lockVersion } }))
+          await page.unroute('**/api/**')
+          await useTestIdentity(page, 4)
+          await page.reload()
+          await page.getByRole('button', { name: 'Написать заключение', exact: true }).click()
+          await page.getByRole('dialog', { name: 'Экспертное заключение' }).locator('textarea').fill('Испытания завершены, образец соответствует требованиям.')
+          await page.getByRole('button', { name: security ? 'Опубликовать и передать в СБ' : 'Опубликовать и завершить заявку', exact: true }).click()
+          await expect(page.locator('.request-objects-status')).toContainText(security ? 'Контроль СБ' : 'Заявка выполнена')
+        }
+      } finally {
+        await Promise.allSettled([initiator, manager, laboratory, expert].map(actor => actor.dispose()))
+      }
+    })
+  }
 }
 
-
-test('выбор маршрута защищён от гонки, завершение акта идемпотентно', async ({ baseURL }) => {
+test('закрытие защищено от гонки и повторов', async ({ baseURL }) => {
   const initiator = await apiFor(baseURL, 3)
-  const manager = await apiFor(baseURL, 1)
-  const laboratory = await apiFor(baseURL, 7)
+  const actors = [await apiFor(baseURL, 1), await apiFor(baseURL, 7)]
   try {
     const created = await expectOk(await initiator.post('/api/v1/requests', { data: {
-      productName: `Гонка маршрутов ${Date.now()}`, manufacturer: 'Завод', supplier: 'Поставщик', sampleQuantity: 1, testMethod: 'Программа',
+      productName: `Гонка закрытия ${Date.now()}`, manufacturer: 'Завод', supplier: 'Поставщик', sampleQuantity: 1, testMethod: 'Программа',
     } }))
     const id = created.id
-    const results = await Promise.all([manager, laboratory].map(actor => actor.post(`/api/v1/requests/${id}/route`, {
-      data: { route: 'act', lockVersion: 1 },
-    })))
-    expect(results.map(response => response.status()).sort()).toEqual([200, 409])
-    await expectOk(await manager.post(`/api/v1/requests/${id}/executor`, { data: { executorId: 2, lockVersion: 2 } }))
-    await expectOk(await manager.post(`/api/v1/requests/${id}/start`, { data: { lockVersion: 3 } }))
-    await expectOk(await manager.post(`/api/v1/requests/${id}/report`, {
-      multipart: { file: { name: 'act.pdf', mimeType: 'application/pdf', buffer: Buffer.from('%PDF-1.4\n%%EOF') } },
+    await expectOk(await actors[0].post(`/api/v1/requests/${id}/executor`, { data: { executorId: 7, lockVersion: 1 } }))
+    await expectOk(await actors[0].post(`/api/v1/requests/${id}/start`, { data: { lockVersion: 2 } }))
+    await expectOk(await actors[0].post(`/api/v1/requests/${id}/report`, {
+      multipart: { file: { name: 'report.pdf', mimeType: 'application/pdf', buffer: Buffer.from('%PDF-1.4\n%%EOF') } },
     }))
-    const options = { headers: { 'Idempotency-Key': crypto.randomUUID() }, data: { lockVersion: 5 } }
-    const completed = await expectOk(await manager.post(`/api/v1/requests/${id}/complete-act`, options))
-    const replay = await manager.post(`/api/v1/requests/${id}/complete-act`, options)
+    const options = actors.map(() => ({ headers: { 'Idempotency-Key': crypto.randomUUID() }, data: { expertiseRequired: false, securityRequired: false, lockVersion: 4 } }))
+    const results = await Promise.all(actors.map((actor, index) => actor.post(`/api/v1/requests/${id}/close`, options[index])))
+    expect(results.map(response => response.status()).sort()).toEqual([200, 409])
+    const winner = results.findIndex(response => response.ok())
+    const completed = await expectOk(results[winner])
+    const replay = await actors[winner].post(`/api/v1/requests/${id}/close`, options[winner])
     expect(await expectOk(replay)).toEqual(completed)
     expect(replay.headers()['idempotency-replayed']).toBe('true')
-    expect((await laboratory.post(`/api/v1/requests/${id}/complete-act`, { data: { lockVersion: 5 } })).status()).toBe(409)
     const details = await expectOk(await initiator.get(`/api/v1/requests/${id}`))
-    expect(details.history.filter(event => event.action === 'complete_act')).toHaveLength(1)
-    expect(details.history.filter(event => event.action === 'choose_route')).toHaveLength(1)
+    expect(details.history.filter(event => event.action === 'close_request')).toHaveLength(1)
   } finally {
-    await Promise.all([initiator.dispose(), manager.dispose(), laboratory.dispose()])
+    await Promise.allSettled([initiator, ...actors].map(actor => actor.dispose()))
   }
 })
-
 
 test('удаление заключения после СБ возвращает заявку на экспертизу и защищено от повторов', async ({ page, baseURL }) => {
   const initiator = await apiFor(baseURL, 3)
@@ -653,10 +663,10 @@ test('удаление заключения после СБ возвращает
       productName: `Возврат заключения ${Date.now()}`, manufacturer: 'Завод', supplier: 'Поставщик', sampleQuantity: 1, testMethod: 'Программа',
     } }))
     const id = created.id
-    await expectOk(await manager.post(`/api/v1/requests/${id}/route`, { data: { route: 'protocol', lockVersion: 1 } }))
-    await expectOk(await manager.post(`/api/v1/requests/${id}/executor`, { data: { executorId: 2, lockVersion: 2 } }))
-    await expectOk(await executor.post(`/api/v1/requests/${id}/start`, { data: { lockVersion: 3 } }))
+    await expectOk(await manager.post(`/api/v1/requests/${id}/executor`, { data: { executorId: 2, lockVersion: 1 } }))
+    await expectOk(await executor.post(`/api/v1/requests/${id}/start`, { data: { lockVersion: 2 } }))
     await expectOk(await executor.post(`/api/v1/requests/${id}/report`, { multipart: { file: { name: 'report.pdf', mimeType: 'application/pdf', buffer: Buffer.from('%PDF-1.4\n%%EOF') } } }))
+    await expectOk(await manager.post(`/api/v1/requests/${id}/close`, { data: { lockVersion: 4 } }))
     await expectOk(await expert.post(`/api/v1/requests/${id}/expert/claim`, { data: { lockVersion: 5 } }))
     await expectOk(await expert.post(`/api/v1/requests/${id}/opinion`, { data: { body: 'Заключение для проверки возврата.', lockVersion: 6 } }))
     await expectOk(await security.post(`/api/v1/requests/${id}/security-decision`, { data: { decision: 'approve', lockVersion: 7 } }))
@@ -680,87 +690,5 @@ test('удаление заключения после СБ возвращает
     await page.screenshot({ path: '/tmp/ic-kashin-opinion-reopened.png', fullPage: true })
   } finally {
     await Promise.allSettled([initiator, manager, executor, expert, security].map(context => context.dispose()))
-  }
-})
-
-for (const managerId of [1, 7]) {
-  test(`руководитель ${managerId} отключает СБ после отчёта, эксперт завершает протокол`, async ({ page, baseURL }) => {
-    if (managerId === 7) await page.setViewportSize({ width: 390, height: 844 })
-    const initiator = await apiFor(baseURL, 3)
-    const manager = await apiFor(baseURL, managerId)
-    const executor = await apiFor(baseURL, 2)
-    const expert = await apiFor(baseURL, 4)
-    try {
-      const { id } = await expectOk(await initiator.post('/api/v1/requests', { data: {
-        productName: `Протокол без СБ ${managerId}`, manufacturer: 'Учебный завод', supplier: 'Учебный поставщик', sampleQuantity: 1, testMethod: 'Учебная программа',
-      } }))
-      await expectOk(await manager.post(`/api/v1/requests/${id}/route`, { data: { route: 'act', lockVersion: 1 } }))
-      await expectOk(await manager.post(`/api/v1/requests/${id}/executor`, { data: { executorId: 2, lockVersion: 2 } }))
-      await expectOk(await executor.post(`/api/v1/requests/${id}/start`, { data: { lockVersion: 3 } }))
-      await expectOk(await executor.post(`/api/v1/requests/${id}/report`, { multipart: { file: { name: 'report.pdf', mimeType: 'application/pdf', buffer: Buffer.from('%PDF-1.4\n%%EOF') } } }))
-      await useTestIdentity(page, managerId)
-      await page.goto(`/?request=${id}`)
-      await page.getByRole('button', { name: 'Изменить маршрут', exact: true }).click()
-      await page.getByLabel('Маршрут', { exact: true }).selectOption('protocol')
-      await page.getByRole('checkbox', { name: 'Требуется контроль СБ', exact: true }).uncheck()
-      await expect(page.getByText('Публикация заключения завершит заявку.', { exact: true })).toBeVisible()
-      await page.screenshot({ path: `/tmp/ic-route-settings-${managerId}.png`, fullPage: true })
-      await page.getByRole('button', { name: 'Сохранить маршрут', exact: true }).click()
-      await expect(page.locator('.process-timeline')).toContainText('Экспертиза')
-      await expect(page.locator('.process-timeline')).not.toContainText('Контроль СБ')
-      const details = await expectOk(await manager.get(`/api/v1/requests/${id}`))
-      expect(Number(details.item.security_review_required)).toBe(0)
-      await expectOk(await expert.post(`/api/v1/requests/${id}/expert/claim`, { data: { lockVersion: details.item.lockVersion } }))
-      await page.unroute('**/api/**')
-      await useTestIdentity(page, 4)
-      await page.reload()
-      await expect(page.getByRole('button', { name: 'Изменить маршрут', exact: true })).toHaveCount(0)
-      await page.getByRole('button', { name: 'Написать заключение', exact: true }).click()
-      await page.getByPlaceholder('Введите итоговое заключение по результатам испытаний').fill('Учебные образцы соответствуют требованиям программы испытаний.')
-      await page.getByRole('button', { name: 'Опубликовать и завершить', exact: true }).click()
-      await expect(page.locator('.request-status')).toHaveText('Заявка выполнена')
-      await expect(page.getByText('Проверка СБ не требуется', { exact: true })).toBeVisible()
-      const completed = await expectOk(await manager.get(`/api/v1/requests/${id}`))
-      expect(completed.item.security_mark).toBeNull()
-      expect(Number(completed.item.can_choose_route)).toBe(0)
-      expect(completed.history.filter(event => event.action === 'publish_opinion').at(-1).toStatus).toBe('completed')
-      expect((await manager.post(`/api/v1/requests/${id}/route`, { data: { route: 'act', lockVersion: completed.item.lockVersion } })).status()).toBe(403)
-    } finally {
-      await Promise.all([initiator, manager, executor, expert].map(api => api.dispose()))
-    }
-  })
-}
-
-test('публикация и изменение необходимости СБ сериализуются по версии заявки', async ({ baseURL }) => {
-  const initiator = await apiFor(baseURL, 3)
-  const manager = await apiFor(baseURL, 1)
-  const executor = await apiFor(baseURL, 2)
-  const expert = await apiFor(baseURL, 4)
-  try {
-    const { id } = await expectOk(await initiator.post('/api/v1/requests', { data: {
-      productName: 'Конкурирующая настройка СБ', manufacturer: 'Учебный завод', supplier: 'Учебный поставщик', sampleQuantity: 1, testMethod: 'Учебная программа',
-    } }))
-    await expectOk(await manager.post(`/api/v1/requests/${id}/route`, { data: { route: 'protocol', lockVersion: 1 } }))
-    await expectOk(await manager.post(`/api/v1/requests/${id}/executor`, { data: { executorId: 2, lockVersion: 2 } }))
-    await expectOk(await executor.post(`/api/v1/requests/${id}/start`, { data: { lockVersion: 3 } }))
-    await expectOk(await executor.post(`/api/v1/requests/${id}/report`, { multipart: { file: { name: 'report.pdf', mimeType: 'application/pdf', buffer: Buffer.from('%PDF-1.4\n%%EOF') } } }))
-    await expectOk(await expert.post(`/api/v1/requests/${id}/expert/claim`, { data: { lockVersion: 5 } }))
-    const responses = await Promise.all([
-      expert.post(`/api/v1/requests/${id}/opinion`, { data: { body: 'Конкурирующее заключение по испытаниям', lockVersion: 6 } }),
-      manager.post(`/api/v1/requests/${id}/route`, { data: { route: 'protocol', securityReviewRequired: false, lockVersion: 6 } }),
-    ])
-    expect(responses.map(response => response.status()).sort()).toEqual([200, 409])
-    const details = await expectOk(await manager.get(`/api/v1/requests/${id}`))
-    if (responses[0].ok()) {
-      expect(details.item.status).toBe('security_review')
-      expect(Number(details.item.security_review_required)).toBe(1)
-      expect(Number(details.item.can_choose_route)).toBe(0)
-    } else {
-      expect(details.item.status).toBe('opinion_preparation')
-      expect(Number(details.item.security_review_required)).toBe(0)
-      expect(details.history.filter(event => event.action === 'publish_opinion')).toHaveLength(0)
-    }
-  } finally {
-    await Promise.all([initiator, manager, executor, expert].map(api => api.dispose()))
   }
 })

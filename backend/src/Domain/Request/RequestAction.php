@@ -13,7 +13,8 @@ enum RequestAction: string
     case PublishOpinion = 'publish_opinion';
     case SecurityApprove = 'security_approve';
     case SecurityDecline = 'security_decline';
-    case CompleteAct = 'complete_act';
+    case CloseRequest = 'close_request';
+    case SubmitForExpertise = 'submit_for_expertise';
     case Reject = 'reject';
     case Withdraw = 'withdraw';
 }

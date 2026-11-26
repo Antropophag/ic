@@ -46,7 +46,7 @@ final class RequestQuery
             . "WHEN 'resume' THEN 'Работа возобновлена' WHEN 'upload_report' THEN 'Загружен отчёт испытаний' "
             . "WHEN 'publish_opinion' THEN 'Опубликовано экспертное заключение' "
             . "WHEN 'delete_opinion' THEN 'Заключение удалено, заявка возвращена на экспертизу' "
-            . "WHEN 'complete_act' THEN 'Акт испытаний завершён' WHEN 'security_decline' THEN 'СБ: не согласовано, заявка выполнена' WHEN 'security_approve' THEN 'СБ: согласовано, заявка выполнена' "
+            . "WHEN 'close_request' THEN 'Заявка завершена без дополнительных проверок' WHEN 'submit_for_expertise' THEN 'Заявка направлена на экспертизу' WHEN 'complete_after_opinion' THEN 'Заключение опубликовано, заявка выполнена' WHEN 'complete_act' THEN 'Акт испытаний завершён' WHEN 'security_decline' THEN 'СБ: не согласовано, заявка выполнена' WHEN 'security_approve' THEN 'СБ: согласовано, заявка выполнена' "
             . "WHEN 'reject' THEN 'В испытаниях отказано' WHEN 'withdraw' THEN 'Заявка отозвана' ELSE 'Событие в заявке' END AS title, "
             . 'u.display_name AS authorName, t.created_at AS occurredAtRaw, t.id AS sourceId '
             . 'FROM {{%request_transitions}} t JOIN {{%requests}} r ON r.id = t.request_id '
@@ -133,8 +133,7 @@ final class RequestQuery
         $items = $this->db->createCommand(
             'SELECT r.id, r.number, r.status, r.color, r.source, r.is_archived, r.product_name, r.manufacturer, '
             . 'r.route, r.security_review_required, r.route_selected_by, r.route_selected_at, '
-            . (new AttentionQueueScope())->canChooseRoute(':route_actor') . ' AS can_choose_route, '
-            . (new AttentionQueueScope())->condition(AttentionQueue::CompleteAct, ':complete_actor') . ' AS can_complete_act, '
+            . (new AttentionQueueScope())->condition(AttentionQueue::CloseRequest, ':complete_actor') . ' AS can_close_request, '
             . '(SELECT GREATEST(COUNT(*), 1) FROM {{%request_objects}} ro WHERE ro.request_id = r.id) AS object_count, '
             . 'r.supplier, r.sample_quantity, r.legacy_sample_quantity_raw, r.test_method, '
             . 'r.lock_version AS lockVersion, r.created_at, '
@@ -149,7 +148,7 @@ final class RequestQuery
             . 'AND EXISTS(SELECT 1 FROM {{%user_roles}} clr JOIN {{%roles}} clrole ON clrole.id = clr.role_id '
             . "WHERE clr.user_id = :color_actor_role AND clrole.code IN ('ic_manager', 'laboratory_manager'))) "
             . 'AS can_set_color, '
-            . "(r.route IS NOT NULL AND r.status IN ('registered', 'in_progress', 'suspended') AND EXISTS(SELECT 1 FROM {{%users}} aau "
+            . "(r.status IN ('registered', 'in_progress', 'suspended') AND EXISTS(SELECT 1 FROM {{%users}} aau "
             . 'WHERE aau.id = :active_assign_actor AND aau.is_active = 1) '
             . 'AND EXISTS(SELECT 1 FROM {{%user_roles}} aur '
             . 'JOIN {{%roles}} ar ON ar.id = aur.role_id '
@@ -166,7 +165,7 @@ final class RequestQuery
             . 'AND EXISTS(SELECT 1 FROM {{%user_roles}} reur JOIN {{%roles}} rer ON rer.id = reur.role_id '
             . "WHERE reur.user_id = :reassign_actor_role AND rer.code = 'expert') "
             . ') AS can_reassign_expert, '
-            . "(r.status = 'registered' AND r.route IS NOT NULL AND EXISTS(SELECT 1 FROM {{%users}} sau "
+            . "(r.status = 'registered' AND EXISTS(SELECT 1 FROM {{%users}} sau "
             . 'WHERE sau.id = :active_start_actor AND sau.is_active = 1) AND '
             . '(EXISTS(SELECT 1 FROM {{%user_roles}} sur '
             . 'JOIN {{%roles}} sr ON sr.id = sur.role_id '
@@ -252,7 +251,6 @@ final class RequestQuery
             . $whereSql
             . ' ORDER BY ' . $orderBy . ' LIMIT :limit OFFSET :offset',
             array_merge([
-                ':route_actor' => $actorId,
                 ':complete_actor' => $actorId,
                 ':color_actor' => $actorId,
                 ':color_actor_role' => $actorId,
@@ -369,8 +367,7 @@ final class RequestQuery
         $item = $this->db->createCommand(
             'SELECT r.id, r.number, r.status, r.color, r.source, r.is_archived, r.product_name, r.manufacturer, '
             . 'r.route, r.security_review_required, r.route_selected_by, r.route_selected_at, '
-            . (new AttentionQueueScope())->canChooseRoute(':route_actor') . ' AS can_choose_route, '
-            . (new AttentionQueueScope())->condition(AttentionQueue::CompleteAct, ':complete_actor') . ' AS can_complete_act, '
+            . (new AttentionQueueScope())->condition(AttentionQueue::CloseRequest, ':complete_actor') . ' AS can_close_request, '
             . '(SELECT GREATEST(COUNT(*), 1) FROM {{%request_objects}} ro WHERE ro.request_id = r.id) AS object_count, '
             . 'r.supplier, r.sample_quantity, r.legacy_sample_quantity_raw, r.test_method, '
             . 'r.lock_version AS lockVersion, '
@@ -389,7 +386,7 @@ final class RequestQuery
             . 'EXISTS(SELECT 1 FROM {{%user_roles}} clr JOIN {{%roles}} clrole ON clrole.id = clr.role_id '
             . "WHERE clr.user_id = :color_actor AND clrole.code IN ('ic_manager', 'laboratory_manager')) "
             . 'AS can_set_color, '
-            . "(r.route IS NOT NULL AND r.status IN ('registered', 'in_progress', 'suspended') AND EXISTS(SELECT 1 FROM {{%user_roles}} aur "
+            . "(r.status IN ('registered', 'in_progress', 'suspended') AND EXISTS(SELECT 1 FROM {{%user_roles}} aur "
             . 'JOIN {{%roles}} ar ON ar.id = aur.role_id '
             . "WHERE aur.user_id = :assign_actor AND ar.code IN ('ic_manager', 'laboratory_manager'))) "
             . 'AS can_assign_executor, '
@@ -402,7 +399,7 @@ final class RequestQuery
             . 'AND EXISTS(SELECT 1 FROM {{%user_roles}} reur JOIN {{%roles}} rer ON rer.id = reur.role_id '
             . "WHERE reur.user_id = :reassign_actor_role AND rer.code = 'expert')) "
             . 'AS can_reassign_expert, '
-            . "(r.status = 'registered' AND r.route IS NOT NULL AND (EXISTS(SELECT 1 FROM {{%user_roles}} sur "
+            . "(r.status = 'registered' AND (EXISTS(SELECT 1 FROM {{%user_roles}} sur "
             . 'JOIN {{%roles}} sr ON sr.id = sur.role_id '
             . "WHERE sur.user_id = :start_manager AND sr.code IN ('ic_manager', 'laboratory_manager')) "
             . 'OR (current_executor.user_id = :start_executor AND EXISTS(SELECT 1 '
@@ -479,7 +476,6 @@ final class RequestQuery
                 ':request_id' => $requestId,
                 ':actor_id' => $actorId,
                 ':department_actor' => $actorId,
-                ':route_actor' => $actorId,
                 ':complete_actor' => $actorId,
                 ':color_actor' => $actorId,
                 ':assign_actor' => $actorId,
@@ -698,10 +694,10 @@ final class RequestQuery
     public function findActiveExecutors(): array
     {
         return $this->db->createCommand(
-            'SELECT u.id, u.display_name AS displayName FROM {{%users}} u '
+            'SELECT DISTINCT u.id, u.display_name AS displayName FROM {{%users}} u '
             . 'JOIN {{%user_roles}} ur ON ur.user_id = u.id '
             . 'JOIN {{%roles}} r ON r.id = ur.role_id '
-            . "WHERE u.is_active = 1 AND r.code = 'ic_executor' ORDER BY u.display_name",
+            . "WHERE u.is_active = 1 AND r.code IN ('ic_executor', 'laboratory_manager') ORDER BY u.display_name",
         )->queryAll();
     }
 

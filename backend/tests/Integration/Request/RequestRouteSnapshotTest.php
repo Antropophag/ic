@@ -5,17 +5,15 @@ declare(strict_types=1);
 namespace Tests\Integration\Request;
 
 use App\Application\Request\CreateRequestInput;
-use App\Domain\Request\RequestRoute;
 use App\Domain\Request\RequestRouteDenied;
 use App\Infrastructure\Document\DocumentRepository;
 use App\Infrastructure\Document\DocumentStorage;
-use App\Infrastructure\Document\OpinionPdfRenderer;
 use App\Infrastructure\Request\RequestRepository;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 use yii\db\Connection;
 
-/** HTTP idempotency can establish a repeatable-read snapshot before a route command. */
+/** HTTP idempotency can establish a repeatable-read snapshot before closure. */
 final class RequestRouteSnapshotTest extends TestCase
 {
     private Connection $writer;
@@ -80,6 +78,12 @@ final class RequestRouteSnapshotTest extends TestCase
     #[DataProvider('variants')]
     public function testRevokedRoleOrDisabledActorCannotUseOldSnapshot(bool $disabled): void
     {
+        $repository = new RequestRepository($this->writer);
+        $repository->assignExecutor($this->requestId, $this->users['ic_executor'], 1, $this->users['ic_manager']);
+        $repository->startRequest($this->requestId, 2, $this->users['ic_executor']);
+        $path = $this->storageRoot . '/report.pdf';
+        file_put_contents($path, '%PDF-1.4 role snapshot');
+        (new DocumentRepository($this->writer, new DocumentStorage($this->storageRoot)))->uploadReport($this->requestId, $this->users['ic_executor'], 'report.pdf', 'application/pdf', (int) filesize($path), $path);
         $this->reader->beginTransaction();
         self::assertSame(1, (int) $this->reader->createCommand('SELECT COUNT(*) FROM {{%user_roles}} WHERE user_id = :id', [':id' => $this->users['ic_manager']])->queryScalar());
         if ($disabled) {
@@ -88,64 +92,55 @@ final class RequestRouteSnapshotTest extends TestCase
             $this->writer->createCommand()->delete('{{%user_roles}}', ['user_id' => $this->users['ic_manager']])->execute();
         }
         $this->expectException(RequestRouteDenied::class);
-        (new RequestRepository($this->reader))->chooseRoute($this->requestId, RequestRoute::Protocol, 1, $this->users['ic_manager'], false);
+        (new RequestRepository($this->reader))->closeRequest($this->requestId, 4, $this->users['ic_manager'], true, false);
     }
 
     #[DataProvider('variants')]
-    public function testPublicationOrCompletionIsVisibleAfterDocumentsAreDeleted(bool $act): void
+    public function testCurrentReportIsReadAfterAnEarlierSnapshot(bool $deleted): void
     {
-        $id = $this->requestId;
-        $manager = $this->users['ic_manager'];
-        $executor = $this->users['ic_executor'];
-        $expert = $this->users['expert'];
         $repository = new RequestRepository($this->writer);
-        $repository->chooseRoute($id, $act ? RequestRoute::Act : RequestRoute::Protocol, 1, $manager);
-        $repository->assignExecutor($id, $executor, 2, $manager);
-        $repository->startRequest($id, 3, $executor);
+        $id = $this->requestId;
+        $executor = $this->users['ic_executor'];
+        $manager = $this->users['ic_manager'];
+        $repository->assignExecutor($id, $executor, 1, $manager);
+        $repository->startRequest($id, 2, $executor);
         $path = $this->storageRoot . '/report.pdf';
         file_put_contents($path, '%PDF-1.4 snapshot test');
         $documents = new DocumentRepository($this->writer, new DocumentStorage($this->storageRoot));
-        $documents->uploadReport($id, $executor, 'report.pdf', 'application/pdf', (int) filesize($path), $path);
-        if (!$act) {
-            $repository->claimExpert($id, 5, $expert);
+        if ($deleted) {
+            $documents->uploadReport($id, $executor, 'report.pdf', 'application/pdf', (int) filesize($path), $path);
         }
         $this->reader->beginTransaction();
-        self::assertSame(0, (int) $this->reader->createCommand('SELECT COUNT(*) FROM {{%expert_opinions}} WHERE request_id = :id', [':id' => $id])->queryScalar());
-        if ($act) {
-            $repository->completeAct($id, 5, $manager);
-            $documents->deleteReport($id, 6, $executor, 'Исправить отчёт');
+        self::assertSame($deleted ? 1 : 0, (int) $this->reader->createCommand(
+            'SELECT COUNT(*) FROM {{%request_documents}} WHERE request_id = :id',
+            [':id' => $id],
+        )->queryScalar());
+        if ($deleted) {
+            $documents->deleteReport($id, 4, $executor, 'Исправить отчёт');
+            $this->expectException(RequestRouteDenied::class);
+            (new RequestRepository($this->reader))->closeRequest($id, 5, $manager);
         } else {
-            $documents->publishOpinion($id, $expert, 'Учебное заключение по испытаниям', 6, new OpinionPdfRenderer());
-            $documents->deleteOpinion($id, 7, $expert, 'Исправить заключение');
+            $documents->uploadReport($id, $executor, 'report.pdf', 'application/pdf', (int) filesize($path), $path);
+            $result = (new RequestRepository($this->reader))->closeRequest($id, 4, $manager);
+            self::assertSame('opinion_preparation', $result['status']);
         }
-        $version = (int) $this->writer->createCommand('SELECT lock_version FROM {{%requests}} WHERE id = :id', [':id' => $id])->queryScalar();
-        $this->expectException(RequestRouteDenied::class);
-        (new RequestRepository($this->reader))->chooseRoute($id, RequestRoute::Protocol, $version, $manager, false);
     }
 
-    #[DataProvider('variants')]
-    public function testNewReportIsVisibleWhenChangingRouteOrResuming(bool $resume): void
+    public function testResumeWithReportStillRequiresManagerClosure(): void
     {
-        $id = $this->requestId;
-        $manager = $this->users['ic_manager'];
-        $executor = $this->users['ic_executor'];
         $repository = new RequestRepository($this->writer);
-        $repository->chooseRoute($id, RequestRoute::Act, 1, $manager);
-        $repository->assignExecutor($id, $executor, 2, $manager);
-        $repository->startRequest($id, 3, $executor);
-        $this->reader->beginTransaction();
-        self::assertSame(0, (int) $this->reader->createCommand('SELECT COUNT(*) FROM {{%request_documents}} WHERE request_id = :id', [':id' => $id])->queryScalar());
+        $id = $this->requestId;
+        $executor = $this->users['ic_executor'];
+        $manager = $this->users['ic_manager'];
+        $repository->assignExecutor($id, $executor, 1, $manager);
+        $repository->startRequest($id, 2, $executor);
         $path = $this->storageRoot . '/report.pdf';
         file_put_contents($path, '%PDF-1.4 snapshot test');
         (new DocumentRepository($this->writer, new DocumentStorage($this->storageRoot)))->uploadReport($id, $executor, 'report.pdf', 'application/pdf', (int) filesize($path), $path);
-        if ($resume) {
-            $repository->suspendRequest($id, 5, $executor, 'Ожидание');
-            $repository->chooseRoute($id, RequestRoute::Protocol, 6, $manager);
-            $result = (new RequestRepository($this->reader))->resumeRequest($id, 7, $executor);
-        } else {
-            $result = (new RequestRepository($this->reader))->chooseRoute($id, RequestRoute::Protocol, 5, $manager);
-        }
-        self::assertSame('opinion_preparation', $result['status']);
+        $this->writer->createCommand()->update('{{%requests}}', ['route' => 'protocol'], ['id' => $id])->execute();
+        $repository->suspendRequest($id, 4, $executor, 'Ожидание');
+        self::assertSame('in_progress', $repository->resumeRequest($id, 5, $executor)['status']);
+        self::assertSame('opinion_preparation', $repository->closeRequest($id, 6, $manager)['status']);
     }
 
     private function connection(): Connection
