@@ -514,7 +514,7 @@ paths:
       summary: Удалить заключение и вернуть заявку на экспертизу
       description: |
         DOC-014. Доступно активному руководителю ИЦ или любому эксперту при наличии
-        действующего отчёта и заключения в маршруте Протокол на этапе экспертизы,
+        действующего отчёта и заключения при выбранной экспертизе на этапах подготовки,
         контроля СБ или после завершения. Причина обязательна.
         Прежние решения СБ перестают действовать; история сохраняется.
       operationId: deleteRequestOpinion
@@ -586,12 +586,12 @@ paths:
         '422': {$ref: '#/components/responses/ValidationError'}
         '500': {$ref: '#/components/responses/ServerError'}
 
-  /api/v1/requests/{id}/route:
+  /api/v1/requests/{id}/close:
     post:
       tags: [Requests]
-      summary: Выбрать маршрут заявки
-      description: Руководитель ИЦ или лаборатории выбирает маршрут до начала работ; маршрут и необходимость СБ меняются до первой публикации заключения или завершения. Удаление документов не снимает блокировку. С загруженным отчётом новый маршрут открывает экспертизу либо завершение акта; приостановка сохраняется. Автор, время, прежние и новые настройки сохраняются в аудите; lockVersion увеличивается.
-      operationId: chooseRequestRoute
+      summary: Закрыть заявку с выбранными проверками
+      description: Руководитель ИЦ или лаборатории проверяет действующий отчёт в in_progress. Обе проверки включены по умолчанию. Без проверок заявка завершается, с экспертизой переходит в opinion_preparation; публикация заключения завершает заявку или передаёт в СБ. Контроль СБ без экспертизы запрещён. Выбор, версия отчёта, аудит и уведомления сохраняются атомарно.
+      operationId: closeRequest
       security: [{cookieSession: [], csrfToken: []}]
       parameters:
         - $ref: '#/components/parameters/RequestId'
@@ -601,35 +601,7 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/ChooseRouteInput'
-      responses:
-        '200': {$ref: '#/components/responses/RequestCommandSucceeded'}
-        '400': {$ref: '#/components/responses/BadRequest'}
-        '401': {$ref: '#/components/responses/Unauthorized'}
-        '403': {$ref: '#/components/responses/Forbidden'}
-        '404': {$ref: '#/components/responses/NotFound'}
-        '409': {$ref: '#/components/responses/Conflict'}
-        '415': {$ref: '#/components/responses/UnsupportedMediaType'}
-        '422': {$ref: '#/components/responses/ValidationError'}
-        '500': {$ref: '#/components/responses/ServerError'}
-
-
-  /api/v1/requests/{id}/complete-act:
-    post:
-      tags: [Requests]
-      summary: Завершить акт испытаний
-      description: Руководитель ИЦ или лаборатории явно завершает маршрут act из in_progress при наличии действующей версии отчёта. Эксперт и СБ не требуются. На маршруте protocol действие запрещено.
-      operationId: completeRequestAct
-      security: [{cookieSession: [], csrfToken: []}]
-      parameters:
-        - $ref: '#/components/parameters/RequestId'
-        - $ref: '#/components/parameters/IdempotencyKey'
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/LockVersionInput'
+              $ref: '#/components/schemas/CloseRequestInput'
       responses:
         '200': {$ref: '#/components/responses/RequestCommandSucceeded'}
         '400': {$ref: '#/components/responses/BadRequest'}
@@ -646,7 +618,7 @@ paths:
     post:
       tags: [Requests]
       summary: Принять решение контроля СБ
-      description: Любое решение (approve — «Согласовано», decline — «Не согласовано») завершает полный маршрут. Автор, время, аудит и переход фиксируются атомарно. Повтор с тем же Idempotency-Key возвращает прежний результат; устаревшая версия получает 409.
+      description: Любое решение (approve — «Согласовано», decline — «Не согласовано») завершает заявку. Автор, время, аудит и переход фиксируются атомарно. Повтор с тем же Idempotency-Key возвращает прежний результат; устаревшая версия получает 409.
       operationId: decideRequestSecurity
       security: [{cookieSession: [], csrfToken: []}]
       parameters:
@@ -1125,8 +1097,7 @@ components:
     AttentionQueueId:
       type: string
       enum:
-        - choose_route
-        - complete_act
+        - close_request
         - assign_executor
         - start_or_resume_work
         - upload_report
@@ -1287,13 +1258,12 @@ components:
           type: string
           nullable: true
           enum: [act, protocol, null]
-          description: null — маршрут ещё не выбран; начало работы запрещено
-        security_review_required: {type: integer, enum: [0, 1], description: Контроль СБ для Протокола; для Акта не применяется}
+          description: Технический код выбранных проверок. act — без проверок, protocol — экспертиза; контроль СБ определяется security_review_required. До закрытия значение не ограничивает назначение, работу или загрузку отчёта; старые значения сохраняются.
+        security_review_required: {type: integer, enum: [0, 1]}
         route_selected_by: {type: integer, nullable: true}
         route_selected_at: {type: string, nullable: true}
-        can_choose_route: {type: integer, enum: [0, 1]}
         can_correct_security_decision: {type: integer, enum: [0, 1]}
-        can_complete_act: {type: integer, enum: [0, 1]}
+        can_close_request: {type: integer, enum: [0, 1]}
         security_mark: {type: string, nullable: true, enum: [approve, decline, null]}
         department:
           type: string
@@ -1349,12 +1319,13 @@ components:
       properties:
         lockVersion: {type: integer, minimum: 1}
       additionalProperties: false
-    ChooseRouteInput:
+    CloseRequestInput:
       type: object
-      required: [route, lockVersion]
+      description: securityRequired=true допустимо только при expertiseRequired=true.
+      required: [lockVersion]
       properties:
-        route: {type: string, enum: [act, protocol]}
-        securityReviewRequired: {type: boolean, default: true, description: Для Протокола задаёт необходимость СБ; для Акта игнорируется. При false публикация заключения завершает заявку.}
+        expertiseRequired: {type: boolean, default: true}
+        securityRequired: {type: boolean, default: true}
         lockVersion: {type: integer, minimum: 1}
       additionalProperties: false
     SecurityDecisionInput:

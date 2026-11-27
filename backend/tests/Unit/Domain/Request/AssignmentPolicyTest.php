@@ -15,19 +15,20 @@ final class AssignmentPolicyTest extends TestCase
     #[DataProvider('managerRoles')]
     public function testManagerCanAssignActiveExecutor(Role $managerRole): void
     {
-        (new AssignmentPolicy())->assertCanAssign(true, [$managerRole], true, [Role::IcExecutor], true);
+        (new AssignmentPolicy())->assertCanAssign([$managerRole], true, [Role::IcExecutor], true);
         self::addToAssertionCount(1);
     }
 
-    public function testRouteMustBeChosenBeforeAssignment(): void
+    public function testLaboratoryManagerCanBeAssignedAsExecutor(): void
     {
-        $this->expectDenied('WF-014', fn () => (new AssignmentPolicy())->assertCanAssign(
-            false,
-            [Role::IcManager],
-            true,
-            [Role::IcExecutor],
-            true,
-        ));
+        (new AssignmentPolicy())->assertCanAssign([Role::IcManager], true, [Role::LaboratoryManager], true);
+        self::addToAssertionCount(1);
+    }
+
+    public function testAssignmentDoesNotRequireAnAdvanceRoute(): void
+    {
+        (new AssignmentPolicy())->assertCanAssign([Role::IcManager], true, [Role::IcExecutor], true);
+        self::addToAssertionCount(1);
     }
 
     /** @return iterable<string, array{Role}> */
@@ -40,7 +41,6 @@ final class AssignmentPolicyTest extends TestCase
     public function testEmployeeCannotAssignExecutor(): void
     {
         $this->expectDenied('WF-001', fn () => (new AssignmentPolicy())->assertCanAssign(
-            true,
             [Role::Employee],
             true,
             [Role::IcExecutor],
@@ -53,7 +53,6 @@ final class AssignmentPolicyTest extends TestCase
     public function testInvalidExecutorIsRejected(bool $active, array $roles): void
     {
         $this->expectDenied('WF-002', fn () => (new AssignmentPolicy())->assertCanAssign(
-            true,
             [Role::IcManager],
             $active,
             $roles,
@@ -64,7 +63,6 @@ final class AssignmentPolicyTest extends TestCase
     public function testDisabledManagerCannotAssign(): void
     {
         $this->expectDenied('AUTH-003', fn () => (new AssignmentPolicy())->assertCanAssign(
-            true,
             [Role::IcManager],
             true,
             [Role::IcExecutor],
@@ -78,7 +76,6 @@ final class AssignmentPolicyTest extends TestCase
         // который бесполезно плодит запись истории, увеличивает
         // lock_version и отправляет письмо без реального изменения.
         $this->expectDenied('WF-013', fn () => (new AssignmentPolicy())->assertCanAssign(
-            true,
             [Role::IcManager],
             true,
             [Role::IcExecutor],

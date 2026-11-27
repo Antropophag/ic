@@ -3,7 +3,7 @@ import { expect, test } from '@playwright/test'
 test.use({ deviceScaleFactor: 3 })
 
 for (const width of [320, 390, 1440, 2560, 3840]) {
-  test(`обзор объясняет актуальные маршруты и возвращает в реестр при ширине ${width}`, async ({ page }) => {
+  test(`обзор объясняет проверки при закрытии и возвращает в реестр при ширине ${width}`, async ({ page }) => {
     await page.setViewportSize({ width, height: 900 })
     await page.route('**/api/**', route => {
       const path = new URL(route.request().url()).pathname
@@ -17,9 +17,9 @@ for (const width of [320, 390, 1440, 2560, 3840]) {
     const guide = page.locator('.guide-page')
     await expect(guide).toBeVisible()
     await expect(guide).toContainText('Любое решение СБ автоматически завершает заявку')
-    await expect(guide).toContainText('Требуется контроль СБ')
-    await expect(guide).toContainText('Опубликовать и завершить')
-    await expect(guide).toContainText('до первой публикации заключения')
+    await expect(guide).toContainText('Контроль СБ без экспертизы запрещён')
+    await expect(guide).toContainText('Только экспертиза.')
+    await expect(guide).toContainText('Обе галочки включены по умолчанию')
     await expect(guide).toContainText('удалить заключение с обязательной причиной')
     await expect(guide).toContainText('В заявке от 1 до 10 объектов')
     const creation = guide.locator('#request-creation')
@@ -29,7 +29,7 @@ for (const width of [320, 390, 1440, 2560, 3840]) {
     const act = guide.locator('[aria-labelledby="act-route-title"]')
     const protocol = guide.locator('[aria-labelledby="protocol-route-title"]')
     await expect(act.locator('ol li')).toHaveCount(4)
-    await expect(guide).toContainText('нажимает «Завершить заявку»')
+    await expect(guide).toContainText('нажимает «Закрыть заявку»')
     await expect(protocol.locator('ol li')).toHaveCount(6)
     await page.evaluate(() => document.fonts.ready)
     const actSteps = await act.locator('ol li').evaluateAll(items => items.map(item => { const { x, y, width, height } = item.getBoundingClientRect(); return { x, y, width, height } }))
@@ -55,7 +55,7 @@ for (const width of [320, 390, 1440, 2560, 3840]) {
       pixels: image.naturalWidth,
       requiredPixels: image.getBoundingClientRect().width * devicePixelRatio,
     })))
-    expect(images).toHaveLength(14)
+    expect(images).toHaveLength(13)
     for (const image of images) {
       expect(image.pixels).toBeGreaterThanOrEqual(4800)
       expect(image.pixels).toBeGreaterThanOrEqual(Math.floor(image.requiredPixels))

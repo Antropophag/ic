@@ -73,14 +73,10 @@ test('повторные и параллельные POST возвращают �
     expect(await json(await initiator.post(`/api/v1/requests/${requestId}/documents`, documentOptions)))
       .toEqual(await json(await initiator.post(`/api/v1/requests/${requestId}/documents`, documentOptions)))
 
-    const routeOptions = { headers: { 'Idempotency-Key': crypto.randomUUID() }, data: { route: 'protocol', lockVersion: 1 } }
-    expect(await json(await manager.post(`/api/v1/requests/${requestId}/route`, routeOptions)))
-      .toEqual(await json(await manager.post(`/api/v1/requests/${requestId}/route`, routeOptions)))
-
     const assignmentKey = crypto.randomUUID()
     const assignmentOptions = {
       headers: { 'Idempotency-Key': assignmentKey },
-      data: { executorId: 2, lockVersion: 2 },
+      data: { executorId: 2, lockVersion: 1 },
     }
     expect(await json(await manager.post(`/api/v1/requests/${requestId}/executor`, assignmentOptions)))
       .toEqual(await json(await manager.post(`/api/v1/requests/${requestId}/executor`, assignmentOptions)))
@@ -88,7 +84,7 @@ test('повторные и параллельные POST возвращают �
     const transitionKey = crypto.randomUUID()
     const transitionOptions = {
       headers: { 'Idempotency-Key': transitionKey },
-      data: { lockVersion: 3 },
+      data: { lockVersion: 2 },
     }
     expect(await json(await manager.post(`/api/v1/requests/${requestId}/start`, transitionOptions)))
       .toEqual(await json(await manager.post(`/api/v1/requests/${requestId}/start`, transitionOptions)))

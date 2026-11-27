@@ -14,14 +14,13 @@ final class AttentionQueueTest extends TestCase
     {
         self::assertSame(
             [
-                'choose_route' => ['Выбрать маршрут', 'Выберите маршрут испытаний.', [Role::IcManager, Role::LaboratoryManager]],
-                'complete_act' => ['Завершить акт испытаний', 'Проверьте загруженный отчёт и завершите заявку.', [Role::IcManager, Role::LaboratoryManager]],
+                'close_request' => ['Закрыть заявку', 'Проверьте отчёт и выберите необходимые проверки при закрытии заявки.', [Role::IcManager, Role::LaboratoryManager]],
                 'assign_executor' => ['Назначить исполнителя', 'Назначьте ответственного за проведение испытаний.', [Role::IcManager, Role::LaboratoryManager]],
                 'start_or_resume_work' => ['Начать или возобновить работы', 'Начните или возобновите работу по заявке.', [Role::IcExecutor, Role::IcManager, Role::LaboratoryManager]],
                 'upload_report' => ['Загрузить отчёт', 'Загрузите отчёт о результатах испытаний в формате PDF.', [Role::IcExecutor, Role::IcManager, Role::LaboratoryManager]],
                 'claim_expert' => ['Взять заявку на экспертизу', 'Возьмите заявку в работу для подготовки заключения.', [Role::Expert]],
                 'publish_opinion' => ['Подготовить заключение', 'Подготовьте и опубликуйте экспертное заключение.', [Role::Expert]],
-                'security_decision' => ['Согласовать протокол испытаний', 'Сохраните решение «Согласовано» или «Не согласовано». Любое решение завершает заявку.', [Role::SecurityOfficer]],
+                'security_decision' => ['Принять решение СБ', 'Сохраните решение «Согласовано» или «Не согласовано». Любое решение завершает заявку.', [Role::SecurityOfficer]],
             ],
             array_reduce(
                 AttentionQueue::cases(),

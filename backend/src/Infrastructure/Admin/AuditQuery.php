@@ -20,9 +20,10 @@ final class AuditQuery
     ];
 
     private const TITLES = [
-        'request.route_action_denied' => 'Действие с маршрутом отклонено',
+        'request.route_action_denied' => 'Закрытие заявки отклонено',
         'request.route_selected' => 'Выбран маршрут заявки',
         'request.act_completed' => 'Акт испытаний завершён',
+        'request.closed' => 'Выбраны проверки при закрытии заявки',
         'request.security_decided' => 'Решение службы безопасности',
         'request.security_decision_corrected' => 'Исправлено решение СБ',
         'request.security_decision_rejected' => 'Решение службы безопасности отклонено',
@@ -59,6 +60,7 @@ final class AuditQuery
         'request.route_selected' => ['from_route', 'route', 'from_security_review_required', 'security_review_required', 'from_status', 'to_status'],
         'request.security_decision_corrected' => ['security_check_id', 'correction_id', 'original_decision', 'previous_decision', 'decision'],
         'request.act_completed' => ['report_version_id'],
+        'request.closed' => ['report_version_id', 'expertise_required', 'security_required'],
         'request.security_decided' => ['decision'], 'request.comment_added' => ['comment_id'],
         'request.expert_claimed' => ['expert_id', 'assignment_id'], 'request.expert_reassigned' => ['expert_id', 'assignment_id'],
         'request.expert_assignment_denied' => ['expert_id'], 'request.executor_assigned' => ['executor_id', 'assignment_id'],
@@ -66,7 +68,7 @@ final class AuditQuery
         'request.started' => ['from_status', 'to_status'], 'request.suspended' => ['from_status', 'to_status'],
         'request.resumed' => ['from_status', 'to_status'], 'request.rejected' => ['from_status', 'to_status'],
         'request.withdrawn' => ['from_status', 'to_status'], 'request.document_uploaded' => ['document_id', 'version_id'],
-        'request.report_uploaded' => ['document_id', 'version_id', 'version'], 'request.report_deleted' => ['document_id'],
+        'request.report_uploaded' => ['document_id', 'version_id', 'version', 'invalidated_opinion_document_id'], 'request.report_deleted' => ['document_id', 'invalidated_opinion_document_id'],
         'request.opinion_published' => ['revision', 'document_version_id'],
         'request.opinion_deleted' => ['document_id'],
         'request.opinion_deletion_rejected' => ['outcome'],

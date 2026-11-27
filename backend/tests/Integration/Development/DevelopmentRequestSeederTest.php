@@ -151,7 +151,7 @@ final class DevelopmentRequestSeederTest extends IntegrationTestCase
         );
         self::assertSame(0, (int) $this->scalar('SELECT COUNT(*) FROM {{%requests}} WHERE legacy_id IS NOT NULL'));
         self::assertSame(['approve', 'decline'], $this->db()->createCommand('SELECT DISTINCT decision FROM {{%security_checks}} ORDER BY decision')->queryColumn());
-        self::assertSame(4, (int) $this->scalar("SELECT COUNT(*) FROM {{%request_transitions}} WHERE action = 'security_decline'"));
+        self::assertSame(2, (int) $this->scalar("SELECT COUNT(*) FROM {{%request_transitions}} WHERE action = 'security_decline'"));
         self::assertSame(
             'Демонстрационная заявка создана. Образцы готовы к передаче в ИЦ.',
             $this->scalar('SELECT body FROM {{%request_comments}} ORDER BY id LIMIT 1'),

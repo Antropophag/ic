@@ -186,10 +186,10 @@ test('объект компактен, правая колонка поднят�
   expect(department.y).toBeGreaterThan(initiator.y + initiator.height)
 })
 
-test('на узком экране статус остаётся сверху, маршрут отмечен в процессе, меню направления доступно', async ({ page }) => {
+test('на узком экране статус остаётся сверху, меню направления доступно', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 900 })
   await openCard(page, { route: 'act', can_set_color: 1 })
-  await expect(page.locator('#process-title').getByLabel('Маршрут: Акт испытаний')).toHaveText('Акт')
+  await expect(page.locator('.request-route-badge')).toHaveCount(0)
   const state = await page.locator('.request-sidebar-state').boundingBox()
   const object = await page.locator('.request-object-summary').boundingBox()
   expect(state.y + state.height).toBeLessThanOrEqual(object.y + 1)

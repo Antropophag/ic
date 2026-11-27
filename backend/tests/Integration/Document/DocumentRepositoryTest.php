@@ -116,20 +116,20 @@ final class DocumentRepositoryTest extends IntegrationTestCase
         )->queryOne();
     }
 
-    public function testReportUploadTransitionsStatusAndNotifiesOnlyActiveExperts(): void
+    public function testReportUploadStaysInWorkAndNotifiesOnlyActiveManagers(): void
     {
         $initiator = $this->createUser('dev.it.doc.initiator1', 'Инициатор');
         $executor = $this->createUser('dev.it.doc.executor1', 'Исполнитель');
         $outsider = $this->createUser('dev.it.doc.outsider0', 'Посторонний сотрудник');
-        $activeExpert = $this->createUser('dev.it.doc.expert1', 'Активный эксперт', 'active.expert@example.invalid');
-        $this->grantRole($activeExpert, 'expert');
-        $inactiveExpert = $this->createUser(
-            'dev.it.doc.expert2',
-            'Неактивный эксперт',
-            'inactive.expert@example.invalid',
+        $activeManager = $this->createUser('dev.it.doc.manager1', 'Активный руководитель', 'active.manager@example.invalid');
+        $this->grantRole($activeManager, 'laboratory_manager');
+        $inactiveManager = $this->createUser(
+            'dev.it.doc.manager2',
+            'Неактивный руководитель',
+            'inactive.manager@example.invalid',
             false,
         );
-        $this->grantRole($inactiveExpert, 'expert');
+        $this->grantRole($inactiveManager, 'laboratory_manager');
 
         $request = $this->createInProgressRequestWithExecutor($initiator, $executor, 'report-upload');
         $requestId = (int) $request['id'];
@@ -138,22 +138,22 @@ final class DocumentRepositoryTest extends IntegrationTestCase
         $repository = new DocumentRepository($this->db(), $this->storage());
         $result = $repository->uploadReport($requestId, $executor, $file['name'], $file['mime'], $file['size'], $file['path']);
 
-        self::assertSame('opinion_preparation', $result['status']);
+        self::assertSame('in_progress', $result['status']);
         self::assertSame((int) $request['lock_version'] + 1, $result['lockVersion']);
 
         $newStatus = $this->scalar('SELECT status FROM {{%requests}} WHERE id = :id', [':id' => $requestId]);
-        self::assertSame('opinion_preparation', $newStatus);
+        self::assertSame('in_progress', $newStatus);
 
         $activeNotified = $this->scalar(
             "SELECT COUNT(*) FROM {{%notification_outbox}} WHERE request_id = :id "
-            . "AND event_type = 'request.report_uploaded' AND recipient_email = 'active.expert@example.invalid'",
+            . "AND event_type = 'request.report_ready' AND recipient_email = 'active.manager@example.invalid'",
             [':id' => $requestId],
         );
         self::assertSame(1, (int) $activeNotified);
 
         $inactiveNotified = $this->scalar(
             "SELECT COUNT(*) FROM {{%notification_outbox}} WHERE request_id = :id "
-            . "AND event_type = 'request.report_uploaded' AND recipient_email = 'inactive.expert@example.invalid'",
+            . "AND event_type = 'request.report_ready' AND recipient_email = 'inactive.manager@example.invalid'",
             [':id' => $requestId],
         );
         self::assertSame(0, (int) $inactiveNotified);
@@ -304,7 +304,7 @@ final class DocumentRepositoryTest extends IntegrationTestCase
             $repository->deleteReport($requestId, (int) $uploaded['lockVersion'], $outsider, 'Нет полномочий');
             self::fail('Report deletion by an unrelated employee must be denied.');
         } catch (ReportDeletionDenied) {
-            self::assertSame('opinion_preparation', $this->scalar(
+            self::assertSame('in_progress', $this->scalar(
                 'SELECT status FROM {{%requests}} WHERE id = :id',
                 [':id' => $requestId],
             ));
@@ -341,7 +341,7 @@ final class DocumentRepositoryTest extends IntegrationTestCase
                 'SELECT status, lock_version FROM {{%requests}} WHERE id = :id',
                 [':id' => $requestId],
             )->queryOne();
-            self::assertSame('opinion_preparation', $requestAfterConflict['status']);
+            self::assertSame('in_progress', $requestAfterConflict['status']);
             self::assertSame((int) $uploaded['lockVersion'], (int) $requestAfterConflict['lock_version']);
             self::assertSame(1, (int) $this->scalar(
                 "SELECT COUNT(*) FROM {{%request_documents}} document "
@@ -378,7 +378,7 @@ final class DocumentRepositoryTest extends IntegrationTestCase
         $second = $this->tempPdf('%PDF-1.4 revision two, slightly longer body');
         $secondResult = $repository->uploadReport($requestId, $executor, $second['name'], $second['mime'], $second['size'], $second['path']);
         self::assertSame(2, $secondResult['version']);
-        self::assertSame($firstResult['lockVersion'], $secondResult['lockVersion']);
+        self::assertSame($firstResult['lockVersion'] + 1, $secondResult['lockVersion']);
 
         $versionCount = $this->scalar(
             'SELECT COUNT(*) FROM {{%request_document_versions}} v '

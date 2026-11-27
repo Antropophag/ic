@@ -158,9 +158,6 @@ final class DocumentRepository
                 (bool) $request['hasActiveReport'],
             );
 
-            if ($request['route'] === null) {
-                throw new ReportDenied('WF-014');
-            }
             $report = $this->findOrCreateReport($requestId, $actorId);
             $documentId = $report['id'];
             $version = (int) $this->db->createCommand(
@@ -182,26 +179,26 @@ final class DocumentRepository
                 'created_at' => $now,
             ])->execute();
             $versionId = (int) $this->db->getLastInsertID();
-            // Every act revision invalidates pending completion commands. The act route stays
-            // in work until a manager explicitly completes it; it never enters expertise.
+            // Uploading never selects the next review. Replacements during expertise stay there;
+            // every version invalidates a pending manager closure or opinion publication.
+            // Older releases deleted reports without deleting their dependent opinions.
+            // Reopening those reports must not republish an obsolete opinion or SB decision.
+            $invalidatedOpinionId = $report['wasDeleted'] ? $this->invalidateOpinion($requestId, $actorId, $now) : null;
             $isFirstOrRevived = $version === 1 || $report['wasDeleted'];
-            $targetStatus = $request['route'] === 'act' ? RequestStatus::InProgress : RequestStatus::OpinionPreparation;
+            $targetStatus = $status === RequestStatus::OpinionPreparation ? $status : RequestStatus::InProgress;
             $statusChanges = $targetStatus !== $status;
-            $requestChanges = $isFirstOrRevived || $statusChanges || $request['route'] === 'act';
-            $nextLockVersion = (int) $request['lockVersion'] + ($requestChanges ? 1 : 0);
-            if ($requestChanges) {
-                $updated = $this->db->createCommand()->update('{{%requests}}', [
-                    'status' => $targetStatus->value,
-                    'lock_version' => $nextLockVersion,
-                    'updated_at' => $now,
-                ], [
-                    'id' => $requestId,
-                    'status' => $status->value,
-                    'lock_version' => (int) $request['lockVersion'],
-                ])->execute();
-                if ($updated !== 1) {
-                    throw new \RuntimeException('Concurrent report upload detected.');
-                }
+            $nextLockVersion = (int) $request['lockVersion'] + 1;
+            $updated = $this->db->createCommand()->update('{{%requests}}', [
+                'status' => $targetStatus->value,
+                'lock_version' => $nextLockVersion,
+                'updated_at' => $now,
+            ], [
+                'id' => $requestId,
+                'status' => $status->value,
+                'lock_version' => (int) $request['lockVersion'],
+            ])->execute();
+            if ($updated !== 1) {
+                throw new \RuntimeException('Concurrent report upload detected.');
             }
             if ($statusChanges || $isFirstOrRevived) {
                 $this->db->createCommand()->insert('{{%request_transitions}}', [
@@ -236,16 +233,16 @@ final class DocumentRepository
                     );
                 }
             }
-            if ($request['route'] === 'act') {
+            if ($targetStatus === RequestStatus::InProgress) {
                 $outbox = new NotificationOutbox($this->db);
                 foreach ($this->activeUsersWithRoles(['ic_manager', 'laboratory_manager']) as $manager) {
                     $outbox->enqueue(
                         $requestId,
-                        'request.act_ready',
+                        'request.report_ready',
                         $manager['email'],
                         $manager['name'],
-                        'Акт испытаний готов к завершению',
-                        'Загружен отчёт по маршруту «Акт испытаний». Проверьте документ и завершите заявку в портале.',
+                        'Отчёт готов к проверке руководителем',
+                        'Загружен отчёт испытаний. Проверьте документ, выберите необходимые проверки и нажмите «Закрыть заявку» в портале.',
                     );
                 }
             }
@@ -255,7 +252,8 @@ final class DocumentRepository
                 'entity_id' => $requestId,
                 'actor_id' => $actorId,
                 'rule_id' => $isFirstOrRevived ? ($report['wasDeleted'] ? 'DOC-012' : 'DOC-002') : 'DOC-008',
-                'payload_json' => ['document_id' => $documentId, 'version_id' => $versionId, 'version' => $version],
+                'payload_json' => ['document_id' => $documentId, 'version_id' => $versionId, 'version' => $version,
+                    'invalidated_opinion_document_id' => $invalidatedOpinionId],
                 'created_at' => $now,
             ])->execute();
             $transaction->commit();
@@ -335,6 +333,7 @@ final class DocumentRepository
                 'deleted_at' => $now,
                 'deleted_by' => $actorId,
             ], ['id' => (int) $document['id']])->execute();
+            $opinionId = $this->invalidateOpinion($requestId, $actorId, $now);
             $nextLockVersion = $expectedLockVersion + 1;
             $updated = $this->db->createCommand()->update('{{%requests}}', [
                 'status' => RequestStatus::InProgress->value,
@@ -366,7 +365,8 @@ final class DocumentRepository
                 'entity_id' => $requestId,
                 'actor_id' => $actorId,
                 'rule_id' => 'DOC-011',
-                'payload_json' => ['document_id' => (int) $document['id'], 'reason' => $reason],
+                'payload_json' => ['document_id' => (int) $document['id'], 'reason' => $reason,
+                    'invalidated_opinion_document_id' => $opinionId],
                 'created_at' => $now,
             ])->execute();
             $transaction->commit();
@@ -685,6 +685,25 @@ final class DocumentRepository
             throw new RequestNotFound('Document version not found');
         }
         return $version;
+    }
+
+    /** Invalidates dependent document access while preserving opinion and decision history. */
+    private function invalidateOpinion(int $requestId, int $actorId, string $now): ?int
+    {
+        $opinionId = $this->db->createCommand(
+            "SELECT id FROM {{%request_documents}} WHERE request_id = :id AND document_type = 'opinion' AND deleted_at IS NULL FOR UPDATE",
+            [':id' => $requestId],
+        )->queryScalar();
+        if ($opinionId === false) {
+            return null;
+        }
+        $this->db->createCommand()->update('{{%request_document_versions}}', ['deleted_at' => $now], [
+            'document_id' => (int) $opinionId, 'deleted_at' => null,
+        ])->execute();
+        $this->db->createCommand()->update('{{%request_documents}}', [
+            'deleted_at' => $now, 'deleted_by' => $actorId,
+        ], ['id' => (int) $opinionId])->execute();
+        return (int) $opinionId;
     }
 
     /** @return array<string, mixed>|false */

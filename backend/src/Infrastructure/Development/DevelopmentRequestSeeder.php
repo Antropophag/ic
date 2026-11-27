@@ -74,8 +74,12 @@ final class DevelopmentRequestSeeder
             $this->clearRequestData();
             for ($index = 0; $index < self::REQUEST_COUNT; ++$index) {
                 $fixture = self::REQUESTS[$index % count(self::REQUESTS)];
-                $fixture['route'] = $fixture['status'] === 'registered' ? null
-                    : (in_array($fixture['status'], ['in_progress', 'completed'], true) && intdiv($index, count(self::REQUESTS)) % 3 === 0 ? 'act' : 'protocol');
+                $fixture['route'] = match ($fixture['status']) {
+                    'completed' => ['act', 'protocol', 'protocol'][intdiv($index, count(self::REQUESTS)) % 3],
+                    'opinion_preparation', 'security_review' => 'protocol',
+                    default => null,
+                };
+                $fixture['securityRequired'] = $fixture['route'] === 'protocol' && ($fixture['status'] !== 'completed' || intdiv($index, count(self::REQUESTS)) % 3 === 1);
                 $fixture['age'] = 8 + ($index % 83);
                 $initiator = self::INITIATORS[$index % count(self::INITIATORS)];
                 $initiatorId = $users[$initiator];
@@ -96,7 +100,7 @@ final class DevelopmentRequestSeeder
                 $newKeys[] = $version['key'];
                 ++$counts['documents'];
 
-                if (in_array($fixture['status'], ['opinion_preparation', 'security_review', 'completed'], true) || ($fixture['route'] === 'act' && $fixture['status'] === 'in_progress')) {
+                if (in_array($fixture['status'], ['opinion_preparation', 'security_review', 'completed'], true) || ($fixture['status'] === 'in_progress' && intdiv($index, count(self::REQUESTS)) % 3 === 0)) {
                     $version = $this->insertAttachment(
                         $requestId,
                         'report',
@@ -123,11 +127,11 @@ final class DevelopmentRequestSeeder
                     $newKeys[] = $version['key'];
                     ++$counts['documents'];
                     $opinionId = $this->insertOpinion($requestId, $version['id'], $expert, $fixture['age'] - 4);
-                    if ($fixture['status'] !== 'security_review') {
-                        $this->insertSecurityCheck($requestId, $opinionId, $users['security'], intdiv($index, count(self::REQUESTS)) % 3 === 1 ? 'approve' : 'decline', $fixture['age'] - 5);
+                    if ($fixture['status'] !== 'security_review' && $fixture['securityRequired']) {
+                        $this->insertSecurityCheck($requestId, $opinionId, $users['security'], intdiv($index, count(self::REQUESTS)) % 2 === 0 ? 'approve' : 'decline', $fixture['age'] - 5);
                     }
                 }
-                $this->insertWorkflow($requestId, $index, $fixture['status'], $fixture['age'], $users, $reportVersionId, $fixture['route']);
+                $this->insertWorkflow($requestId, $index, $fixture['status'], $fixture['age'], $users, $reportVersionId, $fixture['route'], $fixture['securityRequired']);
             }
             $this->db->createCommand()->update('{{%request_number_sequence}}', ['value' => 1000 + self::REQUEST_COUNT], ['id' => 1])->execute();
             $transaction->commit();
@@ -224,7 +228,7 @@ final class DevelopmentRequestSeeder
         $this->db->createCommand()->insert('{{%requests}}', [
             'number' => 1001 + $index, 'legacy_id' => null, 'initiator_id' => $initiatorId,
             'department_name' => $department, 'department_source' => 'current_profile',
-            'status' => $fixture['status'], 'route' => $fixture['route'], 'product_name' => sprintf('%s — демо-серия %03d', $fixture['product'], $index + 1),
+            'status' => $fixture['status'], 'route' => $fixture['route'], 'security_review_required' => $fixture['securityRequired'], 'product_name' => sprintf('%s — демо-серия %03d', $fixture['product'], $index + 1),
             'manufacturer' => $fixture['manufacturer'], 'supplier' => $fixture['supplier'],
             'sample_quantity' => $fixture['quantity'], 'test_method' => $fixture['method'],
             'revision' => 1, 'lock_version' => 1, 'color' => $fixture['color'],
@@ -276,7 +280,7 @@ final class DevelopmentRequestSeeder
     }
 
     /** @param array<string, int> $users */
-    private function insertWorkflow(int $requestId, int $index, string $status, int $age, array $users, ?int $reportVersionId, ?string $route): void
+    private function insertWorkflow(int $requestId, int $index, string $status, int $age, array $users, ?int $reportVersionId, ?string $route, bool $securityRequired): void
     {
         $executor = $index % 2 === 0 ? $users['executor2'] : $users['executor'];
         if ($status !== 'registered') {
@@ -294,7 +298,7 @@ final class DevelopmentRequestSeeder
                 ['in_progress', 'opinion_preparation', 'upload_report', null],
             ],
             'security_review' => [['registered', 'in_progress', 'start', null], ['in_progress', 'opinion_preparation', 'upload_report', null], ['opinion_preparation', 'security_review', 'publish_opinion', null]],
-            'completed' => [['registered', 'in_progress', 'start', null], ['in_progress', 'opinion_preparation', 'upload_report', null], ['opinion_preparation', 'security_review', 'publish_opinion', null], ['security_review', 'completed', intdiv($index, count(self::REQUESTS)) % 3 === 1 ? 'security_approve' : 'security_decline', null]],
+            'completed' => [['registered', 'in_progress', 'start', null], ['in_progress', 'opinion_preparation', 'upload_report', null], ['opinion_preparation', 'security_review', 'publish_opinion', null], ['security_review', 'completed', intdiv($index, count(self::REQUESTS)) % 2 === 0 ? 'security_approve' : 'security_decline', null]],
             'rejected' => [['registered', 'rejected', 'reject', 'Комплект образцов не соответствует условиям приёмки.']],
             default => [['registered', 'withdrawn', 'withdraw', 'Потребность в испытаниях снята инициатором.']],
         };
@@ -303,23 +307,36 @@ final class DevelopmentRequestSeeder
                 'route_selected_by' => $users['manager'], 'route_selected_at' => $this->time($age),
             ], ['id' => $requestId])->execute();
             $this->db->createCommand()->insert('{{%audit_events}}', [
-                'event_type' => 'request.route_selected', 'entity_type' => 'request', 'entity_id' => $requestId,
-                'actor_id' => $users['manager'], 'rule_id' => 'WF-014', 'payload_json' => ['route' => $route],
+                'event_type' => 'request.closed', 'entity_type' => 'request', 'entity_id' => $requestId,
+                'actor_id' => $users['manager'], 'rule_id' => 'WF-015', 'payload_json' => ['expertise_required' => $route !== 'act', 'security_required' => $securityRequired, 'report_version_id' => $reportVersionId],
                 'created_at' => $this->time($age),
             ])->execute();
         }
         if ($route === 'act') {
             $steps = [['registered', 'in_progress', 'start', null], ['in_progress', 'in_progress', 'upload_report', null]];
             if ($status === 'completed') {
-                $steps[] = ['in_progress', 'completed', 'complete_act', null];
+                $steps[] = ['in_progress', 'completed', 'close_request', null];
             }
         }
-        foreach ($steps as $offset => [$from, $to, $action, $reason]) {
-            $actor = in_array($action, ['reject', 'complete_act'], true)
+        if ($route === 'protocol' && !$securityRequired && $status === 'completed') {
+            $steps = [['registered', 'in_progress', 'start', null], ['in_progress', 'opinion_preparation', 'upload_report', null], ['opinion_preparation', 'completed', 'publish_opinion', null]];
+        }
+        if ($status === 'in_progress' && $reportVersionId !== null) {
+            $steps[] = ['in_progress', 'in_progress', 'upload_report', null];
+        }
+        $expandedSteps = [];
+        foreach ($steps as [$from, $to, $action, $reason]) {
+            $expandedSteps[] = [$from, $action === 'upload_report' ? 'in_progress' : $to, $action, $reason];
+            if ($action === 'upload_report' && $to === 'opinion_preparation') {
+                $expandedSteps[] = ['in_progress', 'opinion_preparation', 'submit_for_expertise', null];
+            }
+        }
+        foreach ($expandedSteps as $offset => [$from, $to, $action, $reason]) {
+            $actor = in_array($action, ['reject', 'close_request', 'submit_for_expertise'], true)
                 ? $users['manager']
                 : (str_starts_with($action, 'security_')
                     ? $users['security']
-                    : ($action === 'publish_opinion' ? $users[$index % 2 === 0 ? 'expert2' : 'expert'] : $executor));
+                    : (in_array($action, ['publish_opinion'], true) ? $users[$index % 2 === 0 ? 'expert2' : 'expert'] : $executor));
             $this->db->createCommand()->insert('{{%request_transitions}}', [
                 'request_id' => $requestId, 'actor_id' => $actor, 'from_status' => $from,
                 'to_status' => $to, 'action' => $action, 'reason' => $reason,

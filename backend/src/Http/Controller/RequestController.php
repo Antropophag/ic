@@ -8,8 +8,7 @@ use App\Application\Document\TestActDocumentService;
 use App\Application\Document\TestActConfigurationError;
 use App\Application\Document\TestActInput;
 use App\Application\Request\CreateRequestInput;
-use App\Application\Request\ChooseRouteInput;
-use App\Domain\Request\RequestRoute;
+use App\Application\Request\CloseRequestInput;
 use App\Domain\Request\RequestRouteDenied;
 use App\Application\Request\ChangeDepartmentInput;
 use App\Application\Request\ListRequestsInput;
@@ -96,7 +95,7 @@ final class RequestController extends ApiController
         $mutations = [
             'add-comment', 'upload-document', 'upload-report', 'delete-report', 'delete-opinion', 'change-department',
             'set-color', 'assign-executor', 'claim-expert', 'reassign-expert', 'publish-opinion',
-            'choose-route', 'complete-act', 'security-decision', 'correct-security-decision', 'start', 'suspend', 'resume', 'reject', 'withdraw',
+            'close', 'security-decision', 'correct-security-decision', 'start', 'suspend', 'resume', 'reject', 'withdraw',
         ];
         $requestId = filter_var($params['id'] ?? null, FILTER_VALIDATE_INT, ['options' => ['min_range' => 1]]);
         if (in_array($action->id, $mutations, true) && $requestId !== false && $this->query()->isArchived($requestId)) {
@@ -577,36 +576,15 @@ final class RequestController extends ApiController
     }
 
     /** @return array<string, mixed> */
-    public function actionChooseRoute(int $id): array
+    public function actionClose(int $id): array
     {
-        $input = new ChooseRouteInput();
+        $input = new CloseRequestInput();
         if (($errors = $this->bodyValidationErrors($input)) !== null) {
             return $errors;
         }
         $actorId = $this->currentUserId();
         try {
-            return $this->repository()->chooseRoute($id, RequestRoute::from((string) $input->route), (int) $input->lockVersion, $actorId, (bool) $input->securityReviewRequired);
-        } catch (RequestNotFound $error) {
-            throw new NotFoundHttpException($error->getMessage());
-        } catch (RequestRouteDenied $error) {
-            $this->recordRejectedRouteSafely($id, $actorId, $error->ruleId);
-            throw new ForbiddenHttpException($error->getMessage());
-        } catch (ConcurrentRequestModification $error) {
-            $this->recordRejectedRouteSafely($id, $actorId, $error->ruleId);
-            throw new ConflictHttpException($error->getMessage());
-        }
-    }
-
-    /** @return array<string, mixed> */
-    public function actionCompleteAct(int $id): array
-    {
-        $input = new LockVersionInput();
-        if (($errors = $this->bodyValidationErrors($input)) !== null) {
-            return $errors;
-        }
-        $actorId = $this->currentUserId();
-        try {
-            return $this->repository()->completeAct($id, (int) $input->lockVersion, $actorId);
+            return $this->repository()->closeRequest($id, (int) $input->lockVersion, $actorId, $input->expertiseRequired, $input->securityRequired);
         } catch (RequestNotFound $error) {
             throw new NotFoundHttpException($error->getMessage());
         } catch (RequestRouteDenied $error) {
